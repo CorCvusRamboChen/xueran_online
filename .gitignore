@@ -1,0 +1,14 @@
+node_modules/
+client/dist/
+# 服务器运行数据（房间、存档、TTS 缓存，含玩家 Discord ID）
+data/
+# 密钥
+.env
+*.env
+!env.example
+# 第三方版权素材，只留本地
+design/refs/
+design/wiki-raw/
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>黯月初升 · 地图雏形</title>
+<style>
+  :root { --ink: #0d0f10; --paper: #ece6d8; --muted: #9a958a; --dusk: #e07a3c; --gold: #f2b25c; --cold: #2f3a4a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ink); color: var(--paper); font: 14px/1.5 "Noto Serif SC", "Songti SC", serif; width: 1600px; }
+  header { padding: 18px 28px 6px; display: flex; align-items: baseline; gap: 18px; }
+  header h1 { margin: 0; font-size: 30px; letter-spacing: 6px; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .board { display: grid; grid-template-columns: 1180px 1fr; gap: 18px; padding: 8px 28px 28px; }
+  .map { position: relative; width: 1180px; aspect-ratio: 3280 / 1760; overflow: hidden; border: 1px solid #2a2c2c; }
+  .map img { position: absolute; inset: 0; width: 100%; height: 100%;
+    filter: sepia(.55) saturate(1.7) hue-rotate(-18deg) brightness(.72) contrast(1.05); }
+  /* 暮光：西南方向低低的橙红光，东北偏冷 */
+  .map .light { position: absolute; inset: 0; background:
+    radial-gradient(ellipse at 18% 88%, rgba(224, 122, 60, .55), transparent 55%),
+    linear-gradient(200deg, rgba(47, 58, 74, .55), transparent 60%); mix-blend-mode: overlay; }
+  .map .vignette { position: absolute; inset: 0; box-shadow: inset 0 0 160px 60px rgba(5, 6, 8, .9); }
+  .pin { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .pin b { width: 30px; height: 30px; border-radius: 50%; background: var(--dusk); color: #160c06; display: grid; place-items: center; font: 900 15px sans-serif; box-shadow: 0 0 0 3px rgba(0,0,0,.6), 0 0 18px rgba(242, 178, 92, .8); }
+  .pin span { background: rgba(10, 11, 12, .88); border: 1px solid var(--gold); padding: 3px 8px; font-size: 13px; white-space: nowrap; }
+  .pin small { display: block; color: var(--muted); font-size: 11px; }
+  .zone { position: absolute; border: 1.5px dashed rgba(242, 178, 92, .75); background: rgba(224, 122, 60, .08); padding: 4px 8px; font-size: 12px; color: var(--gold); }
+  .zone.cold { border-color: rgba(140, 170, 200, .7); background: rgba(47, 58, 74, .25); color: #b9cbe0; }
+  .deco { position: absolute; font-size: 11px; color: #f0c08a; background: rgba(10, 11, 12, .75); padding: 2px 6px; border-left: 2px solid #c4502a; }
+  aside h2 { font-size: 16px; letter-spacing: 3px; margin: 0 0 8px; color: var(--gold); }
+  aside section { margin-bottom: 16px; border-top: 1px solid #2a2c2c; padding-top: 10px; }
+  aside p, aside li { color: #cfc8b8; font-size: 13px; margin: 4px 0; }
+  aside ol, aside ul { margin: 4px 0; padding-left: 20px; }
+  .sw { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sw div { width: 120px; font-size: 11px; color: var(--muted); }
+  .sw i { display: block; height: 30px; border: 1px solid #000; margin-bottom: 2px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>黯月初升 · 地图雏形</h1>
+  <p>同一座小镇的布局（可行走区域不变），换成「入冬前的黄昏 · 森林边的小镇」。底图是现有布局参考，颜色只是示意。</p>
+</header>
+<div class="board">
+  <div class="map">
+    <img src="../guides/town-guide.png" alt="">
+    <div class="light"></div>
+    <div class="vignette"></div>
+
+    <div class="zone cold" style="left:9%;top:60%;width:34%;height:9%;transform:rotate(26deg)">南边：森林边缘的黑湖（开始结冰）· 小木栈桥</div>
+    <div class="zone cold" style="left:3%;top:79%;width:26%;">湖对岸：黑松林 + 岩缝里的狼眼</div>
+    <div class="zone" style="left:30%;top:2%;width:40%;">北边远处：山丘、修道院的轮廓、被夕阳吞没的天际线</div>
+
+    <div class="pin" style="left:51.8%;top:33.8%"><b>1</b><span>黯月旅店<small>原 酒馆 · 门口停着篷车和马</small></span></div>
+    <div class="pin" style="left:71.2%;top:49.8%"><b>2</b><span>山丘修道院礼拜堂<small>原 教堂 · 暗红彩窗、枯藤</small></span></div>
+    <div class="pin" style="left:32.8%;top:49.5%"><b>3</b><span>修补匠的钟表工坊<small>原 铁匠铺 · 屋顶冒出齿轮</small></span></div>
+    <div class="pin" style="left:52.3%;top:67.7%"><b>4</b><span>茶馆<small>原 面包房 · 布篷和两张小桌</small></span></div>
+    <div class="pin" style="left:33.1%;top:33.4%"><b>5</b><span>教授的书房兼解剖室<small>原 图书馆 · 屋顶小天文台</small></span></div>
+    <div class="pin" style="left:72.3%;top:69.6%"><b>6</b><span>乌鸦墓园<small>原 墓园 · 新翻的坟土、落满乌鸦的枯枫</small></span></div>
+    <div class="pin" style="left:51.8%;top:50.6%"><b>★</b><span>被枯藤缠住的旧钟楼<small>广场中央（障碍物不变）</small></span></div>
+
+    <div class="deco" style="left:20%;top:41%">枫树：橙红叶 + 黑色斑点</div>
+    <div class="deco" style="left:61%;top:26%">屋脊上的乌鸦</div>
+    <div class="deco" style="left:80%;top:38%">落叶 + 初雪混在石板路上</div>
+    <div class="deco" style="left:41%;top:82%">挂在木杆上的暖色油灯</div>
+    <div class="deco" style="left:86%;top:62%">地图边缘：森林剪影渐隐成黑</div>
+  </div>
+
+  <aside>
+    <section>
+      <h2>氛围</h2>
+      <p>冬日暮色渐近，太阳被天际线吞没；橙红的枫叶被黑色斑点侵蚀；森林等着第一场雪。岩缝里狼在嚎，鸦群四散，旅人匆匆躲进旅店——没人发觉邪恶的眼睛在逼近。</p>
+      <p>比暗流涌动<b>更暖、更暗</b>：低低的橙红暮光 + 冷蓝阴影 + 很亮的窗光（像傍晚六点）。</p>
+    </section>
+    <section>
+      <h2>色板</h2>
+      <div class="sw">
+        <div><i style="background:#e07a3c"></i>暮光 #e07a3c</div>
+        <div><i style="background:#f2b25c"></i>金色亮面 #f2b25c</div>
+        <div><i style="background:#2f3a4a"></i>冷阴影 #2f3a4a</div>
+        <div><i style="background:#c4502a"></i>枫叶 #c4502a</div>
+        <div><i style="background:#2a1a14"></i>叶斑 #2a1a14</div>
+        <div><i style="background:#d8d6cf"></i>初雪 #d8d6cf</div>
+        <div><i style="background:#ffcf7a"></i>窗光 #ffcf7a</div>
+        <div><i style="background:#141a20"></i>黑湖 #141a20</div>
+      </div>
+    </section>
+    <section>
+      <h2>六栋能进的房子</h2>
+      <ol>
+        <li>黯月旅店 — 炉火、麦酒、墙上的鲁特琴</li>
+        <li>修道院礼拜堂 — 长椅、蜡烛、驱魔十字架</li>
+        <li>钟表工坊 — 拆开的钟表、发条、满墙钟</li>
+        <li>茶馆 — 茶炉、茶罐、两张挨着的扶手椅</li>
+        <li>书房兼解剖室 — 解剖台、电极、书堆</li>
+        <li>乌鸦墓园 — 露天，只有一层图</li>
+      </ol>
+    </section>
+    <section>
+      <h2>不变的</h2>
+      <ul>
+        <li>道路、广场、房子的位置大小（走路和进屋的代码不动）</li>
+        <li>等距透视和画法（极乐迪斯科式油画）</li>
+        <li>交付尺寸：底图 6560×3520 + 每栋房子外观/亮灯/室内</li>
+      </ul>
+    </section>
+    <section>
+      <h2>你明天要定的</h2>
+      <ul>
+        <li>六栋房子的主题这样换可以吗</li>
+        <li>南边改成黑湖 + 森林，还是保留海</li>
+        <li>钟楼保留还是换成别的地标（比如绞刑架、老井）</li>
+      </ul>
+    </section>
+  </aside>
+</div>
+</body>
+</html>

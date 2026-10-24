@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>黯月初升 · 地图灰盒</title>
+<style>
+  body { margin: 0; background: #0d0f10; color: #ece6d8; font: 14px/1.55 "Noto Serif SC", "Songti SC", serif; width: 1800px; }
+  header { padding: 18px 28px 4px; display: flex; gap: 18px; align-items: baseline; }
+  h1 { margin: 0; font-size: 30px; letter-spacing: 6px; }
+  header p { margin: 0; color: #9a958a; font-size: 13px; }
+  .row { display: flex; gap: 18px; padding: 10px 28px; }
+  .panel { background: #141718; border: 1px solid #2a2c2c; padding: 10px; }
+  .panel h2 { margin: 0 0 6px; font-size: 15px; letter-spacing: 3px; color: #f2b25c; }
+  canvas { display: block; }
+  table { border-collapse: collapse; font-size: 13px; }
+  td, th { border-bottom: 1px solid #2a2c2c; padding: 5px 8px; text-align: left; vertical-align: top; }
+  th { color: #f2b25c; font-weight: 700; white-space: nowrap; }
+  td.tb { color: #9fb3c8; } td.bmr { color: #f0c08a; }
+  .note { color: #cfc8b8; font-size: 13px; margin: 4px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>黯月初升 · 地图灰盒</h1>
+  <p>只有方块和线条的布局（blockout），先定"在哪、怎么走"，确认后再画美术。坐标、距离都已用脚本验证。</p>
+</header>
+<div class="row">
+  <div class="panel"><h2>俯视平面（施工图）</h2><canvas id="plan" width="720" height="560"></canvas></div>
+  <div class="panel"><h2>等距视角（游戏里的样子，方块模型）</h2><canvas id="iso" width="980" height="560"></canvas></div>
+</div>
+<div class="row">
+  <div class="panel" style="flex:1.25">
+    <h2>地图身份证：和暗流涌动对比</h2>
+    <table>
+      <tr><th></th><th>暗流涌动（现有）</th><th>黯月初升（新）</th></tr>
+      <tr><th>主体</th><td class="tb">钟楼广场 · 海港小镇</td><td class="bmr">驿道边的<b>黯月旅店</b>：集合点是旅店门前的驿站广场（老井 + 绞刑架）</td></tr>
+      <tr><th>主地标</th><td class="tb">广场中央的钟楼</td><td class="bmr">东南山丘上的<b>破烽火台</b>，后面升起一轮暗红的月亮</td></tr>
+      <tr><th>路网结构</th><td class="tb">网格：十字主街 + 横街，四平八稳</td><td class="bmr"><b>一条溪谷斜穿全镇，把镇子切成两岸</b>；一条驿道弯弯曲曲穿过去</td></tr>
+      <tr><th>相遇引擎</th><td class="tb">广场四个路口</td><td class="bmr"><b>石桥</b>（主路，去对岸都要过）+ 茶馆街（窄巷）</td></tr>
+      <tr><th>替代路 / 闭环</th><td class="tb">网格到处都能绕</td><td class="bmr">东北的<b>吊板桥小路</b>：绕远、安静，和石桥连成一个环</td></tr>
+      <tr><th>偏远房间</th><td class="tb">墓园</td><td class="bmr"><b>猎人小屋</b>（过桥再钻林子）、<b>修道院礼拜堂</b>（山丘上）</td></tr>
+      <tr><th>分区</th><td class="tb">广场 / 街区 / 海边</td><td class="bmr">驿站区（旅店、马厩、茶馆街）· 溪谷（磨坊、两座桥）· 山丘（礼拜堂、墓园、烽火台）· 林缘（猎人小屋、狼）</td></tr>
+      <tr><th>季节 · 时刻</th><td class="tb">暴雪的夜里</td><td class="bmr">深秋转冬的<b>黄昏</b>：橙红暮光、带黑斑的枫叶、薄薄的初雪、溪谷起雾</td></tr>
+      <tr><th>声音</th><td class="tb">风雪、海浪</td><td class="bmr">溪水、磨坊水车、林间狼嚎、乌鸦、旅店里的琴声</td></tr>
+    </table>
+  </div>
+  <div class="panel" style="flex:1">
+    <h2>七间私聊房（人少开前 5 间，人多 7 间）</h2>
+    <p class="note">① 黯月旅店（主体，离集合点 0.6 秒）② 茶馆（1.6 秒，茶馆街尽头）③ 溪边磨坊（2.7 秒，水车声盖住说话）④ 修道院礼拜堂（3.6 秒，山丘上，要过石桥）⑤ 乌鸦墓园（2.9 秒，露天）⑥ 钟表工坊（1.3 秒）⑦ 猎人小屋（3.7 秒，最偏，一路都被人看见）</p>
+    <h2 style="margin-top:10px">为什么这样摆（用到的设计原则）</h2>
+    <p class="note">· <b>石桥是相遇引擎</b>：去对岸的礼拜堂、墓园、猎人小屋都要过它，大家会在桥上碰面；想不被看见就绕吊板桥，但慢、而且"绕路"本身就可疑。</p>
+    <p class="note">· <b>集合点居中</b>：最远的房间回来不到 4 秒（暗流涌动最远约 3 秒）。</p>
+    <p class="note">· <b>远处有回报</b>：礼拜堂、猎人小屋更隐秘，室内也最有看头。</p>
+    <p class="note">· <b>能进 = 亮灯</b>：七间房窗户亮，其他建筑暗。</p>
+    <p class="note">· <b>剧本呼应</b>：旅店（旅店老板、吟游诗人）、茶馆（茶艺师）、礼拜堂（驱魔人）、钟表工坊（修补匠）、解剖台留给旅店楼上的教授客房、墓园新翻的坟（僵怖）、林子里的狼（恶魔）。</p>
+  </div>
+</div>
+<script type="module">
+import { BMR_MAP as M } from './layout.js';
+const DOOR = { bottom: (h) => [h.x + h.w / 2, h.y + h.h], right: (h) => [h.x + h.w, h.y + h.h / 2], left: (h) => [h.x, h.y + h.h / 2], top: (h) => [h.x + h.w / 2, h.y] };
+const C = { ground: '#3b3a2e', bank2: '#33372f', creek: '#20313a', bridge: '#8a6a44', coach: '#7a6a52', lane: '#6a5e4c', trail: '#5a5240', house: '#e0a050', ob: '#5c5a54', tree: '#2c3a28', mark: '#c4502a', text: '#ece6d8' };
+const band = (pts, half) => { // 折线变成一条带子的多边形
+  const L = []; const R = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = b[0] - a[0], dy = b[1] - a[1], n = Math.hypot(dx, dy) || 1;
+    L.push([pts[i][0] - dy / n * half, pts[i][1] + dx / n * half]); R.push([pts[i][0] + dy / n * half, pts[i][1] - dx / n * half]);
+  }
+  return [...L, ...R.reverse()];
+};
+const houseNo = (i) => '①②③④⑤⑥⑦'[i];
+
+// ── 俯视
+{
+  const cv = document.getElementById('plan'); const g = cv.getContext('2d'); const k = 0.4;
+  const P = ([x, y]) => [x * k, y * k];
+  const poly = (pts, fill, stroke) => { g.beginPath(); pts.forEach((p, i) => { const [a, b] = P(p); i ? g.lineTo(a, b) : g.moveTo(a, b); }); g.closePath(); if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.stroke(); } };
+  g.fillStyle = C.ground; g.fillRect(0, 0, M.w * k, M.h * k);
+  // 网格
+  g.strokeStyle = 'rgba(255,255,255,.05)'; for (let x = 0; x <= M.w; x += 100) { g.beginPath(); g.moveTo(x * k, 0); g.lineTo(x * k, M.h * k); g.stroke(); } for (let y = 0; y <= M.h; y += 100) { g.beginPath(); g.moveTo(0, y * k); g.lineTo(M.w * k, y * k); g.stroke(); }
+  for (const r of M.roads) poly(band(r.pts, r.half), C[r.kind]);
+  poly(band(M.creek.pts, M.creek.half), C.creek);
+  for (const b of M.bridges) { g.fillStyle = C.bridge; g.fillRect(b.x * k, b.y * k, b.w * k, b.h * k); }
+  for (const [x, y, r] of M.trees) { g.fillStyle = C.tree; g.beginPath(); g.arc(x * k, y * k, r * k, 0, 7); g.fill(); }
+  for (const o of M.obstacles) { g.fillStyle = C.ob; g.fillRect(o.x * k, o.y * k, o.w * k, o.h * k); }
+  M.houses.forEach((h, i) => {
+    g.fillStyle = C.house; g.globalAlpha = h.height ? 1 : .55; g.fillRect(h.x * k, h.y * k, h.w * k, h.h * k); g.globalAlpha = 1;
+    const [dx, dy] = DOOR[h.side](h); g.fillStyle = '#fff'; g.beginPath(); g.arc(dx * k, dy * k, 4, 0, 7); g.fill();
+    g.fillStyle = '#1a120a'; g.font = '900 13px sans-serif'; g.fillText(`${houseNo(i)}${h.name}`, h.x * k + 4, h.y * k + 16);
+  });
+  // 集合点
+  g.strokeStyle = '#f2b25c'; g.setLineDash([5, 4]); g.lineWidth = 2; g.beginPath(); g.arc(M.gather.x * k, M.gather.y * k, M.gather.r * k, 0, 7); g.stroke(); g.setLineDash([]); g.lineWidth = 1;
+  g.fillStyle = '#f2b25c'; g.font = '700 12px sans-serif'; g.fillText('驿站广场（集合点）', (M.gather.x - 90) * k, (M.gather.y + M.gather.r + 30) * k);
+  for (const l of M.landmarks) { g.fillStyle = C.mark; g.beginPath(); g.arc(l.x * k, l.y * k, Math.max(4, l.r * k), 0, 7); g.fill(); g.fillStyle = '#f0c08a'; g.font = `${l.main ? 900 : 400} 11px sans-serif`; g.fillText(l.name, l.x * k + 8, l.y * k - 6); }
+  g.fillStyle = '#9fc0d8'; g.font = '700 12px sans-serif'; g.fillText('溪谷', 240 * k, 1210 * k); g.fillText('石桥', 1075 * k, 760 * k); g.fillText('吊板桥', 1620 * k, 250 * k);
+  g.fillStyle = '#9a958a'; g.font = '11px sans-serif'; g.fillText('驿道 →', 1640 * k, 1060 * k); g.fillText('← 驿道', 10 * k, 600 * k); g.fillText('林缘', 1420 * k, 1340 * k);
+}
+
+// ── 等距（投影和游戏一样：[x−y, (x+y)/2 − z]）
+{
+  const cv = document.getElementById('iso'); const g = cv.getContext('2d');
+  const OX = 1440, OY = 120, S = 980 / 3280;
+  const P = (x, y, z = 0) => [(x - y + OX) * S, ((x + y) / 2 - z + OY) * S];
+  const path = (pts) => { g.beginPath(); pts.forEach(([x, y, z], i) => { const [a, b] = P(x, y, z ?? 0); i ? g.lineTo(a, b) : g.moveTo(a, b); }); g.closePath(); };
+  g.fillStyle = '#0d0f10'; g.fillRect(0, 0, cv.width, cv.height);
+  path([[0, 0], [M.w, 0], [M.w, M.h], [0, M.h]]); g.fillStyle = C.ground; g.fill();
+  // 东南半边（山丘）略亮一点
+  for (const r of M.roads) { path(band(r.pts, r.half)); g.fillStyle = C[r.kind]; g.fill(); }
+  path(band(M.creek.pts, M.creek.half)); g.fillStyle = C.creek; g.fill();
+  for (const b of M.bridges) { path([[b.x, b.y, 4], [b.x + b.w, b.y, 4], [b.x + b.w, b.y + b.h, 4], [b.x, b.y + b.h, 4]]); g.fillStyle = C.bridge; g.fill(); }
+  g.strokeStyle = '#f2b25c'; g.setLineDash([4, 3]); { const pts = []; for (let a = 0; a < 6.3; a += .2) pts.push([M.gather.x + Math.cos(a) * M.gather.r, M.gather.y + Math.sin(a) * M.gather.r]); path(pts); g.stroke(); } g.setLineDash([]);
+  // 方块和树按 x+y 排序画（远的先画）
+  const items = [];
+  M.houses.forEach((h, i) => items.push({ ...h, kind: 'house', i, key: h.x + h.w + h.y + h.h }));
+  for (const o of M.obstacles) items.push({ ...o, kind: 'ob', key: o.x + o.w + o.y + o.h });
+  for (const [x, y, r] of M.trees) items.push({ kind: 'tree', x, y, r, key: x + y + r });
+  for (const l of M.landmarks) items.push({ ...l, kind: 'mark', key: l.x + l.y + l.r });
+  items.sort((a, b) => a.key - b.key);
+  const box = (x, y, w, h, z, top, side, front) => {
+    path([[x + w, y, 0], [x + w, y + h, 0], [x + w, y + h, z], [x + w, y, z]]); g.fillStyle = side; g.fill();       // 东面
+    path([[x, y + h, 0], [x + w, y + h, 0], [x + w, y + h, z], [x, y + h, z]]); g.fillStyle = front; g.fill();      // 南面
+    path([[x, y, z], [x + w, y, z], [x + w, y + h, z], [x, y + h, z]]); g.fillStyle = top; g.fill();                 // 顶
+    g.strokeStyle = 'rgba(0,0,0,.5)'; g.stroke();
+  };
+  for (const it of items) {
+    if (it.kind === 'house') {
+      if (it.height) box(it.x, it.y, it.w, it.h, it.height, '#c98a3c', '#a86a2a', '#e8b060');
+      else { path([[it.x, it.y], [it.x + it.w, it.y], [it.x + it.w, it.y + it.h], [it.x, it.y + it.h]]); g.fillStyle = 'rgba(232,176,96,.35)'; g.fill(); g.strokeStyle = '#e8b060'; g.stroke(); }
+      // 亮着的窗（能进的房子）
+      if (it.height) { const [wx, wy] = P(it.x + it.w * .5, it.y + it.h, it.height * .5); g.fillStyle = '#ffcf7a'; g.fillRect(wx - 6, wy - 4, 12, 8); }
+    } else if (it.kind === 'ob') box(it.x, it.y, it.w, it.h, it.height, '#6a6862', '#4a4842', '#5a5852');
+    else if (it.kind === 'tree') { const [tx, ty] = P(it.x, it.y); g.fillStyle = C.tree; g.beginPath(); g.ellipse(tx, ty, it.r * S, it.r * S * .5, 0, 0, 7); g.fill(); g.beginPath(); g.moveTo(tx - it.r * S * .7, ty); g.lineTo(tx, ty - it.r * S * 2.2); g.lineTo(tx + it.r * S * .7, ty); g.fillStyle = '#3a4a32'; g.fill(); }
+    else if (it.kind === 'mark') { const zz = it.main ? 260 : 60; const [bx, by] = P(it.x, it.y); const [, ty] = P(it.x, it.y, zz); g.fillStyle = it.main ? '#8a4a30' : '#6a5040'; g.fillRect(bx - it.r * S * .8, ty, it.r * S * 1.6, by - ty); g.fillStyle = '#c4502a'; g.beginPath(); g.arc(bx, ty, it.r * S * .9, 0, 7); g.fill(); }
+  }
+  // 标签
+  g.font = '900 13px sans-serif';
+  M.houses.forEach((h, i) => { const [lx, ly] = P(h.x + h.w / 2, h.y + h.h / 2, (h.height || 10) + 30); g.fillStyle = 'rgba(10,11,12,.85)'; const t = `${houseNo(i)} ${h.name}`; const tw = g.measureText(t).width; g.fillRect(lx - tw / 2 - 4, ly - 14, tw + 8, 19); g.fillStyle = '#ffcf7a'; g.fillText(t, lx - tw / 2, ly); });
+  g.font = '700 12px sans-serif';
+  for (const [t, x, y, c] of [['破烽火台（主地标）', 1700, 870, '#f0c08a'], ['石桥', 1010, 790, '#9fc0d8'], ['吊板桥', 1560, 280, '#9fc0d8'], ['驿站广场', 650, 670, '#f2b25c'], ['溪谷', 300, 1150, '#9fc0d8']]) { const [lx, ly] = P(x, y, x === 1700 ? 300 : 0); g.fillStyle = c; g.fillText(t, lx - 30, ly + 4); }
+  // 月亮
+  g.fillStyle = 'rgba(160,40,30,.85)'; g.beginPath(); g.arc(930, 70, 34, 0, 7); g.fill(); g.fillStyle = '#0d0f10'; g.beginPath(); g.arc(944, 62, 30, 0, 7); g.fill();
+}
+</script>
+</body>
+</html>

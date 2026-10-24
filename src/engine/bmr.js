@@ -1,0 +1,601 @@
+// 血染钟楼 · 黯月初升（Bad Moon Rising）的规则。作为方法混进 Game（game.js 在 script === 'bmr' 时调用这里）。
+// 规则口径见 .claude/skills/botc-storyteller/references/bad-moon-rising.md。
+//
+// 状态模型：
+// · 醉酒/中毒/保护都是"效果" this.fx：{ kind, target, source, until, why }
+//     kind：drunk 醉酒 / poison 中毒 / safe 当晚不会死（旅店老板）/ exeSafe 明天被处决不死（魔鬼代言人）
+//     until：在第几天的黄昏结束（数字）；'dawn' 黎明结束；'never' 一直持续（普卡的毒，直到毒发）
+//   效果只在来源活着、而且来源自己没醉酒中毒时生效（来源失效 → 效果立即停；恢复 → 效果恢复）。循环醉酒时一起生效。
+// · 阵营 p.evil（莽夫会变）；僵怖首次死亡后 p.apparentDead = true（活着但被当作死亡）。
+// · 白天的标记：diedToday（僵怖）、outsiderDiedToday（教父）、gossipPending（造谣者）、moonchildPick（月之子）。
+
+import { ROLES, isEvilRole, rolesOf, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS } from './roles.js';
+
+const team = (p) => ROLES[p.role].team;
+const shuffle = (arr, rng) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const sample = (arr, n, rng) => shuffle(arr, rng).slice(0, n);
+const pickOne = (arr, rng) => arr[Math.floor(rng() * arr.length)];
+
+const T = { tf: rolesOf('bmr', 'townsfolk'), out: rolesOf('bmr', 'outsider'), min: rolesOf('bmr', 'minion'), dem: rolesOf('bmr', 'demon') };
+
+/** 黯月初升按人数随机出一套角色。教父 ±1 外来者（外来者为 0 时只能 +1）。 */
+export function rollBMR(n, rng, { godfatherPlus = null } = {}) {
+  if (n < MIN_PLAYERS || n > MAX_PLAYERS) throw new Error(`人数需在 ${MIN_PLAYERS}–${MAX_PLAYERS} 之间`);
+  let [t, o, m] = DISTRIBUTION[n];
+  const minions = sample(T.min, m, rng);
+  if (minions.includes('godfather')) {
+    const plus = o === 0 ? true : godfatherPlus ?? rng() < 0.5;
+    if (plus) { t -= 1; o += 1; } else { t += 1; o -= 1; }
+  }
+  return shuffle([...sample(T.tf, t, rng), ...sample(T.out, o, rng), ...minions, pickOne(T.dem, rng)], rng);
+}
+
+// 夜晚步骤（官方顺序）。info：首夜只给信息、不选人的步骤
+const FIRST_STEPS = ['sailor', 'courtier', 'godfatherInfo', 'devilsadvocate', 'pukka', 'grandmother', 'chambermaid'];
+const OTHER_STEPS = ['sailor', 'innkeeper', 'courtier', 'gambler', 'devilsadvocate', 'lunatic', 'exorcist', 'zombuul', 'pukka',
+  'shabaloth', 'po', 'assassin', 'godfather', 'professor', 'gossip', 'tinker', 'moonchild', 'chambermaid'];
+const DEMON_ROLES = new Set(T.dem);
+
+export const BMR_METHODS = {
+  // ───────────────────────── 开局 ─────────────────────────
+  setupBMR(players, roles, rng) {
+    const assigned = roles ?? rollBMR(players.length, rng);
+    if (assigned.length !== players.length) throw new Error('角色数量与玩家数量不符');
+    this.players = players.map((p, i) => ({
+      id: p.id, name: p.name, seat: i + 1, role: assigned[i], shownRole: assigned[i],
+      alive: true, ghostVote: true, evil: isEvilRole(assigned[i]), apparentDead: false,
+    }));
+    const demon = this.players.find((p) => DEMON_ROLES.has(p.role));
+    // 疯子以为自己是恶魔：一半概率和真恶魔同种
+    const lunatic = this.players.find((p) => p.role === 'lunatic');
+    if (lunatic) lunatic.shownRole = rng() < 0.5 ? demon.role : pickOne(T.dem.filter((r) => r !== demon.role), rng);
+    const inPlay = new Set(assigned);
+    this.bluffs = shuffle([...T.tf, ...T.out].filter((r) => !inPlay.has(r)), rng).slice(0, 3);
+    this.fx = [];
+    this.used = {};        // 每局一次的能力用过了：id → true（侍臣、教授、刺客、弄臣）
+    this.lastPick = {};    // 上一夜选过谁（驱魔人、魔鬼代言人）：id → targetId
+    this.pukkaVictim = null;
+    this.poCharged = false;
+    this.shabaLast = [];
+    this.grandchild = null;
+    this.gossipPending = false;
+    this.gossipSaid = {};  // 今天谁发表过声明（每人每天一次）
+    this.moonchildPick = null;
+    this.pendingMoonchild = null;
+    this.diedToday = false;
+    this.outsiderDiedToday = false;
+    this.mastermindDay = null;
+    this.demonExecuted = false;
+    this.redHerring = null;
+    this.firstDemon = demon?.id ?? null;
+  },
+
+  // ───────────────────────── 状态查询 ─────────────────────────
+  evilOf(p) { return p.evil ?? isEvilRole(p.role); },
+  visAlive(p) { return p.alive && !p.apparentDead; },
+
+  /** 醉酒或中毒（能力失效）。循环醉酒时一起生效。 */
+  bmrBroken(p, seen = new Set()) {
+    if (!p) return false;
+    const next = new Set(seen); next.add(p.id);
+    return this.fx.some((f) => (f.kind === 'drunk' || f.kind === 'poison') && f.target === p.id && this.fxLive(f, next));
+  },
+  /** 效果是否生效：来源活着、来源没醉酒中毒（循环时算生效）。 */
+  fxLive(f, seen = new Set()) {
+    const src = this.get(f.source);
+    if (!src) return true;
+    if (!src.alive) return false;
+    if (seen.has(src.id)) return true;
+    return !this.bmrBroken(src, seen);
+  },
+  addFx(kind, target, source, until, why) {
+    if (!target) return;
+    this.fx.push({ kind, target, source, until, why });
+    this.record('st', `${why}：${this.tag(target)} ${{ drunk: '醉酒', poison: '中毒', safe: '今晚不会死', exeSafe: '明天被处决不会死' }[kind]}`);
+  },
+
+  /** 茶艺师两侧最近的存活玩家（被当作死亡的僵怖不算）。 */
+  visNeighbours(p) {
+    const n = this.players.length; const res = [];
+    for (const dir of [-1, 1]) {
+      for (let k = 1; k < n; k++) {
+        const q = this.players[(p.seat - 1 + dir * k + n * k) % n];
+        if (q.id === p.id) break;
+        if (this.visAlive(q)) { res.push(q); break; }
+      }
+    }
+    return res.length === 2 && res[0].id === res[1].id ? [res[0]] : res;
+  },
+
+  /** p 现在为什么不会死（返回原因，或 null）。cause：execution / assassin / 其他。 */
+  protection(p, cause) {
+    if (cause === 'assassin') return null;
+    if (p.role === 'sailor' && !this.bmrBroken(p)) return '水手';
+    if (this.phase === 'night' && this.fx.some((f) => f.kind === 'safe' && f.target === p.id && this.fxLive(f))) return '旅店老板';
+    for (const t of this.players.filter((q) => q.role === 'tealady' && q.alive && !this.bmrBroken(q))) {
+      const nb = this.visNeighbours(t);
+      if (nb.length === 2 && nb.every((q) => !this.evilOf(q)) && nb.some((q) => q.id === p.id)) return '茶艺师';
+    }
+    if (cause === 'execution' && this.fx.some((f) => f.kind === 'exeSafe' && f.target === p.id && this.fxLive(f))) return '魔鬼代言人';
+    return null;
+  },
+
+  /** 尝试杀死 p：先看各种免死，再看弄臣、僵怖。返回 died / saved / fake（僵怖假死）/ already。 */
+  tryKill(p, cause, messages = []) {
+    if (!p || !p.alive) return 'already';
+    if (p.apparentDead && cause !== 'execution') return 'already'; // 被当作死亡的僵怖：死人不会再死
+    const prot = this.protection(p, cause);
+    if (prot) { this.record('st', `${this.tag(p.id)} 因${prot}没有死（${cause}）`); return 'saved'; }
+    if (cause === 'execution' && !this.evilOf(p)) {
+      const pac = this.players.find((q) => q.role === 'pacifist' && q.alive && !this.bmrBroken(q));
+      if (pac && this.st.pacifistSaves(p)) { this.record('st', `和平主义者：被处决的善良玩家 ${this.tag(p.id)} 没有死`); return 'saved'; }
+    }
+    if (p.role === 'fool' && cause !== 'assassin' && !this.used[p.id] && !this.bmrBroken(p)) {
+      this.used[p.id] = true;
+      this.record('st', `弄臣 ${this.tag(p.id)} 第一次将要死亡，没有死（能力用掉）`);
+      return 'saved';
+    }
+    if (p.role === 'zombuul' && !p.apparentDead && !this.bmrBroken(p)) {
+      p.apparentDead = true;
+      if (this.phase === 'night') this.nightDeaths.push(p.id);
+      else this.diedToday = true;
+      this.record('death', `${this.tag(p.id)} 第一次死亡——僵怖仍然活着，但被当作死亡`);
+      return 'fake';
+    }
+    this.bmrDie(p, cause, messages);
+    return 'died';
+  },
+
+  /** 真的死亡。 */
+  bmrDie(p, cause, messages = []) {
+    p.alive = false;
+    p.apparentDead = false;
+    if (this.phase === 'night') this.nightDeaths.push(p.id);
+    else {
+      this.diedToday = true;
+      if (team(p) === 'outsider') this.outsiderDiedToday = true;
+    }
+    const why = {
+      demon: '被恶魔杀死', execution: '被处决', assassin: '被刺客刺杀', godfather: '被教父杀死', gambler: '赌错了角色',
+      gossip: '因造谣者的声明而死', tinker: '修补匠突然死亡', moonchild: '被月之子带走', grandmother: '孙子被恶魔杀死，祖母随之而去', storyteller: '说书人判定死亡',
+    }[cause] ?? cause;
+    this.log.push(`${this.name(p.id)} 死亡（${cause}）`);
+    this.record('death', `${this.tag(p.id)} ${why}`);
+    if (DEMON_ROLES.has(p.role) && cause === 'execution') this.demonExecuted = true;
+    // 月之子得知自己死亡：要公开选一名存活玩家
+    if (p.role === 'moonchild') this.pendingMoonchild = p.id;
+    // 祖母：孙子被恶魔杀死，祖母一起死（她自己清醒时）
+    if (cause === 'demon' && p.id === this.grandchild) {
+      const gm = this.players.find((q) => q.role === 'grandmother' && q.alive && !this.bmrBroken(q));
+      if (gm) this.tryKill(gm, 'grandmother', messages);
+    }
+  },
+
+  revive(p, why) {
+    if (!p || p.alive) return;
+    p.alive = true; p.ghostVote = true; p.apparentDead = false;
+    delete this.used[p.id];
+    this.nightRevived.push(p.id);
+    this.record('death', `${this.tag(p.id)} 复活了（${why}）`);
+  },
+
+  // ───────────────────────── 夜晚 ─────────────────────────
+  startNightBMR() {
+    this.wokeTonight = new Set();
+    this.goonHit = false;
+    this.blocked = null;
+    this.nightRevived = [];
+    this.lunaticPicks = null;
+  },
+
+  /** 首夜的爪牙/恶魔信息（含疯子）。 */
+  evilInfoBMR() {
+    const messages = [];
+    const say = (p, text) => messages.push({ playerId: p.id, text });
+    const demon = this.players.find((p) => DEMON_ROLES.has(p.role));
+    const minions = this.players.filter((p) => team(p) === 'minion');
+    const lunatic = this.players.find((p) => p.role === 'lunatic');
+    if (this.evilInfo) {
+      this.evilKnown = this.knownMap();
+      for (const m of minions) {
+        const mates = minions.filter((x) => x.id !== m.id).map((x) => this.name(x.id));
+        say(m, `恶魔是 **${this.name(demon.id)}**。${mates.length ? `其他爪牙：${mates.join('、')}。` : ''}`);
+      }
+      // 疯子以为自己是恶魔：给他"爪牙"（人数对，但可以是任何人）和三个"伪装"
+      if (lunatic) {
+        const fake = sample(this.players.filter((q) => q.id !== lunatic.id), minions.length, this.rng);
+        const fakeBluffs = sample([...T.tf, ...T.out].filter((r) => r !== 'lunatic'), 3, this.rng);
+        say(lunatic, `你的爪牙：${fake.map((x) => `**${this.name(x.id)}**`).join('、')}。\n不在场的角色（可用来伪装）：${fakeBluffs.map((r) => ROLES[r].name).join('、')}。`);
+        this.record('info', `疯子 ${this.tag(lunatic.id)} 以为自己是${ROLES[lunatic.shownRole].name}，拿到的"爪牙"：${fake.map((x) => this.name(x.id)).join('、')}`);
+      }
+      say(demon, `你的爪牙：${minions.map((x) => `**${this.name(x.id)}**`).join('、')}。\n不在场的角色（可用来伪装）：${this.bluffs.map((r) => ROLES[r].name).join('、')}。`);
+    }
+    // 恶魔知道谁是疯子（人数少于 7 也告诉他）
+    if (lunatic) say(demon, `**${this.name(lunatic.id)}** 是疯子：他以为自己是${ROLES[lunatic.shownRole].name}。每晚他选了谁，你都会知道。`);
+    return messages;
+  },
+
+  /** 这个人今晚按什么角色行动（疯子按他以为的恶魔）。 */
+  actsAs(p) { return p.role === 'lunatic' ? p.shownRole : p.role; },
+
+  nightPromptsBMR() {
+    const first = this.night === 1;
+    const out = [];
+    const anyDead = this.players.some((q) => !this.visAlive(q));
+    const lunatic = this.players.find((q) => q.role === 'lunatic' && q.alive);
+    for (const p of this.alive()) {
+      if (p.apparentDead && p.role !== 'zombuul') continue;
+      const role = this.actsAs(p);
+      const spec = ROLES[role].choose;
+      if (!spec) continue;
+      if (first ? !ROLES[role].firstNight : !ROLES[role].otherNight) continue;
+      if (spec.once && this.used[p.id]) continue;
+      if (role === 'zombuul' && this.diedToday) continue;
+      if (role === 'godfather' && (first || !this.outsiderDiedToday)) continue;
+      if (role === 'professor' && !anyDead) continue;
+      let count = spec.count; let optional = !!spec.optional;
+      if (role === 'po') {
+        const charged = p.role === 'lunatic' ? !!this.used[`po-${p.id}`] : this.poCharged;
+        count = charged ? 3 : 1; optional = !charged;
+      }
+      const last = this.lastPick[p.id];
+      const options = this.players.filter((q) => {
+        if (spec.notSelf && q.id === p.id) return false;
+        if (spec.alive && !this.visAlive(q)) return false;
+        if (spec.dead && this.visAlive(q)) return false;
+        if (spec.notLast && q.id === last) return false;
+        return true;
+      }).map((q) => q.id);
+      // 真恶魔要等疯子先选完（恶魔得知疯子选了谁再行动）
+      const waiting = DEMON_ROLES.has(p.role) && lunatic && lunatic.id !== p.id && !this.choices[lunatic.id] && this.lunaticActs(lunatic);
+      out.push({ playerId: p.id, role, count, options, optional, pickRole: !!spec.role, roleOptions: spec.role ? rolesOf('bmr') : null, waiting: !!waiting });
+    }
+    return out;
+  },
+  lunaticActs(l) {
+    const r = l.shownRole; const first = this.night === 1;
+    if (first ? !ROLES[r].firstNight : !ROLES[r].otherNight) return false;
+    if (r === 'zombuul' && this.diedToday) return false;
+    return true;
+  },
+
+  /** 收一个选择。返回要马上告诉别人的信息（疯子选完 → 告诉恶魔）。 */
+  submitChoiceBMR(playerId, targets, extra = {}) {
+    const pr = this.nightPromptsBMR().find((x) => x.playerId === playerId);
+    if (!pr) throw new Error('你今晚不需要选择');
+    if (pr.waiting) throw new Error('还要等一会儿');
+    const skip = targets.length === 0 && pr.optional && !(pr.pickRole && extra.role);
+    if (!skip) {
+      if (targets.length !== pr.count || new Set(targets).size !== targets.length) throw new Error(`需要选择 ${pr.count} 名不同的玩家`);
+      if (!targets.every((t) => pr.options.includes(t))) throw new Error('选择了不可选的玩家');
+      if (pr.pickRole && !pr.roleOptions.includes(extra.role)) throw new Error('还要选一个角色');
+    }
+    this.choices[playerId] = skip ? { targets: [], role: null } : { targets, role: pr.pickRole ? extra.role : null };
+    const p = this.get(playerId);
+    const msgs = [];
+    if (p.role === 'lunatic') {
+      const demon = this.players.find((q) => DEMON_ROLES.has(q.role) && q.alive);
+      if (demon) msgs.push({ playerId: demon.id, text: `疯子 ${this.name(p.id)} 今晚${skip ? '没有选人' : `选了：${targets.map((t) => this.name(t)).join('、')}`}。` });
+      this.lunaticPicks = targets;
+    }
+    return msgs;
+  },
+
+  autoChooseBMR(playerId) {
+    const pr = this.nightPromptsBMR().find((x) => x.playerId === playerId);
+    if (!pr || pr.waiting) return;
+    const p = this.get(playerId);
+    // 每局一次的能力：机器人前几晚多半先不用
+    if (pr.optional && pr.role !== 'po' && this.rng() < (pr.role === 'courtier' ? 0.6 : 0.5)) { this.choices[playerId] = { targets: [], role: null }; return; }
+    let opts = pr.options;
+    if (DEMON_ROLES.has(pr.role) || ['assassin', 'godfather'].includes(pr.role)) {
+      const prey = opts.filter((id) => !this.evilOf(this.get(id)) && this.visAlive(this.get(id)));
+      if (prey.length >= pr.count) opts = prey;
+    }
+    const targets = sample(opts, pr.count, this.rng);
+    const role = pr.pickRole ? pickOne(pr.roleOptions.filter((r) => r !== p.role), this.rng) : null;
+    this.choices[playerId] = { targets, role };
+  },
+
+  /** 第一个用自己的能力选中莽夫的人醉酒，莽夫转成他的阵营。返回这次选择还有没有效。 */
+  goonCheck(selector, target, { assassin = false } = {}) {
+    if (!target || target.role !== 'goon' || target.id === selector.id || this.goonHit || !target.alive || this.bmrBroken(target)) return;
+    this.goonHit = true;
+    if (!assassin) this.addFx('drunk', selector.id, target.id, this.night, '莽夫');
+    const was = this.evilOf(target);
+    target.evil = this.evilOf(selector);
+    if (was !== target.evil) this.pendingGoonNews = target.id;
+  },
+
+  choiceOf(p) { const c = this.choices[p.id]; return c ? { targets: (c.targets ?? []).map((id) => this.get(id)), role: c.role ?? null } : null; },
+
+  resolveNightBMR() {
+    const messages = [];
+    const say = (p, text) => messages.push({ playerId: p.id, text });
+    const first = this.night === 1;
+    const prompted = new Set(this.nightPromptsBMR().map((x) => x.playerId));
+    const live = (role) => this.players.filter((q) => q.role === role && q.alive && !q.apparentDead);
+    const broken = (p) => this.bmrBroken(p);
+    this.pendingGoonNews = null;
+
+    for (const step of first ? FIRST_STEPS : OTHER_STEPS) {
+      switch (step) {
+        case 'sailor': for (const p of live('sailor')) {
+          this.wokeTonight.add(p.id);
+          const t = this.choiceOf(p)?.targets[0]; if (!t) break;
+          this.goonCheck(p, t);
+          if (broken(p)) break;
+          const who = t.id === p.id ? p : this.st.sailorDrunk(p, t);
+          this.addFx('drunk', who.id, p.id, this.night, '水手');
+        } break;
+        case 'innkeeper': for (const p of live('innkeeper')) {
+          this.wokeTonight.add(p.id);
+          const ts = this.choiceOf(p)?.targets ?? [];
+          for (const t of ts) this.goonCheck(p, t);
+          if (broken(p) || ts.length < 2) break;
+          for (const t of ts) this.addFx('safe', t.id, p.id, 'dawn', '旅店老板');
+          this.addFx('drunk', this.st.innkeeperDrunk(ts).id, p.id, this.night, '旅店老板');
+        } break;
+        case 'courtier': for (const p of live('courtier')) {
+          if (!prompted.has(p.id)) break;
+          this.wokeTonight.add(p.id);
+          const c = this.choiceOf(p); if (!c?.role) break;
+          this.used[p.id] = true;
+          const holders = this.players.filter((q) => q.role === c.role);
+          if (c.role === 'goon' && holders[0]) this.goonCheck(p, holders[0]);
+          this.record('choice', `${this.tag(p.id)} 选择了角色 ${ROLES[c.role].name}`);
+          if (broken(p) || !holders.length) break;
+          this.addFx('drunk', pickOne(holders, this.rng).id, p.id, this.night + 2, '侍臣');
+        } break;
+        case 'gambler': for (const p of live('gambler')) {
+          this.wokeTonight.add(p.id);
+          const c = this.choiceOf(p); const t = c?.targets[0]; if (!t || !c.role) break;
+          this.goonCheck(p, t);
+          this.record('choice', `${this.tag(p.id)} 猜 ${this.tag(t.id)} 是${ROLES[c.role].name}`);
+          if (broken(p)) break;
+          if (t.role !== c.role) this.tryKill(p, 'gambler', messages);
+        } break;
+        case 'devilsadvocate': for (const p of live('devilsadvocate')) {
+          this.wokeTonight.add(p.id);
+          const t = this.choiceOf(p)?.targets[0]; if (!t) break;
+          this.lastPick[p.id] = t.id;
+          this.goonCheck(p, t);
+          this.fx = this.fx.filter((f) => !(f.kind === 'exeSafe' && f.source === p.id));
+          if (!broken(p)) this.addFx('exeSafe', t.id, p.id, this.night, '魔鬼代言人');
+        } break;
+        case 'lunatic': for (const p of live('lunatic')) {
+          if (!prompted.has(p.id)) break;
+          this.wokeTonight.add(p.id);
+          const ts = this.choiceOf(p)?.targets ?? [];
+          if (p.shownRole === 'po') this.used[`po-${p.id}`] = ts.length === 0;
+          this.record('choice', `疯子 ${this.tag(p.id)} 以为自己在行动，选了 ${ts.map((q) => this.name(q.id)).join('、') || '没有人'}（没有效果）`);
+        } break;
+        case 'exorcist': for (const p of live('exorcist')) {
+          this.wokeTonight.add(p.id);
+          const t = this.choiceOf(p)?.targets[0]; if (!t) break;
+          this.lastPick[p.id] = t.id;
+          this.goonCheck(p, t);
+          if (broken(p) || !DEMON_ROLES.has(t.role) || !t.alive) break;
+          this.blocked = t.id;
+          say(t, `驱魔人 **${this.name(p.id)}** 选中了你——你今晚不能行动。`);
+          this.record('st', `驱魔人选中了恶魔 ${this.tag(t.id)}，恶魔今晚不能行动`);
+        } break;
+        case 'zombuul': for (const p of this.players.filter((q) => q.role === 'zombuul' && q.alive)) {
+          if (this.blocked === p.id || this.diedToday) break;
+          this.wokeTonight.add(p.id);
+          const t = this.choiceOf(p)?.targets[0]; if (!t) break;
+          this.goonCheck(p, t);
+          if (!broken(p)) this.tryKill(t, 'demon', messages);
+        } break;
+        case 'pukka': for (const p of live('pukka')) {
+          const prev = this.pukkaVictim ? this.get(this.pukkaVictim) : null;
+          let fresh = null;
+          if (this.blocked !== p.id) {
+            this.wokeTonight.add(p.id);
+            const t = this.choiceOf(p)?.targets[0];
+            if (t) this.goonCheck(p, t);
+            if (t && !broken(p)) { this.addFx('poison', t.id, p.id, 'never', '普卡'); fresh = t; }
+          }
+          // 普卡醉酒中毒：链条冻结（上一个中毒者今晚不死，也不换人）
+          if (broken(p)) break;
+          // 选完之后，上一个中毒者死亡并恢复健康（被保护就只恢复健康）
+          if (prev) {
+            if (prev.id !== fresh?.id) this.fx = this.fx.filter((x) => !(x.kind === 'poison' && x.source === p.id && x.target === prev.id));
+            this.tryKill(prev, 'demon', messages);
+          }
+          this.pukkaVictim = fresh && fresh.alive ? fresh.id : null;
+        } break;
+        case 'shabaloth': for (const p of live('shabaloth')) {
+          // 反刍：上一夜被选过、现在死了的人之一（说书人决定）
+          if (!broken(p)) {
+            const cands = this.shabaLast.map((id) => this.get(id)).filter((q) => q && !q.alive);
+            const back = this.st.shabaRegurgitate(cands);
+            if (back) this.revive(back, '沙巴洛斯反刍');
+          }
+          if (this.blocked === p.id) { this.shabaLast = []; break; }
+          this.wokeTonight.add(p.id);
+          const ts = this.choiceOf(p)?.targets ?? [];
+          this.shabaLast = ts.map((q) => q.id);
+          for (const t of ts) { this.goonCheck(p, t); if (!broken(p)) this.tryKill(t, 'demon', messages); }
+        } break;
+        case 'po': for (const p of live('po')) {
+          if (this.blocked === p.id) break;
+          this.wokeTonight.add(p.id);
+          const ts = this.choiceOf(p)?.targets ?? [];
+          if (!ts.length) { this.poCharged = true; this.record('st', '珀今晚没有选人——下次可以杀三人'); break; }
+          this.poCharged = false;
+          for (const t of ts) { this.goonCheck(p, t); if (!broken(p)) this.tryKill(t, 'demon', messages); }
+        } break;
+        case 'assassin': for (const p of live('assassin')) {
+          if (!prompted.has(p.id)) break;
+          this.wokeTonight.add(p.id);
+          const t = this.choiceOf(p)?.targets[0]; if (!t) break;
+          this.used[p.id] = true;
+          this.goonCheck(p, t, { assassin: true });
+          if (!broken(p)) this.tryKill(t, 'assassin', messages);
+        } break;
+        case 'godfatherInfo': for (const p of live('godfather')) {
+          this.wokeTonight.add(p.id);
+          const outs = this.players.filter((q) => team(q) === 'outsider').map((q) => ROLES[q.role].name);
+          say(p, outs.length ? `在场的外来者：**${outs.join('、')}**。` : '场上**没有**外来者。');
+        } break;
+        case 'godfather': for (const p of live('godfather')) {
+          if (!prompted.has(p.id)) break;
+          this.wokeTonight.add(p.id);
+          const t = this.choiceOf(p)?.targets[0]; if (!t) break;
+          this.goonCheck(p, t);
+          if (!broken(p)) this.tryKill(t, 'godfather', messages);
+        } break;
+        case 'professor': for (const p of live('professor')) {
+          if (!prompted.has(p.id)) break;
+          this.wokeTonight.add(p.id);
+          const t = this.choiceOf(p)?.targets[0]; if (!t) break;
+          this.used[p.id] = true;
+          if (broken(p) || t.alive || team(t) !== 'townsfolk') { this.record('st', `教授选了 ${this.tag(t.id)}——没有复活`); break; }
+          this.revive(t, '教授');
+          if (t.role === 'grandmother') this.grandmotherInfo(t, say);
+        } break;
+        case 'gossip': {
+          const g = this.players.find((q) => q.role === 'gossip' && q.alive);
+          if (this.gossipPending && g && !broken(g)) {
+            const v = this.st.gossipVictim();
+            if (v) this.tryKill(v, 'gossip', messages);
+          }
+          this.gossipPending = false;
+        } break;
+        case 'tinker': for (const p of live('tinker')) {
+          if (!broken(p) && !this.protection(p, 'tinker') && this.st.tinkerDies(p)) this.tryKill(p, 'tinker', messages);
+        } break;
+        case 'moonchild': {
+          const mc = this.moonchildPick;
+          this.moonchildPick = null;
+          const m = mc && this.get(mc.by);
+          if (m && !broken(m) && mc.good) this.tryKill(this.get(mc.target), 'moonchild', messages);
+        } break;
+        case 'grandmother': for (const p of live('grandmother')) this.grandmotherInfo(p, say); break;
+        case 'chambermaid': for (const p of live('chambermaid')) {
+          const ts = this.choiceOf(p)?.targets ?? []; if (ts.length < 2) break;
+          for (const t of ts) this.goonCheck(p, t);
+          const truth = ts.filter((t) => this.wokeTonight.has(t.id)).length;
+          const n = broken(p) ? this.st.fakeChambermaid(p, truth) : truth;
+          say(p, `${ts.map((t) => this.name(t.id)).join(' 与 ')} 之中，今晚有 **${n}** 人因自己的能力被唤醒。`);
+        } break;
+        default: break;
+      }
+    }
+    // 莽夫换了阵营：告诉他
+    if (this.pendingGoonNews) {
+      const g = this.get(this.pendingGoonNews);
+      say(g, `你的阵营变了——你现在是**${this.evilOf(g) ? '邪恶' : '善良'}**的。`);
+    }
+    this.fx = this.fx.filter((f) => f.until !== 'dawn'); // 旅店老板的保护到黎明
+    this.lastExecuted = null;
+    this.checkWinner();
+    return { messages, ravenkeeper: null };
+  },
+
+  /** 祖母首夜（或被复活后）得知孙子。 */
+  grandmotherInfo(p, say) {
+    if (!this.grandchild || !this.get(this.grandchild)?.alive) this.grandchild = this.st.chooseGrandchild(p)?.id ?? null;
+    const gc = this.get(this.grandchild);
+    if (!gc) return;
+    this.wokeTonight.add(p.id);
+    const role = this.bmrBroken(p) ? this.st.falseRoleBMR(p, gc) : gc.role;
+    say(p, `你的孙子是 **${this.name(gc.id)}**，他是 **${ROLES[role].name}**。`);
+  },
+
+  // ───────────────────────── 白天 ─────────────────────────
+  dawnBMR() {
+    this.diedToday = false;
+    this.outsiderDiedToday = false;
+    this.gossipSaid = {};
+    this.pendingMoonchild = this.pendingMoonchild && !this.get(this.pendingMoonchild)?.alive ? this.pendingMoonchild : null;
+  },
+
+  /**
+   * 造谣者式的公开声明（谁都可以说，只有真造谣者的会生效）。statement：
+   *   { kind: 'role', target, role } X 是某角色 / { kind: 'evil', target } X 是邪恶的 / { kind: 'good', target } X 是善良的
+   *   { kind: 'demon', target } X 是恶魔 / { kind: 'inplay', role } 场上有某角色 / { kind: 'notinplay', role } 场上没有某角色
+   */
+  gossipStatement(uid, st) {
+    if (this.phase !== 'day') throw new Error('只能在白天发表声明');
+    const p = this.get(uid);
+    if (!p || !this.visAlive(p)) throw new Error('死亡玩家不能发表声明');
+    if (this.gossipSaid[uid]) throw new Error('你今天已经发表过声明了');
+    const t = st.target ? this.get(st.target) : null;
+    const known = { role: () => t && ROLES[st.role] && t.role === st.role, evil: () => t && this.evilOf(t), good: () => t && !this.evilOf(t),
+      demon: () => t && DEMON_ROLES.has(t.role), inplay: () => this.players.some((q) => q.role === st.role), notinplay: () => ROLES[st.role] && !this.players.some((q) => q.role === st.role) }[st.kind];
+    if (!known || (['role', 'evil', 'good', 'demon'].includes(st.kind) && !t) || (['role', 'inplay', 'notinplay'].includes(st.kind) && !ROLES[st.role])) throw new Error('声明不完整');
+    this.gossipSaid[uid] = true;
+    const text = this.statementText(st);
+    const truth = !!known();
+    if (p.role === 'gossip') {
+      if (truth) this.gossipPending = true;
+      this.record('st', `造谣者 ${this.tag(uid)} 声明"${text}"——${truth ? '为真，今晚会有人死亡' : '为假'}`);
+    } else this.record('st', `${this.tag(uid)} 声称"${text}"（不是造谣者，没有效果）`);
+    return { text };
+  },
+  statementText(st) {
+    const t = st.target ? this.name(st.target) : '';
+    const r = st.role ? ROLES[st.role]?.name : '';
+    return { role: `${t} 是${r}`, evil: `${t} 是邪恶的`, good: `${t} 是善良的`, demon: `${t} 是恶魔`, inplay: `场上有${r}`, notinplay: `场上没有${r}` }[st.kind] ?? '';
+  },
+
+  /** 月之子得知自己死亡后，公开选一名存活玩家。阵营看选人这一刻。 */
+  moonchildChoose(uid, targetId) {
+    if (this.pendingMoonchild !== uid) throw new Error('现在不需要你选人');
+    const t = this.get(targetId);
+    if (!t || !this.visAlive(t)) throw new Error('要选一名存活的玩家');
+    this.pendingMoonchild = null;
+    this.moonchildPick = { by: uid, target: t.id, good: !this.evilOf(t) };
+    this.record('choice', `月之子 ${this.tag(uid)} 选了 ${this.tag(t.id)}（${this.evilOf(t) ? '邪恶，无事发生' : '善良，今晚会死'}）`);
+  },
+
+  /** 处决。返回 died / saved / fake / already。 */
+  executeBMR(p) {
+    this.executedToday = true;
+    this.lastExecuted = p.id;
+    this.log.push(`${this.name(p.id)} 被处决`);
+    const res = this.tryKill(p, 'execution');
+    if (res === 'died' && team(p) === 'minion') {
+      const min = this.players.find((q) => q.role === 'minstrel' && q.alive && !this.bmrBroken(q));
+      if (min) {
+        for (const q of this.players) if (q.id !== min.id) this.fx.push({ kind: 'drunk', target: q.id, source: min.id, until: this.day + 1, why: '吟游诗人' });
+        this.record('st', '爪牙死于处决：除吟游诗人外所有人醉酒，直到明天黄昏');
+      }
+    }
+    if (this.mastermindDay === this.day) {
+      this.setWinner(this.evilOf(p) ? 'good' : 'evil', `主谋的额外一天：被处决的 ${this.name(p.id)} 是${this.evilOf(p) ? '邪恶' : '善良'}的`);
+    }
+    this.checkWinner();
+    return res;
+  },
+
+  endDayBMR() {
+    let executed = null; let result = null;
+    if (!this.executedToday && this.block) {
+      executed = this.block;
+      result = this.executeBMR(this.get(executed));
+    }
+    if (!this.winner && this.mastermindDay === this.day) this.setWinner('good', '主谋的额外一天没有处决任何人，善良获胜');
+    // 黄昏：到期的醉酒、保护结束
+    this.fx = this.fx.filter((f) => !(typeof f.until === 'number' && Number.isFinite(f.until) && f.until <= this.day));
+    return { executed, result };
+  },
+
+  checkWinnerBMR() {
+    if (this.winner) return this.winner;
+    if (this.mastermindDay != null) return null; // 主谋的额外一夜一天：照常进行，胜负在那天黄昏定
+    const demonAlive = this.players.some((p) => p.alive && DEMON_ROLES.has(p.role));
+    if (!demonAlive) {
+      const mm = this.players.find((p) => p.role === 'mastermind' && p.alive && !this.bmrBroken(p));
+      if (this.demonExecuted && mm) {
+        this.mastermindDay = this.day + 1;
+        this.record('st', '恶魔死于处决，但主谋还活着：额外进行一个夜晚和一个白天');
+        return null;
+      }
+      this.setWinner('good', '恶魔已经死亡');
+    } else if (this.aliveCount() <= 2) this.setWinner('evil', '只剩两名存活玩家，恶魔获胜');
+    return this.winner;
+  },
+};

@@ -1,0 +1,40 @@
+{
+  "name": "botc-activity",
+  "version": "1.0.0",
+  "description": "血染钟楼（暗流涌动）Discord 活动：内嵌小程序 + 机器人说书",
+  "main": "src/server/index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "build": "vite build",
+    "start": "node src/server/index.js",
+    "dev": "vite build --watch --mode development & node --watch-path=src src/server/index.js",
+    "test": "node --test test/*.test.js",
+    "map": "node scripts/gen-map.mjs"
+  },
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@fontsource/barlow-condensed": "^5.3.0",
+    "@fontsource/libre-baskerville": "^5.3.0",
+    "@fontsource/noto-sans-sc": "^5.3.1",
+    "@fontsource/noto-serif-sc": "^5.3.1",
+    "discord.js": "^14.27.0",
+    "dotenv": "^18.0.8",
+    "express": "^5.3.0",
+    "ws": "^8.22.0"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "devDependencies": {
+    "@discord/embedded-app-sdk": "^2.5.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "pixi.js": "^8.21.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.170.0",
+    "vite": "^6.4.5"
+  }
+}
