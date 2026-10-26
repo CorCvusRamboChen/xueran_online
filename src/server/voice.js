@@ -142,8 +142,27 @@ export class VoiceHub {
         const g = await guild();
         const ch = g.channels.cache.get(channelId);
         if (!ch) return;
-        if (squareId) await Promise.all([...ch.members.keys()].map((id) => g.members.edit(id, { channel: squareId }).catch(() => {})));
+        // 先把里面的人送回广场，等 Discord 确认都出来了再删频道（直接删会把人踢出语音）；没出来的再拉一次
+        if (squareId) {
+          for (let k = 0; k < 3 && ch.members.size; k++) {
+            await Promise.all([...ch.members.keys()].map((id) => g.members.edit(id, { channel: squareId }).catch((e) => console.warn(`[botc] 送回广场失败 ${id}：${e.message}`))));
+            for (let w = 0; w < 10 && ch.members.size; w++) await new Promise((ok) => setTimeout(ok, 200));
+          }
+        }
         await ch.delete().catch(() => {});
+      },
+
+      /** 这个人现在在哪个语音频道（不在语音里是 null）。读机器人收到的语音状态，不额外请求。 */
+      async where(id) {
+        const g = await guild();
+        return vsOf(g, id)?.channelId ?? null;
+      },
+
+      /** 把一个人拉到某个语音频道。成功返回 true。 */
+      async move(id, channelId) {
+        const g = await guild();
+        if (!connected(g, id)) return false;
+        try { await g.members.edit(id, { channel: channelId }); return true; } catch (e) { console.warn(`[botc] 拉人失败 ${id} → ${channelId}：${e.message}`); return false; }
       },
 
       async moveAll(ids, squareId) {

@@ -31,8 +31,8 @@ export const PROPS = {
 
 /** 房子的地板（俯视画，放进斜视角的地面层会被压扁成菱形）：木地板 + 室内陈设。 */
 export const houseFloor = (h) => ({
-  el: h.id === 'graveyard'
-    ? <g><rect x={h.x} y={h.y} width={h.w} height={h.h} fill="#d6d4cb" /><rect x={h.x} y={h.y} width={h.w} height={h.h} fill="url(#grain)" /></g>
+  el: !h.height // 露天的墓园：一片砂石地
+    ? <g><rect x={h.x} y={h.y} width={h.w} height={h.h} fill={h.yard ?? '#d6d4cb'} /><rect x={h.x} y={h.y} width={h.w} height={h.h} fill="url(#grain)" /></g>
     : <g><rect x={h.x} y={h.y} width={h.w} height={h.h} fill="url(#planks)" stroke={INK} strokeWidth="1.2" /><Interior h={h} /></g>,
   box: [h.x, h.y, h.w, h.h],
 });

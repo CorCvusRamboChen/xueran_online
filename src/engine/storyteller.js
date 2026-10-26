@@ -262,6 +262,21 @@ export class Storyteller {
   // ───────────── 黯月初升：说书人要做的选择 ─────────────
   // 原则：规则允许的范围里，往落后的一方偏一点；不要用能力直接定胜负。
 
+  /**
+   * 房规"夜里死了仍拿信息"：这条信息按醉酒处理，给真的还是假的。善良领先时多给假的，邪恶领先时多给真的（大约 25%–75%）。
+   * 同一个人同一晚只判一次。
+   */
+  deadLies(p) {
+    const key = `${this.g.night}:${p.id}`;
+    this.deadMemo ??= {};
+    if (key in this.deadMemo) return this.deadMemo[key];
+    const b = this.balance();
+    const lie = this.rng() < clamp(0.5 + 0.25 * b, 0.25, 0.75);
+    this.deadMemo[key] = lie;
+    this.note(`夜里死了仍拿信息（醉酒）：${this.g.name(p.id)} 这次给${lie ? '假' : '真'}信息`, b);
+    return lie;
+  }
+
   /** 和平主义者：被处决的善良玩家要不要活下来。邪恶领先时更常救；每局别救太多次。 */
   pacifistSaves(p) {
     const b = this.balance();
@@ -308,8 +323,10 @@ export class Storyteller {
     const can = g.alive().filter((q) => !q.apparentDead && !g.protection(q, "gossip") && !(q.role === "fool" && !g.used[q.id]));
     if (!can.length) return null;
     const b = this.balance();
-    const evil = can.filter((q) => g.evilOf(q) && ROLES[q.role].team !== "demon");
-    const good = can.filter((q) => !g.evilOf(q) && q.role !== "gossip");
+    // 新手照顾：说书人自己挑谁死的时候，能不挑新手就不挑
+    const easy = (list) => { const vet = list.filter((q) => !g.newbies?.includes(q.id)); return vet.length ? vet : list; };
+    const evil = easy(can.filter((q) => g.evilOf(q) && ROLES[q.role].team !== "demon"));
+    const good = easy(can.filter((q) => !g.evilOf(q) && q.role !== "gossip"));
     const v = b < -0.3 && evil.length && this.rng() < 0.5 ? pick(evil, this.rng) : pick(good.length ? good : can, this.rng);
     this.note(`造谣者的声明为真，说书人选 ${g.name(v.id)} 死亡`, b);
     return v;

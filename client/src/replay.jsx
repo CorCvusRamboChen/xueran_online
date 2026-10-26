@@ -49,6 +49,63 @@ export function Replay({ timeline }) {
 }
 
 const VOTE_OUTCOME = { block: '送上处决台', tie: '平票（台上清空）', lower: '票数不如台上的人', fail: '票数不够' };
+
+/**
+ * 关键信息：按天倒着列——那天早上的刀口（昨晚谁死了 / 平安夜 / 谁复活了）、当天每一次投票的票型、黄昏的处决结果。
+ * knives / execs / votes 都是公开信息（天亮、投票时大家都看到了），这里只是整理在一起方便盘。
+ */
+export function KeyInfo({ votes = [], knives = [], execs = [], g, name }) {
+  const days = [...new Set([...knives.map((k) => k.day), ...votes.map((v) => v.day), ...execs.map((e) => e.day)])].sort((a, b) => b - a);
+  if (!days.length) return <p className="muted">还没有关键信息。每晚的刀口、每次投票的票型、每天的处决都会整理在这里。</p>;
+  const who = (id) => (g(id) ? `${g(id).seat}号 ${name(id).replace(/^\d+号 /, '')}` : '?');
+  return (
+    <div className="vote-history key-info">
+      {days.map((day) => {
+        const k = knives.find((x) => x.day === day);
+        const ex = execs.find((x) => x.day === day);
+        const list = votes.filter((v) => v.day === day);
+        return (
+          <section key={day} className="vh-day">
+            <h4>第 {cnNum(day)} 天</h4>
+            {k && (
+              <div className={`ki-row ki-knife ${k.deaths.length ? '' : 'peace'}`}>
+                <span className="ki-tag">刀口 · 第{cnNum(k.night)}夜</span>
+                <span>{k.deaths.length ? k.deaths.map(who).join('、') + ' 死亡' : '平安夜'}{k.revived?.length ? `；${k.revived.map(who).join('、')} 复活` : ''}</span>
+              </div>
+            )}
+            {list.map((v, i) => <VoteCard key={i} v={v} g={g} name={name} />)}
+            {ex && (
+              <div className={`ki-row ki-exec ${ex.id ? '' : 'none'}`}>
+                <span className="ki-tag">处决</span>
+                <span>{ex.id ? `${who(ex.id)}${ex.saved ? ' 被处决，但没有死' : ' 被处决'}` : '今天没有人被处决'}</span>
+              </div>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 一次投票：谁提名谁、几票、结果、谁举了手。 */
+function VoteCard({ v, g, name }) {
+  return (
+    <div className={`vh-card vh-${v.outcome}`}>
+      <div className="vh-head">
+        <b>{g(v.nominator)?.seat}号 → {g(v.nominee)?.seat}号</b>
+        <span className="vh-count"><b>{v.count}</b> / {v.threshold} 票</span>
+      </div>
+      <p className="vh-line">{name(v.nominator)} 提名 {name(v.nominee)} · <b>{VOTE_OUTCOME[v.outcome]}</b></p>
+      <div className="vh-voters">
+        {v.voters.length ? v.voters.map((id) => (
+          <span key={id} className="vh-voter">
+            {g(id) && <Portrait p={g(id)} size={22} prefer="avatar" />}{g(id)?.seat}号
+          </span>
+        )) : <span className="muted">没有人举手</span>}
+      </div>
+    </div>
+  );
+}
 /** 票型：每天每次投票谁提名谁、谁举了手。 */
 export function VoteHistory({ votes = [], g, name }) {
   if (!votes.length) return <p className="muted">还没有投过票。每次投票结束后，谁举了手都会记在这里。</p>;

@@ -37,11 +37,65 @@ export const shuffle = (arr, rng) => {
 const sample = (arr, n, rng) => shuffle(arr, rng).slice(0, n);
 const pick = (arr, rng) => arr[Math.floor(rng() * arr.length)];
 
-/** 按人数随机出一套角色（已处理男爵 +2 外来者）。 */
-export function rollRoles(n, rng) {
+// 信息位（说书人圈子的经验，官方没有推荐）：大信息 = 每晚都给、最能抓人的共情者和占卜师；小信息 = 首夜给一次的"F4"。
+export const BIG_INFO = ['empath', 'fortuneteller'];
+export const SMALL_INFO = ['washerwoman', 'librarian', 'investigator', 'chef'];
+
+/**
+ * 暗流涌动的 AI 配板：12 人及以下时按经验调信息位，全是概率、不是硬规定（"不要一直有"）：
+ * · 共情者和占卜师同时在场的概率降低（大约只留三分之一）；
+ * · F4 一般给 1–2 个（0 个、3 个以上很少出）；
+ * · 有男爵时多半也有图书管理员（男爵多出两个外来者，图书管理员能看到外来者）。
+ * 13 人以上照常随机。做法：照常随机出一套，按上面的条件以一定概率"接受"，不接受就重抽。
+ */
+export function rollTB(n, rng, { noBaron = false } = {}) {
+  if (n > 12) return rollRoles(n, rng, { noBaron });
+  const F4_KEEP = [0.15, 1, 1, 0.2, 0.05];
+  for (let k = 0; k < 300; k++) {
+    const roles = rollRoles(n, rng, { noBaron });
+    let keep = 1;
+    if (roles.includes('empath') && roles.includes('fortuneteller')) keep *= 0.35;
+    keep *= F4_KEEP[roles.filter((r) => SMALL_INFO.includes(r)).length] ?? 0.05;
+    if (roles.includes('baron') && !roles.includes('librarian')) keep *= 0.3;
+    if (rng() < keep) return roles;
+  }
+  return rollRoles(n, rng, { noBaron });
+}
+
+// ───────────── AI 配板：强神打强神，弱神打弱神 ─────────────
+// 经验分（官方没有公式）：善良的分减邪恶的分，正数偏善良。只用来比较同人数的几套配板。
+const TB_GOOD_W = {
+  washerwoman: 0.8, librarian: 0.8, investigator: 0.9, chef: 0.9, empath: 1.4, fortuneteller: 1.6, undertaker: 1.0,
+  monk: 1.2, ravenkeeper: 0.9, virgin: 1.0, slayer: 1.0, soldier: 0.8, mayor: 1.2,
+  butler: -0.3, drunk: -0.6, recluse: -0.5, saint: -0.7,
+};
+const TB_EVIL_W = { imp: 3.0, poisoner: 1.6, spy: 1.4, scarletwoman: 1.2, baron: 0.6 };
+export function setupScoreTB(roles) {
+  let good = 0; let evil = 0;
+  for (const r of roles) { good += TB_GOOD_W[r] ?? 0; evil += TB_EVIL_W[r] ?? 0; }
+  // 投毒者最怕没东西毒，最喜欢信息位多：信息越多它越值钱
+  if (roles.includes('poisoner')) evil += 0.15 * roles.filter((r) => ['empath', 'fortuneteller', 'undertaker', 'chef', 'investigator'].includes(r)).length;
+  return Math.round((good - evil) * 100) / 100;
+}
+
+/**
+ * 暗流涌动的 AI 配板：照 rollTB 的信息位规则随机出 tries 套，按平衡分排好，去掉两头最偏的，从中间那段里随机挑一套。
+ * 效果是"强神打强神，弱神打弱神"：善良这边信息位很强时，邪恶这边多半也是投毒者、间谍这种强爪牙，反过来也一样。
+ */
+export function balancedTB(n, rng, { noBaron = false, tries = 40 } = {}) {
+  const cands = Array.from({ length: tries }, () => rollTB(n, rng, { noBaron })).map((roles) => ({ roles, s: setupScoreTB(roles) })).sort((a, b) => a.s - b.s);
+  const lo = Math.floor(tries * 0.3); const hi = Math.max(lo + 1, Math.ceil(tries * 0.7));
+  return cands[lo + Math.floor(rng() * (hi - lo))].roles;
+}
+
+/** 房规"夜里死了仍拿信息"：这些角色当晚被杀后照样得到当晚的信息，但按醉酒处理（真假由说书人定）。 */
+export const DEAD_INFO_TB = new Set(['empath', 'fortuneteller', 'undertaker']);
+
+/** 按人数随机出一套角色（已处理男爵 +2 外来者）。noBaron：这局不发男爵（房规：小局不要男爵）。 */
+export function rollRoles(n, rng, { noBaron = false } = {}) {
   if (n < MIN_PLAYERS || n > MAX_PLAYERS) throw new Error(`人数需在 ${MIN_PLAYERS}–${MAX_PLAYERS} 之间`);
   let [t, o, m] = DISTRIBUTION[n];
-  const minions = sample(MINIONS, m, rng);
+  const minions = sample(noBaron ? MINIONS.filter((r) => r !== 'baron') : MINIONS, m, rng);
   if (minions.includes('baron')) { t -= 2; o += 2; }
   return shuffle([...sample(TOWNSFOLK, t, rng), ...sample(OUTSIDERS, o, rng), ...minions, 'imp'], rng);
 }
@@ -52,7 +106,7 @@ export class Game {
    * @param {{rng?:()=>number, roles?:string[], misregister?:number}} opts
    *   misregister：陌客/间谍"错误登记"的固定概率（测试用）；不给就由说书人按局势判定
    */
-  constructor(players, { rng = Math.random, roles, misregister = null, evilInfo = null, script = 'tb', drunkAs = null } = {}) {
+  constructor(players, { rng = Math.random, roles, misregister = null, evilInfo = null, script = 'tb', drunkAs = null, noBaron = false, deadDrunk = false } = {}) {
     this.rng = rng;
     this.script = script === 'bmr' ? 'bmr' : 'tb';
     // 官方规则：7 人及以上第一夜恶魔和爪牙互认、恶魔拿 3 个伪装；6 人及以下都不给（房规可打开）
@@ -61,13 +115,14 @@ export class Game {
     this.bluffsShared = false; // 恶魔有没有把伪装告诉爪牙
     this.id = Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36); // 这一局的编号（客户端按它分开存标记）
     this.misregister = misregister;
+    this.deadDrunk = !!deadDrunk; // 房规：夜里被杀的信息角色照样拿当晚的信息，但按醉酒处理（官方：死了就没有能力）
     this.suspicion = {}; // 每个人被提名、得票的累计，说书人判断局势用
     this.timeline = [];  // 终局复盘：每晚谁选了谁、谁得到什么信息（真/假）、死亡、提名投票、说书人的判定
     this.st = new Storyteller(this, rng);
     this.nightDeaths = [];
     if (this.script === 'bmr') this.setupBMR(players, roles, rng);
     else {
-      const assigned = roles ?? rollRoles(players.length, rng);
+      const assigned = roles ?? balancedTB(players.length, rng, { noBaron });
       if (assigned.length !== players.length) throw new Error('角色数量与玩家数量不符');
 
       this.players = players.map((p, i) => ({
@@ -129,9 +184,9 @@ export class Game {
   toJSON() {
     const keys = ['misregister', 'suspicion', 'timeline', 'players', 'bluffs', 'redHerring', 'phase', 'night', 'day', 'winner', 'winReason',
       'poisonTarget', 'monkTarget', 'butlerMaster', 'virginUsed', 'slayerUsed', 'lastExecuted', 'choices', 'nightDeaths', 'log',
-      'block', 'blockVotes', 'executedToday', 'shooters', 'firstDemon', 'evilInfo', 'evilKnown', 'bluffsShared', 'id',
+      'block', 'blockVotes', 'blockTied', 'executedToday', 'shooters', 'firstDemon', 'evilInfo', 'evilKnown', 'bluffsShared', 'id',
       'script', 'fx', 'used', 'lastPick', 'pukkaVictim', 'poCharged', 'shabaLast', 'grandchild', 'gossipPending', 'gossipSaid',
-      'moonchildPick', 'pendingMoonchild', 'diedToday', 'outsiderDiedToday', 'mastermindDay', 'demonExecuted', 'nightRevived'];
+      'moonchildPick', 'pendingMoonchild', 'diedToday', 'outsiderDiedToday', 'mastermindDay', 'demonExecuted', 'nightRevived', 'newbies', 'deadDrunk'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -232,6 +287,7 @@ export class Game {
     this.night += 1;
     this.choices = {};
     this.nightDeaths = [];
+    this.demonKills = [];
     this.poisonTarget = null; // 上一晚的毒到黄昏结束
     this.monkTarget = null;
     this.butlerMaster = null;
@@ -270,7 +326,8 @@ export class Game {
       .filter((p) => !(first && p.shownRole === 'monk') && !(first && p.shownRole === 'imp'))
       .map((p) => {
         const c = ROLES[p.shownRole].choose;
-        const options = this.players.filter((q) => (!c.notSelf || q.id !== p.id) && (p.shownRole !== 'imp' || q.alive));
+        // 官方规则：能力没写"存活的"就可以选死人。小恶魔选一个已死的玩家 = 空刀（今晚没人死）
+        const options = this.players.filter((q) => !c.notSelf || q.id !== p.id);
         return { playerId: p.id, role: p.shownRole, count: c.count, options: options.map((q) => q.id) };
       });
   }
@@ -296,9 +353,9 @@ export class Game {
     const prompt = this.nightPrompts().find((x) => x.playerId === playerId);
     if (!prompt) return;
     let opts = prompt.options;
-    // 自动替小恶魔/投毒者选时别选自己人，免得太蠢
+    // 自动替小恶魔/投毒者选时别选自己人、也别选死人（超时替他选不该变成空刀），免得太蠢
     if (['imp', 'poisoner'].includes(prompt.role)) {
-      const notEvil = opts.filter((id) => !isEvilRole(this.get(id).role));
+      const notEvil = opts.filter((id) => !isEvilRole(this.get(id).role) && this.get(id).alive);
       if (notEvil.length) opts = notEvil;
     }
     this.choices[playerId] = sample(opts, prompt.count, this.rng);
@@ -322,11 +379,14 @@ export class Game {
 
     let ravenkeeper = null;
     for (const p of this.nightOrder()) {
-      if (!p.alive && p.shownRole !== 'ravenkeeper') continue;
+      // 房规"夜里死了仍拿信息"：今晚被杀的信息角色照样醒来拿信息，但按醉酒处理（真假由说书人定），信息末尾会注明
+      const deadInfo = this.deadDrunk && !p.alive && this.nightDeaths.includes(p.id) && DEAD_INFO_TB.has(p.shownRole);
+      if (!p.alive && p.shownRole !== 'ravenkeeper' && !deadInfo) continue;
       const role = p.shownRole;
       const choice = this.choices[p.id];
-      const broken = this.broken(p);
-      const lies = () => this.lies(p);
+      const broken = this.broken(p) || deadInfo;
+      const lies = () => (deadInfo && !this.broken(p) ? this.st.deadLies(p) : this.lies(p));
+      const said = messages.length;
       switch (role) {
         case 'poisoner':
           if (choice) this.poisonTarget = choice[0];
@@ -368,6 +428,7 @@ export class Game {
           break;
         default: break;
       }
+      if (deadInfo) for (let i = said; i < messages.length; i++) if (messages[i].playerId === p.id) messages[i].text += '\n（你今晚死了。按房规你仍得到了这条信息，但它按醉酒处理：**可能是假的**。）';
     }
     // 守鸦人在恶魔之后醒；今晚被杀才会被唤醒
     const rk = this.players.find((p) => p.shownRole === 'ravenkeeper' && this.nightDeaths.includes(p.id));
@@ -406,6 +467,7 @@ export class Game {
     const aliveBefore = this.aliveCount();
     p.alive = false;
     if (this.phase === 'night') this.nightDeaths.push(p.id);
+    if (this.phase === 'night' && cause === 'demon') (this.demonKills ??= []).push(p.id); // 夜里被恶魔破门杀死的（前端播破门动画）
     this.log.push(`${this.name(p.id)} 死亡（${cause}）`);
     const why = { demon: '被恶魔杀死', starpass: '恶魔自杀（传位）', execution: '被处决', slayer: '被猎手射杀', storyteller: '说书人判定死亡' }[cause] ?? cause;
     this.record('death', `${this.tag(p.id)} ${why}`);
@@ -481,6 +543,7 @@ export class Game {
     this.nominees = new Set();
     this.block = null;     // 当前要被处决的玩家
     this.blockVotes = 0;   // 当前最高票（平票时 block 为 null）
+    this.blockTied = [];   // 平票时同票的几个人（只用来显示：他们一起站在台上，但谁都不会被处决）
     this.executedToday = false;
   }
 
@@ -535,8 +598,8 @@ export class Game {
     const threshold = this.threshold();
     let outcome = 'fail';
     if (count >= threshold) {
-      if (count > this.blockVotes) { this.block = nomineeId; this.blockVotes = count; outcome = 'block'; }
-      else if (count === this.blockVotes) { this.block = null; outcome = 'tie'; }
+      if (count > this.blockVotes) { this.block = nomineeId; this.blockVotes = count; this.blockTied = []; outcome = 'block'; }
+      else if (count === this.blockVotes) { this.blockTied = [...new Set([...(this.block ? [this.block] : this.blockTied ?? []), nomineeId])]; this.block = null; outcome = 'tie'; }
       else outcome = 'lower';
     }
     this.log.push(`对 ${this.name(nomineeId)} 投票：${count} 票（需 ${threshold}）→ ${outcome}`);

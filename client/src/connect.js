@@ -107,7 +107,8 @@ export async function login(onStep = () => {}) {
   const q = new URLSearchParams(location.search);
   let id = q.get('id') || sessionStorage.getItem('botc-dev-id'); // ?id=xxx：截图/测试时指定身份
   if (!id) { id = Math.random().toString(36).slice(2, 10); sessionStorage.setItem('botc-dev-id', id); }
-  return { dev: { id, name: q.get('name') || `玩家${id.slice(0, 3)}`, table: q.get('table') || 'table' } };
+  // ?devRole=poisoner：开局时把这个角色换给自己（只在本地测试模式下生效）
+  return { dev: { id, name: q.get('name') || `玩家${id.slice(0, 3)}`, table: q.get('table') || 'table', role: q.get('devRole') || null } };
 }
 
 export function openSocket(hello, { onState, onPos, onStatus, onUpdate }) {

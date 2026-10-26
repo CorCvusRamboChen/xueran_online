@@ -5,13 +5,16 @@ import { CHARACTERS } from '../../src/shared/characters.js';
 import { Tag, Panel, Btn } from './ui.jsx';
 import { ClockTower, Tree, Lamp, House, MAP_COLORS as C, INK } from './art/TownArt.jsx';
 import { SCENE_ART, ROLE_ART } from './art.js';
-import { ROLES, TEAM_NAME } from '../../src/engine/roles.js';
+import { ROLES, TEAM_NAME, DISTRIBUTION, rolesOf } from '../../src/engine/roles.js';
 import { ATTR } from './flavor.js';
 import { AbilityCard } from './AbilityCard.jsx';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Replay, VoteHistory } from './replay.jsx';
-import { SETUPS } from '../../src/shared/setups.js';
+import { SETUPS, presetsFor, PRESET_SHARE } from '../../src/shared/setups.js';
+import { Glossed } from './terms.jsx';
+import { NIGHT_ORDER, STEP_NAMES } from '../../src/shared/nightOrder.js';
+import { TutorialIntro } from './TutorialIntro.jsx';
 
 // 标题画上的四栋房子（和游戏地图同一套画法）
 const hero = (id, name, x, y, w, h, side) => {
@@ -39,6 +42,7 @@ export function Lobby({ s, act, ask, onTutorial }) {
   const d = DIST[n];
   const set = (patch) => act('settings', patch);
   const human = st.mode === 'human';
+  const [intro, setIntro] = useState(false); // 新手教程的开场介绍
 
   const art = SCENE_ART['lobby-hero'];
   return (
@@ -68,7 +72,7 @@ export function Lobby({ s, act, ask, onTutorial }) {
         <section className="lobby-left">
           <div className="hero-title">
             <h1 className="title">血染钟楼</h1>
-            <Tag tone="dark">暗流涌动 · TROUBLE BREWING</Tag>
+            <Tag tone="dark">{st.script === 'bmr' ? '黯月初升 · BAD MOON RISING' : '暗流涌动 · TROUBLE BREWING'}</Tag>
           </div>
           <nav className="menu">
             {!(human && host) && (joined
@@ -78,7 +82,8 @@ export function Lobby({ s, act, ask, onTutorial }) {
             {host && <Btn className="menu-item" onClick={() => act('addBots', { count: 1 })}>加一个机器人玩家</Btn>}
             {!host && !s.hostOnline && <Btn className="menu-item" onClick={() => act('claimHost')}>房主不在，接管房主</Btn>}
             {!host && s.hostOnline && <p className="menu-wait">等房主开始……</p>}
-            {onTutorial && <Btn className="menu-item menu-tut" onClick={onTutorial}>新手教程（单人练习，约 5 分钟）</Btn>}
+            {onTutorial && <Btn className="menu-item menu-tut" onClick={() => setIntro(true)}>新手教程（动画介绍 + 练习局）</Btn>}
+            {intro && createPortal(<TutorialIntro onStart={() => { setIntro(false); onTutorial(); }} onClose={() => setIntro(false)} />, document.body)}
           </nav>
           <ul className="lobby-tips">
             <li>大家先进同一个语音频道，<b>房主也要在里面</b>——机器人会把它当成城镇广场。</li>
@@ -97,6 +102,11 @@ export function Lobby({ s, act, ask, onTutorial }) {
                     <Portrait p={p} size={52} frame={p.id === s.me ? 'var(--mot)' : '#f4f4f0'} />
                     <span className="lr-seat">{i + 1}</span>
                     <span className="lr-name">{p.id === s.me ? '你' : p.name}</span>
+                    {/* 新手标记：大家都看得到；房主点一下切换（机器人不用标） */}
+                    {(host && !p.id.startsWith('bot-')) ? (
+                      <button type="button" className={`lr-newbie ${s.newbies?.includes(p.id) ? 'on' : ''}`} onClick={() => act('markNewbie', { player: p.id, on: !s.newbies?.includes(p.id) })}
+                        title="标成新手：发身份时尽量避开难角色，机器人和 AI 说书人也会照顾一下">{s.newbies?.includes(p.id) ? '新手' : '+新手'}</button>
+                    ) : s.newbies?.includes(p.id) && <span className="lr-newbie on">新手</span>}
                     {host && p.id !== s.me && <button type="button" className="kick" onClick={() => act('kick', { target: p.id })} aria-label="请他离开">×</button>}
                   </div>
                 ))}
@@ -119,14 +129,23 @@ export function Lobby({ s, act, ask, onTutorial }) {
             <p className="muted setting-note">{st.script === 'bmr' ? '《黯月初升》：中等难度的"死亡盛宴"——恶魔一夜可能杀多人，好人有很多保命和复活手段。推荐 7 人及以上。' : '《暗流涌动》：入门剧本，信息多、规则直白，推荐第一次玩。'}</p>
             <div className="setting mode-row">
               <span>配置</span>
-              <select className="preset-select" value={st.preset ?? ''} disabled={!host} onChange={(e) => set({ preset: e.target.value === '' ? null : Number(e.target.value) })}>
-                <option value="">按人数随机抽角色</option>
-                {(SETUPS[st.script ?? 'tb'] ?? []).map((x, i) => <option key={i} value={i}>官方八人推荐 {i + 1}：{x.name}</option>)}
-              </select>
+              <div className="seg">
+                {[['preset', '推荐预设'], ['ai', 'AI 配置'], ['random', '完全随机']].map(([id, label]) => (
+                  <button key={id} type="button" className={(st.setupMode ?? 'preset') === id ? 'on' : ''} disabled={!host} onClick={() => set({ setupMode: id })}>{label}</button>
+                ))}
+              </div>
             </div>
-            {st.preset != null && SETUPS[st.script ?? 'tb']?.[st.preset] && (
-              <p className="muted setting-note">{n === 8 ? '' : '（只在正好 8 人时生效，现在会按人数随机）'}{SETUPS[st.script ?? 'tb'][st.preset].note}</p>
-            )}
+            <p className="muted setting-note">{(() => {
+              const mode = st.setupMode ?? 'preset';
+              if (mode === 'ai') return 'AI 配置：随机出几十套，按强弱打分挑中间的——强神对强神、弱神对弱神；还会照顾信息位和保护角色别扎堆。';
+              if (mode === 'random') return '完全随机：按人数表纯随机抽角色，不调平衡（可能很偏）。';
+              const list = presetsFor(st.script ?? 'tb', n);
+              const off = list.filter((x) => x.official).length;
+              return list.length
+                ? `推荐预设：${n} 人有 ${list.length} 套推荐配置${off ? `（官方 ${off} 套，优先）` : ''}，大约 ${Math.round(PRESET_SHARE * 100)}% 的局从里面挑，其余用 AI 配置。`
+                : n ? `推荐预设：${n} 人还没有推荐配置，会用 AI 配置。` : '推荐预设：按坐下的人数从推荐配置里挑，这个人数没有的话用 AI 配置。';
+            })()}</p>
+            {host && s.roleAssign && n > 0 && <RoleAssign s={s} act={act} script={st.script ?? 'tb'} />}
             <div className="setting mode-row">
               <span>说书人</span>
               <div className="seg">
@@ -142,6 +161,8 @@ export function Lobby({ s, act, ask, onTutorial }) {
                 <Toggle label="发言时其他人闭麦" on={st.speechMute} disabled={!host} onChange={(v) => set({ speechMute: v })} />
                 <Select label="选人时限" value={st.chooseSeconds} disabled={!host} options={[45, 60, 90, 120, 180]} unit="秒" onChange={(v) => set({ chooseSeconds: v })} />
                 <Toggle label="随机排座位" on={st.shuffle} disabled={!host} onChange={(v) => set({ shuffle: v })} />
+                {st.script !== 'bmr' && <Toggle label="7 人以下不发男爵" on={st.smallNoBaron ?? true} disabled={!host} onChange={(v) => set({ smallNoBaron: v })} />}
+                <Toggle label="夜里死了仍拿信息（醉酒）" on={!!st.deadDrunk} disabled={!host} onChange={(v) => set({ deadDrunk: v })} />
               </div>
               <div className="setting-group">
                 <h4>白天</h4>
@@ -241,12 +262,39 @@ const TEAM_HINT = {
 };
 
 /** 首页：暗流涌动全部 22 个角色的技能。可以按阵营筛选，点一张看完整的能力牌。 */
+/** 夜间顺序：首夜 / 其他夜晚各一列，每步写这个角色醒来做什么，最后讲为什么这么排（照官方的夜晚顺序表）。 */
+function NightOrder({ script }) {
+  const o = NIGHT_ORDER[script];
+  const row = ([id, what], i) => {
+    const r = ROLES[id];
+    const color = r ? ATTR[r.team].color : 'var(--muted)';
+    return (
+      <li key={`${id}-${i}`} style={{ '--attr': color }}>
+        <span className="no-n">{i + 1}</span>
+        <span className="no-art">{r && ROLE_ART[id] ? <img src={ROLE_ART[id]} alt="" loading="lazy" /> : null}</span>
+        <span className="no-body"><b>{r ? r.name : STEP_NAMES[id]}</b><span><Glossed text={what} /></span></span>
+      </li>
+    );
+  };
+  return (
+    <div className="night-order">
+      <p className="muted">说书人每晚按这个顺序叫人。没在场的角色直接跳过；死了的人不再醒（守鸦人这种死了才触发的除外）。</p>
+      <div className="no-cols">
+        <section><h3>☾ 首夜</h3><ol>{o.first.map(row)}</ol></section>
+        <section><h3>☾ 其他夜晚</h3><ol>{o.other.map(row)}</ol></section>
+      </div>
+      <h3>为什么这么排</h3>
+      <ul className="no-why">{o.why.map((t) => <li key={t}><Glossed text={t} /></li>)}</ul>
+    </div>
+  );
+}
+
 export function RoleShowcase({ compact = false, script = 'tb' }) {
   const sc = script === 'bmr' ? 'bmr' : 'tb';
   const ids = Object.keys(ROLES).filter((id) => ROLES[id].script === sc);
   const [team, setTeam] = useState('all');
   const [open, setOpen] = useState(null);
-  const shown = TEAMS.filter((t) => team === 'all' || team === t);
+  const shown = team === 'night' ? [] : TEAMS.filter((t) => team === 'all' || team === t);
   return (
     <section className={compact ? 'roles-compact' : 'lobby-roles glass pnl'}>
       <header className="roles-head">
@@ -259,8 +307,10 @@ export function RoleShowcase({ compact = false, script = 'tb' }) {
           {TEAMS.map((t) => (
             <button key={t} type="button" className={team === t ? 'on' : ''} onClick={() => setTeam(t)}>{TEAM_NAME[t]}</button>
           ))}
+          <button type="button" className={team === 'night' ? 'on' : ''} onClick={() => setTeam('night')}>夜间顺序</button>
         </div>
       </header>
+      {team === 'night' && <NightOrder script={sc} />}
       {shown.map((t) => (
         <div key={t} className="roles-team">
           <h3 style={{ color: ATTR[t].color }}>{TEAM_NAME[t]}<small>{TEAM_HINT[t]}</small></h3>
@@ -270,7 +320,7 @@ export function RoleShowcase({ compact = false, script = 'tb' }) {
                 <span className="rt-art">{ROLE_ART[id] ? <img src={ROLE_ART[id]} alt="" loading="lazy" /> : null}</span>
                 <span className="rt-body">
                   <b>{ROLES[id].name}<i>{ROLES[id].en}</i></b>
-                  <span>{ROLES[id].ability}</span>
+                  <span><Glossed text={ROLES[id].ability} /></span>
                 </span>
               </button>
             ))}
@@ -290,6 +340,59 @@ export function RoleShowcase({ compact = false, script = 'tb' }) {
 }
 
 /** 人数对应的阵营构成：一条四色的条，下面写数字。 */
+/** 房主指定每个人的角色（只有房主看得到）：不指定的座位开局时按人数表随机补齐。 */
+function RoleAssign({ s, act, script }) {
+  const [open, setOpen] = useState(false);
+  const assign = Object.fromEntries(Object.entries(s.roleAssign).filter(([id, r]) => s.lobby.some((p) => p.id === id) && ROLES[r]?.script === script));
+  const k = Object.keys(assign).length;
+  const n = s.lobby.length;
+  const dist = DISTRIBUTION[n];
+  const holder = (r) => s.lobby.findIndex((p) => assign[p.id] === r);
+  const count = (t) => Object.values(assign).filter((r) => ROLES[r].team === t).length;
+  const over = dist && TEAMS.filter((t, i) => count(t) > dist[i] + (t === 'outsider' ? 2 : 0));
+  const meSeated = s.lobby.some((p) => p.id === s.me);
+  return (
+    <div className="role-assign">
+      <div className="setting mode-row">
+        <span>指定角色</span>
+        <button type="button" className="ra-toggle" onClick={() => setOpen(!open)}>
+          {k ? `已指定 ${k} 人` : '全部随机'} · {open ? '收起' : '逐个指定'}
+        </button>
+      </div>
+      {open && (
+        <>
+          <p className="muted setting-note">
+            只有你看得到。没指定的座位开局时按人数表随机补齐（男爵、教父带来的外来者变化会自动算）；指定了角色就不用上面的推荐配置。
+            {s.settings?.shuffle && ' 开着"随机排座位"：开局时座位号会打乱，角色跟着人走。'}
+            {meSeated && k > 0 && <b className="ra-warn"> 你也坐在桌上：指定了别人的角色，你就知道他们的身份了。</b>}
+            {over?.length > 0 && <b className="ra-warn"> {over.map((t) => TEAM_NAME[t]).join('、')}指定得比人数表多，开局会以你的指定为准、少补镇民。</b>}
+          </p>
+          <div className="ra-list">
+            {s.lobby.map((p, i) => (
+              <label key={p.id} className="ra-row">
+                <span className="ra-seat">{i + 1}</span>
+                <span className="ra-name">{p.id === s.me ? '你' : p.name}</span>
+                <select value={assign[p.id] ?? ''} onChange={(e) => act('assignRole', { player: p.id, role: e.target.value || null })}>
+                  <option value="">随机</option>
+                  {TEAMS.map((t) => (
+                    <optgroup key={t} label={TEAM_NAME[t]}>
+                      {rolesOf(script, t).map((r) => {
+                        const h = holder(r);
+                        return <option key={r} value={r}>{ROLES[r].name}{h >= 0 && s.lobby[h].id !== p.id ? `（现在给了 ${h + 1}号）` : ''}</option>;
+                      })}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
+          {k > 0 && <p className="ra-clear"><button type="button" onClick={() => Object.keys(assign).forEach((id) => act('assignRole', { player: id, role: null }))}>全部改回随机</button></p>}
+        </>
+      )}
+    </div>
+  );
+}
+
 function DistBar({ n, d }) {
   if (!d) return <p className="muted dist-empty">{n < 5 ? `至少 5 人开局（现在 ${n} 人）` : '最多 15 人'}</p>;
   const parts = [['镇民', d[0], 'var(--int)'], ['外来者', d[1], 'var(--psy)'], ['爪牙', d[2], '#c9762e'], ['恶魔', d[3], 'var(--phy)']];

@@ -6,7 +6,14 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const cnDay = (n) => ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][n] ?? String(n);
 
 const LINES = {
-  start: ({ n }) => ({
+  start: ({ n, script }) => (script === 'bmr' ? {
+    title: '黯月驿站',
+    text: pick([
+      `${n} 个旅人在天黑前赶到了驿站。旅店的炉火很暖，林子里的狼嚎很近。`,
+      `枫叶红得发黑。${n} 个人推开黯月旅店的门——今晚的月亮不对劲。`,
+      `冬天就要来了。${n} 个人围着炉火喝热茶，谁也没注意窗外那双眼睛。`,
+    ]),
+  } : {
     title: '钟楼镇',
     text: pick([
       `${n} 个人走进了钟楼镇。镇子很冷，钟声很远。你们之中，有人不是人。`,
@@ -23,11 +30,11 @@ const LINES = {
       '灯一盏一盏熄灭。现在，轮到黑暗说话了。',
     ]),
   }),
-  dawn: ({ day, deaths }) => ({
+  dawn: ({ day, deaths, script }) => ({
     title: `第${cnDay(day)}天`,
     text: deaths.length
       ? pick([
-        `天亮了。昨晚，${deaths.join('、')}没能醒来。雪地上没有脚印。`,
+        `天亮了。昨晚，${deaths.join('、')}没能醒来。${script === 'bmr' ? '落叶上没有脚印。' : '雪地上没有脚印。'}`,
         `清晨的钟声里少了一个人的呼吸。${deaths.join('、')}死了。`,
         `太阳照常升起，可${deaths.join('、')}再也看不到了。有人知道为什么。`,
       ])
@@ -40,6 +47,12 @@ const LINES = {
     text: pick([
       `去走走吧。敲开一扇门，和谁说几句悄悄话。${minutes ? `${cnDay(minutes)}分钟后钟声会把你们叫回来。` : ''}`,
       `街道是空的，房子是暖的。去找你信得过的人——如果还有的话。${minutes ? `${cnDay(minutes)}分钟。` : ''}`,
+    ]),
+  }),
+  roamSoon: () => ({
+    text: pick([
+      '天色暗下来了。还有三十秒，钟声就要响了。',
+      '远处的钟楼开始准备了。再过半分钟，所有人都要回到广场。',
     ]),
   }),
   gather: () => ({
@@ -88,12 +101,23 @@ const LINES = {
     title: '处决',
     text: `一道白光。${a}还没来得及收回手指，就倒在了贞洁者面前。`,
   }),
+  // 造谣者式的公开声明：原话照念，所有人都听得到、看得到（官方规则要求声明必须公开）
+  gossip: ({ a, text }) => ({
+    title: '公开声明',
+    text: `${a}站了出来，当众说：「${text}」`,
+  }),
   slay: ({ a, b, hit }) => ({
+    title: '开枪',
     text: hit
       ? `${a}举起枪，扣下扳机。${b}倒下了——那张人皮下面，是别的东西。`
       : pick([`${a}朝${b}开了一枪。什么都没有发生。`, `枪声在广场上回荡。${b}还站着。`]),
   }),
-  end: ({ team, reason }) => ({
+  end: ({ team, reason, script }) => (script === 'bmr' ? {
+    title: team === 'good' ? '善良获胜' : '邪恶获胜',
+    text: team === 'good'
+      ? pick([`${reason}。月亮落下去了，驿站的炉火还亮着。`, `${reason}。林子里的狼嚎停了。`])
+      : pick([`${reason}。黯月高悬，驿站再也没有旅人醒来。`, `${reason}。最后一盏油灯熄灭了。`]),
+  } : {
     title: team === 'good' ? '善良获胜' : '邪恶获胜',
     text: team === 'good'
       ? pick([`${reason}。钟楼镇的天终于亮了。`, `${reason}。恶魔的笑声停了，雪还在下。`])

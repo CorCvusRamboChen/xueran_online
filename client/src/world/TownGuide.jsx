@@ -3,10 +3,14 @@
 // · 每间能进的房子两张底稿：外观（closed）和剖开的室内（open），叠在手绘大图上，范围见 houseCrop()
 // 已经有手绘大图时，下面多一个对齐检查：底稿叠在手绘图上，拖滑块看建筑有没有画歪。
 import { useEffect, useRef, useState } from 'react';
-import { housesFor } from '../../../src/shared/map.js';
+import { getMap } from '../../../src/shared/map.js';
 import town6 from '../assets/maps/town-6.json';
 
 const BASE = Object.values(import.meta.glob('../assets/world/town-base.{webp,png,jpg}', { eager: true, query: '?url', import: 'default' }))[0];
+// ?preview=town&map=bmr 导出别的剧本的地图；文件名前面加剧本前缀（暗流涌动不加，沿用老名字）
+const TOWN = getMap(new URLSearchParams(location.search).get('map') ?? 'tb');
+const TILED = TOWN.id === 'tb' ? town6 : null;
+const PREFIX = TOWN.id === 'tb' ? '' : `${TOWN.id}-`;
 const toBlob = (canvas) => new Promise((ok) => canvas.toBlob(ok, 'image/png'));
 
 /** 开发模式下把底稿存进 design/guides/。 */
@@ -28,7 +32,7 @@ export function TownGuide() {
   useEffect(() => {
     let dead = false;
     import('./World.js').then(async ({ World, GUIDE }) => {
-      const w = await World.create(ref.current, town6, housesFor(10), { guide: true });
+      const w = await World.create(ref.current, TOWN, TILED, TOWN.housesFor(10), { guide: true });
       if (dead) { w.destroy(); return; }
       world.current = w;
       setSize(GUIDE);
@@ -40,33 +44,33 @@ export function TownGuide() {
   const exportHouses = async () => {
     setBusy(true);
     const { World, houseCrop } = await import('./World.js');
-    const list = housesFor(10);
+    const list = TOWN.housesFor(10);
     const out = [];
     for (const mode of ['closed', 'open']) {
-      const w = await World.create(hidden.current, town6, list, { guide: mode });
+      const w = await World.create(hidden.current, TOWN, TILED, list, { guide: mode });
       for (const hs of list) {
-        if (hs.id === 'graveyard' && mode === 'closed') continue; // 墓园没有屋顶，只要一张
+        if (!hs.height && mode === 'closed') continue; // 墓园没有屋顶，只要一张
         const rect = houseCrop(hs);
         const blob = await toBlob(w.exportGuide(rect));
-        const name = `house-${hs.id}-${mode}`;
+        const name = `${PREFIX}house-${hs.id}-${mode}`;
         out.push({ name, rect, url: URL.createObjectURL(blob), saved: await save(name, blob) });
         setHouses([...out]);
       }
       w.destroy();
     }
-    if (url) await save('town-guide', await fetch(url).then((r) => r.blob()));
+    if (url) await save(`${PREFIX}town-guide`, await fetch(url).then((r) => r.blob()));
     setBusy(false);
   };
 
   return (
     <div className="gallery">
-      <h1 className="title" style={{ fontSize: 28 }}>小镇底稿 town-guide.png</h1>
+      <h1 className="title" style={{ fontSize: 28 }}>{TOWN.name} · 底稿 {PREFIX}town-guide.png</h1>
       <p className="muted">
         {size ? `${size.w}×${size.h} 像素，1 像素 = 斜视角世界里 1 个单位。` : '正在画……'}
-        能进的 6 间房子只画了地基，房子之后单独画。
+        能进的 {TOWN.houses.length} 间房子只画了地基，房子之后单独画。
       </p>
       <div className="guide-view" ref={ref} />
-      {url && <p><a className="btn btn-secondary" href={url} download="town-guide.png">保存底稿</a></p>}
+      {url && <p><a className="btn btn-secondary" href={url} download={`${PREFIX}town-guide.png`}>保存底稿</a></p>}
 
       <h2 className="title" style={{ fontSize: 22, marginTop: 24 }}>能进的房子 · 底稿</h2>
       <p className="muted">每间两张：外观（closed）和剖开的室内（open），画在手绘大图上，尺寸就是 houseCrop() 的范围。开发模式下会直接存进 design/guides/。</p>
@@ -81,7 +85,7 @@ export function TownGuide() {
       </div>
       <div ref={hidden} style={{ position: 'fixed', left: -9999, top: 0, width: 800, height: 500 }} />
 
-      {BASE && url && (
+      {BASE && !PREFIX && url && (
         <>
           <h2 className="title" style={{ fontSize: 22, marginTop: 24 }}>对齐检查</h2>
           <p className="muted">手绘大图在下，底稿叠在上面。拖滑块：左边只看手绘，右边只看底稿。</p>

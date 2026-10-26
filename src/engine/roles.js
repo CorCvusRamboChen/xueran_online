@@ -18,7 +18,7 @@ export const ROLES = {
   fortuneteller: { name: '占卜师', en: 'Fortune Teller', team: 'townsfolk', firstNight: 25, otherNight: 35,
     choose: { count: 2 },
     ability: '每个夜晚，选择两名玩家：你会得知其中是否有恶魔。有一名善良玩家会被你误认为恶魔（红鲱鱼）。' },
-  undertaker: { name: '送葬者', en: 'Undertaker', team: 'townsfolk', firstNight: 0, otherNight: 33,
+  undertaker: { name: '送葬者', en: 'Undertaker', team: 'townsfolk', firstNight: 0, otherNight: 35.5, // 官方顺序：共情者 → 占卜师 → 送葬者 → 管家
     ability: '除首夜外的每个夜晚，你会得知今天白天被处决的玩家的角色。' },
   monk: { name: '僧侣', en: 'Monk', team: 'townsfolk', firstNight: 0, otherNight: 12,
     choose: { count: 1, notSelf: true },

@@ -1,8 +1,8 @@
 // 白天自由活动的小镇（斜视角，镜头跟着自己走）。地面、建筑、小人画在 Pixi 画布上（world/World.js），
 // 头像、名字、敲门气泡、地名和小地图是 HTML，每帧按画布给的屏幕坐标摆放。
 // 点哪儿走到哪儿（点房子就走进去），拖动可以看别处，滚轮缩放；走进房子就进那间的私聊语音。
-import { useEffect, useRef, useState } from 'react';
-import { MAP_W, MAP_H, PLAZA, OBSTACLES, WATER_Y, ROADS, ROAD_HALF, positionAt } from '../../src/shared/map.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { getMap, positionAt, pathLength, SPEED } from '../../src/shared/map.js';
 import { Portrait, serverNow } from './util.jsx';
 import { useMarks, MarkMenu, MarkBadge, TAGS } from './marks.jsx';
 import town4 from './assets/maps/town-4.json';
@@ -36,7 +36,7 @@ function AliveStrip({ s, watching, onWatch }) {
   const menuPlayer = menu && s.players.find((p) => p.id === menu.id);
   return (
     <div className="alive-strip" onPointerDown={(e) => e.stopPropagation()}>
-      {menuPlayer && <MarkMenu player={menuPlayer} mark={marks[menu.id]} at={menu} onClose={() => setMenu(null)} />}
+      {menuPlayer && <MarkMenu s={s} player={menuPlayer} mark={marks[menu.id]} at={menu} onClose={() => setMenu(null)} />}
       <span className="as-label">存活 {alive.length} / {s.players.length}</span>
       <div className="as-faces">
         {s.players.map((p) => {
@@ -45,7 +45,7 @@ function AliveStrip({ s, watching, onWatch }) {
             <button key={p.id} type="button" title={`${p.seat}号 ${p.name}${h ? ` · 在${h.name}${h.locked ? '（锁门）' : ''}` : ''}（右键做标记）`}
               className={['as-face', watching === p.id && 'on', p.id === s.me && 'me', !p.alive && 'dead', h && 'inside', h?.locked && 'locked'].filter(Boolean).join(' ')}
               onClick={() => onWatch(p.id)}
-              onContextMenu={(e) => { e.preventDefault(); if (p.id !== s.me) setMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}>
+              onContextMenu={(e) => { e.preventDefault(); setMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}>
               <Portrait p={p} size={44} prefer="avatar" speak={false} frame={p.id === s.me ? 'var(--mot)' : allies[p.id] ? 'var(--phy)' : TAGS[marks[p.id]?.tag]?.color ?? '#f4f4f0'} />
               <i>{p.seat}</i>
               {allies[p.id] ? <span className="mark-badge ally">队友·{allies[p.id]}</span> : <MarkBadge mark={marks[p.id]} />}
@@ -57,7 +57,52 @@ function AliveStrip({ s, watching, onWatch }) {
   );
 }
 
-export function TownMap({ s, onMove }) {
+const line = (pts) => pts.map((p) => p.join(',')).join(' ');
+
+/** 小地图的底：地面、水、路、集合点、建筑、树林和地标（按地图数据画）。 */
+function MiniBase({ town }) {
+  const wt = town.water;
+  return (
+    <>
+      <rect width={town.w} height={town.h} fill={town.minimap?.ground ?? '#e7e6e0'} />
+      {wt?.below != null && <rect y={wt.below} width={town.w} height={town.h - wt.below} fill="#6f8086" />}
+      {town.roads.map((l, i) => <polyline key={i} points={line(l.pts)} stroke={town.minimap?.road ?? '#bdbab1'} strokeWidth={l.half * 2} fill="none" strokeLinecap="round" strokeLinejoin="round" />)}
+      {wt?.band && <polyline points={line(wt.band.pts)} stroke="#6f8086" strokeWidth={wt.band.half * 2} fill="none" strokeLinejoin="round" />}
+      {town.walkways.map((b) => (b.deck
+        ? <polygon key={b.id} points={line(b.deck.poly)} fill="#a08a6a" />
+        : <rect key={b.id} x={b.x} y={b.y} width={b.w} height={b.h} fill="#a08a6a" />))}
+      <circle cx={town.gather.x} cy={town.gather.y} r={town.gather.r} fill="#c9c6bd" />
+      {town.circles.map((c) => <circle key={c.id} cx={c.x} cy={c.y} r={c.r} fill={c.kind === 'trees' ? '#6a7258' : '#8a9592'} />)}
+      {town.obstacles.map((o) => <rect key={o.id} x={o.x} y={o.y} width={o.w} height={o.h} fill="#8a9592" />)}
+    </>
+  );
+}
+
+/**
+ * 恶魔破门（只有恶魔自己看得到）：变身后从自家冲到受害者家门口，钻进门里。
+ * 路线只在本地播放、不发给服务器——别人看不到夜里谁出了门。
+ */
+export function KillDash({ s, target, onArrive, vanish = false }) {
+  const town = getMap(s.script);
+  const me = s.players.find((p) => p.id === s.me);
+  const houses = useMemo(() => town.housesFor(s.players.length).map((h) => ({ ...h, members: [], locked: false, knocks: [] })), [town, s.players.length]);
+  const [m] = useState(() => {
+    const from = town.homeStep(s.homes[s.me]) ?? town.gather;
+    const to = town.homeStep(s.homes[target]) ?? town.gather;
+    const path = town.route(houses, from, to);
+    const end = path[path.length - 1];
+    // 冲刺：比平时快一倍（2.4–4 秒，看得清又不拖到天亮），稍等一下镜头就位再出发
+    return { fx: from.x, fy: from.y, x: end.x, y: end.y, start: serverNow() + 500, dur: Math.min(4000, Math.max(2400, (pathLength(path) / (SPEED * 2)) * 1000)), path };
+  });
+  useEffect(() => {
+    const t = setTimeout(() => onArrive?.(), m.dur + 650);
+    return () => clearTimeout(t);
+  }, []);
+  const fake = { ...s, players: me ? [{ ...me, monster: true, vanish }] : [], roam: { map: town.id, houses, pos: { [s.me]: m }, myHouse: null, until: null } };
+  return <TownMap s={fake} onMove={() => null} night />;
+}
+
+export function TownMap({ s, onMove, night = false }) {
   const r = s.roam;
   const marks = useMarks(s);
   const [walkerMenu, setWalkerMenu] = useState(null); // { id, x, y }
@@ -79,12 +124,15 @@ export function TownMap({ s, onMove }) {
   // 每次渲染把最新数据交给画布，画布每帧自己读
   const data = { players: s.players, roam: r, me: s.me };
   if (world.current) world.current.data = data;
-  const big = r.houses.length > 4;
+  const town = getMap(r.map);
+  const big = r.houses.length > town.open[0];
+  // 暗流涌动的地面是 Tiled 地图（人少 / 人多两张）；别的地图按地图数据直接画
+  const tiled = town.id === 'tb' ? (big ? town6 : town4) : null;
 
   useEffect(() => {
     let dead = false;
     let made = null;
-    import('./world/World.js').then(({ World }) => World.create(ref.current, big ? town6 : town4, r.houses)).then((wd) => {
+    import('./world/World.js').then(({ World }) => World.create(ref.current, town, tiled, r.houses)).then((wd) => {
       made = wd;
       if (dead) { wd.destroy(); return; }
       wd.data = data;
@@ -112,7 +160,7 @@ export function TownMap({ s, onMove }) {
       } catch { /* 隐私模式 */ }
     });
     return () => { dead = true; made?.destroy(); world.current = null; };
-  }, [big]);
+  }, [big, town.id]);
 
   // 键盘：WASD / 方向键，按住连续走，可以两个键斜着走。方向按屏幕算（W 就是往屏幕上方走）。
   const live = useRef({ s, onMove });
@@ -124,7 +172,7 @@ export function TownMap({ s, onMove }) {
     const here = () => {
       const { s: cur } = live.current;
       const m = cur.roam?.pos[cur.me];
-      return m ? positionAt(cur.roam.houses, m, serverNow()) : null;
+      return m ? positionAt(m, serverNow()) : null;
     };
     // 每 90ms 往按住的方向预约一小段（50 单位 ≈ 0.2 秒的路）；本地立刻开始走（见 App 的走路预测）
     const step = () => {
@@ -192,18 +240,18 @@ export function TownMap({ s, onMove }) {
   };
   const miniTap = (e) => {
     const svg = e.currentTarget.getBoundingClientRect();
-    onMove(((e.clientX - svg.left) / svg.width) * MAP_W, ((e.clientY - svg.top) / svg.height) * MAP_H);
+    onMove(((e.clientX - svg.left) / svg.width) * town.w, ((e.clientY - svg.top) / svg.height) * town.h);
     world.current?.follow();
   };
 
   const knocking = new Set(r.houses.flatMap((h) => h.knocks));
 
   return (
-    <div className={`map ${ready ? 'ready' : ''}`} ref={ref} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { drag.current = null; }}>
+    <div className={`map ${ready ? 'ready' : ''} ${night ? 'night' : ''}`} ref={ref} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { drag.current = null; }}>
       <div className="map-fog" aria-hidden="true" />
       <div className="map-place">
-        <small>钟楼镇 · 位于暗流涌动区</small>
-        <b>{r.houses.find((h) => h.id === r.myHouse)?.name ?? '血染钟楼特别行政区'}</b>
+        <small>{night ? '夜里 · 没有人看见你' : town.place}</small>
+        <b>{night ? '破门' : r.houses.find((h) => h.id === r.myHouse)?.name ?? '血染钟楼特别行政区'}</b>
       </div>
       <div className="map-cross" aria-hidden="true"><i /><i /><i /><i /></div>
 
@@ -227,10 +275,10 @@ export function TownMap({ s, onMove }) {
               <div className="float" title={p.id === s.me ? '你' : `${p.seat}号 ${p.name}（点头像做标记）`}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => { if (p.id !== s.me) setWalkerMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}
-                onContextMenu={(e) => { e.preventDefault(); if (p.id !== s.me) setWalkerMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}>
+                onContextMenu={(e) => { e.preventDefault(); setWalkerMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}>
                 <Portrait p={p} size={24} prefer="avatar" frame={p.id === s.me ? 'var(--mot)' : TAGS[marks[p.id]?.tag]?.color ?? '#f4f4f0'} />
                 <i className="walker-seat">{p.seat}</i>
-                {p.id !== s.me && <MarkBadge mark={marks[p.id]} />}
+                <MarkBadge mark={marks[p.id]} />
               </div>
             </div>
             <div className="walker-name">{p.id === s.me ? '你' : p.name}</div>
@@ -238,16 +286,12 @@ export function TownMap({ s, onMove }) {
         );
       })}
 
-      {walkerMenuPlayer && <MarkMenu player={walkerMenuPlayer} mark={marks[walkerMenu.id]} at={walkerMenu} onClose={() => setWalkerMenu(null)} />}
-      <RoomStrip s={s} onGo={(h) => { onMove(h.x + h.w / 2, h.y + h.h / 2); world.current?.follow(); }} />
-      <AliveStrip s={s} watching={watching} onWatch={watch} />
+      {walkerMenuPlayer && <MarkMenu s={s} player={walkerMenuPlayer} mark={marks[walkerMenu.id]} at={walkerMenu} onClose={() => setWalkerMenu(null)} />}
+      {!night && <RoomStrip s={s} onGo={(h) => { onMove(h.x + h.w / 2, h.y + h.h / 2); world.current?.follow(); }} />}
+      {!night && <AliveStrip s={s} watching={watching} onWatch={watch} />}
 
-      <svg className="minimap" viewBox={`0 0 ${MAP_W} ${MAP_H}`} onPointerDown={miniTap} aria-label="小地图">
-        <rect width={MAP_W} height={MAP_H} fill="#e7e6e0" />
-        <rect y={WATER_Y} width={MAP_W} height={MAP_H - WATER_Y} fill="#6f8086" />
-        {ROADS.map((l, i) => <polyline key={i} points={l.map((p) => p.join(',')).join(' ')} stroke="#bdbab1" strokeWidth={ROAD_HALF * 2} fill="none" />)}
-        <circle cx={PLAZA.x} cy={PLAZA.y} r={PLAZA.r} fill="#c9c6bd" />
-        {OBSTACLES.map((o) => <rect key={o.id} x={o.x} y={o.y} width={o.w} height={o.h} fill="#8a9592" />)}
+      <svg className="minimap" viewBox={`0 0 ${town.w} ${town.h}`} onPointerDown={miniTap} aria-label="小地图">
+        <MiniBase town={town} />
         {r.houses.map((h) => <rect key={h.id} x={h.x} y={h.y} width={h.w} height={h.h} fill={h.locked ? '#c9a24a' : '#4f6764'} stroke="#111" strokeWidth="8" />)}
         {s.players.map((p) => r.pos[p.id] && (
           <circle key={p.id} ref={(el) => { if (el) dots.current.set(p.id, el); else dots.current.delete(p.id); }}

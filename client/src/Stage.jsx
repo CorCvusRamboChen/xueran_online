@@ -32,7 +32,10 @@ export function useNarrator(log) {
     seen.current = Math.max(seen.current, last);
     for (const l of fresh) speak(l.text, l.audio);
     const titled = fresh.filter((l) => l.title).map((l) => ({ ...l, key: l.id }));
-    if (titled.length) setCards((cur) => [...cur, ...titled].slice(-3));
+    // "第 N 天"一到就把还没放的旧卡丢掉，直接放它（不然开局时几张卡排队，天亮的卡要等到自由活动开始以后才出来）
+    const dawnAt = titled.findIndex((l) => /^第.+天$/.test(l.title));
+    if (dawnAt >= 0) setCards(titled.slice(dawnAt));
+    else if (titled.length) setCards((cur) => [...cur, ...titled].slice(-3));
   }, [log]);
   return [cards[0] ?? null, useCallback(() => setCards((cur) => cur.slice(1)), [])];
 }
@@ -44,7 +47,8 @@ export function TitleCard({ card, onClose, players = [] }) {
     return () => clearTimeout(t);
   }, [card, onClose]);
   if (!card) return null;
-  const tone = /处决|邪恶/.test(card.title) ? 'phy' : /夜/.test(card.title) ? 'night' : 'day';
+  // "第 N 天"：天亮那张卡做成浅的（只在下方垫一层暗），让后面小屋里的晨光动画露出来
+  const tone = /^第.+天$/.test(card.title) ? 'dawn' : /处决|邪恶|开枪/.test(card.title) ? 'phy' : /夜/.test(card.title) ? 'night' : 'day';
   return (
     <div className={`titlecard tc-${tone}`} key={card.key} onClick={onClose} role="presentation">
       <div className="tc-inner">
@@ -128,8 +132,8 @@ export function SkillCheck({ check, onClose }) {
   );
 }
 
-/** 语音播报、脚步音效的开关（存在本机）。 */
-export function SoundToggles() {
+/** 语音播报、脚步音效的开关（存在本机）。onFixVoice：对局中显示"语音归位"（卡在房间里出不来时点）。 */
+export function SoundToggles({ onFixVoice = null }) {
   const [tts, setT] = useState(ttsEnabled());
   const [sfx, setS] = useState(sfxEnabled());
   const [music, setM] = useState(musicEnabled());
@@ -141,6 +145,7 @@ export function SoundToggles() {
       {ttsSupported && <button type="button" className={tts ? 'on' : ''} onClick={() => setTts(!tts)} title="AI 房主的语音播报">{tts ? '播报 开' : '播报 关'}</button>}
       <button type="button" className={sfx ? 'on' : ''} onClick={() => setSfx(!sfx)} title="脚步声、敲门声">{sfx ? '音效 开' : '音效 关'}</button>
       <button type="button" className={music ? 'on' : ''} onClick={() => setMusic(!music)} title="背景音乐和风雪声">{music ? '音乐 开' : '音乐 关'}</button>
+      {onFixVoice && <button type="button" onClick={onFixVoice} title="Discord 语音卡在别的房间、回不到广场时点这里">语音归位</button>}
     </div>
   );
 }

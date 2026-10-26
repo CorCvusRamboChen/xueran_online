@@ -1,5 +1,5 @@
 // 黯月初升地图的灰盒布局（逻辑坐标，x 向东、y 向南，和暗流涌动同一套投影）。
-// 还没接进游戏：确认后搬到 src/shared/maps/，寻路和画面按它走。
+// 设计稿。游戏里用的是 src/shared/maps/bmr.js（已接进游戏，墓园 id 改成了 crowyard），改布局请改那边。
 
 export const BMR_MAP = {
   id: 'bmr',

@@ -1,22 +1,34 @@
 // 一个频道里的一局游戏：大厅 → 开局 → 夜晚收集选择 → 白天提名投票 → 结束。
 // 所有操作走 act(userId, type, payload)；状态变了就 onChange()，由服务器给每个人推送各自的视图。
-import { Game, shuffle } from '../engine/game.js';
+import { Game, shuffle, balancedTB, setupScoreTB, rollRoles } from '../engine/game.js';
+import { balancedBMR, setupScore, rollBMR } from '../engine/bmr.js';
 import { ROLES, TEAM_NAME, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole } from '../engine/roles.js';
-import {
-  housesFor, houseAt, houseCenter, doorPoint, route, pathLength, positionAt, seatSpot, clampToMap, randomSpot, SPEED,
-} from '../shared/map.js';
+import { getMap, houseAt, houseCenter, doorPoint, pathLength, positionAt, SPEED } from '../shared/map.js';
 import { CHARACTERS, CHARACTER_IDS } from '../shared/characters.js';
 import { cleanOutfit } from '../shared/outfit.js';
-import { SETUPS } from '../shared/setups.js';
+import { SETUPS, pickPreset, PRESET_SHARE } from '../shared/setups.js';
+import { buildRoles, easeNewbies } from '../engine/assign.js';
 import { narration } from './narration.js';
 import { ttsUrl } from './tts.js';
+import { judgeStatement, judgeAvailable } from './judge.js';
+
+// 受害者那段破门过场多长（毫秒）：踹门 → 踹开 → "你死了"，播完再天亮
+const VICTIM_SCENE_MS = 6500;
+// 一局里的真人全都离线这么久，就暂停这局、放开所有闭麦闭耳（有人回来自动接着打）
+const IDLE_PAUSE_MS = 3 * 60_000;
+// 造谣者自由声明交给 AI 判定：入夜结算前最多等这么久，还没判完就按假处理
+const GOSSIP_WAIT_MS = 32_000;
+// 语音校正：每隔几秒对一遍"每个人该在哪个语音频道"和"他实际在哪"，不对就拉过去（拉人偶尔会失败或被网络延迟打乱顺序）
+const VOICE_CHECK_MS = 4000;
+const VOICE_GRACE_MS = 3000; // 刚进出房子的人先不管，等这次拉人落地
 
 export class UserError extends Error {}
 const newId = () => Math.random().toString(36).slice(2, 8);
 
 export const DEFAULT_SETTINGS = {
   script: 'tb',          // 剧本：tb 暗流涌动 / bmr 黯月初升
-  preset: null,          // 套用官方八人推荐配置（SETUPS[script] 的下标；只在 8 人时生效）
+  preset: null,          // 旧设置（只认官方八人推荐的某一套），现在用 setupMode
+  setupMode: 'preset',   // 配置怎么来：preset 推荐预设（人数对得上大多从推荐配置里挑，其余 AI）/ ai AI 配置（强弱配平）/ random 完全随机
   mode: 'auto',          // auto：机器人说书；human：房主说书
   shuffle: true,
   chooseSeconds: 90,     // 夜里选人时限
@@ -24,6 +36,7 @@ export const DEFAULT_SETTINGS = {
   voteCountdown: 8,      // 时钟开始转动前的倒计时
   nightDeafen: true,     // 夜里服务器闭麦+闭耳
   pauseMs: 4000,         // 结算后到下一阶段的停顿
+  killSceneMs: 11000,    // 暗流涌动：夜晚结算后到天亮的时间，留给恶魔"变身 + 冲刺"和受害者"被破门"两段动画
   roamMinutes: 5,        // 白天自由活动多久（0 = 等主持人喊集合）
   nominateMinutes: 3,    // 集合后开放提名多久（自动说书）
   accuseSeconds: 60,     // 提名者陈述（房主开局前可调）
@@ -31,6 +44,8 @@ export const DEFAULT_SETTINGS = {
   nominatorVotes: true,  // 房规：提名的人自动算一票（票数从 1 开始）
   speechMute: true,      // 陈述/辩护时只有发言的人能说话，其他人服务器闭麦
   smallEvilInfo: false,
+  deadDrunk: false,      // 房规：夜里被杀的信息角色照样拿当晚的信息，但按醉酒处理（官方：死了就没有能力，不再醒）
+  smallNoBaron: true,    // 房规：暗流涌动 7 人以下不随机发男爵（小局多两个外来者太难打）；房主指定的照给
   minionBluffs: true,    // 房规：爪牙和恶魔共用 3 个伪装（官方只给恶魔，恶魔再私下告诉队友）
   hideVotes: true,
   spectatorGrimoire: false, // 观战的人能看魔典（所有人身份）——会漏信息，默认关
@@ -57,12 +72,14 @@ export class Room {
     for (const t of this.timers) clearTimeout(t);
     this.timers.clear();
     this.lobby = this.lobby ?? [];
+    this.newbies = this.newbies ?? []; // 房主标记的新手（跨局保留）：发身份避开难角色，机器人和 AI 说书人照顾一下
     this.game = null;
     this.ended = false;
     this.square = null;
     this.vote = null;
     this.pendingNom = null;
     this.roam = null;           // 白天自由活动（小镇地图）
+    this.homes = null;          // 每人在镇上的家：playerId → 房子 id
     this.noms = null;           // 自动说书的提名环节：{ until, timeUp, skips }
     this.nomTimers = [];
     this.rooms = new Map();     // 主持人拉人的私聊房间 channelId → {channelId, members, until}
@@ -78,6 +95,12 @@ export class Room {
     this.roamedToday = false;
     this.lastVote = null;
     this.voteHistory = [];      // 每次投票的票型（谁提名谁、谁举了手），投完公开
+    this.knifeLog = [];         // 刀口：每晚谁死了（平安夜也记），谁复活了——「关键信息」页用
+    this.execLog = [];          // 每天黄昏的处决结果
+    this.paused = false;        // 真人全都离线：暂停中（计时器全停、语音全放开）
+    this.idleTimer = null;
+    this.ownedChannels = new Set(); // 这局开过的语音频道（语音校正用）
+    this.voiceTouched = new Map();
   }
 
   // ───────────── 工具 ─────────────
@@ -100,13 +123,17 @@ export class Room {
   }
   cancel(t) { if (t) { clearTimeout(t); this.timers.delete(t); } }
 
-  announce(text, kind = 'info') {
-    this.log.push({ id: ++this.logSeq, text, kind, at: Date.now() });
+  /**
+   * 一条公告。key：是不是关键信息（「记录」默认只显示关键的）：死亡、提名投票、公开声明、开枪、私聊、开局终局默认算；
+   * 钟楼的操作提示（自由活动怎么玩、集合、还剩 30 秒……）、说书人的旁白不算。
+   */
+  announce(text, kind = 'info', key = ['death', 'vote', 'start', 'end', 'whisper'].includes(kind)) {
+    this.log.push({ id: ++this.logSeq, text, kind, key, at: Date.now() });
     if (this.log.length > 80) this.log.shift();
   }
   /** AI 房主的一句旁白（极乐迪斯科式）。客户端会读出来；有 title 的弹出过场标题卡。 */
   narrate(event, vars) {
-    const n = narration(event, vars);
+    const n = narration(event, { script: this.game?.script, ...vars });
     if (!n) return;
     this.log.push({ id: ++this.logSeq, kind: 'story', text: n.text, title: n.title ?? null, audio: ttsUrl(n.text), at: Date.now() });
     if (this.log.length > 80) this.log.shift();
@@ -142,7 +169,9 @@ export class Room {
       case 'character': this.pickCharacter(uid, p.id ?? null); break;
       case 'outfit': this.outfits.set(uid, cleanOutfit(p.outfit, uid)); break;
       case 'addBots': this.requireHost(uid); this.addFakes(Number(p.count) || 1); break;
-      case 'kick': this.requireHost(uid); if (!this.game) this.lobby = this.lobby.filter((x) => x.id !== p.target); break;
+      case 'assignRole': this.requireHost(uid); this.assignRole(p.player, p.role ?? null); break;
+      case 'kick': this.requireHost(uid); if (!this.game) { this.lobby = this.lobby.filter((x) => x.id !== p.target); this.newbies = this.newbies.filter((x) => x !== p.target); } break;
+      case 'markNewbie': this.requireHost(uid); this.markNewbie(p.player, !!p.on); break;
       case 'start': this.requireHost(uid); await this.start(); break;
       case 'choose': this.choose(uid, p.night, p.targets ?? [], p.role ?? null); break;
       case 'gossip': this.gossip(uid, p.statement ?? {}); break;
@@ -166,6 +195,7 @@ export class Room {
       case 'inviteReply': this.inviteReply(uid, !!p.yes); break;
       case 'roamVote': await this.roamVote(uid, !!p.yes); break;
       case 'endWhisper': await this.endWhisper(uid, p.room); break;
+      case 'fixVoice': return this.fixVoice(uid);
       case 'pull': this.requireHost(uid); await this.pull(uid, p.targets ?? [], p.minutes); break;
       case 'gather': this.requireHost(uid); await this.gather(); break;
       case 'st': this.requireHost(uid); await this.stAction(p); break;
@@ -205,7 +235,10 @@ export class Room {
     if (typeof p.nominatorVotes === 'boolean') s.nominatorVotes = p.nominatorVotes;
     if (typeof p.speechMute === 'boolean') s.speechMute = p.speechMute;
     if (typeof p.smallEvilInfo === 'boolean') s.smallEvilInfo = p.smallEvilInfo;
+    if (typeof p.smallNoBaron === 'boolean') s.smallNoBaron = p.smallNoBaron;
+    if (typeof p.deadDrunk === 'boolean') s.deadDrunk = p.deadDrunk;
     if (p.script === 'tb' || p.script === 'bmr') { if (s.script !== p.script) s.preset = null; s.script = p.script; }
+    if (['preset', 'ai', 'random'].includes(p.setupMode)) s.setupMode = p.setupMode;
     if ('preset' in p) s.preset = p.preset == null ? null : Math.max(0, Math.min((SETUPS[s.script]?.length ?? 1) - 1, Number(p.preset) || 0));
     if (typeof p.minionBluffs === 'boolean') s.minionBluffs = p.minionBluffs;
     if (typeof p.hideVotes === 'boolean') s.hideVotes = p.hideVotes;
@@ -238,6 +271,20 @@ export class Room {
     return CHARACTERS.find((c) => !taken.has(c.id))?.id ?? null;
   }
 
+  /**
+   * 房主给某个座位指定角色（大厅里，只有房主看得到）。role 为 null = 随机。
+   * 同一个角色只能给一个人：指给别人时从原来那个人身上拿走。没指定的座位开局时按人数表随机补齐。
+   */
+  assignRole(player, role) {
+    if (this.game) throw new UserError('游戏已经开始了');
+    if (!this.lobby.some((p) => p.id === player)) throw new UserError('这个人不在座位上');
+    const script = this.settings.script ?? 'tb';
+    if (role != null && ROLES[role]?.script !== script) throw new UserError('这个剧本里没有这个角色');
+    this.roleAssign ??= {};
+    for (const [id, r] of Object.entries(this.roleAssign)) if (r === role) delete this.roleAssign[id];
+    if (role == null) delete this.roleAssign[player]; else this.roleAssign[player] = role;
+  }
+
   addFakes(n) {
     if (this.game) throw new UserError('游戏已经开始了');
     let k = Math.max(0, ...this.lobby.filter((p) => p.fake).map((p) => Number(p.id.slice(4))));
@@ -253,18 +300,89 @@ export class Room {
     if (this.lobby.length < MIN_PLAYERS) throw new UserError(`至少需要 ${MIN_PLAYERS} 名玩家`);
     const seats = this.settings.shuffle ? shuffle(this.lobby, Math.random) : [...this.lobby];
     const script = this.tutorial ? 'tb' : this.settings.script ?? 'tb';
-    const preset = !this.tutorial && seats.length === 8 && this.settings.preset != null ? SETUPS[script]?.[this.settings.preset] : null;
-    const roles = this.tutorial ? this.tutorial.roles : preset ? shuffle(preset.roles, Math.random) : undefined;
-    this.game = new Game(seats.map(({ id, name }) => ({ id, name })), { roles, drunkAs: preset?.drunkAs, script, evilInfo: seats.length >= 7 || this.settings.smallEvilInfo });
-    if (preset) this.stNote(`套用推荐配置「${preset.name}」`);
-    this.square = await this.safeVoice((v) => v.findSquare(this.hostId, seats.map((p) => p.id)));
+    // 房主指定了角色：指定的座位照指定，其余按人数表随机补齐（推荐配置就不用了）
+    const assign = this.tutorial ? {} : Object.fromEntries(Object.entries(this.roleAssign ?? {}).filter(([id, r]) => seats.some((p) => p.id === id) && ROLES[r]?.script === script));
+    const custom = Object.keys(assign).length > 0;
+    const noBaron = script === 'tb' && seats.length < 7 && !!this.settings.smallNoBaron;
+    // 配置三选一：推荐预设（人数对得上时大多从推荐配置里挑，官方的权重高；其余和没有推荐配置的人数用 AI 配置）/ AI 配置 / 完全随机
+    const mode = this.settings.setupMode ?? 'preset';
+    const pinned = this.settings.preset != null ? SETUPS[script]?.[this.settings.preset] : null; // 指定了某一套（旧设置 / 测试）：人数对得上就固定用它
+    const preset = this.tutorial || custom || mode !== 'preset' ? null
+      : pinned?.roles.length === seats.length ? pinned
+        : Math.random() < PRESET_SHARE ? pickPreset(script, seats.length, Math.random) : null;
+    const pure = !this.tutorial && !custom && !preset && mode === 'random'
+      ? (script === 'bmr' ? rollBMR(seats.length, Math.random) : rollRoles(seats.length, Math.random, { noBaron })) : undefined;
+    let roles = this.tutorial ? this.tutorial.roles : custom ? buildRoles(seats.map((p) => p.id), assign, script, Math.random, { noBaron }) : preset ? shuffle(preset.roles, Math.random) : pure;
+    // 新手：拿到难角色的大概率和老玩家的同类普通角色对调（房主指定的座位不动）
+    const newbies = new Set(this.tutorial ? [] : this.newbies.filter((id) => seats.some((p) => p.id === id)));
+    if (newbies.size) {
+      roles ??= script === 'bmr' ? balancedBMR(seats.length, Math.random) : balancedTB(seats.length, Math.random, { noBaron });
+      roles = easeNewbies(seats.map((p) => p.id), roles, newbies, script, { fixed: new Set(Object.keys(assign)) });
+    }
+    this.game = new Game(seats.map(({ id, name }) => ({ id, name })), { roles, drunkAs: custom ? null : preset?.drunkAs, script, noBaron, evilInfo: seats.length >= 7 || this.settings.smallEvilInfo, deadDrunk: !this.tutorial && !!this.settings.deadDrunk });
+    this.game.newbies = [...newbies];
+    if (newbies.size) this.stNote(`新手 ${newbies.size} 人：发身份时调低了当邪恶的概率，难角色尽量换成简单的`);
+    if (pure) this.stNote('完全随机：按人数表随机抽的角色，没有调平衡');
+    else if (script === 'tb' && !custom && !preset && !this.tutorial) this.stNote(`AI 配板：强弱配平（平衡分 ${setupScoreTB(this.game.players.map((p) => p.role))}，正数偏善良）${seats.length <= 12 ? '；12 人及以下调了信息位（共情者和占卜师少同时出现、F4 一般 1–2 个、有男爵多半有图书管理员）' : ''}`);
+    if (this.game.deadDrunk) this.stNote('房规：夜里被杀的信息角色仍拿当晚的信息，按醉酒处理（真假由 AI 说书人按局势定）');
+    if (script === 'bmr' && !custom && !preset && !pure && !this.tutorial) this.stNote(`AI 配板：随机出 60 套、去掉最偏的两头后挑的一套（平衡分 ${setupScore(this.game.players.map((p) => p.role))}，正数偏善良）${seats.length <= 6 ? '；5–6 人局不出沙巴洛斯、莽夫' : ''}`);
+    if (custom) this.stNote(`房主指定了 ${Object.keys(assign).length} 个人的角色，其余随机`);
+    else if (preset) this.stNote(`套用推荐配置「${preset.name}」`);
+    this.devRoles();
+    this.assignHomes();
+    const square = await this.safeVoice((v) => v.findSquare(this.hostId, seats.map((p) => p.id)));
+    // 同一个语音频道同时只能有一局在控制语音：被别的局占着就撤销这局，回到大厅
+    try { await this.claimSquare(square); } catch (e) { this.game = null; this.homes = null; this.stLog = []; throw e; }
+    this.square = square;
     const [t, o, m, d] = DISTRIBUTION[seats.length];
     this.announce(`游戏开始！《${script === 'bmr' ? '黯月初升' : '暗流涌动'}》${seats.length} 人：镇民 ${t} · 外来者 ${o} · 爪牙 ${m} · 恶魔 ${d}`, 'start');
     this.narrate('start', { n: seats.length });
     if (!this.square) this.announce('没检测到大家所在的语音频道，夜晚闭麦和拉人私聊不会生效（房主先进语音再开局即可）。');
     this.syncWatchMute();
     this.stNote(`伪装：${this.game.bluffs.map((r) => ROLES[r].name).join('、')}`);
+    this.watchVoice();
     await this.beginNight();
+  }
+
+  /** 房主标记 / 取消新手（开局前）。 */
+  markNewbie(player, on) {
+    if (this.game) throw new UserError('开局后不能再改，下一局再标');
+    if (!this.lobby.some((p) => p.id === player)) throw new UserError('这个人不在座位上');
+    if (this.isFake(player)) throw new UserError('机器人不用标');
+    this.newbies = on ? [...new Set([...this.newbies, player])] : this.newbies.filter((x) => x !== player);
+  }
+
+  /** 本地测试（DEV_LOGIN 的 ?devRole=）：开局把指定角色和拿着它的人对调。线上的 Discord 用户没有 devRole。 */
+  devRoles() {
+    const ps = this.game.players;
+    for (const p of ps) {
+      const want = this.users.get(p.id)?.devRole;
+      if (!want || !ROLES[want] || p.role === want) continue;
+      // 这局没有这个角色：先把一个同类型的角色（镇民换镇民、爪牙换爪牙……）改成它
+      if (!ps.some((q) => q.role === want)) {
+        const mate = ps.find((q) => ROLES[q.role].team === ROLES[want].team);
+        if (mate) { mate.role = want; mate.shownRole = want; }
+      }
+      const holder = ps.find((q) => q.role === want);
+      if (!holder || holder === p) continue;
+      for (const k of ['role', 'shownRole']) [p[k], holder[k]] = [holder[k], p[k]];
+    }
+    // 开局时按原来的角色算好的东西跟着改：第一任恶魔（拿伪装的人）、占卜师的红鲱鱼（必须是善良玩家）
+    const g = this.game;
+    const demon = ps.find((q) => ROLES[q.role].team === 'demon');
+    if (demon && g.firstDemon !== undefined) g.firstDemon = demon.id;
+    if (g.redHerring && isEvilRole(g.get(g.redHerring)?.role)) g.redHerring = ps.find((q) => !isEvilRole(q.role) && q.role !== 'fortuneteller')?.id ?? null;
+  }
+
+  /**
+   * 每人分一栋镇上不能进的房子当家（暗流涌动先做）：白天从自家门口出门；夜里要选人的角色从家里走到对方家门口动手。
+   * 谁住哪是公开的（房子上挂门牌）。
+   */
+  assignHomes() {
+    const g = this.game;
+    const town = this.town;
+    const pool = g.script === 'tb' ? shuffle([...town.homes()], Math.random) : [];
+    this.homes = pool.length >= g.players.length ? Object.fromEntries(g.players.map((p, i) => [p.id, pool[i].id])) : null;
   }
 
   // ───────────── 夜晚 ─────────────
@@ -285,7 +403,99 @@ export class Room {
     const night = g.night;
     if (!g.missingChoices().length) { this.later(this.settings.pauseMs / 2, () => this.finishNight(night)); return; }
     this.deadline = Date.now() + this.settings.chooseSeconds * 1000;
-    this.nightTimer = this.later(this.settings.chooseSeconds * 1000, () => this.finishNight(night));
+    this.nightBase = this.deadline; // 大家共同的截止时间；dueFor 里是单独延长的人（疯子选完后的真恶魔）
+    this.dueFor = {};
+    this.dawnAt = null; // 黯月初升：最早什么时候天亮（见 startDemonClock）
+    this.nightTimer = this.later(this.settings.chooseSeconds * 1000, () => this.nightTimeout(night));
+  }
+
+  /**
+   * 到了共同的截止时间：没选的人（单独延长了的除外）替他随机选。疯子被替选完，真恶魔才开始自己的时间，
+   * 这时不入夜结算，等到最晚的那个人的截止时间再结算。
+   */
+  nightTimeout(night) {
+    const g = this.game;
+    if (!g || g.phase !== 'night' || g.night !== night || this.resolving) return;
+    const now = Date.now();
+    for (let pass = 0; pass < 2; pass++) {
+      for (const id of g.missingChoices()) {
+        if ((this.dueFor?.[id] ?? 0) > now) continue;
+        if (g.nightPrompts().find((x) => x.playerId === id)?.waiting) continue;
+        this.autoPick(id, night);
+      }
+    }
+    const last = Math.max(0, ...Object.values(this.dueFor ?? {}));
+    if (g.missingChoices().length && last > now) {
+      this.deadline = last;
+      this.cancel(this.nightTimer);
+      this.nightTimer = this.later(last - now, () => this.finishNight(night));
+      this.changed();
+      return;
+    }
+    this.finishNight(night);
+  }
+
+  /** 超时替一个人随机选（机器人按机器人的方式选），告诉他；疯子被替选完要告诉恶魔，并给恶魔留时间。 */
+  autoPick(id, night) {
+    const g = this.game;
+    if (this.isFake(id)) this.botChoose(id); else g.autoChoose(id);
+    const c = g.choices[id];
+    if (!c) return;
+    const names = this.choiceText(c);
+    if (!this.isFake(id)) this.tell(id, `时间到，已替你随机选择：${names}`, 'clock');
+    this.stNote(`${g.name(id)} 超时，随机选择了 ${names}`);
+    (this.timedOut ??= new Set()).add(id);
+    if (g.get(id)?.role === 'lunatic') {
+      const d = g.players.find((q) => ROLES[q.role].team === 'demon' && q.alive);
+      if (d) this.deliver([{ playerId: d.id, text: `疯子 ${g.name(id)} 今晚选了：${names}。` }]);
+    }
+    this.startDemonClock(id, night);
+  }
+
+  /**
+   * 黯月初升：今晚"以为自己是恶魔"的那个人——有疯子要醒就是疯子（真恶魔得等他），没有就是真恶魔。
+   */
+  demonLikeId() {
+    const g = this.game;
+    const acts = (id) => g.nightPrompts().some((x) => x.playerId === id);
+    const lun = g.players.find((q) => q.role === 'lunatic' && q.alive);
+    if (lun && acts(lun.id)) return lun.id;
+    const d = g.players.find((q) => ROLES[q.role].team === 'demon' && q.alive);
+    return d && acts(d.id) ? d.id : null;
+  }
+
+  /**
+   * 黯月初升：从"以为自己是恶魔的人"选完（自己选或超时被替选）开始，天亮统一定在之后随机 20–45 秒。
+   * 疯子选完以后真恶魔还要想一会儿——要是真恶魔自己选完很快就天亮，疯子就能从"我选完以后等了多久才天亮"看出自己是假的。
+   * 现在不管是真恶魔还是疯子，"我选完到天亮"等的时间分布都一样。有疯子时，真恶魔就用这段时间行动（截止在天亮前 2 秒）。
+   */
+  startDemonClock(uid, night) {
+    const g = this.game;
+    if (g?.script !== 'bmr' || this.dawnAt || uid !== this.demonLikeId()) return;
+    const [lo, hi] = this.dawnPad ?? [20_000, 45_000];
+    this.dawnAt = Date.now() + lo + Math.random() * (hi - lo);
+    if (g.get(uid)?.role !== 'lunatic') return;
+    const d = g.players.find((q) => ROLES[q.role].team === 'demon' && q.alive);
+    if (!d || this.isFake(d.id) || g.choices[d.id]) return;
+    const due = this.dawnAt - 2000;
+    (this.dueFor ??= {})[d.id] = due;
+    this.tell(d.id, `疯子选好了，轮到你：你还有 ${Math.round((due - Date.now()) / 1000)} 秒。`, 'clock');
+    if (this.deadline < due) this.deadline = due;
+    // 共同截止时间已经过了（疯子是超时被替选的）：等到恶魔的截止时间再结算
+    if (Date.now() >= (this.nightBase ?? 0)) {
+      this.cancel(this.nightTimer);
+      this.nightTimer = this.later(due - Date.now(), () => this.finishNight(night));
+    }
+  }
+
+  /** 这个人现在该看到的倒计时：夜里只有轮到自己选（而且不是在等疯子）才看得到自己的截止时间；说书人看全局的。 */
+  deadlineFor(uid) {
+    const g = this.game;
+    if (!g || g.phase !== 'night' || uid === this.stId) return this.deadline;
+    if (this.resolving) return this.rkPending === uid ? this.deadline : null;
+    const pr = g.nightPrompts().find((x) => x.playerId === uid);
+    if (!pr || pr.waiting || g.choices[uid]) return null;
+    return Math.max(this.nightBase ?? this.deadline ?? 0, this.dueFor?.[uid] ?? 0) || null;
   }
 
   choose(uid, night, targets, role = null) {
@@ -295,27 +505,35 @@ export class Room {
     if (msgs?.length) this.deliver(msgs);
     for (const pr of g.nightPrompts()) if (this.isFake(pr.playerId) && !g.choices[pr.playerId] && !pr.waiting) this.botChoose(pr.playerId);
     this.stNote(`${g.name(uid)}（${ROLES[g.get(uid).shownRole].name}）选择了 ${this.choiceText(g.choices[uid])}`);
+    this.startDemonClock(uid, night);
     if (!g.missingChoices().length) this.later(600, () => this.finishNight(night));
   }
 
   async finishNight(night) {
     const g = this.game;
     if (!g || g.phase !== 'night' || g.night !== night || this.resolving) return;
+    // 黯月初升：还没到定好的天亮时刻就先等着（见 startDemonClock）
+    if (this.dawnAt && Date.now() < this.dawnAt - 30) {
+      this.cancel(this.nightTimer);
+      this.nightTimer = this.later(this.dawnAt - Date.now(), () => this.finishNight(night));
+      return;
+    }
+    this.dawnAt = null;
     this.resolving = true;
     this.deadline = null;
     this.cancel(this.nightTimer);
-    const timedOut = new Set(g.missingChoices());
+    // 造谣者的声明还在等 AI 判定：先等它（最多 GOSSIP_WAIT_MS），过时还没回来就按假处理
+    if (this.gossipToken && this.gossipJudging) {
+      await Promise.race([this.gossipJudging, new Promise((ok) => setTimeout(ok, this.gossipWaitMs ?? GOSSIP_WAIT_MS))]);
+      if (this.gossipToken) { this.gossipToken = null; g.gossipVerdict(false, 'AI 判定超时，按假处理'); this.stNote('造谣者的声明 AI 判定超时，按假处理'); }
+    }
+    const timedOut = new Set([...g.missingChoices(), ...(this.timedOut ?? [])]);
+    this.timedOut = null;
+    this.dueFor = {};
     for (let pass = 0; pass < 2; pass++) {
       for (const id of g.missingChoices()) {
         if (g.nightPrompts().find((x) => x.playerId === id)?.waiting) continue;
-        if (this.isFake(id)) this.botChoose(id); else g.autoChoose(id);
-        const c = g.choices[id];
-        if (!c) continue;
-        const names = this.choiceText(c);
-        if (c && !this.isFake(id)) this.tell(id, `时间到，已替你随机选择：${names}`, 'clock');
-        this.stNote(`${g.name(id)} 超时，随机选择了 ${names}`);
-        // 疯子选完：把他的选择告诉恶魔
-        if (g.get(id)?.role === 'lunatic') { const d = g.players.find((q) => ROLES[q.role].team === 'demon' && q.alive); if (d) this.deliver([{ playerId: d.id, text: `疯子 ${g.name(id)} 今晚选了：${names}。` }]); }
+        this.autoPick(id, night);
       }
     }
     for (const [id, c] of Object.entries(g.choices)) {
@@ -374,13 +592,32 @@ export class Room {
     if (action === 'send') this.tell(m.playerId, text?.trim() || m.text, m.voice);
   }
 
+  /** 这局有没有破门过场（暗流涌动、每人有家）。 */
+  hasKillScene() {
+    return !!this.homes && this.game?.script === 'tb';
+  }
+
   afterNight() {
     const g = this.game;
+    // 恶魔破门：被恶魔杀死的人在天亮前看一段"门被踹开"的动画。有家的局每晚都停这么久，免得从夜晚长短猜出有没有人死
+    const scene = this.hasKillScene();
+    const total = this.settings.killSceneMs ?? 11000;
+    this.killScene = null;
     if (this.stId) {
+      // 真人说书：说书人可能还要花一阵子发信息，破门等他点「天亮」时才播（见 forceDawn），免得受害者早早就知道自己死了
       this.stNote(`夜晚结算完毕。今晚死亡：${g.nightDeaths.map((id) => g.name(id)).join('、') || '无'}。处理完信息后点「天亮」。`);
       return;
     }
-    this.later(this.settings.pauseMs, () => this.beginDay());
+    // 先等恶魔那边"变身 + 冲到门口"播完（约 4.5 秒），再开始踹受害者的门（约 6 秒），两边对得上
+    if (scene) this.playKillScene(g, Math.max(0, total - VICTIM_SCENE_MS));
+    this.later(scene ? Math.max(this.settings.pauseMs, total) : this.settings.pauseMs, () => this.beginDay());
+  }
+
+  /** delay 毫秒后，给今晚被恶魔杀死的人播破门。 */
+  playKillScene(g, delay) {
+    const victims = [...(g.demonKills ?? [])];
+    const play = () => { if (this.game === g && g.phase === 'night') { this.killScene = { victims }; this.changed(); } };
+    if (delay > 0) this.later(delay, play); else play();
   }
 
   async forceDawn() {
@@ -392,6 +629,15 @@ export class Room {
       if (this.stId) throw new UserError('守鸦人还没选择');
       await this.onRavenkeeper(this.rkPending, g.players[0].id);
     }
+    // 真人说书点「天亮」：先给受害者播破门，播完再天亮（没人死也照样等，免得从等多久猜出有没有人死）
+    const total = this.settings.killSceneMs ?? 11000;
+    if (this.stId && this.hasKillScene() && total > 0) {
+      if (this.dawning === g.night) throw new UserError('正在天亮');
+      this.dawning = g.night;
+      this.playKillScene(g, 0);
+      this.later(Math.min(VICTIM_SCENE_MS, total), () => { if (this.game === g && g.phase === 'night') this.beginDay(); });
+      return;
+    }
     await this.beginDay();
   }
 
@@ -401,15 +647,17 @@ export class Room {
     if (!g || (g.phase !== 'night' && !g.winner) || this.ended) return;
     this.pendingInfo.clear();
     this.resolving = false;
+    this.killScene = null;
     this.roamedToday = false;
     await this.closeAllRooms();
     const { deaths } = g.dawn();
     if (this.square) await this.safeVoice((v) => v.setAsleep(this.realIds(), false, this.square));
     this.announce(deaths.length
       ? `第 ${g.day} 天。昨晚，${deaths.map((id) => `**${g.name(id)}**`).join('、')} 死了。`
-      : `第 ${g.day} 天。昨晚是**平安夜**。`, 'day');
+      : `第 ${g.day} 天。昨晚是**平安夜**。`, 'day', true);
     const back = (g.nightRevived ?? []).filter((id) => g.get(id)?.alive);
-    if (back.length) this.announce(`${back.map((id) => `**${g.name(id)}**`).join('、')} 复活了。`, 'day');
+    if (back.length) this.announce(`${back.map((id) => `**${g.name(id)}**`).join('、')} 复活了。`, 'day', true);
+    (this.knifeLog ??= []).push({ night: g.night, day: g.day, deaths: [...deaths], revived: back });
     if (g.nightRevived) g.nightRevived = [];
     this.moonchildNotice();
     if (g.winner) { await this.endGame(); return; }
@@ -531,7 +779,8 @@ export class Room {
 
   async speakOnly(who) {
     const prev = this.speechMuted ?? new Set();
-    const next = new Set(who && this.settings.speechMute && this.square ? this.realIds().filter((id) => id !== who) : []);
+    // 只在真人发言时闭其他人：机器人不会在语音里说话，闭了也只是让大家干等
+    const next = new Set(who && !this.isFake(who) && this.settings.speechMute && this.square ? this.realIds().filter((id) => id !== who) : []);
     const unmute = [...prev].filter((id) => !next.has(id));
     const mute = [...next].filter((id) => !prev.has(id));
     this.speechMuted = next;
@@ -559,7 +808,8 @@ export class Room {
   /** 所有活着的人都提名过或者表示不提名了。 */
   nomsDone() {
     const g = this.game;
-    return !!this.noms && g.alive().every((p) => g.nominators.has(p.id) || this.noms.skips.has(p.id));
+    // 只算看起来活着的人：假死的僵怖按官方算死人，不能提名，也看不到「不提名」（以前算上他，计数永远差一个）
+    return !!this.noms && g.alive().filter((p) => g.visAlive(p)).every((p) => g.nominators.has(p.id) || this.noms.skips.has(p.id));
   }
 
   /** 一轮投票结束后：该入夜就入夜，否则继续等提名。 */
@@ -587,6 +837,12 @@ export class Room {
       if (p.role === 'imp') t = g.players.find((q) => q.alive && this.isFake(q.id) && !['imp', 'poisoner', 'soldier'].includes(q.role) && pr?.options.includes(q.id)); // 不刀真人，也别去刀士兵
       if (t && pr?.count === 1) { g.submitChoice(id, [t.id]); return; }
     }
+    // 新手照顾：机器人当恶魔时，前三晚能不刀新手就不刀（让新手多玩一会儿）
+    const pr = g.nightPrompts().find((x) => x.playerId === id);
+    if (p && ROLES[p.role].team === 'demon' && pr?.count === 1 && !pr.optional && g.night <= 3 && g.newbies?.length) {
+      const pool = pr.options.filter((o) => o !== id && !g.newbies.includes(o));
+      if (pool.length) { g.submitChoice(id, [pool[Math.floor(Math.random() * pool.length)]]); return; }
+    }
     g.autoChoose(id);
   }
 
@@ -600,15 +856,16 @@ export class Room {
   /** 机器人玩家（测试用）：过几秒决定提名谁，或者不提名了。 */
   botsConsider() {
     if (this.tutorial) { // 教程：机器人都表示不提名，等你提名、投完票就进黄昏
-      for (const p of this.game.alive()) if (this.isFake(p.id)) this.noms?.skips.add(p.id);
+      for (const p of this.game.alive()) if (this.isFake(p.id) && this.game.visAlive(p)) this.noms?.skips.add(p.id);
       return;
     }
     const g = this.game;
-    for (const p of g.alive().filter((q) => this.isFake(q.id) && !g.nominators.has(q.id))) {
+    for (const p of g.alive().filter((q) => this.isFake(q.id) && g.visAlive(q) && !g.nominators.has(q.id))) {
       if (this.noms?.skips.has(p.id)) continue;
       this.later(2000 + Math.random() * 5000, () => {
         if (!this.noms || this.noms.timeUp || this.pendingNom || this.vote || g.phase !== 'day' || g.nominators.has(p.id) || !p.alive) return;
-        const targets = g.players.filter((q) => q.id !== p.id && !g.nominees.has(q.id));
+        // 新手照顾：前两天机器人不提名新手
+        const targets = g.players.filter((q) => q.id !== p.id && !g.nominees.has(q.id) && !(g.day <= 2 && g.newbies?.includes(q.id)));
         if (targets.length && Math.random() < 0.3) this.nominate(p.id, targets[Math.floor(Math.random() * targets.length)].id);
         else this.skipNom(p.id);
       });
@@ -665,7 +922,7 @@ export class Room {
       block: `${g.name(v.nominee)} 被送上处决台`,
       tie: `和${before.block ? ` ${g.name(before.block)} ` : '之前的'}${before.votes} 票打平，台上清空，谁都不会被处决`,
       lower: `不如台上 ${before.block ? g.name(before.block) : ''} 的 ${before.votes} 票`,
-      fail: `票数不够（存活 ${g.aliveCount()} 人，需要一半即 ${v.result.threshold} 票）`,
+      fail: `票数不够（存活 ${g.visAliveCount()} 人，需要一半即 ${v.result.threshold} 票）`,
     }[v.result.outcome];
     const hands = v.result.voters.length ? `。举手：${v.result.voters.map((id) => g.name(id)).join('、')}` : '。没有人举手';
     this.announce(`对 **${g.name(v.nominee)}** 的投票：${v.result.count} 票（需 ${v.result.threshold}）→ ${what}${hands}`, 'vote');
@@ -702,7 +959,8 @@ export class Room {
     this.duskDay = g.day; // 读档时：今天黄昏已经结算过，直接入夜
     if (executed && result === 'saved') this.announce(`黄昏。**${g.name(executed)}** 被处决了——但依然活着。`, 'death');
     else if (executed) this.announce(`黄昏。**${g.name(executed)}** 被处决了。`, 'death');
-    else this.announce(already ? '黄昏。今天的处决已经发生过了。' : '黄昏。今天没有人被处决。', 'night');
+    else this.announce(already ? '黄昏。今天的处决已经发生过了。' : '黄昏。今天没有人被处决。', 'night', true);
+    if (!already || executed) (this.execLog ??= []).push({ day: g.day, id: executed ?? null, saved: result === 'saved' });
     this.moonchildNotice();
     if (executed && result !== 'saved') this.narrate('execution', { name: g.name(executed) });
     else if (!executed) this.narrate('noExecution', { already });
@@ -714,8 +972,34 @@ export class Room {
   gossip(uid, statement) {
     const g = this.requireGame();
     if (g.script !== 'bmr') throw new UserError('这个剧本没有造谣者');
+    if (statement.kind === 'free') return this.gossipFree(uid, statement.text);
     const { text } = g.gossipStatement(uid, statement);
     this.announce(`**${g.name(uid)}** 公开声明：「${text}」`, 'vote');
+    this.narrate('gossip', { a: g.name(uid), text });
+  }
+
+  /**
+   * 自由声明：马上公开播报；只有真造谣者的才在后台问 AI 真假（别人的本来就没效果，不用判，也不会从"判没判"漏出谁是造谣者）。
+   * 判为真就标记今晚有人死；入夜结算前会等它判完（见 finishNight）。
+   */
+  gossipFree(uid, raw) {
+    const g = this.game;
+    if (!(this.judgeReady ?? judgeAvailable)()) throw new UserError('服务器没配 AI 判定，只能用固定句式');
+    const { text, isGossip } = g.gossipFree(uid, raw);
+    this.announce(`**${g.name(uid)}** 公开声明：「${text}」`, 'vote');
+    this.narrate('gossip', { a: g.name(uid), text });
+    if (!isGossip) return;
+    const token = {};
+    this.gossipToken = token;
+    this.gossipJudging = (this.judge ?? judgeStatement)(text, g.gossipFacts()).then((res) => {
+      if (this.gossipToken !== token || this.game !== g) return; // 已经入夜结算了，或者换了一局
+      this.gossipToken = null;
+      const truth = res?.verdict === 'true';
+      const note = res ? `"${text}" 由 AI（${res.by}）判为${{ true: '真', false: '假', unknown: '无法判定（按假处理）' }[res.verdict]}：${res.reason}` : `"${text}" AI 判定失败，按假处理`;
+      g.gossipVerdict(truth, note);
+      this.stNote(`造谣者的声明 ${note}`);
+      this.changed();
+    }).catch((e) => console.warn('[botc] 判定声明出错：', e.message));
   }
 
   /** 月之子得知自己死亡后公开选人。 */
@@ -747,7 +1031,19 @@ export class Room {
     if (g.winner) this.later(0, () => this.endGame());
   }
 
+  /** 现在是不是两个阶段之间的停顿：'dawn' | 'gather' | 'dusk' | null。真人说书时只有黄昏算（其余由说书人决定下一步）。 */
+  transit() {
+    const g = this.game;
+    if (!g || g.phase !== 'day' || this.ended) return null;
+    if (this.duskDay === g.day) return 'dusk';
+    if (this.stId || this.roam || this.noms || this.pendingNom || this.vote) return null;
+    return this.roamedToday ? 'gather' : 'dawn';
+  }
+
   // ───────────── 白天自由活动：小镇地图 ─────────────
+  /** 这局的地图：每个剧本一张。 */
+  get town() { return getMap(this.game?.script); }
+
   // 走进房子 = 机器人把你拉进那间房子的语音频道；走出来 = 拉回广场。房子空了频道就删掉。
   startRoam(minutes) {
     const g = this.requireGame();
@@ -755,10 +1051,11 @@ export class Room {
     if (this.vote || this.pendingNom) throw new UserError('等这轮提名/投票结束');
     if (this.roam) return;
     this.roamedToday = true;
-    const houses = housesFor(g.players.length);
+    const houses = this.town.housesFor(g.players.length);
     const now = Date.now();
     const pos = new Map(g.players.map((p, i) => {
-      const s = seatSpot(i, g.players.length);
+      // 有家的从自家门口出门，没有的站在集合点一圈
+      const s = (this.homes && this.town.homeStep(this.homes[p.id])) ?? this.town.seatSpot(i, g.players.length);
       return [p.id, { fx: s.x, fy: s.y, x: s.x, y: s.y, start: now, dur: 0 }];
     }));
     this.roam = {
@@ -767,9 +1064,11 @@ export class Room {
       zone: new Map(),    // playerId → houseId
       arrive: new Map(),  // playerId → 到达计时器
       until: minutes ? now + minutes * 60_000 : null,
+      since: now,          // 自由活动从什么时候开始（前端按"早上 → 傍晚"调雾的浓淡）
       endVotes: new Set(), // 同意提前集合的人
     };
     if (minutes) this.roamTimer = this.later(minutes * 60_000, () => this.endRoam('时间到'));
+    this.scheduleRoamSoon();
     this.wander();
     this.announce(`自由活动${minutes ? `（${minutes} 分钟）` : ''}！点地图走动，走进小房子就能私聊，房子里的人可以锁门。`, 'day');
     this.narrate('roam', { minutes });
@@ -777,7 +1076,7 @@ export class Room {
 
   /** 现在这一刻的位置（可能正走在路上）。 */
   posNow(id) {
-    return positionAt(this.roam.houses, this.roam.pos.get(id), Date.now());
+    return positionAt(this.roam.pos.get(id), Date.now());
   }
 
   /** 走到 (x, y)。锁着门的房子只能走到门口并敲门。返回给客户端的提示。 */
@@ -785,8 +1084,9 @@ export class Room {
     const r = this.roam;
     if (!r) throw new UserError('现在不是自由活动时间');
     if (!this.game.get(uid)) throw new UserError('你不是这局的玩家');
-    let to = clampToMap(x, y);
+    let to = this.town.clampToMap(x, y);
     let notice = null;
+    r.bounce?.delete(uid); // 换了目的地：不再是「正被挡出门外」
     // 换个地方走 = 不在门口了，敲门作废
     let dropped = false;
     for (const st of r.state.values()) if (st.knocks.delete(uid)) dropped = true;
@@ -812,7 +1112,7 @@ export class Room {
       }
     }
     const from = this.posNow(uid);
-    const path = route(r.houses, from, to); // 绕开建筑的路线，客户端照着它画
+    const path = this.town.route(r.houses, from, to); // 绕开建筑的路线，客户端照着它画
     const end = path[path.length - 1];
     const dur = (pathLength(path) / SPEED) * 1000;
     const m = { fx: from.x, fy: from.y, x: end.x, y: end.y, start: Date.now(), dur, path };
@@ -823,7 +1123,7 @@ export class Room {
     const marks = [];
     let zone = r.zone.get(uid) ?? null;
     for (let t = 50; t < dur; t += 50) {
-      const p = positionAt(r.houses, m, m.start + t);
+      const p = positionAt(m, m.start + t);
       const h = houseAt(r.houses, p.x, p.y)?.id ?? null;
       if (h !== zone) { marks.push(t + 40); zone = h; }
     }
@@ -833,12 +1133,11 @@ export class Room {
     return notice ? { notice } : null;
   }
 
-  /** 记一次敲门；45 秒没人理就作废。 */
+  /** 记一次敲门。一直有效，直到敲门的人走开（move 里清掉）、屋里的人回应、或者屋里没人了；不按时间作废（人还站在门口，面板却没了，再点「让他进来」就失败）。 */
   knock(st, uid) {
     st.knocks.add(uid);
     const at = Date.now();
     (st.knockAt ??= new Map()).set(uid, at);
-    this.later(45_000, () => { if (st.knockAt?.get(uid) === at) { st.knocks.delete(uid); st.knockAt.delete(uid); } });
   }
 
   async arrive(uid) {
@@ -847,6 +1146,8 @@ export class Room {
     const at = this.posNow(uid);
     const now = houseAt(r.houses, at.x, at.y)?.id ?? null;
     const was = r.zone.get(uid) ?? null;
+    // 正被锁着的门挡出去：往外走的这一小段还在屋里，别每一步都重新"进门被挡、敲门"（屋里人的敲门面板会一直闪）
+    if (now && r.bounce?.get(uid) === now) return;
     if (now === was) return;
     if (was) await this.leaveHouse(uid, was);
     if (now) {
@@ -856,6 +1157,7 @@ export class Room {
         const h = r.houses.find((x) => x.id === now);
         const out = doorPoint(h, 24);
         this.move(uid, out.x, out.y, { force: true });
+        (r.bounce ??= new Map()).set(uid, now);
         this.knock(st, uid);
         if (!this.isFake(uid)) this.tell(uid, `${h.name}锁着门，你被挡在了门外。`, 'clock');
         this.changed();
@@ -875,10 +1177,11 @@ export class Room {
     r.invites?.delete(uid);
     this.changed();
     if (this.isFake(uid)) return;
+    this.touchVoice([uid]);
     // 同一间房子的语音操作排队做，免得两个人同时进来建出两个频道
     st.queue = st.queue.then(async () => {
       if (!st.ids.has(uid)) return;
-      if (!st.channelId) st.channelId = await this.safeVoice((v) => v.openRoom(h.name, [uid], null, this.square));
+      if (!st.channelId) { st.channelId = await this.safeVoice((v) => v.openRoom(h.name, [uid], null, this.square)); this.ownChannel(st.channelId); }
       else await this.safeVoice((v) => v.addToRoom(st.channelId, uid));
     });
     await st.queue;
@@ -893,6 +1196,7 @@ export class Room {
     if (!st.ids.size) { st.locked = false; st.knocks.clear(); st.allow.clear(); }
     this.changed();
     if (this.isFake(uid)) return;
+    this.touchVoice([uid]);
     st.queue = st.queue.then(async () => {
       if (!st.channelId) return;
       if (![...st.ids].some((id) => !this.isFake(id))) {
@@ -980,9 +1284,23 @@ export class Room {
       const bots = this.game.players.filter((p) => this.isFake(p.id));
       if (!bots.length) return;
       const bot = bots[Math.floor(Math.random() * bots.length)];
-      const pt = randomSpot(this.roam.houses);
+      const pt = this.town.randomSpot(this.roam.houses);
       this.move(bot.id, pt.x, pt.y);
       this.wander();
+    });
+  }
+
+  /** 自由活动快结束：剩 30 秒时说书人提醒一句（不限时、或者本来就不到 45 秒的不提醒）。 */
+  scheduleRoamSoon() {
+    const r = this.roam;
+    this.cancel(this.roamSoonTimer);
+    if (!r?.until || r.until - (r.since ?? 0) <= 45_000) return;
+    const at = r.until - 30_000 - Date.now();
+    if (at < 0) return; // 已经过了提醒的时刻（比如服务器重启时只剩不到 30 秒）
+    this.roamSoonTimer = this.later(at, () => {
+      if (this.roam !== r) return;
+      this.announce('还有 30 秒就要敲钟集合了——私聊的抓紧说完。', 'clock');
+      this.narrate('roamSoon');
     });
   }
 
@@ -992,6 +1310,7 @@ export class Room {
     if (!r) return;
     this.roam = null;
     this.cancel(this.roamTimer);
+    this.cancel(this.roamSoonTimer);
     for (const t of r.arrive.values()) this.cancel(t);
     for (const st of r.state.values()) {
       await st.queue.catch(() => {});
@@ -1015,7 +1334,9 @@ export class Room {
     // 夜里说书人单独叫人：先给他解除闭耳，回去时再闭上
     const asleep = this.game?.phase === 'night' && this.settings.nightDeafen && this.square;
     if (asleep) await this.safeVoice((v) => v.setAsleep(real, false, this.square));
+    this.touchVoice(real);
     const channelId = await this.safeVoice((v) => v.openRoom(`${label}`, real, withSt, this.square));
+    this.ownChannel(channelId);
     const room = { channelId: channelId ?? `local-${newId()}`, members, withSt, asleep, until: minutes ? Date.now() + minutes * 60_000 : null };
     this.rooms.set(room.channelId, room);
     this.announce(`${members.map((id) => `**${this.name(id)}**`).join(' 和 ')} 去私聊了${minutes ? `（${minutes} 分钟）` : ''}`, 'whisper');
@@ -1041,11 +1362,12 @@ export class Room {
     if (!room) return;
     this.rooms.delete(channelId);
     this.cancel(room.timer);
+    this.touchVoice(room.members);
     if (!channelId.startsWith('local-')) await this.safeVoice((v) => v.closeRoom(channelId, this.square));
     if (room.asleep && this.game?.phase === 'night') {
       await this.safeVoice((v) => v.setAsleep(room.members.filter((id) => !this.isFake(id)), true, this.square));
     }
-    if (reason) this.announce(`私聊结束（${reason}）`, 'whisper');
+    if (reason) this.announce(`私聊结束（${reason}）`, 'whisper', false);
   }
 
   async closeAllRooms() {
@@ -1101,6 +1423,144 @@ export class Room {
     this.narrate('end', { team: g.winner, reason: g.winReason });
   }
 
+  // ───────────── 语音校正 ─────────────
+
+  /** 这些人刚被拉过（进出房子、私聊），校正先等一会儿再管他们。 */
+  touchVoice(ids) {
+    this.voiceTouched ??= new Map();
+    for (const id of ids) this.voiceTouched.set(id, Date.now());
+  }
+
+  /** 这个人现在应该在哪个语音频道：私聊房间 > 自己所在的房子 > 广场。 */
+  voiceWant(uid) {
+    for (const r of this.rooms.values()) if (r.members.includes(uid) && !r.channelId.startsWith('local-')) return r.channelId;
+    for (const st of this.roam?.state.values() ?? []) if (st.ids.has(uid) && st.channelId) return st.channelId;
+    return this.square;
+  }
+
+  /** 记下这局开过的语音频道（关掉以后万一没删成、里面还有人，也能把人拉回广场）。 */
+  ownChannel(id) {
+    if (!id) return;
+    this.ownedChannels ??= new Set();
+    this.ownedChannels.add(id);
+  }
+
+  /** 这局管着的语音频道：广场、各房子、私聊、开过的频道。只校正在这些频道里的人（自己跑去别的频道的不管）。 */
+  managedChannels() {
+    const out = new Set([...(this.square ? [this.square] : []), ...(this.ownedChannels ?? [])]);
+    for (const r of this.rooms.values()) if (!r.channelId.startsWith('local-')) out.add(r.channelId);
+    for (const st of this.roam?.state.values() ?? []) if (st.channelId) out.add(st.channelId);
+    return out;
+  }
+
+  /** 对一遍：该在广场却还卡在房子里的拉回广场，该在房子里却没进去的拉进去。返回拉了几个人。 */
+  async reconcileVoice() {
+    if (!this.game || this.ended || this.paused || !this.square || !this.voice?.where || this.reconciling) return 0;
+    this.reconciling = true;
+    let fixed = 0;
+    try {
+      const managed = this.managedChannels();
+      for (const id of this.realIds()) {
+        if (Date.now() - (this.voiceTouched?.get(id) ?? 0) < VOICE_GRACE_MS) continue;
+        const at = await this.voice.where(id);
+        if (!at || !managed.has(at)) continue;
+        const want = this.voiceWant(id);
+        if (!want || at === want) continue;
+        if (await this.voice.move(id, want)) {
+          fixed++;
+          console.log(`🔧 语音校正 ${this.key}：${this.game.name(id)} 在错的频道，拉到${want === this.square ? '广场' : '该在的房间'}`);
+        }
+        this.touchVoice([id]);
+      }
+    } catch (e) {
+      console.warn('[botc] 语音校正失败：', e.message);
+    } finally { this.reconciling = false; }
+    return fixed;
+  }
+
+  /** 玩家自己点"语音归位"：马上把他拉到该在的频道（不管他现在在哪个频道）。 */
+  async fixVoice(uid) {
+    if (!this.game || this.ended) throw new UserError('游戏还没开始');
+    if (!this.voice?.where || !this.square) throw new UserError('这局没有接上 Discord 语音');
+    const want = this.game.get(uid) ? this.voiceWant(uid) : this.square;
+    const at = await this.voice.where(uid);
+    if (!at) throw new UserError('你现在不在语音频道里，先进语音');
+    if (at === want) return { notice: '语音没问题：你已经在该在的频道里了' };
+    if (!(await this.voice.move(uid, want))) throw new UserError('拉人没成功，过几秒再试一次');
+    this.touchVoice([uid]);
+    console.log(`🔧 语音归位 ${this.key}：${this.users.get(uid)?.name ?? uid} 自己点了归位`);
+    return { notice: want === this.square ? '已经把你拉回广场' : '已经把你拉回你在的房间' };
+  }
+
+  /** 开局 / 恢复后每隔几秒校正一次（暂停、回大厅时跟着计时器一起停）。 */
+  watchVoice() {
+    if (!this.voice?.where) return;
+    if (this.voiceTimer) { clearInterval(this.voiceTimer); this.timers.delete(this.voiceTimer); }
+    this.voiceTimer = setInterval(() => this.reconcileVoice(), VOICE_CHECK_MS);
+    this.voiceTimer.unref?.();
+    this.timers.add(this.voiceTimer);
+  }
+
+  // ───────────── 没人在线就暂停 / 一个语音频道只许一局 ─────────────
+
+  /** 这局还有真人（玩家或说书人）开着小程序吗。 */
+  anyoneOnline() {
+    return this.realIds().some((id) => this.online.has(id)) || (!!this.stId && this.online.has(this.stId));
+  }
+
+  /** 有人进出时调用：真人全离线就倒计时暂停；有人回来就接着打。 */
+  presence() {
+    if (!this.game || this.ended || this.tutorial) return;
+    if (this.anyoneOnline()) {
+      this.cancel(this.idleTimer); this.idleTimer = null;
+      if (this.paused) this.unpause();
+      return;
+    }
+    if (!this.paused && !this.idleTimer) this.idleTimer = this.later(this.idlePauseMs ?? IDLE_PAUSE_MS, () => { this.idleTimer = null; if (!this.anyoneOnline()) return this.pause(); });
+  }
+
+  /** 暂停：计时器全停（机器人不再提名、不再天黑天亮），语音里的闭麦闭耳全部放开。 */
+  async pause() {
+    if (!this.game || this.ended || this.paused) return;
+    for (const t of this.timers) clearTimeout(t);
+    this.timers.clear();
+    this.paused = true;
+    this.announce('大家都离开了，对局暂停，语音里的闭麦闭耳已经放开。有人回来会自动接着打。', 'clock');
+    if (this.watchMuted?.length) { const ids = this.watchMuted; this.watchMuted = []; await this.safeVoice((v) => v.setMuted?.(ids, false)); }
+    await this.speakOnly(null);
+    if (this.square) await this.safeVoice((v) => v.setAsleep(this.realIds(), false, this.square));
+    this.changed();
+  }
+
+  unpause() {
+    if (!this.paused) return;
+    this.paused = false;
+    this.resume('有人回来了，对局接着打。');
+    const nom = this.pendingNom;
+    if (nom?.stage) this.speakOnly(nom.stage === 'accuse' ? nom.nominator : nom.nominee); // 正在发言的人接着说，别人接着闭麦
+    this.syncWatchMute();
+    this.changed();
+  }
+
+  /**
+   * 开局前占住广场：同一个语音频道已经有别的局在进行，就不让开（不然两局一起闭麦）。
+   * 那局的真人全都不在了（暂停或正等着暂停），就直接结束它，把广场让出来。
+   */
+  async claimSquare(square) {
+    if (!square || !this.peers) return;
+    const other = [...this.peers()].find((r) => r !== this && !r.tutorial && r.guildId === this.guildId && r.game && !r.ended && r.square === square);
+    if (!other) return;
+    if (other.paused || !other.anyoneOnline()) {
+      other.announce('这个语音频道开了新的一局，这局没人在玩，已经结束。', 'clock');
+      await other.teardown();
+      other.reset();
+      other.changed();
+      return;
+    }
+    const host = other.users.get(other.hostId)?.name ?? '另一位房主';
+    throw new UserError(`这个语音频道已经有一局在进行（${host} 从另一个频道开的，第 ${other.game.day} 天）。等那局打完，或者请那局的房主在「房主」菜单里结束它。`);
+  }
+
   async teardown() {
     for (const t of this.timers) clearTimeout(t);
     this.timers.clear();
@@ -1122,22 +1582,23 @@ export class Room {
       v: 1,
       savedAt: Date.now(),
       key: this.key, guildId: this.guildId, hostId: this.hostId, settings: this.settings,
-      users: [...this.users.values()], lobby: this.lobby,
+      users: [...this.users.values()], lobby: this.lobby, roleAssign: this.roleAssign ?? {}, newbies: this.newbies ?? [],
       game: this.game?.toJSON() ?? null,
       ended: this.ended, square: this.square, log: this.log, logSeq: this.logSeq, stLog: this.stLog,
       inbox: entries(this.inbox), pendingInfo: entries(this.pendingInfo),
-      resolving: this.resolving, rkPending: this.rkPending, deadline: this.deadline,
-      roamedToday: !!this.roamedToday, duskDay: this.duskDay ?? null,
+      resolving: this.resolving, rkPending: this.rkPending, deadline: this.deadline, nightBase: this.nightBase ?? null, dueFor: this.dueFor ?? {}, dawnAt: this.dawnAt ?? null,
+      roamedToday: !!this.roamedToday, duskDay: this.duskDay ?? null, homes: this.homes ?? null,
       pendingNom: this.pendingNom,
       noms: this.noms && { until: this.noms.until, paused: this.noms.paused, timeUp: this.noms.timeUp, skips: [...this.noms.skips] },
       vote: this.vote && { ...this.vote, yes: [...this.vote.yes], locked: [...this.vote.locked] },
       lastVote: this.lastVote ?? null,
-      voteHistory: this.voteHistory ?? [],
+      voteHistory: this.voteHistory ?? [], knifeLog: this.knifeLog ?? [], execLog: this.execLog ?? [],
       outfits: [...this.outfits],
       watchMuted: this.watchMuted ?? [],
+      paused: !!this.paused,
       rooms: [...this.rooms.values()].map(({ timer, ...x }) => x),
       roam: r && {
-        until: r.until, pos: entries(r.pos), zone: entries(r.zone), endVotes: [...(r.endVotes ?? [])],
+        until: r.until, since: r.since ?? null, pos: entries(r.pos), zone: entries(r.zone), endVotes: [...(r.endVotes ?? [])],
         state: entries(r.state).map(([id, st]) => [id, { ids: [...st.ids], locked: st.locked, knocks: [...st.knocks], allow: [...st.allow], channelId: st.channelId }]),
       },
     };
@@ -1148,42 +1609,46 @@ export class Room {
     this.settings = { ...DEFAULT_SETTINGS, ...s.settings };
     for (const u of s.users ?? []) this.users.set(u.id, u);
     this.lobby = s.lobby ?? [];
+    this.roleAssign = s.roleAssign ?? {};
+    this.newbies = s.newbies ?? [];
     this.game = s.game ? Game.fromJSON(s.game) : null;
     Object.assign(this, {
       ended: s.ended, square: s.square, log: s.log ?? [], logSeq: s.logSeq ?? 0, stLog: s.stLog ?? [],
       inbox: new Map(s.inbox ?? []), pendingInfo: new Map(s.pendingInfo ?? []),
-      resolving: s.resolving, rkPending: s.rkPending, deadline: s.deadline,
-      roamedToday: s.roamedToday, duskDay: s.duskDay, pendingNom: s.pendingNom, lastVote: s.lastVote,
-      voteHistory: s.voteHistory ?? [],
+      resolving: s.resolving, rkPending: s.rkPending, deadline: s.deadline, nightBase: s.nightBase ?? s.deadline ?? null, dueFor: s.dueFor ?? {}, dawnAt: s.dawnAt ?? null,
+      roamedToday: s.roamedToday, duskDay: s.duskDay, homes: s.homes ?? null, pendingNom: s.pendingNom, lastVote: s.lastVote,
+      voteHistory: s.voteHistory ?? [], knifeLog: s.knifeLog ?? [], execLog: s.execLog ?? [],
       outfits: new Map(s.outfits ?? []),
       watchMuted: s.watchMuted ?? [],
+      paused: !!s.paused,
     });
     this.noms = s.noms && { ...s.noms, skips: new Set(s.noms.skips) };
     this.vote = s.vote && { ...s.vote, yes: new Set(s.vote.yes), locked: new Set(s.vote.locked) };
     this.rooms = new Map((s.rooms ?? []).map((x) => [x.channelId, x]));
     if (s.roam && this.game) {
       this.roam = {
-        houses: housesFor(this.game.players.length),
-        until: s.roam.until, pos: new Map(s.roam.pos), zone: new Map(s.roam.zone), arrive: new Map(), endVotes: new Set(s.roam.endVotes ?? []),
+        houses: this.town.housesFor(this.game.players.length),
+        until: s.roam.until, since: s.roam.since ?? null, pos: new Map(s.roam.pos), zone: new Map(s.roam.zone), arrive: new Map(), endVotes: new Set(s.roam.endVotes ?? []),
         state: new Map(s.roam.state.map(([id, st]) => [id, { ...st, ids: new Set(st.ids), knocks: new Set(st.knocks), allow: new Set(st.allow), queue: Promise.resolve() }])),
       };
     }
     return this;
   }
 
-  /** 读档后把该有的计时器重新排上。 */
-  resume() {
+  /** 读档后（或暂停后有人回来）把该有的计时器重新排上。 */
+  resume(why = '服务器刚刚重启过，对局已经恢复，接着玩。') {
     const g = this.game;
-    if (!g || this.ended) return;
+    if (!g || this.ended || this.paused) return;
     const left = (until, min = 5000) => Math.max(min, (until ?? 0) - Date.now());
-    this.announce('服务器刚刚重启过，对局已经恢复，接着玩。', 'clock');
+    this.announce(why, 'clock');
+    this.watchVoice();
     for (const r of this.rooms.values()) if (r.until) r.timer = this.later(left(r.until), () => this.closeRoom(r.channelId, '时间到'));
     if (g.phase === 'night') {
       const night = g.night;
       // 机器人重启时会先把所有人解除闭耳，夜里要重新闭上
       if (this.settings.nightDeafen && this.square) this.safeVoice((v) => v.setAsleep(this.realIds(), true, this.square));
       if (!this.resolving) {
-        if (this.deadline) this.nightTimer = this.later(left(this.deadline), () => this.finishNight(night));
+        if (this.deadline) this.nightTimer = this.later(left(this.nightBase ?? this.deadline), () => this.nightTimeout(night));
         else this.later(3000, () => this.finishNight(night));
       } else if (this.rkPending) {
         const rk = this.rkPending;
@@ -1204,6 +1669,7 @@ export class Room {
     if (this.roam) {
       const r = this.roam;
       if (r.until) this.roamTimer = this.later(left(r.until), () => this.endRoam('时间到'));
+      this.scheduleRoamSoon();
       for (const [id, m] of r.pos) if (m.start + m.dur > Date.now()) r.arrive.set(id, [this.later(m.start + m.dur - Date.now() + 30, () => this.arrive(id))]);
       this.wander();
       return;
@@ -1242,10 +1708,12 @@ export class Room {
       isST,
       settings: this.settings,
       lobby: this.lobby.map((p) => ({ ...p, outfit: this.outfits.get(p.id) ?? null })),
+      roleAssign: this.isHost(uid) && !g ? this.roleAssign ?? {} : null, // 房主指定的角色：只发给房主
+      newbies: this.isHost(uid) ? this.newbies ?? [] : [], // 新手标记只有房主看得到：新手当邪恶的概率被调低了，别人看得到就能据此排除
       myOutfit: this.outfits.get(uid) ?? null,
       log: this.log.slice(-40),
       now: Date.now(),
-      deadline: this.deadline,
+      deadline: this.deadlineFor(uid),
       voiceReady: !!this.square,
       tutorial: !!this.tutorial,
       // 观战席：在线但没坐下（大厅）/ 不在这局里（游戏中）的人
@@ -1258,16 +1726,21 @@ export class Room {
     const showRoles = isST || this.ended || (spectator && this.settings.spectatorGrimoire);
     const vote = this.vote ?? null;
     Object.assign(view, {
-      phase: this.ended ? 'ended' : g.phase,
+      // 开局时游戏先处在 setup（发身份、找语音频道要几秒）：前端当成第一夜，不要露出白天的广场
+      phase: this.ended ? 'ended' : g.phase === 'setup' ? 'night' : g.phase,
       spectator,
       script: g.script,
       dayStage: g.phase !== 'day' ? null : this.roam ? 'roam' : this.roamedToday ? 'square' : 'morning',
-      night: g.night,
+      // 阶段之间的几秒停顿（天亮 → 自由活动、集合 → 开放提名、黄昏 → 入夜）：前端只显示过渡卡片，不露出提名/投票面板
+      transit: this.transit(),
+      homes: this.homes ?? null, // playerId → 房子 id（公开）
+      night: Math.max(1, g.night),
       day: g.day,
       threshold: g.threshold(),
-      aliveCount: g.aliveCount(),
+      aliveCount: g.visAliveCount(), // 看起来活着的人数：假死的僵怖算死人，不然一看人数就知道谁是僵怖
       block: g.block,
       blockVotes: g.blockVotes,
+      blockTied: g.blockTied ?? [],
       executedToday: g.executedToday,
       players: g.players.map((p) => ({
         id: p.id, seat: p.seat, name: p.name, alive: g.visAlive(p), ghostVote: p.ghostVote,
@@ -1282,7 +1755,7 @@ export class Room {
       pendingNom: this.pendingNom,
       noms: this.noms && {
         until: this.noms.paused != null ? null : this.noms.until, timeUp: this.noms.timeUp, skipped: this.noms.skips.has(uid),
-        done: g.alive().filter((p) => g.nominators.has(p.id) || this.noms.skips.has(p.id)).length,
+        done: g.alive().filter((p) => g.visAlive(p) && (g.nominators.has(p.id) || this.noms.skips.has(p.id))).length,
       },
       journal: isST || this.ended ? g.journal : null,
       timeline: this.ended ? g.timeline : null,
@@ -1293,6 +1766,8 @@ export class Room {
         locked: [...vote.locked],
       },
       votes: this.voteHistory ?? [],
+      knives: this.knifeLog ?? [], // 刀口：每晚谁死了（公开信息：天亮时大家都听到了）
+      execs: this.execLog ?? [],   // 每天的处决结果
       voiceChannel: this.square ?? null,
       lastVote: this.lastVote && {
         nominee: this.lastVote.nominee, yes: this.lastVote.result.voters, outcome: this.lastVote.result.outcome,
@@ -1300,7 +1775,8 @@ export class Room {
       },
       rooms: [...this.rooms.values()].map((r) => ({ id: r.channelId, members: r.members, until: r.until, mine: r.members.includes(uid) })),
       roam: this.roam && {
-        until: this.roam.until,
+        map: this.town.id,
+        until: this.roam.until, since: this.roam.since ?? null,
         houses: this.roam.houses.map((h) => {
           const st = this.roam.state.get(h.id);
           return { ...h, members: [...st.ids], locked: st.locked, knocks: [...st.knocks] };
@@ -1330,7 +1806,10 @@ export class Room {
         },
         moonchild: g.pendingMoonchild === uid,
         gossipDone: !!g.gossipSaid?.[uid],
+        newbie: !!g.newbies?.includes(uid), // 新手：身份面板多一段"怎么玩"的提示
+        gossipFree: (this.judgeReady ?? judgeAvailable)(), // 服务器配了 AI 判定：可以自由说
         ravenkeeper: this.rkPending === uid,
+        killedTonight: g.phase === 'night' && !!this.killScene?.victims.includes(uid),
         // 官方规则（7 人及以上）：第一夜恶魔和爪牙互认，恶魔拿 3 个伪装；之后传位/红唇接任不再通知爪牙
         allies: g.evilKnown?.[uid] ?? null,
         evilInfo: g.evilInfo,

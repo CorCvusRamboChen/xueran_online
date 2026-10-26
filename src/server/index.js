@@ -37,6 +37,71 @@ app.get('/api/tts/:id', ttsHandler);
 
 // 开发用：小镇底稿页把导出的底稿直接存进 design/guides/（只在 DEV_LOGIN 下开放）
 if (DEV_LOGIN) {
+  // 色调编辑器（?preview=layout 的「色调」）：写回 src/shared/maps/<地图>-tone.js
+  app.post('/api/dev/tone/:map', express.json({ limit: '16kb' }), async (req, res) => {
+    const map = String(req.params.map);
+    if (map !== 'bmr') return res.status(400).json({ error: '只有黯月初升能调' });
+    const RANGE = { brightness: [0.3, 2], contrast: [0.3, 2], saturate: [0, 3], sepia: [0, 1], hue: [-180, 180] };
+    const out = { map: {}, houses: {} };
+    if (req.body?.square) out.square = {};
+    for (const g of Object.keys(out)) {
+      for (const [k, v] of Object.entries(req.body?.[g] ?? {})) {
+        const r = RANGE[k];
+        if (!r || typeof v !== 'number' || !Number.isFinite(v) || v < r[0] || v > r[1]) return res.status(400).json({ error: `${g}.${k} 不对` });
+        out[g][k] = Math.round(v * 100) / 100;
+      }
+    }
+    const { writeFile } = await import('node:fs/promises');
+    const file = `src/shared/maps/${map}-tone.js`;
+    const head = '// 黯月初升的色调（在 http://localhost:3001/?preview=layout 的「色调」里调，点保存就写回这个文件）。\n'
+      + '// map：手绘底图（连同从底图里切出来的树、普通建筑）和集合广场；houses：7 间能进的房子。没写的项就是不调。\n';
+    await writeFile(path.resolve(file), `${head}export default ${JSON.stringify(out, null, 2)};\n`);
+    res.json({ ok: true, path: file });
+  });
+
+  // 地面雾编辑器（?preview=layout 的「地面雾」）：把雾团写回 src/shared/maps/<地图>-fog.js
+  app.post('/api/dev/fog/:map', express.json({ limit: '256kb' }), async (req, res) => {
+    const map = String(req.params.map);
+    if (map !== 'bmr') return res.status(400).json({ error: '只有黯月初升能调' });
+    const list = req.body;
+    const num = (v, lo, hi) => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
+    if (!Array.isArray(list) || list.length > 600) return res.status(400).json({ error: '雾团太多或格式不对' });
+    const out = [];
+    for (const o of list) {
+      if (!o || !num(o.x, -2000, 6000) || !num(o.y, -2000, 6000) || !num(o.w, 20, 3000) || !num(o.a, 0, 1) || (o.f != null && !num(o.f, 0.05, 1.5))) return res.status(400).json({ error: '有一团雾的数据不对' });
+      out.push({ x: Math.round(o.x), y: Math.round(o.y), w: Math.round(o.w), a: Math.round(o.a * 100) / 100, f: Math.round((o.f ?? 0.36) * 100) / 100, ...(o.top === true ? { top: true } : {}) });
+    }
+    const { writeFile } = await import('node:fs/promises');
+    const file = `src/shared/maps/${map}-fog.js`;
+    const head = '// 黯月初升的地面雾团（在 http://localhost:3001/?preview=layout 的「地面雾」里摆，点保存就写回这个文件）。\n'
+      + '// 每团 { x, y（地图坐标，放大以后的）, w（宽，世界像素）, a（浓度）, f（扁度）, top（盖在房子前面）}。空数组 = 用默认摆法（沿溪谷和林子边）。\n';
+    await writeFile(path.resolve(file), `${head}export default [\n${out.map((o) => `  ${JSON.stringify(o)},`).join('\n')}\n];\n`);
+    res.json({ ok: true, path: file, count: out.length });
+  });
+
+  // 房子摆放编辑器（?preview=layout）：把每间房子的微调写回 src/shared/maps/<地图>-layout.js
+  app.post('/api/dev/layout/:map', express.json({ limit: '64kb' }), async (req, res) => {
+    const map = String(req.params.map);
+    if (map !== 'bmr') return res.status(400).json({ error: '只有黯月初升能调' });
+    const num = (v, lo, hi) => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
+    const out = {};
+    for (const [id, o] of Object.entries(req.body ?? {})) {
+      if (!/^[a-z]{1,20}$/.test(id) || typeof o !== 'object' || !o) return res.status(400).json({ error: `房子 ${id} 的数据不对` });
+      const e = {};
+      if (o.dx != null) { if (!num(o.dx, -2000, 2000)) return res.status(400).json({ error: `${id}.dx 不对` }); e.dx = Math.round(o.dx); }
+      if (o.dy != null) { if (!num(o.dy, -2000, 2000)) return res.status(400).json({ error: `${id}.dy 不对` }); e.dy = Math.round(o.dy); }
+      for (const k of ['cdx', 'cdy']) if (o[k] != null) { if (!num(o[k], -2000, 2000)) return res.status(400).json({ error: `${id}.${k} 不对` }); e[k] = Math.round(o[k]); }
+      for (const k of ['closed', 'open']) if (o[k] != null) { if (!num(o[k], 0.3, 3)) return res.status(400).json({ error: `${id}.${k} 不对` }); e[k] = Math.round(o[k] * 100) / 100; }
+      out[id] = e;
+    }
+    const { writeFile } = await import('node:fs/promises');
+    const file = `src/shared/maps/${map}-layout.js`;
+    const head = '// 黯月初升 7 间能进的房子的手动微调（在 http://localhost:3001/?preview=layout 里拖、拉滑块，点保存就写回这个文件）。\n'
+      + '// dx / dy：房子中心挪多少（世界坐标，放大以后的；室内图和能走的地面跟着挪）；cdx / cdy：外观图再单独挪多少；\n'
+      + '// closed：外观缩放；open：室内缩放（走得到的地面也跟着缩放）。\n';
+    await writeFile(path.resolve(file), `${head}export default ${JSON.stringify(out, null, 2)};\n`);
+    res.json({ ok: true, path: file });
+  });
   app.post('/api/dev/guide/:name', express.raw({ type: 'image/png', limit: '40mb' }), async (req, res) => {
     const name = String(req.params.name);
     if (!/^[a-z0-9-]{1,60}$/.test(name) || !req.body?.length) return res.status(400).json({ error: '文件名不对' });
@@ -147,7 +212,7 @@ function guardMoves(voice, channelId, room) {
   };
   check();
   const skip = (name, ret) => async (...args) => ((await check()) ? ret : voice[name](...args));
-  return { ...voice, openRoom: skip('openRoom', null), addToRoom: skip('addToRoom'), removeFromRoom: skip('removeFromRoom'), closeRoom: skip('closeRoom'), moveAll: skip('moveAll') };
+  return { ...voice, openRoom: skip('openRoom', null), addToRoom: skip('addToRoom'), removeFromRoom: skip('removeFromRoom'), closeRoom: skip('closeRoom'), moveAll: skip('moveAll'), move: skip('move', false) };
 }
 
 function roomFor(guildId, channelId, hostId) {
@@ -160,6 +225,7 @@ function roomFor(guildId, channelId, hostId) {
     room.onPos = (r, id, move) => { broadcastPos(r, id, move); saveSoon(r); };
     room.onEnded = archiveGame;
     room.history = { list: listGames, get: getGame };
+    room.peers = () => rooms.values(); // 开局时查同一个语音频道有没有别的局
     rooms.set(key, room);
     sockets.set(room, new Set());
   }
@@ -182,6 +248,7 @@ wss.on('connection', (ws) => {
         if (msg.dev) {
           if (!DEV_LOGIN) throw new UserError('服务器没开 DEV_LOGIN');
           user = { id: `dev-${String(msg.dev.id).slice(0, 12)}`, name: String(msg.dev.name || '测试玩家').slice(0, 24), avatar: null };
+          if (msg.dev.role) user.devRole = String(msg.dev.role).slice(0, 20); // 测试：开局把这个角色换给自己
         } else {
           user = await discordUser(msg.accessToken, msg.guildId);
         }
@@ -198,6 +265,7 @@ wss.on('connection', (ws) => {
         const seat = room.lobby.find((p) => p.id === user.id);
         if (seat && !room.game) Object.assign(seat, { name: user.name, avatar: user.avatar });
         reply({ ok: true, user, build: BUILD });
+        room.presence?.();
         broadcast(room);
         room.syncWatchMute?.().catch?.(() => {});
         if (!msg.dev) console.log(`👤 ${user.name} 进入 ${guildId}:${channelId}（${room.game ? '游戏中' : '大厅'}）`);
@@ -211,6 +279,7 @@ wss.on('connection', (ws) => {
           if (ws.room?.tutorial) { reply({ ok: true }); return; }
           ws.home = ws.room;
           leave(ws.room);
+          ws.home?.presence?.();
           broadcast(ws.home);
           const old = rooms.get(`tutorial:${ws.uid}`);
           if (old) { await old.teardown(); rooms.delete(old.key); sockets.delete(old); }
@@ -225,7 +294,7 @@ wss.on('connection', (ws) => {
           await tut.teardown();
           rooms.delete(tut.key); sockets.delete(tut);
           ws.room = ws.home;
-          if (ws.room) { sockets.get(ws.room)?.add(ws); ws.room.online.add(ws.uid); broadcast(ws.room); }
+          if (ws.room) { sockets.get(ws.room)?.add(ws); ws.room.online.add(ws.uid); ws.room.presence?.(); broadcast(ws.room); }
         }
         reply({ ok: true });
         return;
@@ -246,12 +315,13 @@ wss.on('connection', (ws) => {
     if (room.tutorial) {
       room.teardown().catch(() => {});
       rooms.delete(room.key); sockets.delete(room);
-      if (ws.home) { ws.home.online.delete(ws.uid); broadcast(ws.home); }
+      if (ws.home) { ws.home.online.delete(ws.uid); ws.home.presence?.(); broadcast(ws.home); }
       return;
     }
     const set = sockets.get(room);
     set.delete(ws);
     if (![...set].some((x) => x.uid === ws.uid)) room.online.delete(ws.uid);
+    room.presence?.();
     room.syncWatchMute?.().catch?.(() => {});
     broadcast(room);
   });
@@ -285,7 +355,8 @@ for (const snap of loadAll()) {
   const live = room.game && !room.ended;
   console.log(`💾 读回存档 ${snap.key}${live ? `（第${room.game.day}天 / 第${room.game.night}夜，进行中）` : ''}`);
   // 语音相关的恢复（夜里重新闭耳等）要等机器人登录好
-  if (live) (guildId === 'dev' ? Promise.resolve() : botReady).then(() => { room.resume(); room.changed(); });
+  // 暂停着的局（真人全走了）不接着跑，等有人回来；接着跑的局几分钟内没人回来也会暂停
+  if (live) (guildId === 'dev' ? Promise.resolve() : botReady).then(() => { room.resume(); room.presence(); room.changed(); });
 }
 
 // 关服（部署、launchd 重启）前把没写完的存档写掉

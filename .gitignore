@@ -12,3 +12,6 @@ design/wiki-raw/
 *.log
 .DS_Store
 Thumbs.db
+
+# Serena（编辑器插件）的本地配置
+.serena/

@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "botc", "runtimeExecutable": "node", "runtimeArgs": ["src/server/index.js"], "port": 3001 },
+    { "name": "botc-test", "runtimeExecutable": "node", "runtimeArgs": ["src/server/index.js"], "env": { "PORT": "3011" }, "port": 3011 }
+  ]
+}

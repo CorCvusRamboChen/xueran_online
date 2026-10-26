@@ -28,11 +28,18 @@ if (ok) {
 /** 去掉 **粗体** 之类的标记，读起来更顺。 */
 const clean = (text) => text.replace(/\*\*/g, '').replace(/[「」]/g, '');
 
+// 播报的音量和语速（音量 0–1；语速 1 = 原速）。别盖过语音聊天，也别拖沓
+const VOLUME = 0.5;
+const RATE = 1.2;
+
 // 服务器配了 Azure 配音时，旁白带 audio 地址：按顺序一句一句播放
 let chain = Promise.resolve();
 function play(url) {
   chain = chain.then(() => new Promise((done) => {
     const a = new Audio(url);
+    a.volume = VOLUME;
+    a.playbackRate = RATE;
+    a.preservesPitch = true; // 加速不变调
     a.onended = done; a.onerror = done;
     a.play().catch(done);
   }));
@@ -45,8 +52,9 @@ export function speak(text, audio = null) {
   const u = new SpeechSynthesisUtterance(clean(text));
   u.lang = 'zh-CN';
   if (voice) u.voice = voice;
-  u.rate = 0.92;
+  u.rate = RATE;
   u.pitch = 0.82;
+  u.volume = VOLUME;
   window.speechSynthesis.speak(u);
 }
 

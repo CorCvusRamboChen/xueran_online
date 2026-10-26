@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { login, openSocket, report, listenSpeaking } from './connect.js';
 import { Town, PaintFilters } from './Town.jsx';
 import { TownMap } from './TownMap.jsx';
-import { Cottage } from './Cottage.jsx';
+import { DemonDash, DoorKick } from './KillScenes.jsx';
+import { useAmbience } from './world/ambience.js';
+import { Cottage, DawnWake } from './Cottage.jsx';
 import { Lobby } from './Lobby.jsx';
 import { Line, Portrait, clock, syncClock, serverNow, gameClock, useTick, useCountdown, cnNum } from './util.jsx';
 import { Tag, Panel, Btn, Stat, Check, Faces, HudBar } from './ui.jsx';
@@ -12,10 +14,10 @@ import { ROLE_ART } from './art.js';
 import { AbilityCard } from './AbilityCard.jsx';
 import { useNarrator, TitleCard, useChecks, SkillCheck, SoundToggles } from './Stage.jsx';
 import { setAmbience } from './ambience.js';
-import { useMarks, setMark, TAGS } from './marks.jsx';
+import { useMarks, TAGS, LINKS, linksOf, addLink, removeLink, MarkMenu, MarkBadge, LinkLines } from './marks.jsx';
 import { Tutorial, tutEvent } from './Tutorial.jsx';
 import { RoleShowcase, Watchers } from './Lobby.jsx';
-import { Replay, VoteHistory } from './replay.jsx';
+import { Replay, KeyInfo } from './replay.jsx';
 import { savedOutfit } from './Wardrobe.jsx';
 import { DISTRIBUTION, ROLES as ROLE_DEFS } from '../../src/engine/roles.js';
 const ROLE_ABILITY = Object.fromEntries(Object.entries(ROLE_DEFS).map(([id, r]) => [id, r.ability]));
@@ -34,7 +36,7 @@ function BoardBar({ n, script }) {
     </div>
   );
 }
-import { route, pathLength, positionAt, clampToMap, houseAt, SPEED } from '../../src/shared/map.js';
+import { getMap, pathLength, positionAt, houseAt, SPEED } from '../../src/shared/map.js';
 
 /**
  * 走路预测：点了地图就先在本地按同一套寻路开始走，不等服务器回话（一来一回要几百毫秒，走路会"慢半拍"）。
@@ -47,12 +49,13 @@ function predictMove(s, x, y) {
   const r = s.roam; const m = r?.pos?.[s.me];
   if (!r || !m) return;
   const now = serverNow();
-  const from = positionAt(r.houses, m, now);
-  const to = clampToMap(x, y);
+  const from = positionAt(m, now);
+  const town = getMap(r.map);
+  const to = town.clampToMap(x, y);
   const target = houseAt(r.houses, to.x, to.y);
   const mine = r.houses.find((h) => h.id === r.myHouse);
   if ((target && target.id !== r.myHouse && target.locked) || (mine?.locked && target?.id !== mine.id)) return;
-  const path = route(r.houses, from, to);
+  const path = town.route(r.houses, from, to);
   const end = path[path.length - 1];
   r.pos[s.me] = { fx: from.x, fy: from.y, x: end.x, y: end.y, start: now, dur: (pathLength(path) / SPEED) * 1000, path, predicted: true };
   recentEnds.push(end);
@@ -170,6 +173,8 @@ export default function App() {
 }
 
 // ───────────────────────── 游戏 ─────────────────────────
+const ROLES_DEMON = new Set(['imp']); // 暗流涌动的恶魔（破门过场）
+
 const MODES = {
   nominate: { title: '提名', hint: '选一个人，站出来指着他。', confirm: '提名' },
   slay: { title: '声称是猎手 · 开枪', hint: '任何人都可以站出来声称自己是猎手，当众向一个人开枪（可以用来诈身份）。只有真猎手打中恶魔，对方才会倒下；每人每局只能开一次。', confirm: '开枪' },
@@ -183,6 +188,7 @@ function Game({ s, act }) {
   const [sheet, setSheet] = useState(null);   // 说书人点开的玩家
   const [tab, setTab] = useState(null);       // 打开的面板
   const [menu, setMenu] = useState(false);
+  const [dash, setDash] = useState(null);     // 恶魔破门过场：{ target, roleId }
   useTick(1000);
   const me = s.self;
   const g = (id) => s.players.find((p) => p.id === id);
@@ -197,7 +203,8 @@ function Game({ s, act }) {
 
   const pickKey = `${s.phase}-${s.night}-${s.day}-${mode}-${!!prompt}-${rk}`;
   useEffect(() => { setPicked([]); setPickedRole(null); }, [pickKey]);
-  useEffect(() => { if (s.phase !== 'day' || s.roam) setMode(null); }, [s.phase, s.roam]);
+  // 换阶段就取消正在选人的操作；自由活动开始/结束时也取消，只有"开枪"例外（官方规则：白天任何时候都能开枪）
+  useEffect(() => { setMode((m) => (s.phase !== 'day' ? null : s.roam && m !== 'slay' ? null : m)); }, [s.phase, !!s.roam]);
 
   const onTap = (p) => {
     if (pickSpec) {
@@ -215,7 +222,12 @@ function Game({ s, act }) {
   const confirm = async () => {
     let ok = false;
     if (rk) ok = await act('ravenkeeper', { target: picked[0] });
-    else if (prompt) ok = await act('choose', { night: prompt.night, targets: picked, role: pickedRole });
+    else if (prompt) {
+      ok = await act('choose', { night: prompt.night, targets: picked, role: pickedRole });
+      // 恶魔选好了人（不是自己）：播变身 + 冲去他家的过场（只有自己看得到）
+      const t = picked[0];
+      if (ok && ROLES_DEMON.has(prompt.roleId) && t && t !== s.me && g(t)?.alive && s.homes?.[s.me] && s.homes?.[t]) setDash({ target: t, roleId: prompt.roleId }); // 选了死人（空刀）不冲过去
+    }
     else if (mode === 'nominate') ok = await act('nominate', { target: picked[0] });
     else if (mode === 'slay') ok = await act('slay', { target: picked[0] });
     else if (mode === 'pull') ok = await act('pull', { targets: picked });
@@ -223,10 +235,12 @@ function Game({ s, act }) {
   };
 
   const roaming = !!s.roam && !pickSpec;
+  useAmbience(s.script, roaming ? 'roam' : night && me ? 'night' : null); // 黯月初升：偶尔狼嚎、鸟群惊飞
   const t = gameClock(s);
   const secs = useCountdown(s.deadline);
   // 右下角只显示当前阶段的倒计时
-  const timerSpec = night ? { label: '距离天亮', until: s.deadline }
+  // 夜里：服务器只在轮到自己选的时候发自己的截止时间（不显示整夜还剩多久：看着它突然变长会漏出"场上有疯子"之类的信息）
+  const timerSpec = night ? (s.deadline ? { label: '选择倒计时', until: s.deadline } : null)
     : s.vote ? { label: '投票倒计时', until: s.deadline }
       : s.pendingNom?.until ? { label: s.pendingNom.stage === 'accuse' ? '提名陈述' : '辩护', until: s.pendingNom.until }
         : s.noms && !s.noms.timeUp ? { label: '提名结束', until: s.noms.until }
@@ -234,8 +248,10 @@ function Game({ s, act }) {
   const timerSecs = useCountdown(timerSpec?.until ?? null);
   // 提名快结束：剩 60 / 30 / 10 秒各提醒一次，最后 10 秒滴答；轮到自己发言的最后 10 秒也滴答
   const nomSecs = timerSpec?.label === '提名结束' ? timerSecs : null;
-  const speechStage = !!s.pendingNom?.until && !!timerSpec && timerSpec.label !== '提名结束';
-  const urgent = (nomSecs != null && nomSecs <= 30) || (speechStage && timerSecs != null && timerSecs <= 10);
+  const roamSecs = timerSpec?.label === '自由活动结束' ? timerSecs : null; // 自由活动快结束：同样剩 60 / 30 / 10 秒提醒、最后 10 秒滴答
+  const chooseSecs = timerSpec?.label === '选择倒计时' ? timerSecs : null; // 夜里自己选人：剩 30 / 10 秒提醒、最后 10 秒滴答
+  const speechStage = !!s.pendingNom?.until && !!timerSpec && !['提名结束', '选择倒计时'].includes(timerSpec.label);
+  const urgent = (nomSecs != null && nomSecs <= 30) || (roamSecs != null && roamSecs <= 30) || (chooseSecs != null && chooseSecs <= 10) || (speechStage && timerSecs != null && timerSecs <= 10);
   const [warn, setWarn] = useState(null);
   const warned = useRef(new Set());
   useEffect(() => {
@@ -250,20 +266,43 @@ function Game({ s, act }) {
         }
       }
       if (nomSecs > 0 && nomSecs <= 10) tick(nomSecs <= 3);
+    } else if (roamSecs != null) {
+      for (const th of [60, 30, 10]) {
+        const key = `roam-${s.day}-${s.roam?.until}-${th}`;
+        if (roamSecs <= th && roamSecs > th - 3 && !warned.current.has(key)) {
+          warned.current.add(key);
+          setWarn(`自由活动还剩 ${th} 秒，快回广场`);
+          clearTimeout(warned.t);
+          warned.t = setTimeout(() => setWarn(null), 3000);
+        }
+      }
+      if (roamSecs > 0 && roamSecs <= 10) tick(roamSecs <= 3);
+    } else if (chooseSecs != null) {
+      for (const th of [30, 10]) {
+        const key = `choose-${s.night}-${s.deadline}-${th}`;
+        if (chooseSecs <= th && chooseSecs > th - 3 && !warned.current.has(key)) {
+          warned.current.add(key);
+          setWarn(`选择还剩 ${th} 秒`);
+          clearTimeout(warned.t);
+          warned.t = setTimeout(() => setWarn(null), 3000);
+        }
+      }
+      if (chooseSecs > 0 && chooseSecs <= 10) tick(chooseSecs <= 3);
     } else if (speechStage && timerSecs != null && timerSecs > 0 && timerSecs <= 10) {
       const mine = (s.pendingNom.stage === 'accuse' ? s.pendingNom.nominator : s.pendingNom.nominee) === s.me;
       if (mine) tick(timerSecs <= 3);
     }
-  }, [nomSecs, speechStage ? timerSecs : null]);
+  }, [nomSecs, roamSecs, chooseSecs, speechStage ? timerSecs : null]);
   const myHouse = s.roam?.houses.find((h) => h.id === s.roam.myHouse);
-  const place = night ? (me ? '你的小屋' : '魔典') : roaming ? (myHouse ? myHouse.name : '钟楼镇 · 街上') : '钟楼广场';
+  const town = getMap(s.script);
+  const place = night ? (me ? '你的小屋' : '魔典') : roaming ? (myHouse ? myHouse.name : `${town.place.split(' · ')[0]} · 街上`) : town.name;
   const meP = g(s.me);
   const [check, closeCheck] = useChecks(me?.inbox);
 
   const items = [
     me && { id: 'role', icon: 'role', label: '身份', dot: me.inbox.length || 0 },
     { id: 'log', icon: 'talk', label: '记录' },
-    { id: 'votes', icon: 'roster', label: '票型', dot: s.votes?.length && tab !== 'votes' && s.votes.at(-1).at > Date.now() - 60_000 ? '' : 0 },
+    { id: 'votes', icon: 'roster', label: '关键信息', dot: s.votes?.length && tab !== 'votes' && s.votes.at(-1).at > Date.now() - 60_000 ? '' : 0 },
     { id: 'roster', icon: 'roster', label: '镇民' },
     { id: 'roles', icon: 'grim', label: '角色' },
     s.isST && { id: 'grim', icon: 'grim', label: '魔典', dot: s.st?.pendingInfo.length || 0 },
@@ -285,25 +324,32 @@ function Game({ s, act }) {
         <BoardBar n={s.players.length} script={s.script} />
         {roaming ? (
           <TownMap s={s} onMove={me ? (x, y) => { predictMove(s, x, y); return act('move', { x, y }); } : () => null} />
+        ) : dash && night ? (
+          <DemonDash s={s} target={dash.target} roleId={dash.roleId} onDone={() => setDash(null)} />
         ) : night && me && meP ? (
-          <Cottage p={meP} awake={!!(prompt || rk)} dead={!me.alive} dawn={timerSecs != null && timerSecs <= 10} />
+          <Cottage p={meP} awake={!!(prompt || rk)} dead={!me.alive} dawn={false} />
+        ) : s.transit === 'dawn' && me && meP ? (
+          // 天亮到开始自由活动之间：在自己的小屋里醒来（不切到集合广场）
+          <DawnWake p={meP} dead={!me.alive} />
         ) : (
           <Town s={s} picked={picked} pickable={pickSpec?.options ?? null} onTap={onTap}>
             <Center s={s} name={name} act={act} me={me} />
           </Town>
         )}
-        <SoundToggles />
+        {night && me?.killedTonight && <DoorKick />}
+        <SoundToggles onFixVoice={me && s.phase !== 'ended' ? () => act('fixVoice') : null} />
         <SkillCheck check={check} onClose={closeCheck} />
         <HudBar items={items} active={tab} onPick={pick} label={t.label}
           timer={timerSpec && { label: timerSpec.label, secs: timerSecs, urgent }} />
         {warn && <div className="nom-warn" key={warn}>{warn}</div>}
-        {/* 操作面板：浮在主画面下方正中（电脑上）；手机上排在画面下面 */}
-        <section className={`dock dock-stage ${dockHot ? 'dock-hot' : ''} ${roaming ? 'on-map' : ''}`}>
-          {me?.moonchild && <MoonchildPanel s={s} act={act} />}
-          <Actions s={s} act={act} me={me} name={name} g={g} mode={mode} setMode={setMode} picked={picked} onTap={onTap}
-            prompt={prompt} rk={rk} pickSpec={pickSpec} confirm={confirm} pickedRole={pickedRole} setPickedRole={setPickedRole}
-            skip={() => act('choose', { night: prompt.night, targets: [], role: null })} />
-        </section>
+      </section>
+
+      {/* 操作面板：电脑上在右栏上方（标签页上面）；手机上排在画面下面 */}
+      <section className={`dock ${dockHot ? 'dock-hot' : ''}`}>
+        {me?.moonchild && <MoonchildPanel s={s} act={act} />}
+        <Actions s={s} act={act} me={me} name={name} g={g} mode={mode} setMode={setMode} picked={picked} onTap={onTap}
+          prompt={prompt} rk={rk} pickSpec={pickSpec} confirm={confirm} pickedRole={pickedRole} setPickedRole={setPickedRole}
+          skip={() => act('choose', { night: prompt.night, targets: [], role: null })} />
       </section>
 
       <aside className={`drawer ${tab ? 'open' : ''}`}>
@@ -314,12 +360,13 @@ function Game({ s, act }) {
           <button type="button" className="drawer-close" onClick={() => setTab(null)} aria-label="收起">×</button>
         </div>
         <div className="drawer-body">
+          {shown === 'role' && me?.newbie && <NewbieTips me={me} />}
           {shown === 'role' && me && <InfoBox me={me} />}
           {shown === 'role' && me && <RoleCard me={me} />}
           {shown === 'role' && me?.bluffs && <BluffCards me={me} act={act} />}
           {shown === 'role' && me && !me.bluffs && <EvilNote me={me} />}
           {shown === 'log' && <History log={s.log} players={s.players} />}
-          {shown === 'votes' && <VoteHistory votes={s.votes} g={g} name={name} />}
+          {shown === 'votes' && <KeyInfo votes={s.votes} knives={s.knives} execs={s.execs} g={g} name={name} />}
           {shown === 'roster' && <Roster s={s} onTap={s.isST ? (p) => setSheet(p.id) : null} />}
           {shown === 'roster' && <Watchers s={s} />}
           {shown === 'roles' && <RoleShowcase compact script={s.script} />}
@@ -363,6 +410,7 @@ function Center({ s, name, act, me }) {
     const can = me && (me.alive || me.ghostVote) && !locked;
     return (
       <div className="center-box vote-center">
+        <OnBlock s={s} ids={[s.vote.nominee]} label="被提名" />
         <div className="vc-title">处决 <b>{name(s.vote.nominee)}</b>？<span>需要 {s.threshold} 票</span></div>
         {can
           ? <HandButton s={s} act={act} raised={raised} />
@@ -373,16 +421,41 @@ function Center({ s, name, act, me }) {
     );
   }
   const lv = s.lastVote;
-  if (lv && Date.now() - lv.endedAt < 9000) {
-    const what = { block: '送上处决台', tie: '平票', lower: '不如台上的票多', fail: '票数不够' }[lv.outcome];
-    return (
-      <div className="center-box">
-        <div className="tally"><b>{lv.count}</b><span>/</span><b className="need">{lv.threshold}</b></div>
-        <small>{name(lv.nominee)} · {what}</small>
+  const recent = lv && Date.now() - lv.endedAt < 9000;
+  // 处决台：票数够的人一直站在台上；同票的几个人一起站上去（平票时谁都不会被处决）
+  const onBlock = s.phase === 'day' ? (s.block ? [s.block] : s.blockTied ?? []) : [];
+  if (!recent && !onBlock.length) return null;
+  const what = recent && { block: '送上处决台', tie: '平票', lower: '不如台上的票多', fail: '票数不够' }[lv.outcome];
+  return (
+    <div className="center-box">
+      {onBlock.length > 0 && (
+        <OnBlock s={s} ids={onBlock}
+          label={onBlock.length > 1 ? `平票 · ${s.blockVotes} 票 · 谁都不处决` : `处决台 · ${s.blockVotes} 票`} />
+      )}
+      {recent && <div className="tally"><b>{lv.count}</b><span>/</span><b className="need">{lv.threshold}</b></div>}
+      {recent && <small>{name(lv.nominee)} · {what}</small>}
+    </div>
+  );
+}
+
+/** 画面正中的处决台：站在台上的人的头像（一个人 = 黄昏会被处决；几个人 = 平票）。 */
+function OnBlock({ s, ids, label }) {
+  const ps = ids.map((id) => s.players.find((p) => p.id === id)).filter(Boolean);
+  if (!ps.length) return null;
+  return (
+    <div className={`on-block ${ps.length > 1 ? 'tied' : ''}`}>
+      <div className="ob-faces">
+        {ps.map((p) => (
+          <figure key={p.id}>
+            <Portrait p={p} size={ps.length > 1 ? 52 : 64} prefer="avatar" frame="#c8473a" />
+            <figcaption>{p.seat}号 {p.name}</figcaption>
+          </figure>
+        ))}
       </div>
-    );
-  }
-  return null;
+      <div className="ob-plank" aria-hidden="true" />
+      <small>{label}</small>
+    </div>
+  );
 }
 
 // ───────────────────────── 操作区（正常的卡片和按钮） ─────────────────────────
@@ -423,25 +496,54 @@ const STATEMENTS = [
   ['role', '某人是某个角色', true, true], ['evil', '某人是邪恶的', true, false], ['good', '某人是善良的', true, false],
   ['demon', '某人是恶魔', true, false], ['inplay', '场上有某个角色', false, true], ['notinplay', '场上没有某个角色', false, true],
 ];
-/** 造谣者按钮：点开是声明表单（单独的组件，状态放这里）。 */
+/**
+ * 造谣者按钮：点开是声明表单（单独的组件，状态放这里）。黯月初升的白天谁都能用（广场、街上、房子里都有），
+ * 每人每天一次；真造谣者自己看到的是醒目的主按钮（只在他自己屏幕上，别人看不出来）。
+ */
 function GossipButton({ s, act }) {
   const [open, setOpen] = useState(false);
-  return open ? <GossipForm s={s} act={act} onClose={() => setOpen(false)} />
-    : <button type="button" title="谁都可以公开发表声明；只有真造谣者的声明为真时，今晚会有人死亡。每人每天一次。" onClick={() => setOpen(true)}>公开声明（造谣者）</button>;
+  const me = s.self;
+  if (s.script !== 'bmr' || s.phase !== 'day' || !me?.alive || me.gossipDone) return null;
+  if (open) return <GossipForm s={s} act={act} onClose={() => setOpen(false)} />;
+  return (
+    <div className="btn-row gossip-row">
+      <Btn kind={me.role?.id === 'gossip' ? 'primary' : 'secondary'} onClick={() => setOpen(true)}
+        title="谁都可以公开发表声明；只有真造谣者的声明为真时，今晚会有人死亡。每人每天一次。">发表声明（造谣者）</Btn>
+    </div>
+  );
+}
+
+/** 猎手按钮（暗流涌动）：白天任何时候谁都能声称猎手开一枪，每人每局一次；真猎手自己看到的是醒目的主按钮。 */
+function SlayButton({ s, setMode }) {
+  const me = s.self;
+  if (s.script === 'bmr' || s.phase !== 'day' || !me?.alive || s.players.find((p) => p.id === s.me)?.shot) return null;
+  return (
+    <div className="btn-row gossip-row">
+      <Btn kind={me.role?.id === 'slayer' ? 'primary' : 'secondary'} onClick={() => setMode('slay')}
+        title="谁都可以声称自己是猎手开一枪；只有真猎手打中恶魔才会有人倒下。每人每局一次。">声称猎手 · 开枪</Btn>
+    </div>
+  );
 }
 
 function GossipForm({ s, act, onClose }) {
-  const [kind, setKind] = useState('role');
+  // 服务器配了 AI 判定：可以自由说一句话（默认选这个）；没配就只能用固定句式
+  const free = !!s.self?.gossipFree;
+  const kinds = free ? [['free', '自由说一句话（AI 判真假）', false, false], ...STATEMENTS] : STATEMENTS;
+  const [kind, setKind] = useState(free ? 'free' : 'role');
   const [target, setTarget] = useState('');
   const [role, setRole] = useState('');
-  const spec = STATEMENTS.find((x) => x[0] === kind);
+  const [text, setText] = useState('');
+  const spec = kinds.find((x) => x[0] === kind);
   const roles = Object.keys(ROLE_DEFS).filter((id) => ROLE_DEFS[id].script === s.script);
-  const ok = (!spec[2] || target) && (!spec[3] || role);
-  const send = async () => { if (await act('gossip', { statement: { kind, target: target || null, role: role || null } })) onClose(); };
+  const ok = kind === 'free' ? !!text.trim() : (!spec[2] || target) && (!spec[3] || role);
+  const send = async () => { if (await act('gossip', { statement: kind === 'free' ? { kind, text } : { kind, target: target || null, role: role || null } })) onClose(); };
   return (
     <div className="gossip-form">
       <p className="muted">声明会公开播报给所有人。只有真造谣者的声明为真时，今晚会有一人死亡。</p>
-      <select value={kind} onChange={(e) => setKind(e.target.value)}>{STATEMENTS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}</select>
+      <select value={kind} onChange={(e) => setKind(e.target.value)}>{kinds.map(([k, label]) => <option key={k} value={k}>{label}</option>)}</select>
+      {kind === 'free' && (
+        <textarea value={text} maxLength={120} rows={3} placeholder="比如：我们之中有两个爪牙 / 5号 昨晚没有醒来 / 3号 和 6号 至少有一个是邪恶的" onChange={(e) => setText(e.target.value)} />
+      )}
       {spec[2] && (
         <select value={target} onChange={(e) => setTarget(e.target.value)}>
           <option value="">选一名玩家</option>
@@ -531,7 +633,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
       <Panel title={v.who} tone={teamTone(roleId)} extra={<Check color={v.color}>{v.skill}</Check>}>
         <p className="flavor-line">「{rk ? FLAVOR.ravenkeeper.wake : v.flavor?.wake}」</p>
         <p className="lead">{hint}</p>
-        {roleId === 'imp' && <p className="muted">也可以选你自己：你会死去，一个活着的爪牙接任小恶魔（官方规则的"自杀传位"）。</p>}
+        {roleId === 'imp' && <p className="muted">也可以选你自己：你会死去，一个活着的爪牙接任小恶魔（官方规则的"自杀传位"）。选一名已经死了的玩家就是空刀：今晚没人死。</p>}
         {roleId === 'po' && pickSpec.count === 3 && <p className="muted">你上次没有选人：今晚要选三名玩家。</p>}
         {pickSpec.count > 0 && <Picker s={s} options={pickSpec.options} picked={picked} onTap={onTap} />}
         {needRole && <RolePicker ids={prompt.roleOptions} value={pickedRole} onPick={setPickedRole} />}
@@ -573,7 +675,9 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
     );
   }
 
-  if (s.roam) return <RoamActions s={s} act={act} name={name} face={face} />;
+  if (s.roam) return <RoamActions s={s} act={act} name={name} face={face} setMode={setMode} />;
+
+  if (s.transit) return <TransitCard s={s} />;
 
   const myRoom = s.rooms.find((r) => r.mine);
   const roomCard = myRoom && (
@@ -623,16 +727,14 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
           <div className={s.block ? 'hot' : ''}><b>{s.block ? `${g(s.block)?.seat}号` : '—'}</b><small>{s.block ? `台上 · ${s.blockVotes} 票` : s.blockVotes ? '平票' : '处决台空着'}</small></div>
         </div>
         {s.noms && <p className="sq-status">{s.noms.timeUp ? '提名结束 · 投完这轮入夜' : `已表态 ${s.noms.done} / ${s.aliveCount}`}</p>}
+        <GossipButton s={s} act={act} />
+        <SlayButton s={s} setMode={setMode} />
         {s.executedToday && <p className="sq-status">今天的处决已经发生</p>}
         <div className="btn-row">
           {me?.alive && !s.executedToday && !meP?.nominator && !s.noms?.timeUp && <Btn kind="primary" onClick={() => setMode('nominate')}>提名</Btn>}
           {s.noms && !s.noms.timeUp && me?.alive && !meP?.nominator && !s.noms.skipped && <Btn onClick={() => act('skipNom')}>不提名</Btn>}
         </div>
         <div className="link-row">
-          {s.script === 'bmr' && me?.alive && !me.gossipDone && <GossipButton s={s} act={act} />}
-          {s.script !== 'bmr' && me?.alive && !s.players.find((p) => p.id === s.me)?.shot && (
-            <button type="button" title="谁都可以声称自己是猎手开一枪；只有真猎手打中恶魔才会有人倒下。每人每局一次。" onClick={() => setMode('slay')}>声称猎手 · 开枪</button>
-          )}
           {s.isHost && <button type="button" onClick={() => act('roam')}>再自由活动一次</button>}
           {s.isHost && <button type="button" onClick={() => act('dusk')}>结束白天{s.block ? `（处决 ${g(s.block)?.seat}号）` : ''}</button>}
         </div>
@@ -673,7 +775,7 @@ function NomStage({ s, act, g, name, face }) {
 }
 
 /** 自由活动时右上角：街上只显示还剩多久；进了房子就是这间屋子的私聊面板（谁在、锁门、出去、有人敲门）。 */
-function RoamActions({ s, act, name, face }) {
+function RoamActions({ s, act, name, face, setMode }) {
   const r = s.roam;
   const house = r.houses.find((h) => h.id === r.myHouse);
   const secs = useCountdown(r.until);
@@ -687,7 +789,7 @@ function RoamActions({ s, act, name, face }) {
       {inv && invHouse && (
         <Panel title="私聊邀请" tone="mot" className="knock-pnl">
           <div className="knock-row">
-            <Portrait p={face(inv.from)} size={40} prefer="avatar" frame="#f4f4f0" />
+            <Portrait p={face(inv.from)} size={40} prefer="avatar" frame="#f4f4f0" speak={false} />
             <p className="flavor-line">{name(inv.from)} 邀请你去<b>{invHouse.name}</b>私聊。</p>
           </div>
           <div className="btn-row">
@@ -699,7 +801,8 @@ function RoamActions({ s, act, name, face }) {
       {house?.knocks.map((who) => (
         <Panel key={who} title="有人敲门" tone="mot" className="knock-pnl">
           <div className="knock-row">
-            <Portrait p={face(who)} size={40} prefer="avatar" frame="#f4f4f0" />
+            {/* 不套"正在说话"的绿框：敲门的人在门外（广场频道）说话，屋里听不到，头像却会一直闪 */}
+            <Portrait p={face(who)} size={40} prefer="avatar" frame="#f4f4f0" speak={false} />
             <p className="flavor-line">「叩，叩，叩。」<br />{name(who)} 站在门外。</p>
           </div>
           <div className="btn-row">
@@ -737,6 +840,8 @@ function RoamActions({ s, act, name, face }) {
             <Btn onClick={() => setInviting((x) => !x)}>{inviting ? '收起' : '邀请别人'}</Btn>
             <Btn kind="ghost" disabled={house.locked} onClick={() => { const d = house.door; act('move', { x: d.x + d.nx * 40, y: d.y + d.ny * 40 }); }}>{house.locked ? '门锁着' : '出去'}</Btn>
           </div>
+          <GossipButton s={s} act={act} />
+          <SlayButton s={s} setMode={setMode} />
           <EndRoamVote s={s} act={act} />
         </Panel>
       ) : (
@@ -746,6 +851,8 @@ function RoamActions({ s, act, name, face }) {
             <Stat value={s.players.filter((p) => p.alive).length} label="存活" color="var(--int)" />
           </div>
           {s.isHost && <div className="btn-row"><Btn kind="secondary" onClick={() => act('gather')}>敲钟集合</Btn></div>}
+          <GossipButton s={s} act={act} />
+          <SlayButton s={s} setMode={setMode} />
           <EndRoamVote s={s} act={act} />
         </Panel>
       )}
@@ -770,6 +877,25 @@ function EndRoamVote({ s, act }) {
   );
 }
 
+/** 新手（房主在大厅标记的）：身份面板顶上多一段"这局你要干什么"。按自己看到的阵营讲，不剧透。 */
+const NEWBIE_TIPS = {
+  townsfolk: ['你是好人（镇民）。好人赢的办法只有一个：在白天把恶魔处决掉。', '每晚得到的信息会出现在下面「你得到的信息」里，也会记进「记录」。白天可以说出来，也可以先藏着，等确认对方是好人再说。', '别人说的话不一定是真的，坏人也会说自己是好人。'],
+  outsider: ['你是好人（外来者）。你的能力对好人有点添乱，但你仍然要帮好人在白天处决恶魔。', '外来者的身份可以先不急着公开，看清局势再说。', '别人说的话不一定是真的，坏人也会说自己是好人。'],
+  minion: ['你是坏人（爪牙）。第一晚已经告诉你恶魔是谁，你的任务是保护他活到最后。', '白天要装成好人：可以从下面的伪装卡里挑一个角色，说成是自己的身份。', '必要的时候可以把怀疑引到别人身上，甚至牺牲自己保住恶魔。'],
+  demon: ['你是恶魔。每晚选一个人杀掉，坏人活到只剩两个人时就赢了。', '白天要装成好人：从下面的伪装卡里挑一个角色，说成是自己的身份，别被处决。', '爪牙是你的队友，他们会帮你打掩护。'],
+};
+function NewbieTips({ me }) {
+  const tips = NEWBIE_TIPS[me.role?.team];
+  if (!tips) return null;
+  return (
+    <section className="newbie-tips">
+      <Tag tone="mot">新手提示</Tag>
+      <ul>{tips.map((t) => <li key={t}>{t}</li>)}</ul>
+      <p className="muted">夜里轮到你时，右上角会出现选人的面板；白天可以在镇上走进房子找人私聊。不确定怎么做，就直接问房主。</p>
+    </section>
+  );
+}
+
 const teamTone = (roleId) => ({ townsfolk: 'int', outsider: 'psy', minion: 'mot', demon: 'phy' }[ROLE_TEAM[roleId]] ?? 'light');
 
 // ───────────────────────── 面板：身份 / 日志 / 记录 / 镇民 ─────────────────────────
@@ -778,6 +904,24 @@ const teamTone = (roleId) => ({ townsfolk: 'int', outsider: 'psy', minion: 'mot'
  * 翻开前是统一的卡背（像思维内阁里还没研究的想法）；翻开后是彩色大图 + 白底名字条 + 能力说明。
  */
 /** 举手按钮：没举手 = 举手；举着手 = 写明"再点放下"（提名者是自动举的手，提醒一下别点掉）。 */
+const TRANSIT = {
+  dawn: { title: '天亮了', next: '马上开始自由活动……' },
+  gather: { title: '集合', next: '大家回到广场，马上开放提名……' },
+  dusk: { title: '黄昏', next: '马上入夜……' },
+};
+
+/** 两个阶段之间那几秒：只说刚发生了什么、接下来是什么，不出提名/投票的按钮和票数。 */
+function TransitCard({ s }) {
+  const t = TRANSIT[s.transit];
+  const last = [...s.log].reverse().find((l) => ['day', 'death', 'night'].includes(l.kind));
+  return (
+    <Panel title={t.title} tone="light" className="square-pnl">
+      {last && <p className="lead"><Line text={last.text} /></p>}
+      <p className="muted">{t.next}</p>
+    </Panel>
+  );
+}
+
 function HandButton({ s, act, raised, big = true }) {
   const auto = raised && s.vote.nominator === s.me;
   if (auto && s.settings?.nominatorVotes) {
@@ -932,8 +1076,13 @@ const KIND_VOICE = {
   story: ['说书人', 'var(--mot)'],
 };
 
+// 记录默认只显示关键信息（死亡、提名投票、公开声明、开枪、私聊、天亮的死讯……）；旁白和操作提示收起来，想看可以打开
+const isKey = (l) => l.key ?? ['death', 'vote', 'start', 'end', 'whisper'].includes(l.kind); // 旧存档没有 key 标记：按类型猜
+
 function History({ log, players = [] }) {
+  const [all, setAll] = useState(false);
   if (!log.length) return <p className="muted">还没有人说话。</p>;
+  const shownLog = all ? log : log.filter(isKey);
   // 一条记录里提到的人（"3号 小明"），按出现顺序，最多 2 个
   const mentioned = (text) => {
     const out = [];
@@ -945,8 +1094,11 @@ function History({ log, players = [] }) {
     return out;
   };
   return (
+    <>
+    <label className="history-all"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> 也显示说书人旁白和操作提示</label>
+    {!shownLog.length && <p className="muted">还没有关键信息。</p>}
     <ul className="history">
-      {[...log].reverse().map((l) => {
+      {[...shownLog].reverse().map((l) => {
         const [who, color] = KIND_VOICE[l.kind] ?? KIND_VOICE.info;
         const faces = mentioned(l.text);
         return (
@@ -957,44 +1109,98 @@ function History({ log, players = [] }) {
         );
       })}
     </ul>
+    </>
   );
 }
 
-/** 镇民面板：每个人的状态；自己可以给别人打标签、猜角色、写笔记（只有自己看得到）。 */
+/**
+ * 镇民面板（小魔典）：大家按座位围成一圈。左键依次点两个人连一条线（先选上面的连线类型；再点一次起点取消），
+ * 右键（手机长按）一个人打标签、猜角色、写笔记。只存在自己设备上，别人看不到。说书人点人还是打开这个人的详情。
+ */
 function Roster({ s, onTap }) {
   const marks = useMarks(s);
+  const ref = useRef(null);
+  const [w, setW] = useState(340);
+  useEffect(() => {
+    if (!ref.current) return undefined;
+    const ro = new ResizeObserver(([e]) => setW(Math.max(220, e.contentRect.width)));
+    ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, []);
+  const [kind, setKind] = useState('sus');
+  const [from, setFrom] = useState(null); // 连线的起点
+  const [menu, setMenu] = useState(null); // { id, x, y }
+  const hold = useRef(null);              // 手机长按
+  const n = s.players.length;
+  const tk = Math.round(Math.min(46, Math.max(26, ((w * Math.PI * 0.82) / n) * 0.52)));
+  const R = w / 2 - tk / 2 - 16;
+  const pos = (i) => { const a = ((-90 + (i * 360) / n) * Math.PI) / 180; return { x: w / 2 + R * Math.cos(a), y: w / 2 + R * Math.sin(a) }; };
+  const posOf = (id) => { const i = s.players.findIndex((p) => p.id === id); return i < 0 ? null : pos(i); };
+  const seat = (id) => s.players.find((p) => p.id === id)?.seat;
   const allies = Object.fromEntries((s.self?.allies ?? []).map((a) => [a.id, a.team]));
+  const tap = (p) => {
+    if (hold.current?.fired) { hold.current = null; return; } // 长按已经打开菜单了
+    if (onTap) { onTap(p); return; }
+    if (!from) { setFrom(p.id); return; }
+    if (from === p.id) { setFrom(null); return; }
+    addLink(from, p.id, kind);
+    setFrom(null);
+  };
+  const openMenu = (p, x, y) => { setFrom(null); setMenu({ id: p.id, x, y }); };
+  const stopHold = () => { if (hold.current?.t) { clearTimeout(hold.current.t); hold.current = null; } };
+  const menuPlayer = menu && s.players.find((p) => p.id === menu.id);
+  const links = linksOf(marks).map((l, i) => ({ ...l, i }));
+  const notes = s.players.filter((p) => marks[p.id]?.note);
   return (
-    <div className="roster-grid">
-      {s.players.map((p) => {
-        const m = marks[p.id] ?? {};
-        const mine = p.id === s.me;
-        return (
-          <div key={p.id} className={`roster-card ${p.alive ? '' : 'dead'}`} style={m.tag ? { '--tag': TAGS[m.tag].color } : null}>
-            <button type="button" className="rc-main" onClick={() => onTap?.(p)} disabled={!onTap}>
-              <Portrait p={p} size={40} frame={mine ? 'var(--mot)' : TAGS[m.tag]?.color ?? '#f4f4f0'} />
-              <span className="rc-body">
-                <b>{p.seat}号 {mine ? '你' : p.name}{allies[p.id] && <span className="ally-chip">队友 · {allies[p.id]}</span>}</b>
-                <span className="muted">{p.alive ? '活着' : p.ghostVote ? '死亡 · 还有一票' : '死亡'}{p.nominated ? ' · 被提名' : ''}{p.nominator ? ' · 已提名' : ''}</span>
-                {p.roleName && <span className="rc-role" style={{ color: p.evil ? 'var(--phy)' : 'var(--int)' }}>{p.roleName}{p.shownRoleName ? `（以为是${p.shownRoleName}）` : ''}</span>}
-              </span>
+    <div className="mini-grim">
+      {!onTap && (
+        <div className="mg-kinds">
+          {Object.entries(LINKS).map(([id, k]) => (
+            <button key={id} type="button" className={kind === id ? 'on' : ''} style={{ '--c': k.color }} title={k.hint} onClick={() => setKind(id)}>{k.label}</button>
+          ))}
+        </div>
+      )}
+      <p className="mg-hint muted">{onTap ? '点一个人看详情。' : from ? `从 ${seat(from)}号 连「${LINKS[kind].label}」到谁？（再点一次 ${seat(from)}号 取消）` : '左键依次点两个人连线；右键（手机长按）一个人打标签、猜角色、写笔记。'}</p>
+      <div className="mg-circle" ref={ref} style={{ height: w }}>
+        <LinkLines marks={marks} posOf={posOf} w={w} h={w} gap={tk * 0.62} />
+        {s.players.map((p, i) => {
+          const { x, y } = pos(i);
+          const m = marks[p.id] ?? {};
+          const mine = p.id === s.me;
+          const frame = allies[p.id] ? 'var(--phy)' : mine ? 'var(--mot)' : TAGS[m.tag]?.color ?? '#f4f4f0';
+          return (
+            <button key={p.id} type="button" className={`mg-token ${p.alive ? '' : 'dead'} ${from === p.id ? 'from' : ''}`} style={{ left: x, top: y, '--tk': `${tk}px` }}
+              onClick={() => tap(p)}
+              onContextMenu={(e) => { e.preventDefault(); stopHold(); openMenu(p, e.clientX, e.clientY); }}
+              onPointerDown={(e) => { if (e.pointerType === 'mouse') return; const at = { x: e.clientX, y: e.clientY }; hold.current = { t: setTimeout(() => { hold.current = { fired: true }; openMenu(p, at.x, at.y); }, 500) }; }}
+              onPointerUp={stopHold} onPointerLeave={stopHold}
+              title={`${p.seat}号 ${p.name}${m.note ? `\n笔记：${m.note}` : ''}`}>
+              <Portrait p={p} size={tk} frame={frame} speak={false} />
+              <span className="mg-seat">{p.seat}</span>
+              {!p.alive && <span className="mg-dead">{p.ghostVote ? '亡·余票' : '亡'}</span>}
+              {m.note && <i className="mg-note">记</i>}
+              <span className="mg-name">{mine ? '你' : p.name}</span>
+              {p.roleName ? <span className="mg-role" style={{ background: ATTR[p.team]?.color ?? (p.evil ? 'var(--phy)' : 'var(--int)') }}>{p.roleName}</span> : <MarkBadge mark={m} />}
             </button>
-            {!mine && (
-              <div className="rc-marks">
-                {Object.entries(TAGS).map(([id, t]) => (
-                  <button key={id} type="button" className={m.tag === id ? 'on' : ''} style={{ '--c': t.color }} onClick={() => setMark(p.id, { tag: m.tag === id ? null : id })}>{t.label}</button>
-                ))}
-                <select value={m.role ?? ''} onChange={(e) => setMark(p.id, { role: e.target.value || null })} aria-label="猜他的角色">
-                  <option value="">猜角色…</option>
-                  {Object.entries(ROLE_NAMES).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-                </select>
-              </div>
-            )}
-            <textarea className="rc-note" rows={1} placeholder={mine ? '给自己记点什么…' : '笔记：他说了什么、自称什么身份…'} value={m.note ?? ''}
-              onChange={(e) => setMark(p.id, { note: e.target.value })} />
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+      {links.length > 0 && (
+        <div className="mg-list">
+          {links.map((l) => (
+            <span key={l.i} className="le-chip" style={{ '--c': LINKS[l.kind].color }}>
+              {seat(l.a)}号 → {seat(l.b)}号 · {LINKS[l.kind].label}
+              <button type="button" onClick={() => removeLink(l.i)} aria-label="删掉这条连线">×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      {notes.length > 0 && (
+        <ul className="mg-notes">
+          {notes.map((p) => <li key={p.id}><b>{p.seat}号{p.id === s.me ? '（你）' : ''}</b> {marks[p.id].note}</li>)}
+        </ul>
+      )}
+      {menuPlayer && <MarkMenu s={s} player={menuPlayer} mark={marks[menu.id]} at={menu} onClose={() => setMenu(null)} />}
     </div>
   );
 }

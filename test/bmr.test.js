@@ -2,7 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Game, makeRng } from '../src/engine/game.js';
-import { rollBMR } from '../src/engine/bmr.js';
+import { rollBMR, balancedBMR, setupScore, SMALL_GAME_AVOID } from '../src/engine/bmr.js';
+import { buildRoles } from '../src/engine/assign.js';
 import { ROLES, rolesOf } from '../src/engine/roles.js';
 
 const players = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, name: `玩家${i + 1}` }));
@@ -35,6 +36,28 @@ test('配置：教父 ±1 外来者；外来者为 0 时只能 +1', () => {
     const outs = roles.filter((r) => ROLES[r].team === 'outsider').length;
     assert.equal(outs, roles.includes('godfather') ? 1 : 0);
     assert.ok(roles.every((r) => ROLES[r].script === 'bmr'));
+  }
+});
+
+test('AI 配板：5–6 人不出沙巴洛斯、莽夫；挑的是平衡分居中的一套，不是最偏的', () => {
+  for (const n of [5, 6]) {
+    for (let seed = 1; seed < 40; seed++) {
+      assert.ok(!balancedBMR(n, makeRng(seed)).some((r) => SMALL_GAME_AVOID.has(r)));
+      assert.ok(!buildRoles(Array.from({ length: n }, (_, i) => `p${i}`), {}, 'bmr', makeRng(seed)).some((r) => SMALL_GAME_AVOID.has(r)));
+    }
+  }
+  // 房主手动指定的照给
+  assert.ok(buildRoles(['a', 'b', 'c', 'd', 'e'], { a: 'shabaloth' }, 'bmr', makeRng(1)).includes('shabaloth'));
+  // 7 人以上照常会出沙巴洛斯
+  assert.ok(Array.from({ length: 60 }, (_, s) => balancedBMR(9, makeRng(s + 1))).some((r) => r.includes('shabaloth')));
+  // 选中的那套比纯随机的极端情况温和：分数落在纯随机分布的中间段
+  const pure = Array.from({ length: 2000 }, (_, s) => setupScore(rollBMR(9, makeRng(s + 7)))).sort((x, y) => x - y);
+  const [p10, p90] = [pure[200], pure[1800]];
+  for (let seed = 1; seed < 40; seed++) {
+    const roles = balancedBMR(9, makeRng(seed));
+    assert.equal(roles.length, 9);
+    const sc = setupScore(roles);
+    assert.ok(sc >= p10 && sc <= p90, `平衡分 ${sc} 不在 [${p10}, ${p90}]`);
   }
 });
 
@@ -349,4 +372,39 @@ test('黯月初升 25 个角色都有测试覆盖', () => {
   const missing = rolesOf('bmr').filter((r) => !covered.has(r) && !['zombuul', 'pukka', 'shabaloth', 'po', 'godfather'].includes(r));
   for (const r of ['po', 'shabaloth', 'zombuul', 'pukka']) covered.add(r);
   assert.deepEqual(missing, []);
+});
+
+test('房规「夜里死了仍拿信息」：被珀杀死的侍女照样拿到当晚的信息（注明按醉酒处理）；不开就没有', () => {
+  for (const on of [false, true]) {
+    const g = mk(['chambermaid', 'sailor', 'gambler', 'fool', 'tinker', 'assassin', 'po'], { ...QUIET, deadLies: () => false });
+    g.deadDrunk = on;
+    night(g, { p1: ['p2', 'p3'], p2: ['p2'] }); day(g); g.endDay();
+    const res = night(g, { p1: ['p2', 'p3'], p2: ['p2'], p7: ['p1'] });
+    assert.equal(g.get('p1').alive, false, '侍女被珀杀了');
+    const t = text(res.messages ?? res, 'p1');
+    if (on) { assert.match(t, /今晚有 \*\*\d\*\* 人/); assert.match(t, /按房规/); } else assert.doesNotMatch(t, /今晚有/);
+  }
+});
+
+test('恶魔的伪装：3 个不在场的善良角色，以镇民为主，外来者最多 1 个（大约三分之一的局有）', () => {
+  let withOut = 0; const N = 300;
+  for (let s = 1; s <= N; s++) {
+    const g = new Game(players(7), { rng: makeRng(s), script: 'bmr' });
+    const inPlay = new Set(g.players.map((p) => p.role));
+    assert.equal(new Set(g.bluffs).size, 3);
+    assert.ok(g.bluffs.every((r) => !inPlay.has(r) && ['townsfolk', 'outsider'].includes(ROLES[r].team)), '不在场的善良角色');
+    const outs = g.bluffs.filter((r) => ROLES[r].team === 'outsider').length;
+    assert.ok(outs <= 1, `外来者伪装 ${outs} 个`);
+    if (outs) withOut++;
+  }
+  assert.ok(withOut > N * 0.2 && withOut < N * 0.5, `有外来者伪装的局 ${withOut} / ${N}`);
+});
+
+test('AI 配板：12 人及以下保护角色（水手、旅店老板、茶艺师、弄臣、和平主义者）很少 3 个以上同时出现', () => {
+  const P = new Set(['sailor', 'innkeeper', 'tealady', 'fool', 'pacifist']);
+  for (const n of [7, 10, 12]) {
+    let many = 0; const N = 400;
+    for (let s = 1; s <= N; s++) if (balancedBMR(n, makeRng(s * 7 + n)).filter((r) => P.has(r)).length >= 3) many++;
+    assert.ok(many / N < 0.12, `${n} 人：3 个以上保护的局占 ${many}/${N}`);
+  }
 });

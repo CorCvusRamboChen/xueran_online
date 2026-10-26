@@ -332,6 +332,13 @@ export function Interior({ h }) {
     smithy: <g><rect x={x + 10} y={y + 10} width="26" height="20" fill="#5a4a42" /><circle cx={x + 23} cy={y + 20} r="5" fill="#d9773a" /><Anvil x={x + 70} y={y + 30} /></g>,
     bakery: <g><rect x={x + 10} y={y + 10} width="30" height="22" fill="#9a7b5a" /><rect x={x + 60} y={y + 14} width={w - 74} height="10" fill={C.wood} /></g>,
     library: <g>{[0, 1, 2].map((k) => <rect key={k} x={x + 8} y={y + 8 + k * 20} width={w - 40} height="8" fill="#7a5f45" />)}</g>,
+    // 黯月初升
+    inn: <g><rect x={x + 12} y={y + 10} width="40" height="16" fill="#5a4a42" /><circle cx={x + 32} cy={y + 18} r="5" fill="#d9773a" /><rect x={x + 70} y={y + 60} width={w - 110} height="16" fill={C.wood} />{[0, 1, 2, 3].map((k) => <circle key={k} cx={x + 84 + k * 44} cy={y + 90} r="7" fill="#a98a62" />)}<rect x={x + w - 34} y={y + 10} width="22" height="60" fill="#7a5f45" /></g>,
+    teahouse: <g><rect x={x + 12} y={y + 10} width="26" height="18" fill="#5a4a42" /><circle cx={x + 25} cy={y + 19} r="4" fill="#d9773a" />{[0, 1, 2, 3].map((k) => <rect key={k} x={x + 56 + k * 18} y={y + 10} width="10" height="12" fill="#b08a5e" />)}<rect x={x + 60} y={y + 56} width="30" height="26" rx="6" fill="#8a3a2a" /><rect x={x + 100} y={y + 56} width="30" height="26" rx="6" fill="#8a3a2a" /></g>,
+    mill: <g><circle cx={x + 50} cy={y + 50} r="26" fill="#9a958a" /><circle cx={x + 50} cy={y + 50} r="6" fill="#5a554c" />{[0, 1, 2].map((k) => <ellipse key={k} cx={x + 110 + k * 22} cy={y + 30} rx="9" ry="12" fill="#c8b48a" />)}</g>,
+    chapel: <g>{[0, 1, 2].map((k) => <rect key={k} x={x + 24} y={y + 40 + k * 18} width={w - 48} height="6" fill={C.wood} />)}<rect x={x + w / 2 - 14} y={y + 8} width="28" height="12" fill="#efe9da" /><rect x={x + w / 2 - 2} y={y + 4} width="4" height="18" fill="#7a5f45" /></g>,
+    workshop: <g><rect x={x + 10} y={y + 10} width={w - 40} height="14" fill={C.wood} />{[0, 1, 2, 3].map((k) => <circle key={k} cx={x + 26 + k * 34} cy={y + 17} r="5" fill="#d8c48a" />)}<circle cx={x + 40} cy={y + 70} r="14" fill="none" stroke="#b08a3a" strokeWidth="3" /><circle cx={x + 64} cy={y + 80} r="9" fill="none" stroke="#b08a3a" strokeWidth="3" /></g>,
+    lodge: <g><rect x={x + 12} y={y + 12} width="30" height="20" fill="#5a4a42" /><ellipse cx={x + 90} cy={y + 60} rx="30" ry="16" fill="#8a6a4a" /><rect x={x + 30} y={y + 70} width="40" height="10" fill={C.wood} /></g>,
   }[h.id];
   return <g stroke={INK} strokeWidth=".8" opacity=".9">{items}<rect x={x} y={y} width={w} height={hh + WALL_H} fill="none" /></g>;
 }

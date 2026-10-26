@@ -4,7 +4,10 @@
 // 用法：npm run map
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { housesFor, doorPoint, blockedAt, houseAt, PLAZA, ROADS, ROAD_HALF, OBSTACLES, WATER_Y, MAP_W } from '../src/shared/map.js';
+import { doorPoint, houseAt, getMap, PLAZA, ROADS, ROAD_HALF, OBSTACLES, WATER_Y, MAP_W } from '../src/shared/map.js';
+const TB = getMap('tb');
+const housesFor = (n) => TB.housesFor(n);
+const blockedAt = (houses, x, y) => TB.blockedAt(houses, x, y);
 import { TILE, TILE_PX, GRID_W, GRID_H, PX_PER_UNIT, TILESET_COLS, TILE_COUNT, SNOW, COBBLE, cornersOf, tileName } from '../src/shared/tiles.js';
 
 const OUT = fileURLToPath(new URL('../client/src/assets/maps/', import.meta.url));

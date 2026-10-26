@@ -10,6 +10,7 @@
 // · 白天的标记：diedToday（僵怖）、outsiderDiedToday（教父）、gossipPending（造谣者）、moonchildPick（月之子）。
 
 import { ROLES, isEvilRole, rolesOf, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS } from './roles.js';
+import { BMR_STEPS } from '../shared/nightOrder.js';
 
 const team = (p) => ROLES[p.role].team;
 const shuffle = (arr, rng) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -18,28 +19,104 @@ const pickOne = (arr, rng) => arr[Math.floor(rng() * arr.length)];
 
 const T = { tf: rolesOf('bmr', 'townsfolk'), out: rolesOf('bmr', 'outsider'), min: rolesOf('bmr', 'minion'), dem: rolesOf('bmr', 'demon') };
 
-/** 黯月初升按人数随机出一套角色。教父 ±1 外来者（外来者为 0 时只能 +1）。 */
-export function rollBMR(n, rng, { godfatherPlus = null } = {}) {
+/**
+ * 恶魔的 3 个伪装（不在场的善良角色）。官方只说"三个不在场的善良角色"，没规定镇民 / 外来者怎么配；
+ * 说书人的常见做法是以镇民为主：外来者伪装最多一个（大约三分之一的局有）。7 人这种本来 0 外来者的局，
+ * 冒充外来者只有在"教父多出一个外来者"时说得通，给两个就等于废掉两个伪装（爪牙也共用这三个，整队都被坑）。
+ * exclude：不能给的角色（在场的、疯子自己）。
+ */
+export function pickBluffsBMR(exclude, rng) {
+  const tf = shuffle(T.tf.filter((r) => !exclude.has(r)), rng);
+  const out = shuffle(T.out.filter((r) => !exclude.has(r)), rng);
+  const k = out.length && rng() < 0.35 ? 1 : 0;
+  const pick = [...tf.slice(0, 3 - k), ...out.slice(0, k)];
+  if (pick.length < 3) pick.push(...out.slice(k, k + 3 - pick.length)); // 镇民不够（几乎不会）才多补外来者
+  return shuffle(pick, rng);
+}
+
+/** 黯月初升按人数随机出一套角色。教父 ±1 外来者（外来者为 0 时只能 +1）。exclude：这些角色不出。 */
+export function rollBMR(n, rng, { godfatherPlus = null, exclude = null } = {}) {
   if (n < MIN_PLAYERS || n > MAX_PLAYERS) throw new Error(`人数需在 ${MIN_PLAYERS}–${MAX_PLAYERS} 之间`);
   let [t, o, m] = DISTRIBUTION[n];
-  const minions = sample(T.min, m, rng);
+  const ok = (r) => !exclude?.has(r);
+  const minions = sample(T.min.filter(ok), m, rng);
   if (minions.includes('godfather')) {
     const plus = o === 0 ? true : godfatherPlus ?? rng() < 0.5;
     if (plus) { t -= 1; o += 1; } else { t += 1; o -= 1; }
   }
-  return shuffle([...sample(T.tf, t, rng), ...sample(T.out, o, rng), ...minions, pickOne(T.dem, rng)], rng);
+  return shuffle([...sample(T.tf.filter(ok), t, rng), ...sample(T.out.filter(ok), o, rng), ...minions, pickOne(T.dem.filter(ok), rng)], rng);
+}
+
+// ───────────── AI 配板：别发出一边倒的局 ─────────────
+// 官方的做法是说书人亲手挑角色（不是随机）；官方说明还点名：5–6 人的黯月初升里，沙巴洛斯、莽夫会让一方占不公平的便宜。
+// 下面的分数是经验估计（官方没有公式）：正数 = 对善良有利，负数 = 对邪恶有利。只用来比较同人数的几套配板。
+
+/** 小局（5–6 人）不随机出的角色（房主手动指定的照给）。 */
+export const SMALL_GAME_AVOID = new Set(['shabaloth', 'goon']);
+
+const DEMON_W = { shabaloth: 3.2, po: 2.6, zombuul: 2.6, pukka: 2.0 }; // 沙巴洛斯最强（每晚稳定两刀），普卡最慢（毒发要等一晚）
+const MINION_W = { assassin: 2.0, godfather: 1.8, devilsadvocate: 1.4, mastermind: 1.0 };
+const GOOD_W = {
+  // 防住恶魔 / 抓恶魔
+  sailor: 1.4, innkeeper: 1.4, tealady: 1.2, fool: 1.0, pacifist: 1.0, exorcist: 1.5, courtier: 1.5, professor: 1.4, minstrel: 1.0,
+  // 信息
+  grandmother: 0.8, chambermaid: 0.9, gossip: 0.9, gambler: 0.5,
+  // 外来者：对善良是负担
+  tinker: -0.6, moonchild: -0.4, goon: -0.4, lunatic: -0.3,
+};
+const PROTECT = new Set(['sailor', 'innkeeper', 'tealady', 'fool', 'pacifist']);
+
+/** 一套配板的平衡分：善良的分减邪恶的分，再算几个配合（刺客无视保护；多刀的恶魔更怕保护）。 */
+export function setupScore(roles) {
+  let good = 0; let evil = 0;
+  for (const r of roles) { good += GOOD_W[r] ?? 0; evil += MINION_W[r] ?? DEMON_W[r] ?? 0; }
+  const prot = roles.filter((r) => PROTECT.has(r)).length;
+  if (roles.includes('assassin')) good -= prot * 0.3;
+  if (roles.includes('shabaloth') || roles.includes('po')) good += prot * 0.2;
+  return Math.round((good - evil) * 100) / 100;
+}
+
+/**
+ * 保护角色别扎堆（12 人及以下）：水手、旅店老板、茶艺师挡夜里的刀，弄臣、和平主义者挡一次死亡。
+ * 官方没有硬规定，思路是让邪恶的杀伤力（多杀的恶魔、无视保护的刺客、教父……）去对冲保护；可人少时刀不够用，
+ * 三四个保护同时在场恶魔几乎杀不死人。这里按概率"接受"一套配板：两个保护一半概率接受（有刺客、沙巴洛斯、珀这种能破保护的就照常），
+ * 三个及以上很少接受。13 人以上照常。
+ */
+export function protectKeep(roles, n) {
+  if (n > 12) return 1;
+  const prot = roles.filter((r) => PROTECT.has(r)).length;
+  if (prot <= 1) return 1;
+  const breaker = roles.some((r) => ['assassin', 'shabaloth', 'po'].includes(r));
+  if (prot === 2) return breaker ? 1 : 0.5;
+  if (prot === 3) return breaker ? 0.08 : 0.03;
+  return 0.01;
+}
+
+/**
+ * AI 说书人配板：一次随机出 tries 套，按平衡分排好，去掉两头最偏的（对善良太有利 / 对邪恶太有利），从中间那段里随机挑一套。
+ * 5–6 人不出沙巴洛斯、莽夫。12 人及以下保护角色别扎堆（见 protectKeep）。返回按座位顺序的角色。
+ */
+export function balancedBMR(n, rng, { tries = 60 } = {}) {
+  const exclude = n <= 6 ? SMALL_GAME_AVOID : null;
+  const roll = () => {
+    for (let k = 0; k < 40; k++) { const r = rollBMR(n, rng, { exclude }); if (rng() < protectKeep(r, n)) return r; }
+    return rollBMR(n, rng, { exclude });
+  };
+  const cands = Array.from({ length: tries }, roll).map((roles) => ({ roles, s: setupScore(roles) })).sort((a, b) => a.s - b.s);
+  const lo = Math.floor(tries * 0.3); const hi = Math.max(lo + 1, Math.ceil(tries * 0.7));
+  return cands[lo + Math.floor(rng() * (hi - lo))].roles;
 }
 
 // 夜晚步骤（官方顺序）。info：首夜只给信息、不选人的步骤
-const FIRST_STEPS = ['sailor', 'courtier', 'godfatherInfo', 'devilsadvocate', 'pukka', 'grandmother', 'chambermaid'];
-const OTHER_STEPS = ['sailor', 'innkeeper', 'courtier', 'gambler', 'devilsadvocate', 'lunatic', 'exorcist', 'zombuul', 'pukka',
-  'shabaloth', 'po', 'assassin', 'godfather', 'professor', 'gossip', 'tinker', 'moonchild', 'chambermaid'];
+// 夜晚步骤的顺序和前端「角色 → 夜间顺序」的说明是同一份（shared/nightOrder.js）
+const FIRST_STEPS = BMR_STEPS.first;
+const OTHER_STEPS = BMR_STEPS.other;
 const DEMON_ROLES = new Set(T.dem);
 
 export const BMR_METHODS = {
   // ───────────────────────── 开局 ─────────────────────────
   setupBMR(players, roles, rng) {
-    const assigned = roles ?? rollBMR(players.length, rng);
+    const assigned = roles ?? balancedBMR(players.length, rng);
     if (assigned.length !== players.length) throw new Error('角色数量与玩家数量不符');
     this.players = players.map((p, i) => ({
       id: p.id, name: p.name, seat: i + 1, role: assigned[i], shownRole: assigned[i],
@@ -50,7 +127,7 @@ export const BMR_METHODS = {
     const lunatic = this.players.find((p) => p.role === 'lunatic');
     if (lunatic) lunatic.shownRole = rng() < 0.5 ? demon.role : pickOne(T.dem.filter((r) => r !== demon.role), rng);
     const inPlay = new Set(assigned);
-    this.bluffs = shuffle([...T.tf, ...T.out].filter((r) => !inPlay.has(r)), rng).slice(0, 3);
+    this.bluffs = pickBluffsBMR(inPlay, rng);
     this.fx = [];
     this.used = {};        // 每局一次的能力用过了：id → true（侍臣、教授、刺客、弄臣）
     this.lastPick = {};    // 上一夜选过谁（驱魔人、魔鬼代言人）：id → targetId
@@ -204,7 +281,7 @@ export const BMR_METHODS = {
       // 疯子以为自己是恶魔：给他"爪牙"（人数对，但可以是任何人）和三个"伪装"
       if (lunatic) {
         const fake = sample(this.players.filter((q) => q.id !== lunatic.id), minions.length, this.rng);
-        const fakeBluffs = sample([...T.tf, ...T.out].filter((r) => r !== 'lunatic'), 3, this.rng);
+        const fakeBluffs = pickBluffsBMR(new Set(['lunatic']), this.rng); // 和真恶魔拿到的同一个样子，疯子看不出破绽
         say(lunatic, `你的爪牙：${fake.map((x) => `**${this.name(x.id)}**`).join('、')}。\n不在场的角色（可用来伪装）：${fakeBluffs.map((r) => ROLES[r].name).join('、')}。`);
         this.record('info', `疯子 ${this.tag(lunatic.id)} 以为自己是${ROLES[lunatic.shownRole].name}，拿到的"爪牙"：${fake.map((x) => this.name(x.id)).join('、')}`);
       }
@@ -473,12 +550,17 @@ export const BMR_METHODS = {
           if (m && !broken(m) && mc.good) this.tryKill(this.get(mc.target), 'moonchild', messages);
         } break;
         case 'grandmother': for (const p of live('grandmother')) this.grandmotherInfo(p, say); break;
-        case 'chambermaid': for (const p of live('chambermaid')) {
-          const ts = this.choiceOf(p)?.targets ?? []; if (ts.length < 2) break;
-          for (const t of ts) this.goonCheck(p, t);
-          const truth = ts.filter((t) => this.wokeTonight.has(t.id)).length;
-          const n = broken(p) ? this.st.fakeChambermaid(p, truth) : truth;
-          say(p, `${ts.map((t) => this.name(t.id)).join(' 与 ')} 之中，今晚有 **${n}** 人因自己的能力被唤醒。`);
+        case 'chambermaid': {
+          // 房规"夜里死了仍拿信息"：今晚被杀的侍女照样拿信息，但按醉酒处理（真假由说书人定）
+          const dead = this.deadDrunk ? this.players.filter((q) => q.role === 'chambermaid' && !q.alive && this.nightDeaths.includes(q.id)) : [];
+          for (const p of [...live('chambermaid'), ...dead]) {
+            const ts = this.choiceOf(p)?.targets ?? []; if (ts.length < 2) continue;
+            const deadInfo = !p.alive;
+            if (!deadInfo) for (const t of ts) this.goonCheck(p, t);
+            const truth = ts.filter((t) => this.wokeTonight.has(t.id)).length;
+            const n = broken(p) || (deadInfo && this.st.deadLies(p)) ? this.st.fakeChambermaid(p, truth) : truth;
+            say(p, `${ts.map((t) => this.name(t.id)).join(' 与 ')} 之中，今晚有 **${n}** 人因自己的能力被唤醒。${deadInfo ? '\n（你今晚死了。按房规你仍得到了这条信息，但它按醉酒处理：**可能是假的**。）' : ''}`);
+          }
         } break;
         default: break;
       }
@@ -535,6 +617,38 @@ export const BMR_METHODS = {
     } else this.record('st', `${this.tag(uid)} 声称"${text}"（不是造谣者，没有效果）`);
     return { text };
   },
+  /**
+   * 自由声明（谁都可以说，只有真造谣者的才需要判定）：只做检查和记账，真假由服务器问大模型（见 server/judge.js）。
+   * 返回 { text, isGossip }：isGossip 为真时服务器去判定，判为真再调用 gossipVerdict(true)。
+   */
+  gossipFree(uid, raw) {
+    if (this.phase !== 'day') throw new Error('只能在白天发表声明');
+    const p = this.get(uid);
+    if (!p || !this.visAlive(p)) throw new Error('死亡玩家不能发表声明');
+    if (this.gossipSaid[uid]) throw new Error('你今天已经发表过声明了');
+    const text = String(raw ?? '').replace(/\s+/g, ' ').trim();
+    if (!text) throw new Error('声明不能是空的');
+    if ([...text].length > 120) throw new Error('声明太长了（最多 120 字）');
+    this.gossipSaid[uid] = true;
+    const isGossip = p.role === 'gossip';
+    this.record('st', isGossip ? `造谣者 ${this.tag(uid)} 自由声明"${text}"——交给 AI 判定` : `${this.tag(uid)} 声称"${text}"（不是造谣者，没有效果）`);
+    return { text, isGossip };
+  },
+
+  /** AI 判定的结果回来了：为真就记下"今晚有人死"。 */
+  gossipVerdict(truth, note) {
+    if (truth) this.gossipPending = true;
+    this.record('st', `造谣者的声明 ${note}${truth ? '——今晚会有人死亡' : ''}`);
+  },
+
+  /** 给 AI 判定用的整局真实情况：每个人的真实角色、阵营、生死，加复盘时间线。 */
+  gossipFacts() {
+    const TEAM = { townsfolk: '镇民', outsider: '外来者', minion: '爪牙', demon: '恶魔' };
+    const ppl = this.players.map((q) => `${q.seat}号 ${q.name}：${ROLES[q.role].name}（${TEAM[ROLES[q.role].team]}${q.role === 'lunatic' ? `，以为自己是${ROLES[q.shownRole]?.name ?? '恶魔'}` : ''}），${this.evilOf(q) ? '邪恶' : '善良'}阵营，${q.alive ? (q.apparentDead ? '看起来已死但其实还活着' : '存活') : '已死亡'}`);
+    const tl = this.timeline.map((e) => `[${e.when}] ${e.text}`);
+    return [`剧本：黯月初升。现在是第 ${this.day} 天白天，共 ${this.players.length} 名玩家。`, '玩家：', ...ppl, '', '复盘时间线（到现在为止）：', ...tl].join('\n');
+  },
+
   statementText(st) {
     const t = st.target ? this.name(st.target) : '';
     const r = st.role ? ROLES[st.role]?.name : '';

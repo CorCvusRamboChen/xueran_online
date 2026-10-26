@@ -3,6 +3,7 @@
 import { ROLES, TEAM_NAME, isEvilRole } from '../../src/engine/roles.js';
 import { ATTR, FLAVOR } from './flavor.js';
 import { ROLE_ART } from './art.js';
+import { Glossed, Term, GLOSSARY } from './terms.jsx';
 
 // 每个角色的要点：选几个人、得到什么、魔典里用到的提醒标记（照原作）
 const META = {
@@ -83,7 +84,7 @@ export function AbilityCard({ id, compact = false }) {
       </header>
       <div className="acard-body">
         <p className="acard-kicker">{attr.name} · {TEAM_NAME[r.team]} · {isEvilRole(id) ? '邪恶' : '善良'}</p>
-        <p className="acard-text">{r.ability}</p>
+        <p className="acard-text"><Glossed text={r.ability} /></p>
         {!compact && (
           <>
             <dl className="acard-facts">
@@ -92,7 +93,7 @@ export function AbilityCard({ id, compact = false }) {
             </dl>
             {meta.reminders && (
               <div className="acard-reminders">
-                {meta.reminders.map((t) => <span key={t} className="reminder">{t}</span>)}
+                {meta.reminders.map((t) => <span key={t} className="reminder">{GLOSSARY[t] ? <Term k={t}>{t}</Term> : t}</span>)}
                 <small>魔典提醒</small>
               </div>
             )}

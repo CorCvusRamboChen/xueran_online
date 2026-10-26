@@ -99,7 +99,7 @@ export function gameClock(s) {
   if (s.phase === 'ended') return { time: '06:00', label: '黎明' };
   if (s.phase === 'night') {
     const span = (s.settings?.chooseSeconds ?? 90) * 1000;
-    const t = s.deadline ? 1 - (s.deadline - now) / span : 1;
+    const t = s.deadline ? 1 - (s.deadline - now) / span : 0.5; // 夜里玩家只在自己选人时才拿到截止时间，其余时候时钟停在深夜
     return { time: hhmm(lerp(30, 240, t)), label: `第${cnNum(s.night)}夜` };
   }
   const day = `第${cnNum(s.day)}日`;

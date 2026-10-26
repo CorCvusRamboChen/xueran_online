@@ -1,14 +1,16 @@
 // 钟楼广场（座位圈）：和小镇地图同一套线稿画风——石板圆场、三层圆台阶、钟楼；
 // 大家的方形肖像围成一圈。投票时一根指针从钟楼指向正在投票的人。夜里整幅画压暗成深青色。
 import { useLayoutEffect, useRef, useState } from 'react';
+import { toneFilter } from './world/tone.js';
+import { getMap } from '../../src/shared/map.js';
 import { Portrait } from './util.jsx';
-import { useMarks, TAGS, MarkMenu, MarkBadge } from './marks.jsx';
+import { useMarks, TAGS, MarkMenu, MarkBadge, LinkLines } from './marks.jsx';
 import { ClockTower, Tree, Lamp, MAP_COLORS as C, INK } from './art/TownArt.jsx';
 import { SCENE_ART } from './art.js';
 
-// 手绘广场（白天 / 夜里两张同构图，夜里淡入）；没有就用线稿
-const PAINT_DAY = SCENE_ART['square-day'];
-const PAINT_NIGHT = SCENE_ART['square-night'];
+// 手绘广场（白天 / 夜里两张同构图，夜里淡入）；没有就用线稿。
+// 每个剧本一张：square-day-<剧本>.webp（暗流涌动不带后缀）；还没画的剧本先用暗流涌动的
+const sceneFor = (name, script) => SCENE_ART[script && script !== 'tb' ? `${name}-${script}` : name] ?? SCENE_ART[name];
 
 export function Town({ s, picked = [], pickable = null, onTap, children }) {
   const ref = useRef(null);
@@ -20,8 +22,9 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
   }, []);
 
   const n = s.players.length;
-  // 竖屏人多时把圆拉成竖椭圆，用上下的空白
-  const tall = n > 9 && window.innerHeight > window.innerWidth * 1.2 ? 1.25 : 1;
+  // 竖屏把圆拉成竖椭圆，用上下的空白：手机上总是拉（中间要放台上的人和举手），平板 / 窄窗口人多时才拉
+  const portrait = window.innerHeight > window.innerWidth * 1.2;
+  const tall = portrait && window.innerWidth < 600 ? 1.35 : portrait && n > 9 ? 1.25 : 1;
   const h = w * tall;
   const tk = Math.round(Math.min(52, Math.max(28, ((w * Math.PI * 0.78 * (1 + tall) / 2) / n) * 0.38)));
   const Rx = 50 - ((tk / 2 + 18) / w) * 100;
@@ -33,6 +36,11 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
   const locked = new Set(vote?.locked ?? []);
   const inRoom = new Set(s.rooms?.flatMap((r) => r.members) ?? []);
   const night = s.phase === 'night';
+  const PAINT_DAY = sceneFor('square-day', s.script);
+  // 和小镇地图同一套色调；square 里单独写的项（比如饱和度）盖在上面
+  const tone = getMap(s.script).tone;
+  const paintTone = toneFilter(tone && { ...tone.map, ...tone.square });
+  const PAINT_NIGHT = sceneFor('square-night', s.script);
 
   const allies = new Set((s.self?.allies ?? []).map((a) => a.id));
   const marks = useMarks(s);
@@ -53,11 +61,11 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
   const pr = Math.min(Rx, Ry * tall) / 100 * VW + 22;
 
   return (
-    <div className={`town ${night ? 'night' : ''} ${PAINT_DAY ? 'painted' : ''}`} ref={ref} style={{ '--tk': `${tk}px`, aspectRatio: `1 / ${tall}` }}>
+    <div className={`town ${night ? 'night' : ''} ${PAINT_DAY ? 'painted' : ''}`} ref={ref} style={{ '--tk': `${tk}px`, aspectRatio: `1 / ${tall}`, maxWidth: tall > 1 ? `min(100%, calc((100vh - 200px) / ${tall}))` : undefined }}>
       {PAINT_DAY ? (
         <div className="town-paint" aria-hidden="true">
-          <img src={PAINT_DAY} alt="" />
-          <img className="town-paint-night" src={PAINT_NIGHT ?? PAINT_DAY} alt="" />
+          <img src={PAINT_DAY} alt="" style={{ filter: paintTone }} />
+          <img className="town-paint-night" src={PAINT_NIGHT ?? PAINT_DAY} alt="" style={{ filter: paintTone }} />
         </div>
       ) : <svg className="town-bg" viewBox={`0 0 ${VW} ${VH}`} aria-hidden="true">
         <rect width={VW} height={VH} fill={C.void} />
@@ -100,7 +108,10 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
         return <div className="clock-hand" style={{ height: `${Math.hypot(dx, dy) - tk * 0.6}px`, transform: `rotate(${deg}deg)` }} />;
       })()}
       <div className="town-center">{children}</div>
-      {menuPlayer && <MarkMenu player={menuPlayer} mark={marks[menu.id]} at={menu} onClose={() => setMenu(null)} />}
+      {/* 小魔典里的连线（只有自己看得到）：画在头像底下 */}
+      <LinkLines marks={marks} w={w} h={h} gap={tk * 0.62}
+        posOf={(id) => { const i = s.players.findIndex((p) => p.id === id); if (i < 0) return null; const a = rad(i); return { x: ((50 + Rx * Math.cos(a)) / 100) * w, y: ((50 + Ry * Math.sin(a)) / 100) * h }; }} />
+      {menuPlayer && <MarkMenu s={s} player={menuPlayer} mark={marks[menu.id]} at={menu} onClose={() => setMenu(null)} />}
       {s.players.map((p, i) => {
         const a = rad(i);
         const can = !pickable || pickable.includes(p.id);
@@ -121,14 +132,14 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
             className={cls}
             style={{ left: `${50 + Rx * Math.cos(a)}%`, top: `${50 + Ry * Math.sin(a)}%` }}
             onClick={() => onTap?.(p)}
-            onContextMenu={(e) => { e.preventDefault(); if (p.id !== s.me) setMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}
+            onContextMenu={(e) => { e.preventDefault(); setMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}
             title={`${p.seat}号 ${p.name}${marks[p.id]?.note ? `\n笔记：${marks[p.id].note}` : ''}\n（右键做标记）`}
           >
             <div className="token-face">
               <Portrait p={p} size={tk} frame={frameOf(p)} />
               {!p.alive && <span className="stamp">{p.ghostVote ? '亡 · 余一票' : '亡'}</span>}
               <span className="seat">{p.seat}</span>
-              {p.id !== s.me && !p.roleName && <MarkBadge mark={marks[p.id]} />}
+              {!p.roleName && <MarkBadge mark={marks[p.id]} />}
               {marks[p.id]?.note && <i className="token-note" title={marks[p.id].note}>记</i>}
               {vote && yes.has(p.id) && <span className={`raised ${locked.has(p.id) ? 'locked' : ''}`}>举</span>}
               {inRoom.has(p.id) && <span className="mark whisper">密谈</span>}

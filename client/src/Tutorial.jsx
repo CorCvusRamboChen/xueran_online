@@ -2,6 +2,7 @@
 // 有的步骤看状态就能判断做没做（走进房子、锁门、提名……），有的要界面发事件（翻身份牌、打开日志）。
 // 练习局的剧本见 src/server/tutorial.js：你是共情者，2 号老格是恶魔，7 号汉娜是士兵。
 import { useEffect, useState } from 'react';
+import { TUT_DEMOS } from './TutorialIntro.jsx';
 
 /** 界面上发生了教程关心的事：tutEvent('flip') / tutEvent('journal')。 */
 export const tutEvent = (name) => window.dispatchEvent(new CustomEvent('botc-tut', { detail: name }));
@@ -12,18 +13,18 @@ const STEPS = [
     text: '这是一局只有你和 6 个机器人的练习局。镇上藏着一个恶魔和他的爪牙（邪恶阵营），其余的人是好人（善良阵营）。好人要在白天投票处决恶魔；恶魔每晚杀一个人，杀到只剩两个人就赢了。',
   },
   {
-    id: 'flip', title: '先看看你是谁', target: '.idcard',
+    id: 'flip', demo: 'flip', title: '先看看你是谁', target: '.idcard',
     text: '每个人开局都会拿到一个秘密身份。点右边的身份牌把它翻开——别让旁边的人看见。',
     done: (f) => f.flip,
   },
   {
-    id: 'journal', title: '夜里收到的信息', target: '.info-box, .hud-btn-role',
+    id: 'journal', demo: 'empath', title: '夜里收到的信息', target: '.info-box, .hud-btn-role',
     text: '你是共情者：每天晚上会得知左右两边活着的邻座里，有几个是邪恶的。天黑以后说书人已经把信息告诉你了——就在「身份」页最上面的「你得到的信息」里。',
     ready: (s) => s.self?.inbox?.length > 0,
     done: (f) => f.journal,
   },
   {
-    id: 'think', manual: true, title: '推理一下',
+    id: 'think', demo: 'empath', manual: true, title: '推理一下',
     text: '日志里说：你两侧有 1 个邪恶。你左边是 2 号老格，右边是 7 号汉娜。（练习局直接告诉你一条线索：汉娜是士兵，是好人。）那邪恶的就是……先记在心里，白天去验证。',
   },
   {
@@ -39,7 +40,7 @@ const STEPS = [
     done: (f) => f.entered,
   },
   {
-    id: 'lock', title: '锁门', target: '.room-pnl .btn-primary',
+    id: 'lock', demo: 'knock', title: '锁门', target: '.room-pnl .btn-primary',
     text: '在右上角点「锁门私聊」。锁上以后，别人走到门口只能敲门，你可以选择让他进来或者假装没人。',
     ready: (s) => !!s.roam?.myHouse,
     done: (f) => f.locked,
@@ -57,7 +58,7 @@ const STEPS = [
     done: (f) => f.gathered,
   },
   {
-    id: 'nominate', title: '提名', target: '.sq-board, .btn-row .btn-primary',
+    id: 'nominate', demo: 'vote', title: '提名', target: '.sq-board, .btn-row .btn-primary',
     text: '回到广场后可以提名。每人每天只能提名一次。点「提名」，再点座位圈上 2 号老格的头像。',
     ready: (s) => !!s.noms,
     done: (f) => f.nominated,
@@ -69,14 +70,14 @@ const STEPS = [
     done: (f) => f.spoke,
   },
   {
-    id: 'vote', title: '投票', target: '.big',
-    text: '投票开始了：时钟指针从被提名者的下一位开始顺时针转，转到谁，谁的票就锁定。在指针转到你之前点「举手」。超过半数的人举手，被提名者就会在黄昏被处决。',
+    id: 'vote', demo: 'vote', title: '投票', target: '.big',
+    text: '投票开始了：时钟指针从被提名者的下一位开始顺时针转，转到谁，谁的票就锁定。在指针转到你之前点「举手」。举手人数达到活人数的一半（7 人要 4 票），被提名者就会在黄昏被处决。',
     ready: (s) => !!s.vote,
     done: (f) => f.voted,
   },
   {
     id: 'dusk', title: '等待黄昏',
-    text: '票数出来了。超过半数的人举了手，被提名者就会被送上处决台；黄昏时，台上的人会被处决。看看会发生什么……',
+    text: '票数出来了。票数够了，被提名者就会被送上处决台；黄昏时，台上的人会被处决。看看会发生什么……',
     ready: (s) => !!s.lastVote,
     done: () => false,
   },
@@ -143,7 +144,9 @@ export function Tutorial({ s, onExit }) {
     return () => { clearInterval(t); document.querySelectorAll('.tut-target').forEach((el) => el.classList.remove('tut-target')); };
   }, [step?.id]);
 
+  const [hideDemo, setHideDemo] = useState(false);
   if (!step) return null;
+  const Demo = !retry && TUT_DEMOS[step.demo];
   const waiting = step.ready && !step.ready(s);
   return (
     <aside className="tut" role="dialog" aria-label="新手教程">
@@ -153,6 +156,9 @@ export function Tutorial({ s, onExit }) {
       </div>
       <h3>{step.title}</h3>
       <p>{step.text}</p>
+      {Demo && (hideDemo
+        ? <button type="button" className="tut-demo-toggle" onClick={() => setHideDemo(false)}>看演示 ▸</button>
+        : <div className="tut-demo"><Demo key={step.id} /><button type="button" className="tut-demo-toggle" onClick={() => setHideDemo(true)}>收起演示</button></div>)}
       {waiting && <p className="tut-wait">（稍等，游戏正在进行到这一步……）</p>}
       <div className="tut-actions">
         {retry ? null : step.last

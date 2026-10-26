@@ -1,6 +1,7 @@
 // 夜里的小屋：参考极乐迪斯科开场那间旅馆——一个斜 45° 剖开的房间浮在黑暗里。
 // 有画好的位图（assets/art/scenes/cottage-night.webp，天快亮时淡入 cottage-dawn.webp）就用位图，否则用代码画。
 // 夜里要行动时你坐在桌边，否则躺在床上睡觉；肖像飘在你头顶。
+import { useEffect, useState } from 'react';
 import { Portrait, hue } from './util.jsx';
 import { SCENE_ART } from './art.js';
 import { INK } from './art/TownArt.jsx';
@@ -116,6 +117,20 @@ export function Cottage({ p, awake, dead, dawn = false }) {
         <Portrait p={p} size={40} frame="var(--mot)" />
         {!awake && !dead && <span className="zzz">Z z z</span>}
       </div>
+    </div>
+  );
+}
+
+/**
+ * 天亮那几秒（服务器公布死讯、念"第 N 天"，然后才开始自由活动）：不再切到集合广场，
+ * 而是在自己的小屋里醒来：夜里的小屋慢慢淡成清晨。
+ */
+export function DawnWake({ p, dead }) {
+  const [on, setOn] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setOn(true), 60); return () => clearTimeout(t); }, []);
+  return (
+    <div className={`dawn-wake ${on ? 'on' : ''}`}>
+      <Cottage p={p} awake dead={dead} dawn={on} />
     </div>
   );
 }

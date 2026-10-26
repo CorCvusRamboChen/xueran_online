@@ -2,7 +2,7 @@
 // misregister: 0 表示陌客/间谍从不错误登记，1 表示总是错误登记（排除说书人的随机判定）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Game, makeRng } from '../src/engine/game.js';
+import { Game, makeRng, rollRoles, rollTB, balancedTB, setupScoreTB, SMALL_INFO } from '../src/engine/game.js';
 import { ROLES, TOWNSFOLK, OUTSIDERS, MINIONS } from '../src/engine/roles.js';
 
 const players = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, name: `玩家${i + 1}` }));
@@ -128,6 +128,23 @@ test('猎手：只能开一枪，打中恶魔才会死', () => {
   assert.equal(g.slay('p1', 'p2').hit, false);
   assert.throws(() => g.slay('p1', 'p3'), /已经开过枪/); // 每人每局只能声称一次
   assert.ok(g.get('p3').alive);
+});
+
+test('小恶魔可以选已死的玩家（空刀）：今晚没人死；超时替他选时不会选死人', () => {
+  const g = mk(['chef', 'empath', 'imp', 'poisoner', 'monk']);
+  night(g);
+  g.dawn();
+  g.execute(g.get('p1'));
+  g.startNight();
+  assert.ok(g.nightPrompts().find((x) => x.playerId === 'p3').options.includes('p1'));
+  g.submitChoice('p3', ['p1']);
+  g.resolveNight();
+  assert.deepEqual(g.nightDeaths, []);
+  assert.equal(g.alive().length, 4);
+  g.dawn();
+  g.startNight();
+  g.autoChoose('p3');
+  assert.ok(g.get(g.choices.p3[0]).alive);
 });
 
 test('士兵不会被恶魔杀死', () => {
@@ -319,4 +336,55 @@ test('投票门槛（官方）：存活人数的一半向上取整；3 人存活
   g.nominate('p3', 'p1');
   assert.equal(g.recordVote('p1', ['p3', 'p5']).outcome, 'tie');
   assert.equal(g.block, null);
+});
+
+test('房规「夜里死了仍拿信息」：被小恶魔杀死的共情者照样拿当晚的信息（按醉酒，真假由说书人定）；不开就没有', () => {
+  for (const on of [false, true]) {
+    const g = mk(['empath', 'chef', 'imp', 'poisoner', 'monk'], { deadDrunk: on });
+    g.st.deadLies = () => false;
+    night(g); g.dawn();
+    const { messages } = night(g, { p3: ['p1'], p4: ['p5'], p5: ['p2'] });
+    assert.equal(g.get('p1').alive, false);
+    const t = textOf(messages, 'p1');
+    if (on) { assert.match(t, /存活邻座中有 \*\*\d\*\*/); assert.match(t, /按房规/); } else assert.equal(t, '');
+  }
+  // 说书人判"给假的"：数字和真实不同
+  const g = mk(['empath', 'chef', 'imp', 'poisoner', 'monk'], { deadDrunk: true });
+  night(g); g.dawn();
+  const truth = g.empathInfo(g.get('p1'), false);
+  g.st.deadLies = () => true;
+  const { messages } = night(g, { p3: ['p1'], p4: ['p5'], p5: ['p2'] });
+  assert.ok(!textOf(messages, 'p1').includes(`**${truth}**`), '给的是假数字');
+});
+
+test('AI 配板（暗流涌动 12 人及以下）：共情者+占卜师少同时出现，F4 多半 1–2 个，有男爵多半有图书管理员', () => {
+  const stats = (f) => {
+    let both = 0; let f12 = 0; let baron = 0; let baronLib = 0; const N = 3000;
+    for (let s = 1; s <= N; s++) {
+      const r = f(makeRng(s * 7 + 3));
+      if (r.includes('empath') && r.includes('fortuneteller')) both++;
+      const k = r.filter((x) => SMALL_INFO.includes(x)).length; if (k >= 1 && k <= 2) f12++;
+      if (r.includes('baron')) { baron++; if (r.includes('librarian')) baronLib++; }
+    }
+    return { both: both / N, f12: f12 / N, lib: baronLib / Math.max(1, baron) };
+  };
+  const pure = stats((rng) => rollRoles(10, rng));
+  const ai = stats((rng) => rollTB(10, rng));
+  assert.ok(ai.both < pure.both * 0.6, `共情者+占卜师同时出现 ${ai.both} vs 纯随机 ${pure.both}`);
+  assert.ok(ai.both > 0, '不是完全不出');
+  assert.ok(ai.f12 > 0.85, `F4 为 1–2 个的比例 ${ai.f12}`);
+  assert.ok(ai.lib > 0.65 && ai.lib < 1, `有男爵时有图书管理员 ${ai.lib}`);
+  // 13 人以上照常随机
+  assert.deepEqual(rollTB(13, makeRng(5)), rollRoles(13, makeRng(5)));
+});
+
+test('AI 配板（暗流涌动）：强神打强神、弱神打弱神——挑的那套平衡分落在纯随机分布的中间段', () => {
+  const pure = Array.from({ length: 2000 }, (_, k) => setupScoreTB(rollTB(9, makeRng(k + 11)))).sort((a, b) => a - b);
+  const [p10, p90] = [pure[200], pure[1800]];
+  for (let seed = 1; seed < 60; seed++) {
+    const r = balancedTB(9, makeRng(seed));
+    assert.equal(r.length, 9);
+    const sc = setupScoreTB(r);
+    assert.ok(sc >= p10 && sc <= p90, `平衡分 ${sc} 不在 [${p10}, ${p90}]`);
+  }
 });

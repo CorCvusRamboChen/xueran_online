@@ -219,3 +219,42 @@ test('自动说书人：酒鬼拿到假信息，并记进说书人手记', () =>
   assert.ok(g.journal.some((j) => /酒鬼/.test(j.text)), '手记里有这条判定');
   assert.ok(g.journal.some((j) => /红鲱鱼/.test(j.text)), '开局定了红鲱鱼');
 });
+
+test('恶魔夜里杀死的人记在 demonKills（前端播破门动画）；被僧侣保护就没有', () => {
+  const g = mk(['monk', 'imp', 'poisoner', 'empath', 'chef']);
+  g.startNight(); g.resolveNight(); g.dawn(); g.endDay();
+  g.startNight();
+  g.submitChoice('p3', ['p5']);
+  g.submitChoice('p1', ['p4']);   // 僧侣保护共情者
+  g.submitChoice('p2', ['p4']);   // 小恶魔刀共情者：没死
+  g.resolveNight();
+  assert.deepEqual(g.demonKills, []);
+  g.dawn(); g.endDay();
+  g.startNight();
+  g.submitChoice('p3', ['p5']);
+  g.submitChoice('p1', ['p5']);
+  g.submitChoice('p2', ['p4']);
+  g.resolveNight();
+  assert.deepEqual(g.demonKills, ['p4']);
+  g.dawn(); g.endDay();
+  g.startNight();
+  g.submitChoice('p3', ['p5']);
+  g.submitChoice('p1', ['p5']);
+  g.submitChoice('p2', ['p2']);   // 小恶魔自杀传位：不算破门，谁都不播
+  g.resolveNight();
+  assert.equal(g.get('p2').alive, false);
+  assert.deepEqual(g.demonKills, []);
+});
+
+test('处决台：同票的人一起站在台上（blockTied），谁都不处决；更高票把他们都挤下去', () => {
+  const g = mk(['monk', 'imp', 'poisoner', 'empath', 'chef']);
+  g.startNight(); g.resolveNight(); g.dawn();
+  g.recordVote('p4', ['p1', 'p2', 'p3']);
+  assert.equal(g.block, 'p4');
+  g.recordVote('p5', ['p1', 'p2', 'p3']);
+  assert.equal(g.block, null);
+  assert.deepEqual(g.blockTied, ['p4', 'p5']);
+  g.recordVote('p1', ['p2', 'p3', 'p4', 'p5']);
+  assert.equal(g.block, 'p1');
+  assert.deepEqual(g.blockTied, []);
+});
