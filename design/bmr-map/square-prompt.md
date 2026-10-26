@@ -2,9 +2,9 @@
 
 房子验收通过，已经接进游戏，谢谢。最后两张：大家集合、提名、投票时看到的广场俯视图。
 
-1. 格式照《暗流涌动》那两张：C:\Users\12424\OneDrive\文档\酒桌游戏\botc-bot\client\src\assets\art\scenes\square-day.webp 和 square-night.webp。1600×1600，正上方往下看（略带一点斜），圆形广场占画面中间约七成，四周露出一点周围的建筑。游戏会在广场上围一圈摆玩家头像，所以广场边缘那一圈要相对干净、别放高的东西挡头像；正中间会叠一根投票指针，中心别画太花。
+1. 格式照《暗流涌动》那两张：C:\Users\12424\OneDrive\文档\xueran_online\client\src\assets\art\scenes\square-day.webp 和 square-night.webp。1600×1600，正上方往下看（略带一点斜），圆形广场占画面中间约七成，四周露出一点周围的建筑。游戏会在广场上围一圈摆玩家头像，所以广场边缘那一圈要相对干净、别放高的东西挡头像；正中间会叠一根投票指针，中心别画太花。
 
-2. 画风和小镇底图 outputs\bmr\town-base.webp、刚画好的 outputs\bmr\houses\ 一致：极乐迪斯科式厚涂，深秋入冬前，地上落叶混着一层薄初雪。参考 C:\Users\12424\OneDrive\文档\酒桌游戏\botc-bot\design\refs\de\ 里的 de-ref-bmr-overview-artbook、de-ref-bmr-terrain-lands-end、de-ref-bmr-inn-backyard、de-ref-fishing-village（只学画法，不要照抄）。
+2. 画风和小镇底图 outputs\bmr\town-base.webp、刚画好的 outputs\bmr\houses\ 一致：极乐迪斯科式厚涂，深秋入冬前，地上落叶混着一层薄初雪。参考 C:\Users\12424\OneDrive\文档\xueran_online\design\refs\de\ 里的 de-ref-bmr-overview-artbook、de-ref-bmr-terrain-lands-end、de-ref-bmr-inn-backyard、de-ref-fishing-village（只学画法，不要照抄）。
 
 3. 内容：
 * 广场是旧石板地，石缝里有枯草，铺着红枫落叶；

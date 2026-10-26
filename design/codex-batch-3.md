@@ -1,5 +1,5 @@
 请继续给"血染钟楼"小镇画第三批图，风格和你之前画的小镇大图、房子完全一致（极乐迪斯科式低饱和厚涂油画、冬夜、积雪、冷蓝灰底色 + 暖橙灯光）。
-风格参考：C:\Users\12424\OneDrive\文档\酒桌游戏\botc-bot\client\src\assets\world\town-base.webp 和同目录的 house-*-closed-lit.png。
+风格参考：C:\Users\12424\OneDrive\文档\xueran_online\client\src\assets\world\town-base.webp 和同目录的 house-*-closed-lit.png。
 所有图：不要文字、不要人物、不要水印、不要 UI。画完存到你的 outputs 文件夹，文件名按下面写的来。
 
 ## 1. 钟楼广场座位圈 `square-day.webp` + `square-night.webp`（1600×1600，正方形）

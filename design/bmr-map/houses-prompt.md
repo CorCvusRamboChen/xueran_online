@@ -3,7 +3,7 @@
 底图已经定稿，现在画《黯月初升》7 间能进的房子。要求和《暗流涌动》那批一样：要有独特性，像极乐迪斯科地图里的建筑，不要千篇一律的小木屋。
 
 1. 参考图（极乐迪斯科官方场景截图，只学造型、细节密度、剖面画法，不要照抄）：
-C:\Users\12424\OneDrive\文档\酒桌游戏\botc-bot\design\refs\de\
+C:\Users\12424\OneDrive\文档\xueran_online\design\refs\de\
 
 * 外观：de-ref-church-exterior（木头教堂，尖塔、层层叠叠的屋顶、架空的木平台）、de-ref-whirling-exterior、de-ref-bookstore-exterior、de-ref-pawnshop-exterior、de-ref-frittte-exterior、de-ref-fishing-village、de-ref-sea-fortress、de-ref-doomed-commercial，以及这个剧本专用的 de-ref-bmr-shack-exterior、de-ref-bmr-ramshackle-exterior、de-ref-bmr-church-concept、de-ref-bmr-inn-backyard
 * 剖开的室内：de-ref-whirling-interior（最重要：整栋楼被剖开，地板、墙、家具、人物活动的痕迹都看得见）、de-ref-church-interior、de-ref-bookstore-interior、de-ref-pawnshop-interior、de-ref-frittte-interior、de-ref-coalroom-interior、de-ref-bmr-shack-interior、de-ref-bmr-cutaway-interior
@@ -14,7 +14,7 @@ C:\Users\12424\OneDrive\文档\酒桌游戏\botc-bot\design\refs\de\
 * 房子落地的位置就是底稿里那块地基，底部要压在地基上，不能挪走；
 * 门（入口）在底稿门的位置附近：黯月旅店、茶馆、修道院礼拜堂的门在南墙中间（画面左下那面墙）；溪边磨坊、钟表工坊、猎人小屋的门在东墙中间（画面右下那面墙）；乌鸦墓园的铁门在西边。
 
-3. 底稿在 C:\Users\12424\OneDrive\文档\酒桌游戏\botc-bot\design\guides\ ，文件名是 bmr-house-<id>-closed.png 和 bmr-house-<id>-open.png（墓园只有 open）。每张底稿就是输出画布：输出尺寸和底稿完全一样，地基的像素位置不变。房子上方已经留了地方画高的结构。
+3. 底稿在 C:\Users\12424\OneDrive\文档\xueran_online\design\guides\ ，文件名是 bmr-house-<id>-closed.png 和 bmr-house-<id>-open.png（墓园只有 open）。每张底稿就是输出画布：输出尺寸和底稿完全一样，地基的像素位置不变。房子上方已经留了地方画高的结构。
 
 4. 输出透明背景的 PNG：只要房子本身（可以带一点贴地的软阴影），其他地方全透明。可以先在纯色背景上画，再用 Python 抠掉背景，边缘要干净、没有色边。
 
