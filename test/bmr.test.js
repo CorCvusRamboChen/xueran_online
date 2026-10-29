@@ -301,10 +301,9 @@ test('僵怖：白天有人死就不醒；第一次死亡后仍活着但被当�
   assert.equal(g.winner, null);
   assert.equal(g.visAliveCount(), g.aliveCount() - 1);
   g.endDay();
+  // 官方："The second time the Zombuul dies, they die for real"——第二次死亡不论原因（这里是刺客）
   night(g, { p2: ['p3'], p3: ['p5', 'p2'], p6: ['p7'] });
-  assert.ok(g.get('p7').alive, '被当作死亡的僵怖：刺客也杀不死（死人不会再死）');
-  day(g);
-  g.execute(g.get('p7'));
+  assert.equal(g.get('p7').alive, false, '假死的僵怖第二次死亡（被刺客刺）：真的死了');
   assert.equal(g.winner, 'good');
 });
 
@@ -406,5 +405,126 @@ test('AI 配板：12 人及以下保护角色（水手、旅店老板、茶艺�
     let many = 0; const N = 400;
     for (let s = 1; s <= N; s++) if (balancedBMR(n, makeRng(s * 7 + n)).filter((r) => P.has(r)).length >= 3) many++;
     assert.ok(many / N < 0.12, `${n} 人：3 个以上保护的局占 ${many}/${N}`);
+  }
+});
+
+test('官方：只有写着"可以"的能力（每局一次、没蓄力的珀）能今晚不用；水手这种"你要选择"的不能空过', () => {
+  const g = mk(['sailor', 'gambler', 'grandmother', 'fool', 'tinker', 'assassin', 'zombuul'], QUIET);
+  g.startNight();
+  assert.throws(() => g.submitChoice('p1', [], {}), /需要选择/);
+});
+
+test('疯子以为自己是僵怖（官方）：死了就失去能力，之后不再叫醒', () => {
+  const g = mk(['lunatic', 'sailor', 'chambermaid', 'gambler', 'fool', 'assassin', 'po'], QUIET);
+  g.get('p1').shownRole = 'zombuul';
+  night(g);
+  day(g);
+  g.execute(g.get('p1'));
+  g.endDay();
+  night(g, { p7: [] });
+  day(g); g.endDay(); // 这一天没人死
+  g.startNight();
+  assert.ok(!g.nightPrompts().some((x) => x.playerId === 'p1'), '死了的疯子不再醒');
+});
+
+test('房规「疯子死后照样醒」：死了以后在他看来是"假死"——没人死的夜里照样叫醒他选人；死后再被处决一次才不再叫醒', () => {
+  // 1 疯子（以为是僵怖） 2 水手 3 侍女 4 赌徒 5 弄臣 6 刺客 7 珀
+  const g = mk(['lunatic', 'sailor', 'chambermaid', 'gambler', 'fool', 'assassin', 'po'], QUIET);
+  g.lunaticGhost = true;
+  g.get('p1').shownRole = 'zombuul';
+  night(g);
+  day(g);
+  assert.equal(g.execute(g.get('p1')), 'died');
+  assert.equal(g.get('p1').alive, false, '疯子真的死了，不算活人');
+  g.endDay();
+  // 当晚：今天白天有人死（就是他自己），僵怖不醒——和真僵怖一样
+  g.startNight();
+  assert.ok(!g.nightPrompts().some((x) => x.playerId === 'p1'), '今天有人死，"僵怖"不醒');
+  assert.match(text(g.evilMessages ?? [], 'p1'), /第一次死亡/, '私下告诉他：僵怖还在场');
+  g.submitChoice('p7', ['p5']); // 珀这晚选人（连着两晚不选，下次就必须选三人）；5 号弄臣第一次不死
+  g.resolveNight();
+  day(g); g.endDay(); // 这一天没人死
+  g.startNight();
+  const pr = g.nightPrompts().find((x) => x.playerId === 'p1');
+  assert.ok(pr, '没人死的夜里，死了的"僵怖疯子"照样被叫醒');
+  assert.equal(pr.role, 'zombuul');
+  assert.equal(g.nightPrompts().find((x) => x.playerId === 'p7').waiting, true, '真恶魔照样先等他');
+  const msgs = g.submitChoice('p1', ['p3']);
+  assert.match(text(msgs, 'p7'), /疯子/, '真恶魔知道他选了谁');
+  g.submitChoice('p7', []);
+  g.resolveNight();
+  assert.ok(g.get('p3').alive, '疯子的刀没有效果');
+  // 死后又被处决：在他看来僵怖这次真的死了，以后不再叫醒
+  day(g);
+  g.execute(g.get('p1'));
+  g.endDay();
+  day(g); g.endDay();
+  g.startNight();
+  assert.ok(!g.nightPrompts().some((x) => x.playerId === 'p1'), '第二次"死亡"以后不再叫醒');
+});
+
+test('真僵怖第一次死亡：私下告诉他还在场；被当作死亡、不能再被夜里杀，没人死的夜里照样醒', () => {
+  const g = mk(['sailor', 'chambermaid', 'gambler', 'fool', 'tinker', 'assassin', 'zombuul'], QUIET);
+  night(g);
+  day(g);
+  assert.equal(g.execute(g.get('p7')), 'fake');
+  assert.equal(g.get('p7').alive, true);
+  assert.equal(g.visAlive(g.get('p7')), false);
+  g.endDay();
+  g.startNight();
+  assert.match(text(g.evilMessages ?? [], 'p7'), /第一次死亡/);
+  assert.ok(!g.nightPrompts().some((x) => x.playerId === 'p7'), '今天有人"死"了，僵怖不醒');
+  g.resolveNight();
+  day(g); g.endDay();
+  g.startNight();
+  assert.ok(g.nightPrompts().some((x) => x.playerId === 'p7'), '没人死的夜里照样醒');
+});
+
+test('夜里被复活、角色排在后面的人当晚照常醒来行动（结算停下等他选）；中毒醉酒也照样醒，只是能力不生效', () => {
+  // 1 教授 2 侍女 3 水手 4 赌徒 5 弄臣 6 刺客 7 沙巴洛斯
+  const g = mk(['professor', 'chambermaid', 'sailor', 'gambler', 'fool', 'assassin', 'shabaloth'], QUIET);
+  night(g, { p2: ['p3', 'p4'], p3: ['p4'] });
+  day(g); g.endDay();
+  night(g, { p7: ['p2', 'p5'], p3: ['p4'], p6: [] }); // 沙巴洛斯杀侍女（弄臣第一次不死）
+  assert.equal(g.get('p2').alive, false);
+  day(g); g.endDay();
+  g.startNight();
+  for (const [id, t] of Object.entries({ p1: ['p2'], p7: ['p4', 'p6'] })) g.submitChoice(id, t, {});
+  const r1 = g.resolveNight();
+  assert.equal(r1.pause, 'p2', '教授复活了侍女，侍女排在教授后面：停下来等她');
+  assert.equal(g.get('p2').alive, true);
+  assert.deepEqual(g.nightPrompts().map((x) => x.playerId), ['p2'], '这时只有她要选');
+  // 被复活的人这时如果醉酒，也照样醒来选，只是信息可能是假的
+  g.fx.push({ kind: 'drunk', target: 'p2', source: 'p3', until: g.night, why: '测试' });
+  g.submitChoice('p2', ['p3', 'p7'], {});
+  const r2 = g.resolveNight();
+  assert.ok(!r2.pause);
+  assert.match(text(r2.messages, 'p2'), /今晚有 \*\*\d\*\* 人因自己的能力被唤醒/, '侍女当晚拿到了信息');
+  assert.ok(r2.messages.length > 0, '停下之前攒的信息一起送出');
+});
+
+test('官方规则复查（黯月初升）：普卡毒发时还中着毒——弄臣救不了自己；珀蓄力后必须选三人；教授指了活人不算用掉', () => {
+  // 普卡毒弄臣：下一夜弄臣直接死（毒发那一刻还中着毒，没有能力）
+  const g = mk(['fool', 'sailor', 'chambermaid', 'gambler', 'tinker', 'assassin', 'pukka'], QUIET);
+  night(g, { p7: ['p1'], p2: ['p3'], p3: ['p4', 'p2'] });
+  day(g); g.endDay();
+  night(g, { p7: ['p4'], p2: ['p3'], p3: ['p4', 'p2'], p6: [] });
+  assert.equal(g.get('p1').alive, false, '中毒的弄臣毒发就死');
+  // 珀：上次没选，这次必须选三人
+  const h = mk(['fool', 'sailor', 'chambermaid', 'gambler', 'tinker', 'assassin', 'po'], QUIET);
+  night(h); day(h); h.endDay();
+  night(h, { p7: [] }); day(h); h.endDay();
+  h.startNight();
+  assert.equal(h.nightPrompts().find((x) => x.playerId === 'p7').count, 3);
+  assert.throws(() => h.submitChoice('p7', [], {}), /必须选三名/);
+  // 教授指了一个活着的人：能力不算用掉
+  const k = mk(['professor', 'sailor', 'chambermaid', 'gambler', 'tinker', 'assassin', 'shabaloth'], QUIET);
+  night(k); day(k); k.endDay();
+  night(k, { p7: ['p4', 'p5'] }); day(k); k.endDay();
+  k.startNight();
+  if (k.nightPrompts().some((x) => x.playerId === 'p1')) {
+    k.choices.p1 = { targets: ['p2'], role: null }; // 直接塞一个活人（正常界面里只给选死人，这里模拟"刚被反刍的人"）
+    k.resolveNight();
+    assert.ok(!k.used.p1, '指了活人：教授的能力还在');
   }
 });

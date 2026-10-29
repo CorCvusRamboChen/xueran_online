@@ -1,4 +1,5 @@
-// 登录 + WebSocket。在 Discord 里走 Embedded App SDK 授权；普通浏览器里走 DEV_LOGIN 测试模式。
+// 登录 + WebSocket。在 Discord 里走 Embedded App SDK 授权；从 KOOK 机器人发的进入链接（?kt=门票）打开的走门票；
+// 普通浏览器里走 DEV_LOGIN 测试模式。
 import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { setSpeaking, clearSpeaking } from './speaking.js';
 
@@ -27,6 +28,26 @@ export async function listenSpeaking(channelId) {
 }
 
 export const inDiscord = new URLSearchParams(location.search).has('frame_id');
+
+/**
+ * KOOK 进入链接里的门票（?kt=…）：存进这个标签页（刷新还在），再从地址栏去掉（截图、分享地址时不会带出去）。
+ * 返回门票；不是从 KOOK 进来的返回 null。
+ */
+function kookTicket() {
+  const KEY = 'botc-kook-ticket';
+  try {
+    const url = new URL(location.href);
+    const kt = url.searchParams.get('kt');
+    if (kt) {
+      sessionStorage.setItem(KEY, kt);
+      url.searchParams.delete('kt');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+      return kt;
+    }
+    return sessionStorage.getItem(KEY);
+  } catch { return null; }
+}
+export const fromKook = !inDiscord && !!kookTicket();
 
 /** 把进入时卡住/出错的情况报给服务器日志（方便排查"卡在进入界面"）。 */
 export function report(stage, error) {
@@ -102,7 +123,9 @@ export async function login(onStep = () => {}) {
     throw e;
   }
 
-  if (!cfg.devLogin) throw new Error('请在 Discord 里打开这个活动');
+  const kt = !inDiscord && kookTicket();
+  if (kt) { onStep('正在走进这座小镇……'); return { kook: kt }; }
+  if (!cfg.devLogin) throw new Error('请在 Discord 里打开这个活动；在 KOOK 里玩的话，在文字频道发「/血染」领取进入链接');
   // 测试模式：每个浏览器标签页是一个玩家（?name=小明&table=1）
   const q = new URLSearchParams(location.search);
   let id = q.get('id') || sessionStorage.getItem('botc-dev-id'); // ?id=xxx：截图/测试时指定身份

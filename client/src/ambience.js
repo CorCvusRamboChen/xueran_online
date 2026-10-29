@@ -7,6 +7,7 @@
 //   lobby 大厅、night 夜晚、day 白天自由活动、nominate 提名、vote 投票、end 终局；缺哪首就往下找替补。
 // 开关和音量存在本机。
 import { audio } from './world/footsteps.js';
+import { bus, level, onMix } from './mixer.js';
 
 const urls = (glob) => Object.fromEntries(Object.entries(glob).map(([p, u]) => [p.split('/').pop().replace(/\.(mp3|ogg|m4a)$/, ''), u]));
 const MUSIC = urls(import.meta.glob('./assets/music/*.{mp3,ogg,m4a}', { eager: true, query: '?url', import: 'default' }));
@@ -30,6 +31,7 @@ export function setMusic(on) {
 export function onMusic(f) { listeners.add(f); return () => listeners.delete(f); }
 
 const MUSIC_VOL = 0.32;
+const musicVol = () => MUSIC_VOL * level('music');
 const WIND_VOL = 0.22;
 
 // ───────────── 背景音乐：两个 <audio> 轮流，交叉淡化 ─────────────
@@ -51,13 +53,13 @@ function playMusic(url) {
   if (!url || !musicOn) return;
   const el = new Audio(url);
   el.loop = true; el.volume = 0;
-  el.play().then(() => fade(el, MUSIC_VOL, 3000)).catch(() => { pendingUrl = url; });
+  el.play().then(() => fade(el, musicVol(), 3000)).catch(() => { pendingUrl = url; });
   current = { el, url };
 }
 let pendingUrl = null;
 // 浏览器要求先点一下才能放声音：第一次点击时补放
 if (typeof window !== 'undefined') {
-  window.addEventListener('pointerdown', () => { if (pendingUrl && current) { current.el.play().then(() => fade(current.el, MUSIC_VOL, 3000)).catch(() => {}); pendingUrl = null; } startWind(); });
+  window.addEventListener('pointerdown', () => { if (pendingUrl && current) { current.el.play().then(() => fade(current.el, musicVol(), 3000)).catch(() => {}); pendingUrl = null; } startWind(); });
 }
 
 // ───────────── 风雪 ─────────────
@@ -68,8 +70,8 @@ function startWind() {
   if (!ctx || ctx.state !== 'running') return;
   const gain = ctx.createGain(); gain.gain.value = 0;
   const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 16000; filter.Q.value = 0.4;
-  filter.connect(gain).connect(ctx.destination);
-  const inside = ctx.createGain(); inside.gain.value = 0; inside.connect(ctx.destination);
+  filter.connect(gain).connect(bus(ctx, 'ambient'));
+  const inside = ctx.createGain(); inside.gain.value = 0; inside.connect(bus(ctx, 'ambient'));
   wind = { gain, filter, inside };
   if (SFX.wind) loop(ctx, SFX.wind, filter).catch(() => synthWind(ctx, filter));
   else synthWind(ctx, filter);
@@ -120,7 +122,7 @@ function startLake() {
   const ctx = audio();
   if (!ctx || ctx.state !== 'running') return;
   const gain = ctx.createGain(); gain.gain.value = 0;
-  gain.connect(ctx.destination);
+  gain.connect(bus(ctx, 'ambient'));
   lake = { gain };
   if (SFX.lake) {
     // 录音是港口碎浪，滤掉高频、压低一点，像水在冰缝间闷闷地拍
@@ -197,6 +199,9 @@ function apply() {
   if (lake) lake.gain.gain.setTargetAtTime(musicOn && state.wind && !state.indoors ? lakeLevel * 0.35 : 0, audio().currentTime, 0.8);
   playMusic(musicOn ? musicFor(state.stage) : null);
 }
+
+// 拖音量条时，正在放的曲子跟着变（风声、湖水走 Web Audio 总线，自己会变）
+onMix(() => { if (current && !current.el.paused) current.el.volume = musicVol(); });
 
 /** 每次状态变化时调用：stage 是阶段，indoors 是不是在屋里，wind 要不要风声。 */
 export function setAmbience(next) {

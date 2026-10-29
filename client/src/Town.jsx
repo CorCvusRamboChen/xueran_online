@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { toneFilter } from './world/tone.js';
 import { getMap } from '../../src/shared/map.js';
 import { Portrait } from './util.jsx';
-import { useMarks, TAGS, MarkMenu, MarkBadge, LinkLines } from './marks.jsx';
+import { useMarks, TAGS, MarkMenu, MarkBadge, LinkLines, LINKS, addLink, useLinkKind, LinkKinds } from './marks.jsx';
 import { ClockTower, Tree, Lamp, MAP_COLORS as C, INK } from './art/TownArt.jsx';
 import { SCENE_ART } from './art.js';
 
@@ -45,6 +45,19 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
   const allies = new Set((s.self?.allies ?? []).map((a) => a.id));
   const marks = useMarks(s);
   const [menu, setMenu] = useState(null); // { id, x, y }
+  // 左键连线（和镇民面板一样）：没在选人（提名、夜里选人）时，左键依次点两个人连一条线，再点一次起点取消
+  const linkable = !pickable && !s.isST;
+  const [kind] = useLinkKind();
+  const [from, setFrom] = useState(null);
+  const seatOf = (id) => s.players.find((q) => q.id === id)?.seat;
+  useLayoutEffect(() => { if (!linkable) setFrom(null); }, [linkable]); // 开始提名 / 选人时取消连线
+  const tap = (p) => {
+    if (!linkable) { onTap?.(p); return; }
+    if (!from) { setFrom(p.id); return; }
+    if (from === p.id) { setFrom(null); return; }
+    addLink(from, p.id, kind);
+    setFrom(null);
+  };
   const menuPlayer = menu && s.players.find((p) => p.id === menu.id);
   const frameOf = (p) => {
     if (picked.includes(p.id)) return '#f2efe6';
@@ -112,11 +125,19 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
       <LinkLines marks={marks} w={w} h={h} gap={tk * 0.62}
         posOf={(id) => { const i = s.players.findIndex((p) => p.id === id); if (i < 0) return null; const a = rad(i); return { x: ((50 + Rx * Math.cos(a)) / 100) * w, y: ((50 + Ry * Math.sin(a)) / 100) * h }; }} />
       {menuPlayer && <MarkMenu s={s} player={menuPlayer} mark={marks[menu.id]} at={menu} onClose={() => setMenu(null)} />}
+      {linkable && from && (
+        <div className="town-linkbar" role="status">
+          <span>从 <b>{seatOf(from)}号</b> 连「{LINKS[kind].label}」到谁？再点一次 {seatOf(from)}号 取消</span>
+          <LinkKinds />
+          <button type="button" className="tl-cancel" onClick={() => setFrom(null)}>取消</button>
+        </div>
+      )}
       {s.players.map((p, i) => {
         const a = rad(i);
         const can = !pickable || pickable.includes(p.id);
         const cls = [
           'token',
+          linkable && from === p.id && 'link-from',
           !p.alive && 'dead',
           picked.includes(p.id) && 'picked',
           pickable && can && 'pickable',
@@ -131,7 +152,7 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
             type="button"
             className={cls}
             style={{ left: `${50 + Rx * Math.cos(a)}%`, top: `${50 + Ry * Math.sin(a)}%` }}
-            onClick={() => onTap?.(p)}
+            onClick={() => tap(p)}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}
             title={`${p.seat}号 ${p.name}${marks[p.id]?.note ? `\n笔记：${marks[p.id].note}` : ''}\n（右键做标记）`}
           >

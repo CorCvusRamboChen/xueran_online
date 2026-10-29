@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getMap, positionAt, pathLength, SPEED } from '../../src/shared/map.js';
 import { Portrait, serverNow } from './util.jsx';
 import { useMarks, MarkMenu, MarkBadge, TAGS } from './marks.jsx';
+import { CheatSheet, useSheetMode } from './CheatSheet.jsx';
 import town4 from './assets/maps/town-4.json';
 import town6 from './assets/maps/town-6.json';
 
@@ -105,6 +106,7 @@ export function KillDash({ s, target, onArrive, vanish = false }) {
 export function TownMap({ s, onMove, night = false }) {
   const r = s.roam;
   const marks = useMarks(s);
+  const [sheet, setSheet] = useSheetMode(); // 小地图那里换成技能速查表
   const [walkerMenu, setWalkerMenu] = useState(null); // { id, x, y }
   const walkerMenuPlayer = walkerMenu && s.players.find((p) => p.id === walkerMenu.id);
   const ref = useRef(null);
@@ -218,7 +220,7 @@ export function TownMap({ s, onMove, night = false }) {
 
   const local = (e) => { const b = ref.current.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
   const down = (e) => {
-    if (e.target.closest('.minimap')) return;
+    if (e.target.closest('.minimap, .cs, .mm-sheet-btn')) return;
     drag.current = { x: e.clientX, y: e.clientY, moved: false };
     ref.current.setPointerCapture?.(e.pointerId);
   };
@@ -290,7 +292,8 @@ export function TownMap({ s, onMove, night = false }) {
       {!night && <RoomStrip s={s} onGo={(h) => { onMove(h.x + h.w / 2, h.y + h.h / 2); world.current?.follow(); }} />}
       {!night && <AliveStrip s={s} watching={watching} onWatch={watch} />}
 
-      <svg className="minimap" viewBox={`0 0 ${town.w} ${town.h}`} onPointerDown={miniTap} aria-label="小地图">
+      {sheet ? <CheatSheet s={s} onClose={() => setSheet(false)} /> : <button type="button" className="mm-sheet-btn" onClick={() => setSheet(true)} title="把小地图换成技能速查表：所有角色的技能">技能表</button>}
+      <svg className={`minimap ${sheet ? 'hidden' : ''}`} viewBox={`0 0 ${town.w} ${town.h}`} onPointerDown={miniTap} aria-label="小地图">
         <MiniBase town={town} />
         {r.houses.map((h) => <rect key={h.id} x={h.x} y={h.y} width={h.w} height={h.h} fill={h.locked ? '#c9a24a' : '#4f6764'} stroke="#111" strokeWidth="8" />)}
         {s.players.map((p) => r.pos[p.id] && (

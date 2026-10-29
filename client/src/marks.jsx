@@ -17,7 +17,7 @@ export const TAGS = {
 export const LINKS = {
   trust: { label: '信任', color: '#5fb8cf', hint: 'A 信任 B / 互保' },
   sus: { label: '怀疑', color: '#e2b52c', hint: 'A 怀疑 B' },
-  ally: { label: '同伙', color: '#d24a3a', hint: 'A 和 B 可能是一伙的' },
+  ally: { label: '同伙', color: '#db5444', hint: 'A 和 B 可能是一伙的' },
   counter: { label: '对跳', color: '#b06adf', hint: 'A 和 B 声称同一个角色' },
   info: { label: '信息', color: '#9ad08a', hint: 'A 的信息指向 B（查过 / 看到 / 选过）' },
 };
@@ -57,6 +57,31 @@ export function setMark(id, patch) {
 }
 
 export const linksOf = (marks) => marks?._links ?? [];
+
+// 左键连线用的连线类型：镇民面板（小魔典）和广场座位圈共用一个，在哪边切了另一边也跟着变
+let linkKind = 'sus';
+const kindSubs = new Set();
+export function useLinkKind() {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const f = () => bump((x) => x + 1);
+    kindSubs.add(f);
+    return () => kindSubs.delete(f);
+  }, []);
+  return [linkKind, (k) => { linkKind = k; for (const f of kindSubs) f(); }];
+}
+
+/** 连线类型的一排小按钮。 */
+export function LinkKinds({ className = 'mg-kinds' }) {
+  const [kind, setKind] = useLinkKind();
+  return (
+    <div className={className}>
+      {Object.entries(LINKS).map(([id, k]) => (
+        <button key={id} type="button" className={kind === id ? 'on' : ''} style={{ '--c': k.color }} title={k.hint} onClick={(e) => { e.stopPropagation(); setKind(id); }}>{k.label}</button>
+      ))}
+    </div>
+  );
+}
 export function addLink(a, b, kind) {
   if (!a || !b || a === b || !LINKS[kind]) return;
   const list = linksOf(data).filter((l) => !(l.a === a && l.b === b && l.kind === kind));
@@ -141,8 +166,9 @@ export function MarkMenu({ s, player, mark, at, onClose }) {
   const W = 300;
   const x = Math.max(8, Math.min(at.x, window.innerWidth - W - 8));
   const y = Math.max(8, Math.min(at.y - 150, window.innerHeight - 470));
+  // 高度按菜单下面还剩多少地方算，放不下就在菜单里面滚（原来按整屏算，下半截跑到屏幕外、滑不到）
   return (
-    <div className="mark-menu" style={{ left: x, top: y, width: W }} onContextMenu={(e) => e.preventDefault()}>
+    <div className="mark-menu" style={{ left: x, top: y, width: W, maxHeight: window.innerHeight - y - 8 }} onContextMenu={(e) => e.preventDefault()}>
       <div className="mm-title">{player.seat}号 {player.id === s.me ? '你自己' : player.name}</div>
       <div className="mm-tags">
         {Object.entries(TAGS).map(([id, t]) => (

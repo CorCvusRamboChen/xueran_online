@@ -305,6 +305,13 @@ export class Storyteller {
   }
 
   /** 沙巴洛斯反刍：偶尔（每局一两次）把上一夜吃掉的人吐回来，通常是善良玩家；邪恶领先时更常发生。 */
+  /** 醉酒中毒的教父首夜：给一份假的"在场外来者"名单（随机换一两个，有时说没有）。 */
+  fakeOutsidersBMR(p, truthNames) { // eslint-disable-line no-unused-vars
+    const all = Object.keys(ROLES).filter((r) => ROLES[r].script === 'bmr' && ROLES[r].team === 'outsider');
+    const n = Math.max(0, Math.min(all.length, truthNames.length + (this.rng() < 0.5 ? 1 : -1)));
+    return [...all].sort(() => this.rng() - 0.5).slice(0, n);
+  }
+
   shabaRegurgitate(cands) {
     if (!cands.length) return null;
     const b = this.balance();

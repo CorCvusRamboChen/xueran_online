@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CHARACTERS } from '../../src/shared/characters.js';
-import { PEOPLE_ART } from './art.js';
+import { PEOPLE_ART, ROLE_ART } from './art.js';
+import { ROLES } from '../../src/engine/roles.js';
 import { useSpeaking } from './speaking.js';
 
 export const CHAR_BY_ID = Object.fromEntries(CHARACTERS.map((c) => [c.id, c]));
@@ -153,6 +154,48 @@ export function Dialogue({ lines = [], options = [], children, keys = false }) {
   );
 }
 
+const ROLE_BY_NAME = Object.fromEntries(Object.entries(ROLES).map(([id, r]) => [r.name, id]));
+// 魔典的一行（服务器 Game.grimoire() 的格式）：【邪】4号 名字 — 小恶魔（中毒、占卜师的干扰项）
+const GRIM_LINE = /^【(善|邪)】(\d+)号 (.+) — ([^（]+)(?:（(.+)）)?$/;
+const TEAM_COLOR = { townsfolk: 'var(--int)', outsider: 'var(--psy)', minion: 'var(--phy)', demon: 'var(--phy)' };
+
+/** 多行信息：一行一段；魔典的行排成一张表（座位、角色小图、名字、角色、提示标记），一人一行对齐。 */
+function MultiLine({ text }) {
+  const lines = text.split('\n');
+  const out = [];
+  let rows = [];
+  const flush = () => {
+    if (!rows.length) return;
+    out.push(
+      <ol className="grim" key={`g${out.length}`}>
+        {rows.map(([, side, seat, name, roleName, tags]) => {
+          const id = ROLE_BY_NAME[roleName.trim()];
+          return (
+            <li key={seat} className={side === '邪' ? 'evil' : 'good'}>
+              <span className="grim-seat">{seat}</span>
+              <span className="grim-icon">{id && ROLE_ART[id] ? <img src={ROLE_ART[id]} alt="" /> : null}</span>
+              <span className="grim-who">
+                <b style={{ color: TEAM_COLOR[ROLES[id]?.team] ?? 'inherit' }}>{roleName.trim()}</b>
+                <small>{name}{side === '邪' ? ' · 邪恶' : ''}</small>
+              </span>
+              {tags && <span className="grim-tags">{tags.split(/[、，]/).map((t) => <i key={t}>{t}</i>)}</span>}
+            </li>
+          );
+        })}
+      </ol>,
+    );
+    rows = [];
+  };
+  for (const l of lines) {
+    const m = l.match(GRIM_LINE);
+    if (m) { rows.push(m); continue; }
+    flush();
+    if (l.trim()) out.push(<span className="ml-line" key={`l${out.length}`}><Md text={l} /></span>);
+  }
+  flush();
+  return out;
+}
+
 export function Line({ who, color = 'var(--cream)', chip, chipColor, text, flavor, children }) {
   return (
     <p className="line">
@@ -161,7 +204,7 @@ export function Line({ who, color = 'var(--cream)', chip, chipColor, text, flavo
       {who && ' — '}
       {flavor && <span className="flavor">{flavor}</span>}
       {flavor && text && ' '}
-      {text && <span className="said"><Md text={text} /></span>}
+      {text && <span className="said">{text.includes('\n') ? <MultiLine text={text} /> : <Md text={text} />}</span>}
       {children}
     </p>
   );

@@ -196,7 +196,7 @@ test('随机整局模拟不会崩溃且最终分出胜负', () => {
   }
 });
 
-test('管家：主人没举手时，管家的票不算', () => {
+test('管家：主人没举手时，违规的票照算（官方：说书人不替管家把关）', () => {
   // 1 管家 2 小恶魔 3 投毒者 4 共情者 5 厨师
   const g = mk(['butler', 'imp', 'poisoner', 'empath', 'chef']);
   g.startNight();
@@ -204,7 +204,7 @@ test('管家：主人没举手时，管家的票不算', () => {
   g.submitChoice('p3', ['p5']);
   g.resolveNight(); g.dawn();
   g.nominate('p4', 'p2');
-  assert.equal(g.recordVote('p2', ['p1', 'p5']).count, 1, '主人没举手');
+  assert.equal(g.recordVote('p2', ['p1', 'p5']).count, 2, '主人没举手：违规票照算');
   g.nominate('p5', 'p3');
   assert.equal(g.recordVote('p3', ['p1', 'p4']).count, 2, '主人举手了');
 });

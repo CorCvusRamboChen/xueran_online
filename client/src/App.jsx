@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { login, openSocket, report, listenSpeaking } from './connect.js';
+import { createPortal } from 'react-dom';
+import { login, openSocket, report, listenSpeaking, fromKook } from './connect.js';
 import { Town, PaintFilters } from './Town.jsx';
 import { TownMap } from './TownMap.jsx';
 import { DemonDash, DoorKick } from './KillScenes.jsx';
@@ -14,9 +15,10 @@ import { ROLE_ART } from './art.js';
 import { AbilityCard } from './AbilityCard.jsx';
 import { useNarrator, TitleCard, useChecks, SkillCheck, SoundToggles } from './Stage.jsx';
 import { setAmbience } from './ambience.js';
-import { useMarks, TAGS, LINKS, linksOf, addLink, removeLink, MarkMenu, MarkBadge, LinkLines } from './marks.jsx';
+import { useMarks, TAGS, LINKS, linksOf, addLink, removeLink, MarkMenu, MarkBadge, LinkLines, useLinkKind, LinkKinds } from './marks.jsx';
 import { Tutorial, tutEvent } from './Tutorial.jsx';
-import { RoleShowcase, Watchers } from './Lobby.jsx';
+import { Watchers } from './Lobby.jsx';
+import { RoleIndex } from './RoleIndex.jsx';
 import { Replay, KeyInfo } from './replay.jsx';
 import { savedOutfit } from './Wardrobe.jsx';
 import { DISTRIBUTION, ROLES as ROLE_DEFS } from '../../src/engine/roles.js';
@@ -36,6 +38,41 @@ function BoardBar({ n, script }) {
     </div>
   );
 }
+/**
+ * 提名 / 投票时左上角的「票数」小块：还活着几人、拿到几票就上处决台、全场能投几票（活人 + 死人剩下的那一票）。
+ * 点开看细节：哪些死人还有票、处决台上现在几票、下一个人至少要几票才能把他换下来。
+ */
+function VoteStats({ s }) {
+  const [open, setOpen] = useState(false);
+  if (s.phase !== 'day' || !(s.noms || s.vote || s.pendingNom)) return null;
+  const dead = s.players.filter((p) => !p.alive);
+  const ghosts = dead.filter((p) => p.ghostVote);
+  const total = s.aliveCount + ghosts.length;
+  const blockP = s.block && s.players.find((p) => p.id === s.block);
+  const toBeat = Math.max(s.threshold, (s.blockVotes || 0) + 1);
+  return (
+    <div className={`vote-stats ${open ? 'open' : ''}`}>
+      <button type="button" className="vs-chip" onClick={() => setOpen(!open)} title="点开看票数细节">
+        <span>还活着 <b>{s.aliveCount}</b> 人<small>（共 {s.players.length}）</small></span>
+        <span>拿到 <b>{s.threshold}</b> 票就上处决台</span>
+        <span>全场能投 <b>{total}</b> 票{ghosts.length ? <small>（含死人 {ghosts.length} 票）</small> : null}</span>
+        <i>{open ? '▴' : '▾'}</i>
+      </button>
+      {open && (
+        <div className="vs-more">
+          <p>活着 <b>{s.aliveCount}</b> 人，被提名的人要拿到<b>活人数的一半（{s.threshold} 票）</b>才会上处决台。</p>
+          <p>{!dead.length ? '还没有人死。' : <>死了 <b>{dead.length}</b> 人：{ghosts.length ? <>还有票的 <b>{ghosts.length}</b> 人（{ghosts.map((p) => `${p.seat}号`).join('、')}），每人整局只能再投一次</> : '都没有票了'}{dead.length - ghosts.length > 0 && ghosts.length ? `；${dead.length - ghosts.length} 人已经用掉` : ''}。</>}</p>
+          <p>全场最多能投 <b>{total}</b> 票（活人 {s.aliveCount} + 死人余票 {ghosts.length}）。</p>
+          <p>{blockP
+            ? <>处决台上：<b>{blockP.seat}号 {blockP.name}</b>，{s.blockVotes} 票。下一个人要 <b>{toBeat}</b> 票才能换掉他；正好 {s.blockVotes} 票就是平票，谁都不处决。</>
+            : s.blockVotes ? <>现在平票（{s.blockVotes} 票），谁都不处决；下一个人要 <b>{toBeat}</b> 票才能上台。</>
+              : <>处决台还空着：下一个人拿到 <b>{s.threshold}</b> 票就上台。</>}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 import { getMap, pathLength, positionAt, houseAt, SPEED } from '../../src/shared/map.js';
 
 /**
@@ -79,7 +116,7 @@ export default function App() {
   const phaseRef = useRef(null);
   phaseRef.current = s?.phase ?? null;
   const api = useRef(null);
-  const [card, closeCard] = useNarrator(s?.log ?? null);
+  const [card, closeCard] = useNarrator(s?.log ?? null, s?.logEpoch);
   // 说话绿框：订阅大家所在的语音频道（活动开在文字频道时用服务器找到的那个语音频道）
   useEffect(() => { if (s?.voiceChannel) listenSpeaking(s.voiceChannel); }, [s?.voiceChannel]);
 
@@ -149,7 +186,7 @@ export default function App() {
         <p className="splash-note">{status.kind === 'error' ? status.error : status.kind === 'online' ? '正在走进这座小镇……' : step}</p>
         {(slow || status.kind === 'error') && (
           <div className="splash-help">
-            <p>{status.kind === 'error' ? '进不去？' : '等太久了？'}点下面重新进入；还不行就关掉活动再从语音频道打开一次。</p>
+            <p>{status.kind === 'error' ? '进不去？' : '等太久了？'}点下面重新进入；{fromKook ? '还不行就回 KOOK 频道重新领一次进入链接。' : '还不行就关掉活动再从语音频道打开一次。'}</p>
             <button type="button" className="splash-retry" onClick={() => location.reload()}>重新进入</button>
           </div>
         )}
@@ -199,7 +236,7 @@ function Game({ s, act }) {
   const rk = night && me?.ravenkeeper;
   const pickSpec = rk ? { count: 1, options: s.players.map((p) => p.id) }
     : prompt ? { count: prompt.count, options: prompt.options }
-      : mode ? { count: MODES[mode].max ?? 1, options: s.players.map((p) => p.id).filter((id) => mode === 'pull' || id !== s.me) } : null;
+      : mode ? { count: MODES[mode].max ?? 1, options: s.players.map((p) => p.id).filter((id) => mode !== 'pull' || id !== s.me) } : null; // 官方：可以提名自己
 
   const pickKey = `${s.phase}-${s.night}-${s.day}-${mode}-${!!prompt}-${rk}`;
   useEffect(() => { setPicked([]); setPickedRole(null); }, [pickKey]);
@@ -297,7 +334,7 @@ function Game({ s, act }) {
   const town = getMap(s.script);
   const place = night ? (me ? '你的小屋' : '魔典') : roaming ? (myHouse ? myHouse.name : `${town.place.split(' · ')[0]} · 街上`) : town.name;
   const meP = g(s.me);
-  const [check, closeCheck] = useChecks(me?.inbox);
+  const [check, closeCheck] = useChecks(me?.inbox, s.logEpoch);
 
   const items = [
     me && { id: 'role', icon: 'role', label: '身份', dot: me.inbox.length || 0 },
@@ -322,6 +359,7 @@ function Game({ s, act }) {
           <div className="spectator-bar">观战中{s.settings?.spectatorGrimoire ? ' · 你能看到所有人的身份，别在语音里说' : ' · 看不到任何人的身份'}{(s.watchers?.length ?? 0) > 1 ? ` · 观战 ${s.watchers.length} 人` : ''}</div>
         )}
         <BoardBar n={s.players.length} script={s.script} />
+        <VoteStats s={s} />
         {roaming ? (
           <TownMap s={s} onMove={me ? (x, y) => { predictMove(s, x, y); return act('move', { x, y }); } : () => null} />
         ) : dash && night ? (
@@ -369,7 +407,7 @@ function Game({ s, act }) {
           {shown === 'votes' && <KeyInfo votes={s.votes} knives={s.knives} execs={s.execs} g={g} name={name} />}
           {shown === 'roster' && <Roster s={s} onTap={s.isST ? (p) => setSheet(p.id) : null} />}
           {shown === 'roster' && <Watchers s={s} />}
-          {shown === 'roles' && <RoleShowcase compact script={s.script} />}
+          {shown === 'roles' && <RoleIndex s={s} />}
           {shown === 'grim' && s.isST && <StDesk s={s} act={act} name={name} />}
         </div>
       </aside>
@@ -411,7 +449,7 @@ function Center({ s, name, act, me }) {
     return (
       <div className="center-box vote-center">
         <OnBlock s={s} ids={[s.vote.nominee]} label="被提名" />
-        <div className="vc-title">处决 <b>{name(s.vote.nominee)}</b>？<span>需要 {s.threshold} 票</span></div>
+        <div className="vc-title">处决 <b>{name(s.vote.nominee)}</b>？<span>{s.block ? `要 ${Math.max(s.threshold, s.blockVotes + 1)} 票才换下台上的人（${s.blockVotes} 票平票）` : `需要 ${Math.max(s.threshold, (s.blockVotes || 0) + 1)} 票`}</span></div>
         {can
           ? <HandButton s={s} act={act} raised={raised} />
           : me && <span className="center-locked">{raised ? '你举了手 · 已锁定' : locked ? '你没举手 · 已锁定' : '你的幽灵票已用掉，不能投票'}</span>}
@@ -504,11 +542,18 @@ function GossipButton({ s, act }) {
   const [open, setOpen] = useState(false);
   const me = s.self;
   if (s.script !== 'bmr' || s.phase !== 'day' || !me?.alive || me.gossipDone) return null;
-  if (open) return <GossipForm s={s} act={act} onClose={() => setOpen(false)} />;
+  // 表单开成屏幕中间的弹窗（以前塞在右上角的操作面板里展开，面板高度不够，大半被挡住，看起来像没弹出来）
   return (
     <div className="btn-row gossip-row">
       <Btn kind={me.role?.id === 'gossip' ? 'primary' : 'secondary'} onClick={() => setOpen(true)}
         title="谁都可以公开发表声明；只有真造谣者的声明为真时，今晚会有人死亡。每人每天一次。">发表声明（造谣者）</Btn>
+      {open && createPortal(
+        <div className="sheet-bg gossip-bg" onClick={() => setOpen(false)} role="presentation">
+          <div className="gossip-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="发表声明">
+            <h3>发表声明</h3>
+            <GossipForm s={s} act={act} onClose={() => setOpen(false)} />
+          </div>
+        </div>, document.body)}
     </div>
   );
 }
@@ -516,7 +561,7 @@ function GossipButton({ s, act }) {
 /** 猎手按钮（暗流涌动）：白天任何时候谁都能声称猎手开一枪，每人每局一次；真猎手自己看到的是醒目的主按钮。 */
 function SlayButton({ s, setMode }) {
   const me = s.self;
-  if (s.script === 'bmr' || s.phase !== 'day' || !me?.alive || s.players.find((p) => p.id === s.me)?.shot) return null;
+  if (s.script === 'bmr' || s.phase !== 'day' || !me || s.players.find((p) => p.id === s.me)?.shot) return null; // 死人也能声称（没有效果）
   return (
     <div className="btn-row gossip-row">
       <Btn kind={me.role?.id === 'slayer' ? 'primary' : 'secondary'} onClick={() => setMode('slay')}
@@ -630,16 +675,16 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
     const hint = rk ? '你在今晚死去了。选一个人，乌鸦会告诉你他的身份。'
       : [pickSpec.count ? `选择 ${cnNum(pickSpec.count)} 名玩家` : '', needRole ? (pickSpec.count ? '，再猜一个角色' : '选择一个角色') : '', '。', prompt?.optional ? '也可以今晚不用。' : ''].join('');
     return (
-      <Panel title={v.who} tone={teamTone(roleId)} extra={<Check color={v.color}>{v.skill}</Check>}>
+      <Panel title={v.who} tone={teamTone(roleId)} className="choose-pnl" extra={<Check color={v.color}>{v.skill}</Check>}>
         <p className="flavor-line">「{rk ? FLAVOR.ravenkeeper.wake : v.flavor?.wake}」</p>
         <p className="lead">{hint}</p>
-        {roleId === 'imp' && <p className="muted">也可以选你自己：你会死去，一个活着的爪牙接任小恶魔（官方规则的"自杀传位"）。选一名已经死了的玩家就是空刀：今晚没人死。</p>}
+        {roleId === 'imp' && <p className="muted">也可以选你自己：你会死去，一个活着的爪牙接任小恶魔（官方规则的"自杀传位"）。想空刀就选一名已经死了的玩家：今晚没人死。</p>}
         {roleId === 'po' && pickSpec.count === 3 && <p className="muted">你上次没有选人：今晚要选三名玩家。</p>}
         {pickSpec.count > 0 && <Picker s={s} options={pickSpec.options} picked={picked} onTap={onTap} />}
         {needRole && <RolePicker ids={prompt.roleOptions} value={pickedRole} onPick={setPickedRole} />}
         <div className="btn-row">
           <Btn kind="primary" disabled={!ready} onClick={confirm}>确认</Btn>
-          {prompt?.optional && <Btn kind="ghost" onClick={skip}>今晚不用</Btn>}
+          {prompt && (prompt.optional || prompt.options.length < prompt.count) && <Btn kind="ghost" onClick={skip}>{prompt.optional ? '今晚不用' : '没得选，跳过'}</Btn>}
         </div>
       </Panel>
     );
@@ -1127,7 +1172,7 @@ function Roster({ s, onTap }) {
     ro.observe(ref.current);
     return () => ro.disconnect();
   }, []);
-  const [kind, setKind] = useState('sus');
+  const [kind] = useLinkKind(); // 和广场座位圈共用
   const [from, setFrom] = useState(null); // 连线的起点
   const [menu, setMenu] = useState(null); // { id, x, y }
   const hold = useRef(null);              // 手机长按
@@ -1153,13 +1198,7 @@ function Roster({ s, onTap }) {
   const notes = s.players.filter((p) => marks[p.id]?.note);
   return (
     <div className="mini-grim">
-      {!onTap && (
-        <div className="mg-kinds">
-          {Object.entries(LINKS).map(([id, k]) => (
-            <button key={id} type="button" className={kind === id ? 'on' : ''} style={{ '--c': k.color }} title={k.hint} onClick={() => setKind(id)}>{k.label}</button>
-          ))}
-        </div>
-      )}
+      {!onTap && <LinkKinds />}
       <p className="mg-hint muted">{onTap ? '点一个人看详情。' : from ? `从 ${seat(from)}号 连「${LINKS[kind].label}」到谁？（再点一次 ${seat(from)}号 取消）` : '左键依次点两个人连线；右键（手机长按）一个人打标签、猜角色、写笔记。'}</p>
       <div className="mg-circle" ref={ref} style={{ height: w }}>
         <LinkLines marks={marks} posOf={posOf} w={w} h={w} gap={tk * 0.62} />

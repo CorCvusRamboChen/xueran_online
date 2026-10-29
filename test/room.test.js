@@ -5,6 +5,9 @@ import { Room } from '../src/server/room.js';
 import { ROLES, isEvilRole as isEvil } from '../src/engine/roles.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// 按真实时间等（Windows 上 setTimeout 最短约 15 毫秒，按次数数的等待会比想的长很多或短很多）。
+// 读档后服务器故意留 3–5 秒缓冲再接着走，等的上限要比这个长。
+const until = async (cond, ms = 8000) => { const end = Date.now() + ms; while (!cond() && Date.now() < end) await sleep(5); };
 const FAST = { chooseSeconds: 0.05, voteSeconds: 0.002, voteCountdown: 0.005, pauseMs: 5, killSceneMs: 0 };
 
 function mockVoice() {
@@ -312,6 +315,18 @@ async function reboot(room, voice) {
   return next;
 }
 
+test('房间编号 logEpoch：重启读档后不变；新建的房间不一样（客户端靠它重新对齐日志编号，不然旁白不弹也不念）', async () => {
+  const { room, voice } = setup('auto');
+  await room.act('u1', 'join');
+  const epoch = room.viewFor('u1').logEpoch;
+  assert.ok(epoch, '视图里带着房间编号');
+  const r2 = await reboot(room, voice);
+  assert.equal(r2.viewFor('u1').logEpoch, epoch, '读档后编号不变：已经看过的旁白不会重放');
+  const fresh = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice });
+  assert.notEqual(fresh.epoch, epoch, '清掉重建的房间换了编号：logSeq 从 0 重数，客户端要重新对齐');
+  await r2.teardown(); await fresh.teardown();
+});
+
 test('存档读档：夜里重启后接着结算，信息和日志都在；终局有复盘时间线', async () => {
   const { room, voice } = setup('auto');
   await room.act('u1', 'join');
@@ -327,7 +342,7 @@ test('存档读档：夜里重启后接着结算，信息和日志都在；终�
   assert.ok(r2.log.length > logLen, '恢复时发了一条公告');
   assert.equal(r2.viewFor('u2').phase, 'night');
   await untilDay(r2);
-  for (let k = 0; k < 100 && r2.game.phase === 'night'; k++) await sleep(3);
+  await until(() => r2.game.phase !== 'night');
   assert.ok(r2.game.phase === 'day' || r2.game.winner, '读档后夜晚照常结算到天亮');
 
   // 一直打到结束，看复盘
@@ -355,9 +370,9 @@ test('存档读档：自由活动中和投票中途重启都能接着走', async
   const r2 = await reboot(room, voice);
   assert.ok(r2.roam);
   assert.equal(r2.roam.pos.size, r2.game.players.length);
-  for (let k = 0; k < 400 && r2.roam; k++) await sleep(3);
+  await until(() => !r2.roam);
   assert.equal(r2.roam, null, '读档后自由活动到点结束');
-  for (let k = 0; k < 200 && !r2.noms; k++) await sleep(3);
+  await until(() => r2.noms);
   assert.ok(r2.noms, '集合后开放提名');
 
   // 投票中途重启：指针接着转，投完照常记票
@@ -370,7 +385,7 @@ test('存档读档：自由活动中和投票中途重启都能接着走', async
   for (let k = 0; k < 50 && (!r2.vote || r2.vote.idx < 1); k++) await sleep(1);
   const r3 = await reboot(r2, voice);
   assert.ok(r3.vote, '投票状态读回来了');
-  for (let k = 0; k < 400 && r3.vote; k++) await sleep(3);
+  await until(() => !r3.vote);
   assert.equal(r3.vote, null, '投票读档后转完');
   assert.ok(r3.game.timeline.some((e) => e.kind === 'vote'), '投票记进复盘');
   await r3.teardown();
@@ -405,19 +420,19 @@ test('新手教程：固定身份，共情者得知 1 个邪恶；提名 2 号�
   const g = room.game;
   assert.deepEqual(g.players.map((p) => p.role), ['empath', 'imp', 'washerwoman', 'chef', 'poisoner', 'monk', 'soldier']);
   assert.ok(room.viewFor('me').tutorial);
-  for (let k = 0; k < 400 && g.phase === 'night'; k++) await sleep(5);
-  for (let k = 0; k < 400 && !room.roam; k++) await sleep(10);
+  await until(() => g.phase !== 'night');
+  await until(() => room.roam);
   assert.match(room.inbox.get('me').map((m) => m.text).join('\n'), /\*\*1\*\* 名/, '共情者得知两侧有 1 个邪恶');
   assert.ok(g.isPoisoned(g.get('p4') ?? g.players[3]), '投毒者毒了厨师');
   assert.equal(room.roam.until, null, '自由活动不限时');
   await room.act('me', 'roamVote', { yes: true });
   assert.equal(room.roam, null, '只有一个真人，自己同意就集合');
-  for (let k = 0; k < 200 && !room.noms; k++) await sleep(5);
+  await until(() => room.noms);
   await room.act('me', 'nominate', { target: g.players[1].id });
   await room.act('me', 'nomDone');
-  for (let k = 0; k < 400 && !room.vote; k++) await sleep(5);
+  await until(() => room.vote);
   await room.act('me', 'hand', { up: true });
-  for (let k = 0; k < 600 && !room.ended; k++) await sleep(5);
+  await until(() => room.ended);
   assert.equal(g.winner, 'good');
   await room.teardown();
 });
@@ -1032,4 +1047,54 @@ test('推荐预设：按人数挑，官方的权重高；这个人数没有就�
   for (let k = 0; k < 600; k++) { const p = pickPreset('tb', 8, rnd); counts[p.official ? 'off' : 'other'] = (counts[p.official ? 'off' : 'other'] ?? 0) + 1; assert.equal(p.roles.length, 8); }
   assert.ok(counts.off > 0);
   assert.equal(pickPreset('tb', 99), null);
+});
+
+test('敲门：在门口松开方向键、原地挪一下不算走开，敲门一直都在；真走远了才取消', async () => {
+  const { room } = setup('auto');
+  for (const id of ['u2', 'u3']) room.users.set(id, { id, name: id, avatar: null });
+  await room.act('u1', 'join'); await room.act('u2', 'join'); await room.act('u3', 'join');
+  await room.act('u1', 'addBots', { count: 4 });
+  await room.act('u1', 'start');
+  await untilDay(room);
+  for (let k = 0; k < 100 && room.game.phase === 'night'; k++) await sleep(3);
+  if (room.ended) return;
+  for (let k = 0; k < 50 && !room.roam; k++) await sleep(2);
+  const tavern = room.viewFor('u2').roam.houses.find((h) => h.id === 'tavern');
+  const inside = { x: tavern.x + 60, y: tavern.y + 60 };
+  await room.act('u2', 'move', inside);
+  for (let k = 0; k < 2000 && room.viewFor('u2').roam.myHouse !== 'tavern'; k++) await sleep(5);
+  await room.act('u2', 'lock', { house: 'tavern', locked: true });
+  await room.act('u3', 'move', inside);
+  const st = room.roam.state.get('tavern');
+  assert.ok(st.knocks.has('u3'), '走向锁着的门：敲门');
+  // 到门口后松开方向键：客户端发一次「停在原地」，还有在门口挪一小步
+  for (let k = 0; k < 400 && room.roam.pos.get('u3') && Date.now() < room.roam.pos.get('u3').start + room.roam.pos.get('u3').dur; k++) await sleep(5);
+  const here = room.posNow('u3');
+  await room.act('u3', 'move', here);
+  assert.ok(st.knocks.has('u3'), '停在门口：敲门还在');
+  await room.act('u3', 'move', { x: here.x + 20, y: here.y });
+  assert.ok(st.knocks.has('u3'), '门口挪一步：敲门还在');
+  await room.act('u2', 'knock', { house: 'tavern', who: 'u3', yes: true });
+  for (let k = 0; k < 2000 && !st.ids.has('u3'); k++) await sleep(5);
+  assert.ok(st.ids.has('u3'), '放他进来：真的进来了');
+  await room.teardown();
+});
+
+test('疯子（7 人及以上）：界面上和真恶魔一样看得到"爪牙"（红框、名单）和 3 张伪装；点「告诉爪牙」不会报错露馅', async () => {
+  const { room } = setup('auto');
+  await room.act('u1', 'join'); await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 5 });
+  await room.act('u1', 'settings', { script: 'bmr' });
+  await room.act('u1', 'assignRole', { player: 'u2', role: 'lunatic' });
+  await room.act('u1', 'start');
+  const self = () => room.viewFor('u2').self;
+  for (let k = 0; k < 400 && !self()?.allies; k++) await sleep(5);
+  const minions = room.game.players.filter((p) => ROLES[p.role].team === 'minion').length;
+  assert.equal(self().allies.length, minions, '爪牙人数对得上');
+  assert.ok(self().allies.every((a) => a.team === '爪牙' && a.id !== 'u2'));
+  assert.equal(self().bluffs.length, 3, '3 张伪装');
+  assert.equal(self().bluffsMine, true);
+  await room.act('u2', 'shareBluffs');
+  assert.equal(self().bluffsShared, true, '显示已经告诉爪牙');
+  await room.teardown();
 });

@@ -2,7 +2,7 @@
 // 有的步骤看状态就能判断做没做（走进房子、锁门、提名……），有的要界面发事件（翻身份牌、打开日志）。
 // 练习局的剧本见 src/server/tutorial.js：你是共情者，2 号老格是恶魔，7 号汉娜是士兵。
 import { useEffect, useState } from 'react';
-import { TUT_DEMOS } from './TutorialIntro.jsx';
+import { TUT_DEMOS } from './TutorialDemos.jsx';
 
 /** 界面上发生了教程关心的事：tutEvent('flip') / tutEvent('journal')。 */
 export const tutEvent = (name) => window.dispatchEvent(new CustomEvent('botc-tut', { detail: name }));
@@ -10,7 +10,7 @@ export const tutEvent = (name) => window.dispatchEvent(new CustomEvent('botc-tut
 const STEPS = [
   {
     id: 'welcome', manual: true, title: '欢迎来到钟楼镇',
-    text: '这是一局只有你和 6 个机器人的练习局。镇上藏着一个恶魔和他的爪牙（邪恶阵营），其余的人是好人（善良阵营）。好人要在白天投票处决恶魔；恶魔每晚杀一个人，杀到只剩两个人就赢了。',
+    text: '开场动画里的那几个人都在：你坐 1 号，是好人；老格和汉娜就坐在你两边。镇上藏着一个恶魔和它的帮手。跟着提示走一遍：看身份、收线索、白天私聊、提名、投票，把恶魔找出来。',
   },
   {
     id: 'flip', demo: 'flip', title: '先看看你是谁', target: '.idcard',

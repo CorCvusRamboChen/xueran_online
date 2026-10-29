@@ -150,6 +150,17 @@ export const BMR_METHODS = {
   // ───────────────────────── 状态查询 ─────────────────────────
   evilOf(p) { return p.evil ?? isEvilRole(p.role); },
   visAlive(p) { return p.alive && !p.apparentDead; },
+  /**
+   * 房规 lunaticGhost（默认关，官方规则是"死了就失去能力"，死了的疯子不再醒）：
+   * 疯子以为自己是僵怖、已经死过一次：在他看来这就是僵怖的"假死"，之后没人死的夜里照样叫醒他选人（选了也没效果，
+   * 真恶魔照常知道他选了谁），维持假象；死后再被处决一次（他以为的"第二次死亡"）才不再叫醒。他是真的死了，不算活人。
+   */
+  ghostLunatic(p) { return !!p && p.role === 'lunatic' && !p.alive && !!p.lunaticGhost; },
+  /** 第一次"死亡"时私下告诉僵怖（或以为自己是僵怖的疯子）：你还在场。白天死的等入夜再说。 */
+  zombuulNote(p, messages) {
+    const m = { playerId: p.id, text: '你第一次死亡了——但僵怖并没有真的死：大家看到你死了，你仍在场。之后每个白天没人死亡的夜里，你照样醒来杀人；再死一次才是真的死亡。' };
+    if (this.phase === 'night') messages.push(m); else (this.evilMessages ??= []).push(m);
+  },
 
   /** 醉酒或中毒（能力失效）。循环醉酒时一起生效。 */
   bmrBroken(p, seen = new Set()) {
@@ -200,7 +211,7 @@ export const BMR_METHODS = {
   /** 尝试杀死 p：先看各种免死，再看弄臣、僵怖。返回 died / saved / fake（僵怖假死）/ already。 */
   tryKill(p, cause, messages = []) {
     if (!p || !p.alive) return 'already';
-    if (p.apparentDead && cause !== 'execution') return 'already'; // 被当作死亡的僵怖：死人不会再死
+    // 被当作死亡的僵怖第二次死亡（不论什么原因：处决、刺客、教父、月之子……）就真的死了（官方）
     const prot = this.protection(p, cause);
     if (prot) { this.record('st', `${this.tag(p.id)} 因${prot}没有死（${cause}）`); return 'saved'; }
     if (cause === 'execution' && !this.evilOf(p)) {
@@ -217,6 +228,7 @@ export const BMR_METHODS = {
       if (this.phase === 'night') this.nightDeaths.push(p.id);
       else this.diedToday = true;
       this.record('death', `${this.tag(p.id)} 第一次死亡——僵怖仍然活着，但被当作死亡`);
+      this.zombuulNote(p, messages);
       return 'fake';
     }
     this.bmrDie(p, cause, messages);
@@ -239,6 +251,11 @@ export const BMR_METHODS = {
     this.log.push(`${this.name(p.id)} 死亡（${cause}）`);
     this.record('death', `${this.tag(p.id)} ${why}`);
     if (DEMON_ROLES.has(p.role) && cause === 'execution') this.demonExecuted = true;
+    if (this.lunaticGhost && p.role === 'lunatic' && p.shownRole === 'zombuul' && !p.lunaticGhostUsed) {
+      p.lunaticGhost = true; p.lunaticGhostUsed = true;
+      this.record('st', `疯子 ${this.tag(p.id)} 以为自己是僵怖：在他看来这是"假死"，之后没人死的夜里照样叫醒他（选了也没效果）`);
+      this.zombuulNote(p, messages);
+    }
     // 月之子得知自己死亡：要公开选一名存活玩家
     if (p.role === 'moonchild') this.pendingMoonchild = p.id;
     // 祖母：孙子被恶魔杀死，祖母一起死（她自己清醒时）
@@ -250,7 +267,7 @@ export const BMR_METHODS = {
 
   revive(p, why) {
     if (!p || p.alive) return;
-    p.alive = true; p.ghostVote = true; p.apparentDead = false;
+    p.alive = true; p.ghostVote = true; p.apparentDead = false; p.lunaticGhost = false;
     delete this.used[p.id];
     this.nightRevived.push(p.id);
     this.record('death', `${this.tag(p.id)} 复活了（${why}）`);
@@ -283,6 +300,8 @@ export const BMR_METHODS = {
         const fake = sample(this.players.filter((q) => q.id !== lunatic.id), minions.length, this.rng);
         const fakeBluffs = pickBluffsBMR(new Set(['lunatic']), this.rng); // 和真恶魔拿到的同一个样子，疯子看不出破绽
         say(lunatic, `你的爪牙：${fake.map((x) => `**${this.name(x.id)}**`).join('、')}。\n不在场的角色（可用来伪装）：${fakeBluffs.map((r) => ROLES[r].name).join('、')}。`);
+        // 界面上也要和真恶魔一模一样：座位圈上"爪牙"的红框、爪牙名单、3 张伪装卡（见 room.js 的 self 视图）
+        this.lunaticFake = { id: lunatic.id, allies: fake.map((x) => x.id), bluffs: fakeBluffs, shared: false };
         this.record('info', `疯子 ${this.tag(lunatic.id)} 以为自己是${ROLES[lunatic.shownRole].name}，拿到的"爪牙"：${fake.map((x) => this.name(x.id)).join('、')}`);
       }
       say(demon, `你的爪牙：${minions.map((x) => `**${this.name(x.id)}**`).join('、')}。\n不在场的角色（可用来伪装）：${this.bluffs.map((r) => ROLES[r].name).join('、')}。`);
@@ -299,8 +318,8 @@ export const BMR_METHODS = {
     const first = this.night === 1;
     const out = [];
     const anyDead = this.players.some((q) => !this.visAlive(q));
-    const lunatic = this.players.find((q) => q.role === 'lunatic' && q.alive);
-    for (const p of this.alive()) {
+    const lunatic = this.players.find((q) => q.role === 'lunatic' && (q.alive || this.ghostLunatic(q)));
+    for (const p of [...this.alive(), ...this.players.filter((q) => this.ghostLunatic(q))]) {
       if (p.apparentDead && p.role !== 'zombuul') continue;
       const role = this.actsAs(p);
       const spec = ROLES[role].choose;
@@ -327,6 +346,7 @@ export const BMR_METHODS = {
       const waiting = DEMON_ROLES.has(p.role) && lunatic && lunatic.id !== p.id && !this.choices[lunatic.id] && this.lunaticActs(lunatic);
       out.push({ playerId: p.id, role, count, options, optional, pickRole: !!spec.role, roleOptions: spec.role ? rolesOf('bmr') : null, waiting: !!waiting });
     }
+    if (this.midNight) return out.filter((x) => x.playerId === this.midNight.revived).map((x) => ({ ...x, waiting: false }));
     return out;
   },
   lunaticActs(l) {
@@ -341,7 +361,10 @@ export const BMR_METHODS = {
     const pr = this.nightPromptsBMR().find((x) => x.playerId === playerId);
     if (!pr) throw new Error('你今晚不需要选择');
     if (pr.waiting) throw new Error('还要等一会儿');
-    const skip = targets.length === 0 && pr.optional && !(pr.pickRole && extra.role);
+    // 只有能力写着"可以"的（每局一次的侍臣、教授、刺客，没蓄力的珀）才能今晚不用；其余都是"你要选择"（官方），不能空过
+    const cantPick = pr.options.length < pr.count; // 可选的人不够（比如活人太少）：只能不选
+    if (targets.length === 0 && !pr.optional && !cantPick && !(pr.pickRole && extra.role)) throw new Error(pr.role === 'po' ? '上次没选人：这次必须选三名玩家' : `需要选择 ${pr.count} 名玩家`);
+    const skip = targets.length === 0 && (pr.optional || cantPick) && !(pr.pickRole && extra.role);
     if (!skip) {
       if (targets.length !== pr.count || new Set(targets).size !== targets.length) throw new Error(`需要选择 ${pr.count} 名不同的玩家`);
       if (!targets.every((t) => pr.options.includes(t))) throw new Error('选择了不可选的玩家');
@@ -386,16 +409,26 @@ export const BMR_METHODS = {
 
   choiceOf(p) { const c = this.choices[p.id]; return c ? { targets: (c.targets ?? []).map((id) => this.get(id)), role: c.role ?? null } : null; },
 
+  /**
+   * 夜晚结算。夜里有人被复活（教授、沙巴洛斯反刍），而他的角色在夜晚顺序里还没轮到：官方是当晚照常唤醒他行动
+   * （中毒醉酒也照样醒，只是能力不生效）。这时结算停在这一步，返回 { pause: 他的 id }；服务器让他选完后再调一次
+   * resolveNight()，从下一步接着结算（this.midNight 记着停在哪、已经攒下的信息、今晚谁醒过）。
+   */
   resolveNightBMR() {
-    const messages = [];
+    const mid = this.midNight ?? null;
+    this.midNight = null;
+    const messages = mid?.messages ?? [];
     const say = (p, text) => messages.push({ playerId: p.id, text });
     const first = this.night === 1;
     const prompted = new Set(this.nightPromptsBMR().map((x) => x.playerId));
-    const live = (role) => this.players.filter((q) => q.role === role && q.alive && !q.apparentDead);
+    const live = (role) => this.players.filter((q) => q.role === role && ((q.alive && !q.apparentDead) || this.ghostLunatic(q)));
     const broken = (p) => this.bmrBroken(p);
-    this.pendingGoonNews = null;
+    if (mid) { for (const id of mid.woke ?? []) this.wokeTonight.add(id); } else this.pendingGoonNews = null;
+    const steps = first ? FIRST_STEPS : OTHER_STEPS;
 
-    for (const step of first ? FIRST_STEPS : OTHER_STEPS) {
+    for (let i = mid?.step ?? 0; i < steps.length; i++) {
+      const step = steps[i];
+      const revivedBefore = this.nightRevived.length;
       switch (step) {
         case 'sailor': for (const p of live('sailor')) {
           this.wokeTonight.add(p.id);
@@ -434,8 +467,9 @@ export const BMR_METHODS = {
         } break;
         case 'devilsadvocate': for (const p of live('devilsadvocate')) {
           this.wokeTonight.add(p.id);
-          const t = this.choiceOf(p)?.targets[0]; if (!t) break;
-          this.lastPick[p.id] = t.id;
+          const t = this.choiceOf(p)?.targets[0];
+          this.lastPick[p.id] = t?.id ?? null; // 今晚没选：下一晚不受"不能和上一晚相同"限制
+          if (!t) break;
           this.goonCheck(p, t);
           this.fx = this.fx.filter((f) => !(f.kind === 'exeSafe' && f.source === p.id));
           if (!broken(p)) this.addFx('exeSafe', t.id, p.id, this.night, '魔鬼代言人');
@@ -449,8 +483,9 @@ export const BMR_METHODS = {
         } break;
         case 'exorcist': for (const p of live('exorcist')) {
           this.wokeTonight.add(p.id);
-          const t = this.choiceOf(p)?.targets[0]; if (!t) break;
-          this.lastPick[p.id] = t.id;
+          const t = this.choiceOf(p)?.targets[0];
+          this.lastPick[p.id] = t?.id ?? null;
+          if (!t) break;
           this.goonCheck(p, t);
           if (broken(p) || !DEMON_ROLES.has(t.role) || !t.alive) break;
           this.blocked = t.id;
@@ -476,18 +511,19 @@ export const BMR_METHODS = {
           // 普卡醉酒中毒：链条冻结（上一个中毒者今晚不死，也不换人）
           if (broken(p)) break;
           // 选完之后，上一个中毒者死亡并恢复健康（被保护就只恢复健康）
+          // 官方：上一个中毒者"死亡，然后恢复健康"——死的那一刻还中着毒（被毒的弄臣、水手救不了自己）
           if (prev) {
-            if (prev.id !== fresh?.id) this.fx = this.fx.filter((x) => !(x.kind === 'poison' && x.source === p.id && x.target === prev.id));
             this.tryKill(prev, 'demon', messages);
+            if (prev.id !== fresh?.id) this.fx = this.fx.filter((x) => !(x.kind === 'poison' && x.source === p.id && x.target === prev.id));
           }
-          this.pukkaVictim = fresh && fresh.alive ? fresh.id : null;
+          this.pukkaVictim = fresh?.id ?? null; // 毒到死人也记下：下次轮到普卡时照样把毒清掉（不然被复活后永久中毒）
         } break;
         case 'shabaloth': for (const p of live('shabaloth')) {
           // 反刍：上一夜被选过、现在死了的人之一（说书人决定）
           if (!broken(p)) {
             const cands = this.shabaLast.map((id) => this.get(id)).filter((q) => q && !q.alive);
             const back = this.st.shabaRegurgitate(cands);
-            if (back) this.revive(back, '沙巴洛斯反刍');
+            if (back) { this.revive(back, '沙巴洛斯反刍'); if (back.role === 'grandmother') this.grandmotherInfo(back, say); }
           }
           if (this.blocked === p.id) { this.shabaLast = []; break; }
           this.wokeTonight.add(p.id);
@@ -513,7 +549,8 @@ export const BMR_METHODS = {
         } break;
         case 'godfatherInfo': for (const p of live('godfather')) {
           this.wokeTonight.add(p.id);
-          const outs = this.players.filter((q) => team(q) === 'outsider').map((q) => ROLES[q.role].name);
+          let outs = this.players.filter((q) => team(q) === 'outsider').map((q) => ROLES[q.role].name);
+          if (broken(p)) outs = this.st.fakeOutsidersBMR(p, outs).map((r) => ROLES[r].name);
           say(p, outs.length ? `在场的外来者：**${outs.join('、')}**。` : '场上**没有**外来者。');
         } break;
         case 'godfather': for (const p of live('godfather')) {
@@ -527,8 +564,9 @@ export const BMR_METHODS = {
           if (!prompted.has(p.id)) break;
           this.wokeTonight.add(p.id);
           const t = this.choiceOf(p)?.targets[0]; if (!t) break;
+          if (t.alive) { this.record('st', `教授选的 ${this.tag(t.id)} 已经活着（刚被反刍）——不算用掉，以后还能用`); break; }
           this.used[p.id] = true;
-          if (broken(p) || t.alive || team(t) !== 'townsfolk') { this.record('st', `教授选了 ${this.tag(t.id)}——没有复活`); break; }
+          if (broken(p) || team(t) !== 'townsfolk') { this.record('st', `教授选了 ${this.tag(t.id)}——没有复活`); break; }
           this.revive(t, '教授');
           if (t.role === 'grandmother') this.grandmotherInfo(t, say);
         } break;
@@ -564,6 +602,7 @@ export const BMR_METHODS = {
         } break;
         default: break;
       }
+      if (this.midNightCheck(steps, i, revivedBefore, messages)) return { messages: [], ravenkeeper: null, pause: this.midNight.revived };
     }
     // 莽夫换了阵营：告诉他
     if (this.pendingGoonNews) {
@@ -574,6 +613,24 @@ export const BMR_METHODS = {
     this.lastExecuted = null;
     this.checkWinner();
     return { messages, ravenkeeper: null };
+  },
+
+  /**
+   * 第 i 步结算完：这一步里被复活的人（nightRevived 里 from 之后的）有没有人的角色排在后面、今晚还要选人？
+   * 有就记下停在哪（this.midNight），返回 true。
+   */
+  midNightCheck(steps, i, from, messages) {
+    for (const id of this.nightRevived.slice(from)) {
+      const p = this.get(id);
+      if (!p?.alive || this.choices[id]) continue;
+      const role = this.actsAs(p);
+      if (!steps.slice(i + 1).includes(role)) continue;
+      if (!this.nightPromptsBMR().some((x) => x.playerId === id)) continue;
+      this.midNight = { step: i + 1, revived: id, messages, woke: [...this.wokeTonight] };
+      this.record('st', `${this.tag(id)} 被复活了，他的角色在今晚的顺序里还没轮到：唤醒他行动`);
+      return true;
+    }
+    return false;
   },
 
   /** 祖母首夜（或被复活后）得知孙子。 */
@@ -658,6 +715,7 @@ export const BMR_METHODS = {
   /** 月之子得知自己死亡后，公开选一名存活玩家。阵营看选人这一刻。 */
   moonchildChoose(uid, targetId) {
     if (this.pendingMoonchild !== uid) throw new Error('现在不需要你选人');
+    if (this.phase !== 'day') throw new Error('天亮以后再选');
     const t = this.get(targetId);
     if (!t || !this.visAlive(t)) throw new Error('要选一名存活的玩家');
     this.pendingMoonchild = null;
@@ -670,6 +728,10 @@ export const BMR_METHODS = {
     this.executedToday = true;
     this.lastExecuted = p.id;
     this.log.push(`${this.name(p.id)} 被处决`);
+    if (this.ghostLunatic(p)) {
+      p.lunaticGhost = false;
+      this.record('death', `已经死过的疯子 ${this.tag(p.id)} 又被处决：在他看来僵怖这次真的死了，之后不再叫醒他`);
+    }
     const res = this.tryKill(p, 'execution');
     if (res === 'died' && team(p) === 'minion') {
       const min = this.players.find((q) => q.role === 'minstrel' && q.alive && !this.bmrBroken(q));
@@ -687,6 +749,11 @@ export const BMR_METHODS = {
 
   endDayBMR() {
     let executed = null; let result = null;
+    if (this.pendingMoonchild) { // 月之子拖到黄昏还没选：替他随机选一名存活玩家
+      const opts = this.players.filter((q) => this.visAlive(q) && q.id !== this.pendingMoonchild);
+      if (opts.length) this.moonchildChoose(this.pendingMoonchild, pickOne(opts, this.rng).id);
+      else this.pendingMoonchild = null;
+    }
     if (!this.executedToday && this.block) {
       executed = this.block;
       result = this.executeBMR(this.get(executed));

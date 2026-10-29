@@ -1,6 +1,7 @@
 // 后端：给 Activity 换 OAuth token、用 WebSocket 同步游戏状态、托管前端页面、驱动机器人管语音。
 import 'dotenv/config';
 import http from 'node:http';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
 import express from 'express';
@@ -11,22 +12,64 @@ import { VoiceHub } from './voice.js';
 import { ttsHandler, ttsEnabled } from './tts.js';
 import { saveSoon, flushAll, loadAll, archiveGame, listGames, getGame } from './store.js';
 import { startTutorial } from './tutorial.js';
+import { KookBot, KOOK_PREFIX } from './kook.js';
+import { verifyTicket } from './tickets.js';
+import { partnerPlatform } from './partner.js';
+import { timingSafeEqual } from 'node:crypto';
 
 const { DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_TOKEN } = process.env;
 const PORT = Number(process.env.PORT ?? 3001);
 const DEV_LOGIN = process.env.DEV_LOGIN === '1';   // 允许在普通浏览器里不登录 Discord 测试
+const { KOOK_TOKEN } = process.env;
+const PUBLIC_URL = process.env.PUBLIC_URL ?? 'https://botc.rambooo.com'; // KOOK 进入链接指向的网页地址
+// KOOK 进入链接的签名密钥：没单独配就从机器人 token 派生（换 token 旧链接就作废）；本地测试用固定值
+const TICKET_SECRET = process.env.KOOK_TICKET_SECRET
+  || (KOOK_TOKEN ? createHash('sha256').update(`botc-ticket|${KOOK_TOKEN}`).digest('hex') : DEV_LOGIN ? 'dev-ticket-secret' : null);
 
 // ───────────── 机器人（管语音） ─────────────
 let hub = null;
 let botReady = Promise.resolve();
 if (DISCORD_TOKEN) {
   const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
-  hub = new VoiceHub(client);
+  // 账上挂着闭麦的局：还在进行（没结束、没暂停）才算数，不然定时解开
+  hub = new VoiceHub(client, { roomAlive: (key) => { const r = rooms.get(key); return !!(r?.game && !r.ended && !r.paused); } });
   botReady = new Promise((ok) => client.once(Events.ClientReady, ok));
   client.once(Events.ClientReady, (c) => console.log(`🤖 机器人已登录：${c.user.tag}`));
   client.login(DISCORD_TOKEN).catch((e) => console.error('机器人登录失败：', e.message));
 } else {
-  console.warn('⚠️ 没有 DISCORD_TOKEN：游戏能玩，但夜晚闭麦和拉人私聊不会生效');
+  console.warn('⚠️ 没有 DISCORD_TOKEN：Discord 那边游戏能玩，但夜晚闭麦和拉人私聊不会生效');
+}
+
+// ───────────── 合作机器人代管语音（比如旺财，见 docs/WANGCAI_BOTC_HANDOVER.md） ─────────────
+// 这些 Discord 服务器里不用请我们的机器人：语音操作发给对方的机器人去做。
+const PARTNER_URL = process.env.PARTNER_BOT_URL ?? '';
+const PARTNER_TOKEN = process.env.PARTNER_BOT_TOKEN ?? '';
+const PARTNER_GUILDS = new Set((process.env.PARTNER_BOT_GUILDS ?? '').split(',').map((x) => x.trim()).filter(Boolean));
+const PARTNER_NAME = process.env.PARTNER_BOT_NAME || '旺财'; // 只用在日志里
+let partner = null;
+let partnerHub = null;
+let partnerReady = Promise.resolve();
+if (PARTNER_URL && PARTNER_TOKEN && PARTNER_GUILDS.size) {
+  partner = partnerPlatform({ url: PARTNER_URL, token: PARTNER_TOKEN, name: PARTNER_NAME });
+  partnerHub = new VoiceHub(partner, {
+    roomAlive: (key) => { const r = rooms.get(key); return !!(r?.game && !r.ended && !r.paused); },
+    file: path.resolve('data/voice-held-partner.json'), oldFile: null,
+  });
+  partnerReady = partner.connect();
+  console.log(`🤝 ${PARTNER_GUILDS.size} 个服务器的语音交给${PARTNER_NAME}代管`);
+}
+
+// ───────────── KOOK 机器人（发进入链接、管语音） ─────────────
+let kookHub = null;
+let kookReady = Promise.resolve();
+if (KOOK_TOKEN) {
+  const kook = new KookBot({ token: KOOK_TOKEN, publicUrl: PUBLIC_URL, ticketSecret: TICKET_SECRET });
+  kookHub = new VoiceHub(kook.platform, {
+    roomAlive: (key) => { const r = rooms.get(key); return !!(r?.game && !r.ended && !r.paused); },
+    file: path.resolve('data/voice-held-kook.json'), oldFile: null,
+  });
+  kookReady = kook.ready;
+  kook.start().catch((e) => console.error('KOOK 机器人登录失败：', e.message));
 }
 
 // ───────────── HTTP ─────────────
@@ -34,6 +77,26 @@ const app = express();
 app.use(express.json());
 
 app.get('/api/tts/:id', ttsHandler);
+
+// 合作机器人推来的语音状态（有人进出语音、被闭麦）：{ guildId, userId, channelId, serverMute, serverDeaf }
+app.post('/api/partner/voice', (req, res) => {
+  const got = Buffer.from(String(req.headers.authorization ?? ''));
+  const want = Buffer.from(`Bearer ${PARTNER_TOKEN}`);
+  if (!partner || got.length !== want.length || !timingSafeEqual(got, want)) return res.status(401).json({ ok: false, error: 'unauthorized' });
+  const list = Array.isArray(req.body) ? req.body : [req.body];
+  let n = 0;
+  for (const s of list.slice(0, 50)) if (PARTNER_GUILDS.has(String(s?.guildId)) && partner.push(s)) n++;
+  res.json({ ok: true, accepted: n });
+});
+
+// 本地测试 KOOK 进入链接（不连 KOOK）：/api/dev/kook-ticket?g=服务器&c=频道&u=用户&n=名字 → 跳到带门票的页面
+if (DEV_LOGIN && TICKET_SECRET) {
+  const { signTicket } = await import('./tickets.js');
+  app.get('/api/dev/kook-ticket', (req, res) => {
+    const q = (k, d) => String(req.query[k] ?? d).slice(0, 40);
+    res.redirect(`/?kt=${signTicket(TICKET_SECRET, { g: q('g', 'devguild'), c: q('c', 'devchannel'), u: q('u', 'devuser'), n: q('n', 'KOOK测试'), a: null })}`);
+  });
+}
 
 // 开发用：小镇底稿页把导出的底稿直接存进 design/guides/（只在 DEV_LOGIN 下开放）
 if (DEV_LOGIN) {
@@ -215,13 +278,27 @@ function guardMoves(voice, channelId, room) {
   return { ...voice, openRoom: skip('openRoom', null), addToRoom: skip('addToRoom'), removeFromRoom: skip('removeFromRoom'), closeRoom: skip('closeRoom'), moveAll: skip('moveAll'), move: skip('move', false) };
 }
 
+const isKook = (guildId) => guildId.startsWith(KOOK_PREFIX);
+
+/** 这一局用哪个机器人管语音：KOOK 的房间（服务器 id 带 kook- 前缀）用 KOOK 机器人，其余用 Discord 的。 */
+function voiceFor(guildId, key) {
+  if (guildId === 'dev') return null;
+  if (isKook(guildId)) return kookHub?.forGuild(guildId.slice(KOOK_PREFIX.length), key) ?? null;
+  if (PARTNER_GUILDS.has(guildId)) return partnerHub?.forGuild(guildId, key) ?? null;
+  return hub?.forGuild(guildId, key) ?? null;
+}
+
 function roomFor(guildId, channelId, hostId) {
   const key = `${guildId}:${channelId}`;
   let room = rooms.get(key);
   if (!room) {
-    const voice = hub && guildId !== 'dev' ? hub.forGuild(guildId) : null;
+    const voice = voiceFor(guildId, key);
     room = new Room({ key, guildId, hostId, voice, onChange: (r) => { broadcast(r); saveSoon(r); } });
-    if (voice) room.voice = guardMoves(voice, channelId, room);
+    if (voice) {
+      voice.setScope(() => room.managedChannels()); // 只在本局的频道里闭麦、拉人
+      // Discord 活动从语音频道启动时拉人会把人踢出活动；KOOK 是浏览器里玩的，没有这个问题
+      room.voice = isKook(guildId) ? voice : guardMoves(voice, channelId, room);
+    }
     room.onPos = (r, id, move) => { broadcastPos(r, id, move); saveSoon(r); };
     room.onEnded = archiveGame;
     room.history = { list: listGames, get: getGame };
@@ -245,15 +322,21 @@ wss.on('connection', (ws) => {
     try {
       if (msg.type === 'hello') {
         let user;
-        if (msg.dev) {
+        let ticket = null;
+        if (msg.kook) {
+          // KOOK：机器人发的进入链接（见 tickets.js）
+          if (!TICKET_SECRET) throw new UserError('服务器没接 KOOK');
+          try { ticket = verifyTicket(TICKET_SECRET, msg.kook); } catch (e) { throw new UserError(e.message); }
+          user = { id: `${KOOK_PREFIX}${ticket.u}`, name: String(ticket.n || 'KOOK 玩家').slice(0, 24), avatar: ticket.a || null };
+        } else if (msg.dev) {
           if (!DEV_LOGIN) throw new UserError('服务器没开 DEV_LOGIN');
           user = { id: `dev-${String(msg.dev.id).slice(0, 12)}`, name: String(msg.dev.name || '测试玩家').slice(0, 24), avatar: null };
           if (msg.dev.role) user.devRole = String(msg.dev.role).slice(0, 20); // 测试：开局把这个角色换给自己
         } else {
           user = await discordUser(msg.accessToken, msg.guildId);
         }
-        const guildId = msg.dev ? 'dev' : msg.guildId;
-        const channelId = msg.dev ? String(msg.dev.table || 'table') : msg.channelId;
+        const guildId = ticket ? `${KOOK_PREFIX}${ticket.g}` : msg.dev ? 'dev' : msg.guildId;
+        const channelId = ticket ? String(ticket.c) : msg.dev ? String(msg.dev.table || 'table') : msg.channelId;
         if (!guildId || !channelId) throw new UserError('请在服务器频道里打开（私信里玩不了）');
         const room = roomFor(guildId, channelId, user.id);
         ws.uid = user.id;
@@ -356,7 +439,7 @@ for (const snap of loadAll()) {
   console.log(`💾 读回存档 ${snap.key}${live ? `（第${room.game.day}天 / 第${room.game.night}夜，进行中）` : ''}`);
   // 语音相关的恢复（夜里重新闭耳等）要等机器人登录好
   // 暂停着的局（真人全走了）不接着跑，等有人回来；接着跑的局几分钟内没人回来也会暂停
-  if (live) (guildId === 'dev' ? Promise.resolve() : botReady).then(() => { room.resume(); room.presence(); room.changed(); });
+  if (live) (guildId === 'dev' ? Promise.resolve() : isKook(guildId) ? kookReady : PARTNER_GUILDS.has(guildId) ? partnerReady : botReady).then(() => { room.resume(); room.presence(); room.changed(); });
 }
 
 // 关服（部署、launchd 重启）前把没写完的存档写掉

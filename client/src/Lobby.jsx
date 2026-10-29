@@ -15,6 +15,8 @@ import { SETUPS, presetsFor, PRESET_SHARE } from '../../src/shared/setups.js';
 import { Glossed } from './terms.jsx';
 import { NIGHT_ORDER, STEP_NAMES } from '../../src/shared/nightOrder.js';
 import { TutorialIntro } from './TutorialIntro.jsx';
+import { VolumeButton } from './Volume.jsx';
+import { fromKook } from './connect.js';
 
 // 标题画上的四栋房子（和游戏地图同一套画法）
 const hero = (id, name, x, y, w, h, side) => {
@@ -82,12 +84,15 @@ export function Lobby({ s, act, ask, onTutorial }) {
             {host && <Btn className="menu-item" onClick={() => act('addBots', { count: 1 })}>加一个机器人玩家</Btn>}
             {!host && !s.hostOnline && <Btn className="menu-item" onClick={() => act('claimHost')}>房主不在，接管房主</Btn>}
             {!host && s.hostOnline && <p className="menu-wait">等房主开始……</p>}
-            {onTutorial && <Btn className="menu-item menu-tut" onClick={() => setIntro(true)}>新手教程（动画介绍 + 练习局）</Btn>}
+            {onTutorial && <Btn className="menu-item menu-tut" onClick={() => setIntro(true)}>新手教程（1 分钟动画 + 练习局）</Btn>}
+            <VolumeButton className="btn btn-secondary menu-item menu-vol" label="声音、字号和背景" />
             {intro && createPortal(<TutorialIntro onStart={() => { setIntro(false); onTutorial(); }} onClose={() => setIntro(false)} />, document.body)}
           </nav>
           <ul className="lobby-tips">
             <li>大家先进同一个语音频道，<b>房主也要在里面</b>——机器人会把它当成城镇广场。</li>
-            <li>从<b>文字频道</b>的应用启动器打开：进房子私聊时被拉去别的语音频道，也不会掉线。</li>
+            {fromKook
+              ? <li>在 KOOK 文字频道发<b>「/血染」</b>，每个人点卡片上的按钮领自己的进入链接；语音还是在 KOOK 里聊。</li>
+              : <li>从<b>文字频道</b>的应用启动器打开：进房子私聊时被拉去别的语音频道，也不会掉线。</li>}
           </ul>
         </section>
 
@@ -159,10 +164,11 @@ export function Lobby({ s, act, ask, onTutorial }) {
                 <h4>夜晚</h4>
                 <Toggle label="闭麦闭耳" on={st.nightDeafen} disabled={!host} onChange={(v) => set({ nightDeafen: v })} />
                 <Toggle label="发言时其他人闭麦" on={st.speechMute} disabled={!host} onChange={(v) => set({ speechMute: v })} />
-                <Select label="选人时限" value={st.chooseSeconds} disabled={!host} options={[45, 60, 90, 120, 180]} unit="秒" onChange={(v) => set({ chooseSeconds: v })} />
+                <Select label="选人时限" value={st.chooseSeconds} disabled={!host} options={[30, 45, 60, 90, 120]} unit="秒" onChange={(v) => set({ chooseSeconds: v })} />
                 <Toggle label="随机排座位" on={st.shuffle} disabled={!host} onChange={(v) => set({ shuffle: v })} />
-                {st.script !== 'bmr' && <Toggle label="7 人以下不发男爵" on={st.smallNoBaron ?? true} disabled={!host} onChange={(v) => set({ smallNoBaron: v })} />}
-                <Toggle label="夜里死了仍拿信息（醉酒）" on={!!st.deadDrunk} disabled={!host} onChange={(v) => set({ deadDrunk: v })} />
+                {st.script !== 'bmr' && <Toggle label="房规：7 人以下不发男爵" on={st.smallNoBaron ?? true} disabled={!host} onChange={(v) => set({ smallNoBaron: v })} />}
+                <Toggle label="房规：夜里死了仍拿信息（醉酒）" on={!!st.deadDrunk} disabled={!host} onChange={(v) => set({ deadDrunk: v })} />
+                {st.script === 'bmr' && <Toggle label="房规：疯子（以为是僵怖）死后照样醒" on={!!st.lunaticGhost} disabled={!host} onChange={(v) => set({ lunaticGhost: v })} />}
               </div>
               <div className="setting-group">
                 <h4>白天</h4>
@@ -170,10 +176,10 @@ export function Lobby({ s, act, ask, onTutorial }) {
                 <Select label="提名环节" value={st.nominateMinutes} disabled={!host} options={[2, 3, 5, 8, 10]} unit="分钟" onChange={(v) => set({ nominateMinutes: v })} />
                 <Select label="提名理由" value={st.accuseSeconds} disabled={!host} options={[15, 30, 60, 90, 120]} unit="秒" onChange={(v) => set({ accuseSeconds: v })} />
                 <Select label="辩护时间" value={st.defendSeconds} disabled={!host} options={[30, 60, 90, 120, 180]} unit="秒" onChange={(v) => set({ defendSeconds: v })} />
-                <Toggle label="提名者自动投一票" on={st.nominatorVotes} disabled={!host} onChange={(v) => set({ nominatorVotes: v })} />
-                <Toggle label="小局也互认、发伪装" on={st.smallEvilInfo} disabled={!host} onChange={(v) => set({ smallEvilInfo: v })} />
-                <Toggle label="爪牙共用恶魔的 3 个伪装" on={st.minionBluffs} disabled={!host} onChange={(v) => set({ minionBluffs: v })} />
-                <Toggle label="投票时隐藏票型（投完公开）" on={st.hideVotes} disabled={!host} onChange={(v) => set({ hideVotes: v })} />
+                <Toggle label="房规：提名者自动投一票" on={st.nominatorVotes} disabled={!host} onChange={(v) => set({ nominatorVotes: v })} />
+                <Toggle label="房规：小局也互认、发伪装" on={st.smallEvilInfo} disabled={!host} onChange={(v) => set({ smallEvilInfo: v })} />
+                <Toggle label="房规：爪牙共用恶魔的 3 个伪装" on={st.minionBluffs} disabled={!host} onChange={(v) => set({ minionBluffs: v })} />
+                <Toggle label="房规：投票时隐藏票型（投完公开）" on={st.hideVotes} disabled={!host} onChange={(v) => set({ hideVotes: v })} />
                 <Toggle label="观战者能看魔典（所有身份）" on={st.spectatorGrimoire} disabled={!host} onChange={(v) => set({ spectatorGrimoire: v })} />
                 <Toggle label="观战者在语音里闭麦" on={st.muteSpectators} disabled={!host} onChange={(v) => set({ muteSpectators: v })} />
                 <Select label="投票时钟每人" value={st.voteSeconds} disabled={!host} options={[1, 2, 3, 4, 5]} unit="秒" onChange={(v) => set({ voteSeconds: v })} />
@@ -253,7 +259,7 @@ function PastGame({ game, onClose }) {
   );
 }
 
-const TEAMS = ['townsfolk', 'outsider', 'minion', 'demon'];
+export const TEAMS = ['townsfolk', 'outsider', 'minion', 'demon'];
 const TEAM_HINT = {
   townsfolk: '善良阵营。每人有一个有用的能力，帮大家找出恶魔。',
   outsider: '善良阵营，但能力往往帮倒忙。',
@@ -263,7 +269,7 @@ const TEAM_HINT = {
 
 /** 首页：暗流涌动全部 22 个角色的技能。可以按阵营筛选，点一张看完整的能力牌。 */
 /** 夜间顺序：首夜 / 其他夜晚各一列，每步写这个角色醒来做什么，最后讲为什么这么排（照官方的夜晚顺序表）。 */
-function NightOrder({ script }) {
+export function NightOrder({ script }) {
   const o = NIGHT_ORDER[script];
   const row = ([id, what], i) => {
     const r = ROLES[id];
@@ -433,7 +439,7 @@ function CharacterPicker({ s, act }) {
       <div className="char-grid">
         <button type="button" className={`char ${!mine ? 'on' : ''}`} onClick={() => act('character', { id: null })}>
           <Portrait p={{ ...me, char: null }} size={54} frame={!mine ? 'var(--red)' : '#f4f4f0'} />
-          <span>Discord 头像</span>
+          <span>{fromKook ? 'KOOK 头像' : 'Discord 头像'}</span>
         </button>
         {CHARACTERS.map((c) => {
           const holder = s.lobby.find((p) => p.char === c.id && p.id !== s.me);

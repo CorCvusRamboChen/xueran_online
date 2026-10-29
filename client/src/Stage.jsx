@@ -8,6 +8,7 @@ import { speak, ttsEnabled, ttsSupported, setTts, onTts } from './voice.js';
 import { voiceOf, ROLE_NAMES } from './flavor.js';
 import { sfxEnabled, setSfx, onSfx } from './world/footsteps.js';
 import { musicEnabled, setMusic, onMusic } from './ambience.js';
+import { VolumeButton } from './Volume.jsx';
 
 /** 逐字打出来的一行字。 */
 function Typewriter({ text, speed = 55 }) {
@@ -20,14 +21,27 @@ function Typewriter({ text, speed = 55 }) {
   return <>{text.slice(0, n)}<span className="tw-rest">{text.slice(n)}</span></>;
 }
 
+/**
+ * 编号对齐：刚连上、或者换了房间实例（epoch 变了：房间被清掉重建、进出教程），把现有的都当成看过的；
+ * 编号倒退（老服务器没发 epoch）也重新对齐。返回 true 表示这次只是对齐，没有新内容。
+ */
+function realign(seen, epochRef, epoch, last) {
+  if (seen.current == null || epochRef.current !== epoch || last < seen.current) {
+    seen.current = last; epochRef.current = epoch;
+    return true;
+  }
+  return false;
+}
+
 /** 盯着日志：新的旁白读出来；带标题的排队弹标题卡。刚连上时的旧日志不算。 */
-export function useNarrator(log) {
+export function useNarrator(log, epoch) {
   const seen = useRef(null);
+  const epochRef = useRef(epoch);
   const [cards, setCards] = useState([]);
   useEffect(() => {
     if (!log) return; // 还没连上
     const last = log.at(-1)?.id ?? 0;
-    if (seen.current == null) { seen.current = last; return; }
+    if (realign(seen, epochRef, epoch, last)) return;
     const fresh = log.filter((l) => l.id > seen.current && l.kind === 'story');
     seen.current = Math.max(seen.current, last);
     for (const l of fresh) speak(l.text, l.audio);
@@ -36,21 +50,40 @@ export function useNarrator(log) {
     const dawnAt = titled.findIndex((l) => /^第.+天$/.test(l.title));
     if (dawnAt >= 0) setCards(titled.slice(dawnAt));
     else if (titled.length) setCards((cur) => [...cur, ...titled].slice(-3));
-  }, [log]);
+  }, [log, epoch]);
   return [cards[0] ?? null, useCallback(() => setCards((cur) => cur.slice(1)), [])];
 }
 
+// 白天自由活动时当众发生的事（公开声明、开枪）：做成不挡操作的横幅——点击穿过去，大家正在地图上点着走路，
+// 整屏的卡一出来就会被顺手点掉，看起来就像"没有播报"。横幅只能按右上角的 × 关，时间到自己收起。
+const BANNER = new Set(['公开声明', '开枪']);
+// 整屏的卡刚出来这一会儿不响应点击（防止上一下点地图的连击把它点掉）
+const CLICK_GUARD_MS = 1500;
+
 export function TitleCard({ card, onClose, players = [] }) {
+  const shownAt = useRef(0);
   useEffect(() => {
     if (!card) return undefined;
-    const t = setTimeout(onClose, Math.max(4200, card.text.length * 150 + 1800));
+    shownAt.current = Date.now();
+    const t = setTimeout(onClose, Math.max(BANNER.has(card.title) ? 7000 : 4200, card.text.length * 150 + 1800));
     return () => clearTimeout(t);
   }, [card, onClose]);
   if (!card) return null;
   // "第 N 天"：天亮那张卡做成浅的（只在下方垫一层暗），让后面小屋里的晨光动画露出来
   const tone = /^第.+天$/.test(card.title) ? 'dawn' : /处决|邪恶|开枪/.test(card.title) ? 'phy' : /夜/.test(card.title) ? 'night' : 'day';
+  if (BANNER.has(card.title)) {
+    return (
+      <div className={`tc-banner tc-${tone}`} key={card.key} role="status" aria-live="assertive">
+        <button type="button" className="tc-banner-x" onClick={onClose} aria-label="关掉">×</button>
+        <span className="tc-kicker">说书人 · 当众</span>
+        <h2 className="tc-title">{card.title}</h2>
+        <p className="tc-line"><Typewriter text={card.text} speed={40} /></p>
+      </div>
+    );
+  }
+  const tryClose = () => { if (Date.now() - shownAt.current > CLICK_GUARD_MS) onClose(); };
   return (
-    <div className={`titlecard tc-${tone}`} key={card.key} onClick={onClose} role="presentation">
+    <div className={`titlecard tc-${tone}`} key={card.key} onClick={tryClose} role="presentation">
       <div className="tc-inner">
         {card.title === '处决' && <Gallows p={players.find((q) => card.text.includes(`${q.seat}号 ${q.name}`))} />}
         <span className="tc-kicker">说书人</span>
@@ -98,17 +131,18 @@ function Gallows({ p }) {
 }
 
 /** 盯着自己的私密信息：新到的弹一个技能检定。 */
-export function useChecks(inbox) {
+export function useChecks(inbox, epoch) {
   const seen = useRef(null);
+  const epochRef = useRef(epoch);
   const [check, setCheck] = useState(null);
   useEffect(() => {
     const list = inbox ?? [];
     const last = list.at(-1)?.id ?? 0;
-    if (seen.current == null) { seen.current = last; return; }
+    if (realign(seen, epochRef, epoch, last)) return;
     const fresh = list.filter((m) => m.id > seen.current);
     seen.current = Math.max(seen.current, last);
     if (fresh.length) setCheck({ ...fresh.at(-1), key: fresh.at(-1).id });
-  }, [inbox]);
+  }, [inbox, epoch]);
   return [check, useCallback(() => setCheck(null), [])];
 }
 
@@ -132,7 +166,7 @@ export function SkillCheck({ check, onClose }) {
   );
 }
 
-/** 语音播报、脚步音效的开关（存在本机）。onFixVoice：对局中显示"语音归位"（卡在房间里出不来时点）。 */
+/** 语音播报、脚步音效、音乐的开关和音量（存在本机）。onFixVoice：对局中显示"语音归位"（卡在房间里出不来时点）。 */
 export function SoundToggles({ onFixVoice = null }) {
   const [tts, setT] = useState(ttsEnabled());
   const [sfx, setS] = useState(sfxEnabled());
@@ -145,7 +179,8 @@ export function SoundToggles({ onFixVoice = null }) {
       {ttsSupported && <button type="button" className={tts ? 'on' : ''} onClick={() => setTts(!tts)} title="AI 房主的语音播报">{tts ? '播报 开' : '播报 关'}</button>}
       <button type="button" className={sfx ? 'on' : ''} onClick={() => setSfx(!sfx)} title="脚步声、敲门声">{sfx ? '音效 开' : '音效 关'}</button>
       <button type="button" className={music ? 'on' : ''} onClick={() => setMusic(!music)} title="背景音乐和风雪声">{music ? '音乐 开' : '音乐 关'}</button>
-      {onFixVoice && <button type="button" onClick={onFixVoice} title="Discord 语音卡在别的房间、回不到广场时点这里">语音归位</button>}
+      <VolumeButton />
+      {onFixVoice && <button type="button" onClick={onFixVoice} title="语音卡在别的房间、回不到广场，或者一直被闭着麦时点这里">语音归位</button>}
     </div>
   );
 }

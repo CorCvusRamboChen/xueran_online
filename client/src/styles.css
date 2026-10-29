@@ -6,13 +6,13 @@
   --line: rgba(233, 228, 216, .14);
   --cream: #e9e4d8;
   --paper: #f4f4f0;
-  --muted: #9a9688;
+  --muted: #aca799;    /* 次要文字：深底上约 8:1，和主文字 --cream 拉开一层（原来 #9a9688 偏淡） */
   --red: #c63d2a;      /* 主按钮、选中 */
   --opt: #d9603b;      /* 提醒点、举手 */
   --opt-hi: #f2efe6;
   --int: #5fb8cf;      /* 智力：镇民 */
   --psy: #9a7fd6;      /* 精神：外来者 */
-  --phy: #d24a3a;      /* 体格：爪牙、恶魔 */
+  --phy: #db5444;      /* 体格：爪牙、恶魔（深底上当字用约 4.8:1；原来 #d24a3a 只有 4.35） */
   --mot: #e2b52c;      /* 运动：你自己、说书人 */
   --ok: #3f9b62;
   --serif: "Noto Serif SC", "Songti SC", serif;
@@ -115,7 +115,7 @@ b { color: var(--opt-hi); font-weight: 900; }
   display: block; position: fixed; left: 0; right: 0; bottom: 64px; z-index: 960; max-height: 70vh; overflow: auto;
   background: rgba(10, 12, 12, .97); border-top: 2px solid var(--red); padding: 0 14px 14px;
 }
-.drawer-tabs { position: sticky; top: 0; display: flex; gap: 2px; background: rgba(10, 12, 12, .97); padding-top: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--line); z-index: 1; }
+.drawer-tabs { position: sticky; top: 0; display: flex; gap: 2px; background: rgba(10, 12, 12, .97); padding-top: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--line); z-index: 5; } /* 高过小魔典圆圈里的头像（z 3），滚动时不会盖住标签 */
 .drawer-tabs button { background: none; border: 0; padding: 8px 12px; cursor: pointer; color: var(--muted); font: 900 13px var(--sans); letter-spacing: 2px; border-bottom: 2px solid transparent; }
 .drawer-tabs button.on { color: var(--paper); border-bottom-color: var(--red); }
 .drawer-close { margin-left: auto; font-size: 20px !important; }
@@ -131,6 +131,8 @@ b { color: var(--opt-hi); font-weight: 900; }
   .game { height: calc(100vh - 32px); grid-template-rows: auto minmax(0, 1fr); }
   .dock { max-height: 62vh; overflow: hidden auto; scrollbar-width: thin; }
   .drawer, .drawer.open { align-self: stretch; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  .drawer-body { padding-bottom: 28px; } /* 最后一条别贴着底边，看起来像滑不到 */
+  @media (max-height: 760px) { .dock { max-height: 48vh; } } /* 窗口矮时操作面板别把下面的标签页挤成一小条 */
   .drawer-tabs { position: sticky; top: 0; background: var(--ink); }
   .drawer-close { display: none; }
 }
@@ -1141,65 +1143,6 @@ span.lr-newbie { cursor: default; }
 *::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
 *::-webkit-scrollbar-corner { background: transparent; }
 
-/* ───────── 新手教程开场（TutorialIntro.jsx） ───────── */
-.ti { position: fixed; inset: 0; z-index: 3000; background: #070808; color: var(--cream); display: flex; flex-direction: column; overflow: hidden; }
-.ti-bg { position: absolute; inset: -4%; background: center / cover no-repeat; opacity: .38; filter: saturate(.8); animation: tiBg 22s ease-out both; }
-.ti-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(7, 8, 8, .92) 0%, rgba(7, 8, 8, .55) 55%, rgba(7, 8, 8, .8) 100%); }
-@keyframes tiBg { from { opacity: 0; transform: scale(1.08); } 12% { opacity: .38; } to { opacity: .38; transform: scale(1); } }
-.ti-fog { position: absolute; inset: auto -20% -10% -20%; height: 45%; background: radial-gradient(ellipse at 30% 70%, rgba(200, 205, 210, .09), transparent 60%), radial-gradient(ellipse at 75% 80%, rgba(200, 205, 210, .07), transparent 55%); animation: tiFog 16s ease-in-out infinite alternate; pointer-events: none; }
-@keyframes tiFog { to { transform: translateX(8%); } }
-.ti-head, .ti-foot { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px clamp(16px, 4vw, 48px); }
-.ti-head > span { font: 900 12px/1 var(--sans); letter-spacing: 3px; color: var(--mot); }
-.ti-link { background: none; border: 0; color: var(--muted); font: 700 13px var(--sans); cursor: pointer; padding: 6px 8px; }
-.ti-link:hover { color: var(--paper); }
-.ti-body { position: relative; z-index: 1; flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: clamp(16px, 4vw, 56px); align-items: center; padding: 8px clamp(16px, 5vw, 72px); max-width: 1280px; width: 100%; margin: 0 auto; box-sizing: border-box; }
-.ti-body.solo { grid-template-columns: minmax(0, 720px); justify-content: center; }
-.ti-kicker { display: block; font: 900 12px/1 var(--sans); letter-spacing: 4px; color: var(--opt); animation: tiIn .6s ease-out both; }
-.ti-text h2 { margin: 10px 0 14px; font: 900 clamp(26px, 4vw, 44px)/1.15 var(--serif); letter-spacing: 3px; color: var(--paper); animation: tiIn .7s .08s ease-out both; }
-.ti-text p { margin: 0 0 12px; font: 400 clamp(14px, 1.5vw, 17px)/1.85 var(--serif); color: #d8d3c6; animation: tiIn .8s var(--d, .3s) ease-out both; }
-.ti-body.solo .ti-text p { font-size: clamp(16px, 1.9vw, 20px); }
-@keyframes tiIn { from { opacity: 0; transform: translateY(14px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
-.ti-stage { animation: tiIn .8s .2s ease-out both; min-width: 0; }
-.ti-foot { gap: 16px; }
-.ti-dots { display: flex; gap: 8px; }
-.ti-dots button { width: 10px; height: 10px; padding: 0; border: 1px solid var(--muted); background: none; cursor: pointer; transform: rotate(45deg); transition: background .2s, border-color .2s; }
-.ti-dots button.seen { background: var(--muted); }
-.ti-dots button.on { background: var(--mot); border-color: var(--mot); }
-.ti-prev, .ti-next { min-width: 110px; padding: 10px 18px; font: 900 14px var(--sans); letter-spacing: 2px; cursor: pointer; border: 1px solid var(--line); background: none; color: var(--cream); }
-.ti-prev:disabled { opacity: .3; cursor: default; }
-.ti-next { background: var(--mot); color: #111; border-color: var(--mot); }
-.ti-next.go { background: var(--red); color: var(--paper); border-color: var(--red); animation: tutPulse 1.6s ease-in-out infinite; }
-@media (max-width: 760px) {
-  .ti-body { grid-template-columns: minmax(0, 1fr); align-content: start; gap: 14px; }
-  .ti-head > span { display: none; }
-  .ti-prev, .ti-next { min-width: 84px; padding: 9px 12px; }
-}
-
-/* 两个阵营 */
-.ti-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.ti-side h4 { margin: 0 0 8px; font: 900 14px var(--sans); letter-spacing: 4px; }
-.ti-side.good h4 { color: var(--int); }
-.ti-side.evil h4 { color: var(--phy); }
-.ti-side-cards { display: grid; gap: 10px; }
-.ti-team { display: grid; grid-template-columns: 62px 1fr; grid-template-rows: auto 1fr; column-gap: 10px; background: rgba(10, 12, 12, .78); border: 1px solid var(--line); border-left: 4px solid var(--c); padding: 8px; animation: tiCard .7s var(--d) cubic-bezier(.2, .9, .3, 1.2) both; }
-.ti-team img { grid-row: 1 / 3; width: 62px; aspect-ratio: 18 / 25; object-fit: cover; border: 1px solid var(--c); }
-.ti-team b { color: var(--c); font: 900 17px var(--serif); letter-spacing: 2px; }
-.ti-team p { margin: 2px 0 0; font-size: 12.5px; line-height: 1.55; color: #cfcabd; }
-@keyframes tiCard { from { opacity: 0; transform: perspective(600px) rotateY(-70deg) translateX(-20px); } to { opacity: 1; transform: none; } }
-
-/* 怎么赢 */
-.ti-win { display: grid; gap: 18px; }
-.ti-win-row { background: rgba(10, 12, 12, .78); border: 1px solid var(--line); padding: 12px; }
-.ti-tokens { display: flex; gap: 6px; }
-.ti-tok { flex: 1; max-width: 54px; aspect-ratio: 1; border-radius: 50%; overflow: hidden; border: 2px solid var(--paper); transition: filter .5s, border-color .4s, transform .4s; }
-.ti-tok img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
-.ti-tok.red { border-color: var(--phy); transform: scale(1.12); }
-.ti-tok.dead { filter: grayscale(1) brightness(.4); transform: scale(.88); }
-.ti-win-row p { margin: 10px 0 0; font: 700 14px var(--sans); color: var(--muted); transition: color .3s; }
-.ti-win-row p.on { animation: tiIn .5s ease-out both; }
-.ti-win-row p.good { color: var(--int); }
-.ti-win-row p.evil { color: var(--phy); }
-
 /* 演示画布：160 × 110，里面的东西按百分比摆 */
 .demo { position: relative; width: 100%; aspect-ratio: 160 / 110; container-type: inline-size; overflow: hidden; background: radial-gradient(circle at 50% 48%, rgba(233, 228, 216, .07), transparent 62%), #0d1010; border: 1px solid var(--line); user-select: none; }
 .demo.night { background: radial-gradient(circle at 50% 48%, rgba(95, 184, 207, .1), transparent 60%), #080b10; }
@@ -1246,25 +1189,543 @@ span.lr-newbie { cursor: default; }
 .dm-mini.on { background: var(--mot); color: #111; border-color: var(--mot); }
 .dm-count { position: absolute; transform: translate(-50%, -50%); font: 900 3cqw var(--sans); color: var(--cream); background: rgba(10, 12, 12, .85); padding: .4cqw 1.4cqw; white-space: nowrap; }
 .dm-count.ok { color: var(--phy); }
-.demo.cycle { transition: background .8s; }
-.dm-phase { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: .3cqw; opacity: .45; transition: opacity .3s, transform .3s; }
-.dm-phase i { font-style: normal; font-size: 5cqw; width: 9cqw; height: 9cqw; display: grid; place-items: center; border-radius: 50%; border: .3cqw solid var(--line); background: #101313; }
-.dm-phase span { font: 900 2.6cqw var(--sans); white-space: nowrap; }
-.dm-phase.on { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
-.dm-phase.on i { border-color: var(--mot); color: var(--mot); box-shadow: 0 0 3cqw rgba(226, 181, 44, .35); }
-.dm-phase-text { position: absolute; transform: translate(-50%, -50%); width: 48%; text-align: center; }
-.dm-phase-text b { font: 900 4.4cqw var(--serif); color: var(--mot); letter-spacing: .6cqw; }
-.dm-phase-text p { margin: .8cqw 0 0; font: 400 2.7cqw/1.6 var(--sans); color: var(--cream); animation: tiIn .5s ease-out both; }
 
 /* 练习局分步提示里的演示 */
 .tut-demo { margin-top: 10px; display: grid; gap: 4px; }
 .tut-demo .demo { width: min(100%, 300px); justify-self: center; }
 @media (max-height: 640px) { .tut-demo .demo { width: min(100%, 220px); } }
 .tut-demo-toggle { justify-self: end; margin-top: 6px; background: none; border: 0; color: var(--muted); font: 700 12px var(--sans); cursor: pointer; padding: 2px 0; }
-@media (prefers-reduced-motion: reduce) { .ti-bg, .ti-fog, .ti-next.go { animation: none; } }
-.demo.story { transition: background 1s; }
-.demo.story.red { background: radial-gradient(circle at 50% 45%, rgba(210, 74, 58, .22), transparent 60%), #120808; }
-.dm-strike { position: absolute; transform: translate(-50%, -100%); font: 900 4cqw var(--serif); letter-spacing: .8cqw; color: var(--cream); white-space: nowrap; animation: dmFade .25s ease-out both; }
-.dm-strike.red { color: var(--phy); font-size: 5cqw; text-shadow: 0 0 3cqw rgba(210, 74, 58, .7); }
-.dm-vignette { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 14cqw rgba(150, 10, 10, .55); animation: tiIn 1.2s ease-out both; }
-@keyframes dmFade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ───────── 新手教程开场（TutorialIntro.jsx）：全屏短动画。类名都很通用（.card、.stamp……），一律限定在 .ti2 里面 ───────── */
+.ti2 { position: fixed; inset: 0; z-index: 3000; color: var(--cream); overflow: hidden; container-type: size; user-select: none; }
+.ti2-bg { position: absolute; inset: 0; transition: background 1s; background: radial-gradient(ellipse at 50% 60%, #1c1a17 0%, #070707 70%); }
+.ti2.mood-night .ti2-bg { background: radial-gradient(ellipse at 50% 30%, #13213a 0%, #05070d 72%); }
+.ti2.mood-day .ti2-bg { background: radial-gradient(ellipse at 50% 40%, #4a3d24 0%, #1d1912 55%, #0d0c09 100%); }
+.ti2-head { position: absolute; z-index: 20; left: 0; right: 0; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px clamp(12px, 3vw, 32px); }
+.ti2-prog { display: flex; gap: 6px; flex: 1; max-width: 420px; }
+.ti2-prog button { flex: 1; height: 5px; padding: 0; border: 0; background: rgba(233, 228, 216, .18); cursor: pointer; }
+.ti2-prog button.seen { background: rgba(233, 228, 216, .6); }
+.ti2-prog button.on { background: var(--mot); }
+.ti2-prog button:disabled { cursor: default; }
+.ti2-tools { display: flex; gap: 4px; }
+.ti2-tools button { background: none; border: 0; color: var(--muted); font: 700 13px var(--sans); cursor: pointer; padding: 6px 8px; }
+.ti2-tools button:hover { color: var(--paper); }
+
+.ti2 .beat { position: absolute; inset: 0; cursor: pointer; }
+.ti2 .beat-in { position: absolute; inset: 0; }
+.ti2 .next-hint { position: absolute; bottom: 4cqh; left: 50%; transform: translateX(-50%); z-index: 15; font: 900 clamp(12px, 2.2cqmin, 16px) var(--sans); letter-spacing: 3px; color: var(--mot); animation: tiBlink 1.2s ease-in-out infinite; white-space: nowrap; }
+.ti2 .next-hint.dim { color: rgba(233, 228, 216, .3); animation: none; letter-spacing: 2px; font-weight: 700; }
+@keyframes tiBlink { 50% { opacity: .35; } }
+
+.ti2 .hl { position: absolute; z-index: 12; left: 0; right: 0; top: 9cqh; margin: 0; padding: 0 4cqw; text-align: center; font: 900 clamp(28px, 8cqmin, 84px)/1.12 var(--serif); letter-spacing: .12em; color: var(--paper); text-shadow: 0 .6cqmin 3cqmin rgba(0, 0, 0, .8); animation: hlSlam .55s cubic-bezier(.2, 1.4, .4, 1) both; }
+.ti2 .hl em { font-style: normal; color: var(--mot); }
+.ti2 .hl.night { color: #cfe2ff; }
+.ti2 .hl.day { color: #fff3d6; }
+.ti2 .hl.evil { color: var(--phy); text-shadow: 0 0 4cqmin rgba(210, 74, 58, .7); }
+.ti2 .hl.good { color: var(--int); text-shadow: 0 0 4cqmin rgba(95, 184, 207, .7); }
+@keyframes hlSlam { from { opacity: 0; transform: scale(1.9); filter: blur(10px); } to { opacity: 1; transform: none; filter: none; } }
+.ti2 .sub { position: absolute; z-index: 12; left: 50%; bottom: 10cqh; transform: translateX(-50%); width: min(92cqw, 900px); margin: 0; text-align: center; font: 400 clamp(15px, 3.3cqmin, 30px)/1.6 var(--serif); color: #e6e0d2; text-shadow: 0 2px 10px #000; animation: subIn .5s ease-out both; }
+.ti2 .sub b { color: var(--paper); }
+.ti2 .sub b.good, .ti2 .tl-good { color: var(--int); }
+.ti2 .sub b.evil { color: var(--phy); }
+@keyframes subIn { from { opacity: 0; transform: translate(-50%, 2cqh); } to { opacity: 1; transform: translateX(-50%); } }
+
+/* 人 */
+.ti2 .f { position: absolute; z-index: 5; width: max(12cqmin, 52px); transform: translate(-50%, -50%) scale(var(--s, 1)); transition: transform .35s cubic-bezier(.3, 1.5, .5, 1), filter .5s, opacity .5s; display: flex; flex-direction: column; align-items: center; animation: fIn .45s cubic-bezier(.3, 1.6, .5, 1) both; }
+@keyframes fIn { from { opacity: 0; transform: translate(-50%, -50%) scale(.2); } }
+.ti2 .f-img { width: 100%; aspect-ratio: 1; border-radius: 50%; overflow: hidden; border: .7cqmin solid var(--ring); box-shadow: 0 0 0 0 var(--glow); transition: border-color .3s, box-shadow .3s; background: #222; }
+.ti2 .f.glow .f-img { box-shadow: 0 0 0 .6cqmin var(--glow), 0 0 6cqmin var(--glow); }
+.ti2 .f-img img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.ti2 .f-name { margin-top: .6cqmin; font: 900 clamp(10px, 2.3cqmin, 20px)/1.3 var(--sans); background: rgba(8, 9, 9, .85); padding: 0 1cqmin; white-space: nowrap; }
+.ti2 .f-name i { font-style: normal; color: var(--muted); margin-right: .6cqmin; font-family: var(--cond); }
+.ti2 .f.dim { filter: brightness(.35) saturate(.4); }
+.ti2 .f.dead .f-img { filter: grayscale(1) brightness(.45); }
+.ti2 .f.dead { opacity: .75; }
+.ti2 .f.fall { transform: translate(-50%, -50%) scale(var(--s, 1)) translateY(2cqmin) rotate(-14deg); }
+.ti2 .f-label { position: absolute; top: calc(100% + .3cqmin); color: #111; font: 900 clamp(10px, 2.3cqmin, 20px)/1.4 var(--sans); padding: 0 1cqmin; white-space: nowrap; animation: popIn .3s cubic-bezier(.3, 1.8, .5, 1) both; }
+.ti2 .f-hand { position: absolute; top: -3cqmin; right: -3cqmin; font-size: 6cqmin; animation: popIn .3s cubic-bezier(.3, 1.8, .5, 1) both; }
+.ti2 .f-bubble { position: absolute; bottom: calc(100% + 1.4cqmin); left: 50%; transform: translateX(-50%); z-index: 8; width: max-content; max-width: 34cqmin; background: var(--paper); color: #111; font: 900 clamp(11px, 2.5cqmin, 22px)/1.45 var(--sans); padding: 1cqmin 1.8cqmin; text-align: center; animation: bubbleIn .35s cubic-bezier(.3, 1.8, .5, 1) both; }
+.ti2 .f-bubble::after { content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); border: 1.2cqmin solid transparent; border-top-color: var(--paper); }
+.ti2 .f-bubble.below { bottom: auto; top: calc(100% + 1.4cqmin); }
+.ti2 .f-bubble.below::after { top: auto; bottom: 100%; border-top-color: transparent; border-bottom-color: var(--paper); }
+.ti2 .f-bubble big { display: block; font-size: 1.5em; color: var(--phy); }
+@keyframes popIn { from { opacity: 0; transform: scale(.3); } }
+@keyframes bubbleIn { from { opacity: 0; transform: translateX(-50%) scale(.3); } }
+
+/* 特效 */
+.ti2 .flash { position: absolute; inset: 0; z-index: 11; pointer-events: none; }
+.ti2 .flash.red { background: radial-gradient(circle, rgba(210, 40, 30, .65), rgba(120, 0, 0, .95)); }
+.ti2 .flash.blue { background: radial-gradient(circle, rgba(140, 220, 255, .7), rgba(40, 120, 170, .9)); }
+.ti2 .spot { position: absolute; inset: 0; z-index: 7; pointer-events: none; transition: opacity .4s; background: radial-gradient(circle 14cqmin at var(--sx) var(--sy), transparent 60%, var(--tint) 100%); }
+.ti2 .moon { position: absolute; right: 4cqw; top: 9cqh; width: 11cqmin; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fffbe8, #d9d2b4 60%, #a9a181); box-shadow: 0 0 8cqmin rgba(255, 248, 210, .35); }
+.ti2 .claw { position: absolute; z-index: 9; width: 22cqmin; height: 22cqmin; transform: translate(-50%, -50%) rotate(-28deg); pointer-events: none; }
+.ti2 .claw i { position: absolute; left: 0; height: 1.6cqmin; width: 100%; background: linear-gradient(90deg, transparent, #ff2a1a 20%, #ff6a4a 50%, #ff2a1a 80%, transparent); box-shadow: 0 0 3cqmin #ff2a1a; transform-origin: left; animation: clawCut .22s ease-out both; }
+.ti2 .claw i:nth-child(1) { top: 30%; }
+.ti2 .claw i:nth-child(2) { top: 48%; animation-delay: .06s; }
+.ti2 .claw i:nth-child(3) { top: 66%; animation-delay: .12s; }
+@keyframes clawCut { from { transform: scaleX(0); } }
+.ti2 .bolt { position: absolute; z-index: 6; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.ti2 .bolt polyline { fill: none; stroke: var(--phy); stroke-width: 6; stroke-linejoin: bevel; filter: drop-shadow(0 0 6px var(--phy)); stroke-dasharray: 2000; animation: boltDraw .3s ease-out both; }
+@keyframes boltDraw { from { stroke-dashoffset: 2000; } }
+.ti2 .stamp { position: absolute; z-index: 13; left: 50%; top: 55%; transform: translate(-50%, -50%) rotate(-8deg); border: .8cqmin solid var(--phy); color: var(--phy); background: rgba(10, 6, 6, .7); font: 900 clamp(18px, 5cqmin, 48px)/1.2 var(--serif); letter-spacing: .15em; padding: .6cqmin 3cqmin; white-space: nowrap; animation: stampIn .35s cubic-bezier(.2, 1.6, .4, 1) both; }
+.ti2 .stamp.big { font-size: clamp(40px, 13cqmin, 130px); top: 56%; }
+@keyframes stampIn { from { opacity: 0; transform: translate(-50%, -50%) rotate(-8deg) scale(3); } }
+.ti2 .dusk { position: absolute; inset: 0; z-index: 4; background: #02030a; opacity: 0; transition: opacity .15s; pointer-events: none; }
+.ti2 .dusk.on { opacity: .8; }
+.ti2 .nights { position: absolute; z-index: 12; left: 50%; top: 55%; transform: translate(-50%, -50%); font: 900 clamp(20px, 6cqmin, 56px) var(--serif); color: #cfe2ff; letter-spacing: .2em; animation: popIn .3s ease-out both; }
+.ti2 .rays { position: absolute; z-index: 3; left: 50%; top: 55%; width: 220cqmax; height: 220cqmax; transform: translate(-50%, -50%); background: repeating-conic-gradient(rgba(95, 184, 207, .22) 0 8deg, transparent 8deg 20deg); border-radius: 50%; animation: raysSpin 14s linear infinite, tiFade 1s ease-out both; mask-image: radial-gradient(circle, #000 10%, transparent 45%); -webkit-mask-image: radial-gradient(circle, #000 10%, transparent 45%); pointer-events: none; }
+@keyframes raysSpin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+@keyframes tiFade { from { opacity: 0; } }
+
+/* 身份牌 */
+.ti2 .card { position: absolute; z-index: 9; left: 50%; top: 47%; width: clamp(130px, 34cqmin, 330px); aspect-ratio: 18 / 25; padding: 0; border: 0; background: none; cursor: default; perspective: 1400px; transform: translate(-50%, calc(-50% + var(--drop))) rotate(var(--tilt)); transition: top .5s cubic-bezier(.3, 1.3, .5, 1), width .5s; }
+.ti2 .card.ask { cursor: pointer; animation: cardAsk 1s ease-in-out infinite; }
+.ti2 .card.up { top: 40%; width: clamp(110px, 25cqmin, 250px); }
+@keyframes cardAsk { 50% { filter: drop-shadow(0 0 3cqmin rgba(226, 181, 44, .9)); } }
+.ti2 .card-in { position: absolute; inset: 0; transform-style: preserve-3d; transform: rotateY(var(--flip)); }
+.ti2 .card-face { position: absolute; inset: 0; backface-visibility: hidden; border: .8cqmin solid var(--paper); overflow: hidden; background: #111; box-shadow: 0 3cqmin 6cqmin rgba(0, 0, 0, .7); }
+.ti2 .card-face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ti2 .card-face.front { transform: rotateY(180deg); border-color: var(--int); }
+.ti2 .card-face.front b { position: absolute; left: 0; right: 0; bottom: 0; background: var(--int); color: #111; font: 900 clamp(14px, 4cqmin, 34px)/1.6 var(--serif); letter-spacing: .2em; text-align: center; }
+.ti2 .tap-hint { position: absolute; z-index: 12; left: 50%; top: 82%; transform: translateX(-50%); font: 900 clamp(15px, 3.6cqmin, 32px) var(--sans); color: var(--mot); letter-spacing: .15em; white-space: nowrap; animation: tiBlink 1s ease-in-out infinite; }
+.ti2 .tap-hint.low { top: auto; bottom: 4cqh; }
+.ti2 .minis { position: absolute; z-index: 9; left: 50%; top: 70%; transform: translateX(-50%); display: flex; gap: 1.4cqmin; }
+.ti2 .mini { width: clamp(30px, 8cqmin, 76px); aspect-ratio: 18 / 25; background: #1a1a1a url() center / cover; border: .5cqmin solid var(--muted); display: grid; place-items: end center; transition: transform .35s, background .2s, border-color .2s; transform: rotateY(90deg); }
+.ti2 .mini.show { transform: none; }
+.ti2 .mini.good.show { background: #173944; border-color: var(--int); }
+.ti2 .mini.evil.show { background: #4a1612; border-color: var(--phy); }
+.ti2 .mini b { font: 900 clamp(10px, 2.2cqmin, 18px)/1.6 var(--sans); width: 100%; text-align: center; }
+.ti2 .mini.good b { background: var(--int); color: #111; }
+.ti2 .mini.evil b { background: var(--phy); color: #fff; }
+
+/* 投票 */
+.ti2 .count { position: absolute; z-index: 12; left: 50%; top: 66%; transform: translateX(-50%); font: 900 clamp(22px, 6.5cqmin, 64px)/1.1 var(--num); color: var(--paper); white-space: nowrap; text-align: center; }
+.ti2 .count small { display: block; font: 900 clamp(12px, 2.6cqmin, 22px) var(--sans); color: var(--mot); }
+.ti2 .count.ok { color: var(--mot); animation: popIn .3s ease-out both; }
+.ti2 .raise { position: absolute; z-index: 14; left: 50%; top: 91%; transform: translate(-50%, -50%); background: var(--red); color: var(--paper); border: 0; font: 900 clamp(18px, 5cqmin, 44px) var(--sans); letter-spacing: .15em; padding: 1.6cqmin 5cqmin; cursor: pointer; animation: raisePulse .9s ease-in-out infinite; box-shadow: 0 0 0 0 rgba(198, 61, 42, .7); }
+@keyframes raisePulse { 50% { transform: translate(-50%, -50%) scale(1.08); box-shadow: 0 0 0 2cqmin rgba(198, 61, 42, 0); } }
+
+/* 收尾 */
+.ti2 .recap { position: absolute; z-index: 12; left: 50%; top: 32%; transform: translateX(-50%); margin: 0; padding: 0; list-style: none; display: grid; gap: 2.4cqmin; width: min(86cqw, 720px); }
+.ti2 .recap li { display: flex; align-items: center; gap: 3cqmin; font: 900 clamp(18px, 5cqmin, 46px)/1.3 var(--serif); color: var(--paper); animation: recapIn .45s cubic-bezier(.2, 1.4, .4, 1) both; }
+.ti2 .recap li i { font-style: normal; flex: none; width: 1.6em; height: 1.6em; display: grid; place-items: center; background: var(--mot); color: #111; font-family: var(--num); font-size: .8em; }
+@keyframes recapIn { from { opacity: 0; transform: translateX(-12cqw); } }
+.ti2 .go-row { position: absolute; z-index: 14; left: 50%; bottom: 4cqh; transform: translateX(-50%); display: flex; gap: 14px; }
+.ti2 .go { background: var(--red); color: var(--paper); border: 0; font: 900 clamp(16px, 3.6cqmin, 30px) var(--sans); letter-spacing: .15em; padding: 1.4cqmin 4.5cqmin; cursor: pointer; animation: raisePulse2 1.4s ease-in-out infinite; }
+@keyframes raisePulse2 { 50% { transform: scale(1.05); } }
+.ti2 .go-ghost { background: none; color: var(--muted); border: 1px solid var(--line); font: 700 clamp(13px, 2.6cqmin, 20px) var(--sans); padding: 1cqmin 3cqmin; cursor: pointer; }
+.ti2 .recap ~ .sub { bottom: 17cqh; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ti2 *, .ti2 *::before, .ti2 *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
+}
+
+/* 音量面板（Volume.jsx） */
+.vol-wrap { position: relative; display: inline-flex; }
+.vol-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; width: 300px; max-width: calc(100vw - 24px); background: #0f1212; border: 1px solid var(--line); border-top: 3px solid var(--mot); box-shadow: 0 18px 40px rgba(0, 0, 0, .7); padding: 10px 14px 12px; display: grid; gap: 8px; text-align: left; cursor: default; }
+.vol-title { font: 900 12px/1 var(--sans); letter-spacing: 3px; color: var(--mot); }
+.vol-row { display: grid; grid-template-columns: 1fr 34px; grid-template-areas: "name num" "bar bar"; align-items: center; gap: 2px 8px; cursor: pointer; }
+.vol-row.master { padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.vol-name { grid-area: name; font: 900 13px var(--sans); color: var(--paper); }
+.vol-name small { margin-left: 6px; font: 400 11px var(--sans); color: var(--muted); }
+.vol-num { grid-area: num; font: 700 12px var(--cond); color: var(--mot); text-align: right; }
+.vol-row input[type="range"] { grid-area: bar; -webkit-appearance: none; appearance: none; width: 100%; height: 18px; background: none; margin: 0; cursor: pointer; }
+.vol-row input[type="range"]::-webkit-slider-runnable-track { height: 4px; background: linear-gradient(90deg, var(--mot) var(--v), rgba(233, 228, 216, .15) var(--v)); }
+.vol-row input[type="range"]::-moz-range-track { height: 4px; background: rgba(233, 228, 216, .15); }
+.vol-row input[type="range"]::-moz-range-progress { height: 4px; background: var(--mot); }
+.vol-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 16px; margin-top: -6px; background: var(--paper); border: 2px solid var(--mot); border-radius: 0; transform: rotate(45deg) scale(.8); }
+.vol-row input[type="range"]::-moz-range-thumb { width: 10px; height: 14px; background: var(--paper); border: 2px solid var(--mot); border-radius: 0; }
+.menu .vol-wrap { display: flex; }
+.menu .vol-wrap .vol-btn { width: 100%; }
+.menu .vol-panel { left: calc(100% + 10px); right: auto; top: auto; bottom: 0; }
+@media (max-width: 760px) { .menu .vol-panel { left: 0; bottom: auto; top: calc(100% + 6px); } }
+.scene:has(.minimap) .sound-toggles .vol-panel { top: auto; bottom: calc(100% + 6px); }
+.ti2 .f-img img.role { object-position: 50% 30%; transform: scale(1.15); }
+.lobby-left:has(.vol-panel) { position: relative; z-index: 40; }
+
+/* 对局右栏「角色」页（RoleIndex.jsx）：搜索 + 角色名小块 + 下面展开技能 */
+.ri { display: flex; flex-direction: column; gap: 8px; }
+.ri-top { display: flex; gap: 6px; position: sticky; top: 0; z-index: 2; background: var(--panel); padding: 2px 0 6px; }
+.ri-search { flex: 1; min-width: 0; background: #141717; color: var(--cream); border: 1px solid var(--line); font: 400 13px var(--sans); padding: 7px 9px; }
+.ri-search:focus { outline: none; border-color: var(--mot); }
+.ri-night { flex: none; background: none; border: 1px solid var(--line); color: var(--muted); font: 700 12px var(--sans); padding: 0 10px; cursor: pointer; }
+.ri-night.on { color: #111; background: var(--mot); border-color: var(--mot); }
+.ri-team { display: grid; grid-template-columns: 50px 1fr; gap: 6px; align-items: start; }
+.ri-tlabel { font: 900 11px/26px var(--sans); color: var(--attr); letter-spacing: 1px; }
+.ri-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.ri-chip { position: relative; background: none; border: 1px solid color-mix(in srgb, var(--attr) 55%, transparent); color: var(--attr); font: 900 12.5px/1 var(--sans); padding: 6px 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.ri-chip:hover { background: color-mix(in srgb, var(--attr) 14%, transparent); }
+.ri-chip.on { background: var(--attr); color: #111; border-color: var(--attr); }
+.ri-chip.mine { box-shadow: 0 0 0 2px var(--mot); }
+.ri-chip i { font-style: normal; font-size: 10px; background: var(--mot); color: #111; padding: 1px 3px; }
+.ri-chip em { font-style: normal; font-size: 10px; font-weight: 700; color: var(--cream); background: rgba(10, 12, 12, .85); padding: 1px 3px; }
+.ri-chip.on em { color: #111; background: rgba(255, 255, 255, .5); }
+.ri-empty { margin: 4px 0; font-size: 13px; }
+.ri-detail { display: grid; grid-template-columns: 76px 1fr; gap: 10px; margin-top: 4px; background: rgba(8, 10, 10, .7); border: 1px solid var(--line); border-left: 4px solid var(--attr); padding: 8px; animation: riIn .25s ease-out both; }
+@keyframes riIn { from { opacity: 0; transform: translateY(6px); } }
+.ri-art { padding: 0; border: 1px solid var(--attr); background: #000; cursor: zoom-in; aspect-ratio: 18 / 25; overflow: hidden; }
+.ri-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ri-body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ri-body header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+.ri-body header b { font: 900 17px var(--serif); color: var(--paper); letter-spacing: 1px; }
+.ri-body header small { font: italic 400 11px var(--num); color: var(--muted); }
+.ri-tag { font: 900 10px/1.6 var(--sans); padding: 0 4px; background: var(--attr); color: #111; }
+.ri-tag.night { background: #22344a; color: #cfe2ff; }
+.ri-body p { margin: 0; font-size: 13px; line-height: 1.65; color: #ddd8cb; }
+.ri-body .ri-note { font-size: 12px; color: var(--mot); }
+.ri-more { align-self: flex-start; background: none; border: 0; padding: 0; color: var(--muted); font: 700 12px var(--sans); cursor: pointer; }
+.ri-more:hover { color: var(--paper); }
+
+/* 小地图位置的技能速查表（CheatSheet.jsx） */
+.minimap.hidden { display: none; }
+.mm-sheet-btn { position: absolute; z-index: 4000; top: 12px; right: calc(12px + 150px + 8px); background: rgba(10, 12, 12, .88); border: 1px solid var(--line); color: var(--cream); font: 900 12px/1 var(--sans); letter-spacing: 1px; padding: 6px 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(0, 0, 0, .4); }
+.mm-sheet-btn:hover { color: #111; background: var(--mot); border-color: var(--mot); }
+@media (max-width: 859px) { .mm-sheet-btn { right: calc(12px + 104px + 6px); } }
+.cs { position: absolute; z-index: 5000; right: 12px; top: 12px; width: 310px; max-width: calc(100% - 24px); display: flex; flex-direction: column; background: rgba(12, 14, 14, .96); border: 1px solid var(--line); border-top: 3px solid var(--mot); box-shadow: 0 14px 34px rgba(0, 0, 0, .65); }
+.cs.moved { position: fixed; right: auto; }
+.cs.big { width: min(560px, calc(100vw - 24px)); max-height: calc(100% - 24px); }
+.cs.moved.big { max-height: calc(100vh - 24px); }
+.cs-head { display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 10px; cursor: grab; user-select: none; touch-action: none; border-bottom: 1px solid var(--line); }
+.cs-head:active { cursor: grabbing; }
+.cs-head b { font: 900 13px var(--sans); color: var(--mot); letter-spacing: 2px; }
+.cs-sc { flex: 1; font: 700 11px var(--sans); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-head button { background: none; border: 1px solid var(--line); color: var(--cream); font: 700 11px/1 var(--sans); padding: 4px 6px; cursor: pointer; }
+.cs-head button:hover { border-color: var(--mot); color: var(--mot); }
+.cs-body { max-height: 220px; overflow-y: auto; padding: 4px 8px 8px; }
+.cs.big .cs-body { max-height: none; flex: 1; min-height: 0; }
+.cs section { margin-top: 6px; }
+.cs h4 { margin: 0 0 2px; font: 900 11px var(--sans); color: var(--attr); letter-spacing: 2px; }
+.cs-row { display: grid; grid-template-columns: 58px 1fr; gap: 0 8px; width: 100%; text-align: left; background: none; border: 0; border-left: 2px solid transparent; padding: 3px 4px; color: inherit; cursor: pointer; }
+.cs-row:hover, .cs-row.open { background: rgba(233, 228, 216, .05); border-left-color: var(--attr); }
+.cs-row b { font: 900 12px/1.55 var(--sans); color: var(--attr); white-space: nowrap; }
+.cs-row b i { font-style: normal; margin-left: 3px; font-size: 9px; background: var(--mot); color: #111; padding: 0 2px; }
+.cs-row > span { font-size: 11.5px; line-height: 1.55; color: #d8d3c6; }
+.cs-full { grid-column: 2; margin: 2px 0 2px; font-size: 11.5px; line-height: 1.55; color: var(--muted); }
+.cs-row.mine { background: rgba(226, 181, 44, .08); }
+.cs.big .cs-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; align-content: start; }
+.cs.big .cs-row b { font-size: 13px; }
+.cs.big .cs-row > span { font-size: 12.5px; }
+@media (max-width: 640px) { .cs.big .cs-body { grid-template-columns: 1fr; } }
+.scene:has(.cs:not(.moved)) .room-strip { top: 280px; }
+
+/* 提名 / 投票时顶上的票数小块（App.jsx VoteStats） */
+.vote-stats { position: absolute; top: 46px; left: 12px; z-index: 958; display: flex; flex-direction: column; align-items: flex-start; width: max-content; max-width: calc(100% - 24px); }
+.vs-chip { display: flex; flex-wrap: wrap; max-width: 330px; text-align: left; align-items: baseline; gap: 2px 12px; background: rgba(8, 10, 10, .9); border: 1px solid var(--line); border-top: 2px solid var(--opt); color: var(--cream); font: 700 12px var(--sans); padding: 4px 12px; cursor: pointer; }
+.vs-chip > span { white-space: nowrap; }
+.vs-chip b { font: 900 15px var(--num); color: var(--paper); margin: 0 1px; }
+.vs-chip i { font-style: normal; color: var(--muted); }
+.vs-chip small { font-size: 11px; color: var(--muted); font-weight: 400; }
+.vs-chip:hover { border-color: var(--opt); }
+.vs-more { margin-top: 4px; width: min(420px, calc(100vw - 24px)); background: rgba(10, 12, 12, .97); border: 1px solid var(--line); border-left: 3px solid var(--opt); padding: 8px 12px; box-shadow: 0 12px 30px rgba(0, 0, 0, .6); animation: riIn .2s ease-out both; }
+.vs-more p { margin: 0 0 6px; font-size: 13px; line-height: 1.6; color: #d8d3c6; }
+.vs-more p:last-child { margin-bottom: 0; }
+.vs-more b { color: var(--paper); }
+@media (max-width: 859px) { .vote-stats { top: 40px; } .vs-chip { gap: 8px; font-size: 11px; padding: 3px 8px; } .vs-chip b { font-size: 13px; } }
+
+/* 「角色」页多选 */
+.ri-multi-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+.ri-multi-bar button { background: none; border: 1px solid var(--line); color: var(--cream); font: 700 12px var(--sans); padding: 3px 10px; cursor: pointer; }
+.ri-x { margin-left: auto; background: none; border: 0; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.ri-x:hover { color: var(--paper); }
+/* 提名 / 投票时左上角有票数小块：声音开关挪到右下角（和走地图时一样），别挤在一起 */
+.scene:has(.vote-stats) .sound-toggles { top: auto; bottom: 84px; }
+.scene:has(.vote-stats) .sound-toggles .vol-panel { top: auto; bottom: calc(100% + 6px); }
+.vs-chip { max-width: 420px; }
+/* 操作面板里人多时，「确认 / 不选」那排按钮贴在面板底部，不用往下滚才找到 */
+@media (min-width: 860px) { .dock .choose-pnl .btn-row { position: sticky; bottom: 0; z-index: 2; background: linear-gradient(transparent, var(--ink) 30%); padding-top: 10px; margin-bottom: -2px; } }
+/* 广场座位圈左键连线（Town.jsx） */
+.town-linkbar { position: absolute; z-index: 40; left: 50%; top: 8px; transform: translateX(-50%); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px; width: max-content; max-width: calc(100% - 16px); background: rgba(10, 12, 12, .94); border: 1px solid var(--line); border-top: 2px solid var(--mot); padding: 6px 10px; font: 700 12px var(--sans); color: var(--cream); box-shadow: 0 8px 22px rgba(0, 0, 0, .6); }
+.town-linkbar b { color: var(--mot); }
+.town-linkbar .tl-cancel { background: none; border: 1px solid var(--line); color: var(--muted); font: 700 12px var(--sans); padding: 4px 8px; cursor: pointer; }
+.town .token.link-from .portrait { outline: 3px solid var(--mot); outline-offset: 2px; animation: dock-pulse 1.2s ease-in-out infinite; }
+
+/* 造谣者的声明：屏幕中间的弹窗 */
+.gossip-bg { align-items: center; z-index: 2100; }
+.gossip-modal { width: min(460px, calc(100vw - 24px)); max-height: calc(100vh - 40px); overflow-y: auto; background: #0f1212; border: 1px solid var(--line); border-top: 3px solid var(--mot); box-shadow: 0 20px 50px rgba(0, 0, 0, .75); padding: 14px 16px; animation: riIn .2s ease-out both; }
+.gossip-modal h3 { margin: 0 0 4px; font: 900 18px var(--serif); color: var(--paper); letter-spacing: 2px; }
+.gossip-modal .gossip-form { border: 0; padding: 0; margin: 0; }
+
+/* ───────── 字号：文字多的界面整体缩放（display.js 设 --ui-zoom）───────── */
+.dock, .drawer, .lobby-right, .tut, .gossip-modal, .sheet, .role-modal { zoom: var(--ui-zoom, 1); }
+
+/* ───────── 浅色主题（自动生成：scripts/gen-light-theme.py 从上面的样式里把深底换成纸色、浅字换成墨色；只作用在读字的界面里，地图和过场不变）───────── */
+/* 文字三层（纸色底 #faf7f0 上）：主 #1c1913 约 16:1、强调 #0f0d0a、次要 #45403a 约 9.5:1——原来次要 #6a6457 只有 5:1，又细又小，看着像融进底色 */
+html.theme-light { --lt-bg: #e9e3d4; --lt-panel: rgba(250, 247, 240, .98); --lt-text: #1c1913; --lt-strong: #0f0d0a; --lt-muted: #45403a; }
+html.theme-light body { background: var(--lt-bg); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) {
+  color: var(--lt-text); color-scheme: light;
+  --line: rgba(40, 34, 24, .22); --muted: #45403a; --cream: #1c1913;
+  /* 强调色在浅底上当文字用：整体加深，11 号小字也过 4.5:1 */
+  --mot: #7a5a00; --int: #135f78; --psy: #553ca0; --phy: #a1271d; --opt: #a8401a; --ok: #226a40;
+  -webkit-font-smoothing: auto; /* 浅底上灰度平滑会把字吃细 */
+}
+@media (min-width: 860px) { html.theme-light .dock, html.theme-light .drawer { background: var(--lt-panel); border: 1px solid rgba(40, 34, 24, .15); padding: 10px 12px; } }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) b, html.theme-light b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .muted, html.theme-light .muted:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .toast, html.theme-light .toast:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .splash-note, html.theme-light .splash-note:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .title, html.theme-light .title:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tag-dark, html.theme-light .tag-dark:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .pnl, html.theme-light .pnl:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: var(--lt-panel); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .flavor-line, html.theme-light .flavor-line:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .btn-secondary, html.theme-light .btn-secondary:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); border-color: rgba(40, 34, 24, 0.63); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .btn-secondary:hover:not(:disabled) { background: rgba(40, 34, 24, 0.1); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .btn-ghost, html.theme-light .btn-ghost:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .btn-ghost:hover:not(:disabled) { color: var(--lt-text); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .chip.empty, html.theme-light .chip.empty:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); border: 1px dashed rgba(40, 34, 24, 0.43); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .line, html.theme-light .line:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .flavor, html.theme-light .flavor:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .said b, html.theme-light .said b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .drawer.open, html.theme-light .drawer.open:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(246, 242, 233, 0.97); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .drawer-tabs, html.theme-light .drawer-tabs:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(246, 242, 233, 0.97); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .drawer-tabs button, html.theme-light .drawer-tabs button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .drawer-tabs button.on, html.theme-light .drawer-tabs button.on:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .drawer-tabs, html.theme-light .drawer-tabs:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: var(--lt-bg); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .me-sq, html.theme-light .me-sq:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #2a2620; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .me-seat, html.theme-light .me-seat:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tally b.need, html.theme-light .tally b.need:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .clock-hand, html.theme-light .clock-hand:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .speech, html.theme-light .speech:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .skillcard, html.theme-light .skillcard:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; border: 1px solid rgba(40, 34, 24, 0.38); box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .skill-art, html.theme-light .skill-art:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f3efe6; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .roster-card, html.theme-light .roster-card:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: var(--lt-panel); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .info-item, html.theme-light .info-item:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: var(--lt-panel); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) textarea, html.theme-light textarea:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip), html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) select, html.theme-light select:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f4f0e7; color: var(--lt-text); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .sheet-bg, html.theme-light .sheet-bg:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(248, 244, 235, 0.9); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .menu .menu-item, html.theme-light .menu .menu-item:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(247, 243, 234, 0.9); color: var(--lt-text); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .menu .btn-primary.menu-item, html.theme-light .menu .btn-primary.menu-item:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #2a2620; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .menu .menu-item:disabled, html.theme-light .menu .menu-item:disabled:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); background: rgba(247, 243, 234, 0.9); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .menu-wait, html.theme-light .menu-wait:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .lobby-tips, html.theme-light .lobby-tips:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .lobby .glass, html.theme-light .lobby .glass:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(246, 242, 233, 0.9); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dist-legend, html.theme-light .dist-legend:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .kick, html.theme-light .kick:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .seg, html.theme-light .seg:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { border: 1px solid rgba(40, 34, 24, 0.53); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .seg button, html.theme-light .seg button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .switch, html.theme-light .switch:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { border: 1px solid rgba(40, 34, 24, 0.58); background: #f3efe6; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tips, html.theme-light .tips:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .zzz, html.theme-light .zzz:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .pick, html.theme-light .pick:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.05); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .pick:hover { border-color: rgba(40, 34, 24, 0.58); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .id-name, html.theme-light .id-name:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .acard, html.theme-light .acard:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f6f2e9; border: 1px solid rgba(40, 34, 24, 0.28); box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .acard-art, html.theme-light .acard-art:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f8f4eb; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .acard-when .night, html.theme-light .acard-when .night:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(246, 242, 233, 0.9); color: #2a2620; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .acard-text, html.theme-light .acard-text:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .acard-facts dd, html.theme-light .acard-facts dd:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .reminder, html.theme-light .reminder:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .acard-reminders small, html.theme-light .acard-reminders small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .acard-flavor, html.theme-light .acard-flavor:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .guide-houses figcaption, html.theme-light .guide-houses figcaption:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .titlecard, html.theme-light .titlecard:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(ellipse at center, rgba(246, 242, 233, 0.9), rgba(248, 244, 235, 0.94)); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .titlecard.tc-night, html.theme-light .titlecard.tc-night:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(ellipse at center, rgba(245, 241, 232, 0.9), rgba(248, 244, 235, 0.96)); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .titlecard.tc-dawn, html.theme-light .titlecard.tc-dawn:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: linear-gradient(to top, rgba(248, 244, 235, 0.9), rgba(248, 244, 235, 0.9) 38%, transparent 62%); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .titlecard.tc-phy, html.theme-light .titlecard.tc-phy:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(ellipse at center, rgba(245, 241, 232, 0.9), rgba(248, 244, 235, 0.96)); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tc-title, html.theme-light .tc-title:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tc-phy .tc-title, html.theme-light .tc-phy .tc-title:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #2a2620; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tc-line, html.theme-light .tc-line:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .sc-roll, html.theme-light .sc-roll:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .sc-flavor, html.theme-light .sc-flavor:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .replay-filters button, html.theme-light .replay-filters button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .replay-filters button.on, html.theme-light .replay-filters button.on:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .replay-group h4, html.theme-light .replay-group h4:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .replay-kind, html.theme-light .replay-kind:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .replay-group li.rk-st, html.theme-light .replay-group li.rk-st:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .replay-group li.broken > span:last-child, html.theme-light .replay-group li.broken > span:last-child:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .room-chip, html.theme-light .room-chip:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(246, 242, 233, 0.9); color: var(--lt-text); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .room-chip.locked, html.theme-light .room-chip.locked:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { border-color: rgba(40, 34, 24, 0.6799999999999999); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .room-state, html.theme-light .room-state:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rp, html.theme-light .rp:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .sq-board b, html.theme-light .sq-board b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .sq-board small, html.theme-light .sq-board small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .sq-status, html.theme-light .sq-status:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .link-row button, html.theme-light .link-row button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .link-row button:hover { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mark-menu, html.theme-light .mark-menu:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mm-title, html.theme-light .mm-title:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mm-role, html.theme-light .mm-role:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mm-foot button, html.theme-light .mm-foot button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mm-foot button:last-child, html.theme-light .mm-foot button:last-child:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rc-note, html.theme-light .rc-note:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .roles-head h2, html.theme-light .roles-head h2:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .roles-team h3 small, html.theme-light .roles-team h3 small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .role-tile, html.theme-light .role-tile:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(247, 243, 234, 0.9); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .role-tile:hover { background: rgba(40, 34, 24, 0.06); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rt-art, html.theme-light .rt-art:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f8f4eb; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rt-body, html.theme-light .rt-body:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rt-body b, html.theme-light .rt-body b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rt-body b i, html.theme-light .rt-body b i:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .role-modal-close, html.theme-light .role-modal-close:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tut, html.theme-light .tut:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tut-exit, html.theme-light .tut-exit:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tut h3, html.theme-light .tut h3:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tut p, html.theme-light .tut p:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tut .tut-wait, html.theme-light .tut .tut-wait:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tut-skip, html.theme-light .tut-skip:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .bb-n, html.theme-light .bb-n:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .bb-item, html.theme-light .bb-item:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .center-hand, html.theme-light .center-hand:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(247, 243, 234, 0.9); color: var(--lt-strong); box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .center-locked, html.theme-light .center-locked:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .bluff-card, html.theme-light .bluff-card:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f6f2e9; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .bc-art, html.theme-light .bc-art:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f8f4eb; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .bluff-card b, html.theme-light .bluff-card b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .bluff-card small, html.theme-light .bluff-card small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .splash-help p, html.theme-light .splash-help p:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vt, html.theme-light .vt:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(247, 243, 234, 0.9); color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-day h4, html.theme-light .vh-day h4:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-card, html.theme-light .vh-card:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.02); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-head > b, html.theme-light .vh-head > b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-count, html.theme-light .vh-count:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-count b, html.theme-light .vh-count b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-line, html.theme-light .vh-line:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-line b, html.theme-light .vh-line b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-voter, html.theme-light .vh-voter:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .invite-people button, html.theme-light .invite-people button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .update-bar, html.theme-light .update-bar:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .pg-list button, html.theme-light .pg-list button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.03); color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .pg-when, html.theme-light .pg-when:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip), html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .pg-meta, html.theme-light .pg-meta:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .past-game, html.theme-light .past-game:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f6f2e9; box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .pg-p small, html.theme-light .pg-p small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .info-box, html.theme-light .info-box:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.05); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .info-box header small, html.theme-light .info-box header small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .w-label, html.theme-light .w-label:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .wd-preview, html.theme-light .wd-preview:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(ellipse at 50% 85%, rgba(40, 34, 24, 0.14), transparent 60%), #f6f2e9; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .wd-label, html.theme-light .wd-label:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .wd-pick b, html.theme-light .wd-pick b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .wd-pick button, html.theme-light .wd-pick button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rp-team button, html.theme-light .rp-team button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .gossip-form select, html.theme-light .gossip-form select:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip), html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .preset-select, html.theme-light .preset-select:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .gossip-form textarea, html.theme-light .gossip-form textarea:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .home-tag, html.theme-light .home-tag:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { border: 1px solid rgba(40, 34, 24, 0.58); background: rgba(246, 242, 233, 0.9); color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .home-tag.picked, html.theme-light .home-tag.picked:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { border-color: rgba(40, 34, 24, 1); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .morph, html.theme-light .morph:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(circle at 50% 45%, #f6f2e9, #f8f4eb 70%); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-room, html.theme-light .dk-room:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(circle at 50% 60%, #f2eee5, #f7f3ea 70%); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-door, html.theme-light .dk-door:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: linear-gradient(90deg, #efebe2, #5d412b 50%, #efebe2); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-door i, html.theme-light .dk-door i:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f3efe6; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-qte, html.theme-light .dk-qte:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-qte b, html.theme-light .dk-qte b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-qte span, html.theme-light .dk-qte span:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-bar, html.theme-light .dk-bar:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { border: 2px solid rgba(40, 34, 24, 1); background: #f5f1e8; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-qte em, html.theme-light .dk-qte em:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #2a2620; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-line, html.theme-light .dk-line:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .role-assign .ra-toggle, html.theme-light .role-assign .ra-toggle:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .role-assign .ra-warn, html.theme-light .role-assign .ra-warn:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ra-row select, html.theme-light .ra-row select:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ra-clear button, html.theme-light .ra-clear button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dkl-door, html.theme-light .dkl-door:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f7f3ea; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dkl-doorway, html.theme-light .dkl-doorway:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: linear-gradient(180deg, #b8cbe0, #5d7290 60%, #efebe2); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dkl-claws i, html.theme-light .dkl-claws i:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: linear-gradient(90deg, transparent, #ff2a1a 25%, #ffd0b0 50%, #f0ece3 80%, transparent); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dkl-fade, html.theme-light .dkl-fade:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(circle, transparent 30%, #f6f2e9 100%); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .layout-editor, html.theme-light .layout-editor:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f6f2e9; color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .le-panel button, html.theme-light .le-panel button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .le-panel button.on, html.theme-light .le-panel button.on:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { border-color: rgba(40, 34, 24, 1); color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .le-msg, html.theme-light .le-msg:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .le-fog-dot, html.theme-light .le-fog-dot:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.35); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .term-tip, html.theme-light .term-tip:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-text); box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .no-cols li, html.theme-light .no-cols li:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.04); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .no-n, html.theme-light .no-n:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .no-art, html.theme-light .no-art:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(248, 244, 235, 0.9); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .no-why, html.theme-light .no-why:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .role-picker .rp-none, html.theme-light .role-picker .rp-none:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .role-picker .rp-none.on, html.theme-light .role-picker .rp-none.on:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rc-role-btn, html.theme-light .rc-role-btn:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip), html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rc-link-btn, html.theme-light .rc-link-btn:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--c, var(--lt-text)); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mark-menu .mm-sub, html.theme-light .mark-menu .mm-sub:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ki-row.peace, html.theme-light .ki-row.peace:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip), html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ki-row.none, html.theme-light .ki-row.none:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.04); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ki-tag, html.theme-light .ki-tag:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .history-all, html.theme-light .history-all:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mg-circle, html.theme-light .mg-circle:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(circle at 50% 50%, rgba(40, 34, 24, 0.06), transparent 70%); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mm-note, html.theme-light .mm-note:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-text); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tut-demo-toggle, html.theme-light .tut-demo-toggle:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vol-panel, html.theme-light .vol-panel:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vol-name, html.theme-light .vol-name:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vol-name small, html.theme-light .vol-name small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vol-row input[type="range"]::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--mot) var(--v), rgba(40, 34, 24, 0.15) var(--v)); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vol-row input[type="range"]::-moz-range-track { background: rgba(40, 34, 24, 0.15); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-top, html.theme-light .ri-top:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: var(--lt-panel); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-search, html.theme-light .ri-search:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-text); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-night, html.theme-light .ri-night:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-chip em, html.theme-light .ri-chip em:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); background: rgba(246, 242, 233, 0.9); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-detail, html.theme-light .ri-detail:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(247, 243, 234, 0.9); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-art, html.theme-light .ri-art:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f8f4eb; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-body header b, html.theme-light .ri-body header b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-body header small, html.theme-light .ri-body header small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-tag.night, html.theme-light .ri-tag.night:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f0ece3; color: #2a2620; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-body p, html.theme-light .ri-body p:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-more, html.theme-light .ri-more:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-more:hover { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .cs, html.theme-light .cs:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(246, 242, 233, 0.96); box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .cs-sc, html.theme-light .cs-sc:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .cs-row:hover, html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .cs-row.open, html.theme-light .cs-row.open:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.05); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .cs-row > span, html.theme-light .cs-row > span:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .cs-full, html.theme-light .cs-full:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-multi-bar, html.theme-light .ri-multi-bar:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-multi-bar button, html.theme-light .ri-multi-bar button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-x, html.theme-light .ri-x:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-x:hover { color: var(--lt-strong); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .gossip-modal, html.theme-light .gossip-modal:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
+html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .gossip-modal h3, html.theme-light .gossip-modal h3:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
+/* 设置面板里的「显示」 */
+.disp { display: grid; gap: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.disp-row { display: grid; gap: 4px; }
+.disp-seg { display: flex; flex-wrap: wrap; gap: 3px; }
+.disp-seg button { flex: 1; min-width: 36px; background: none; border: 1px solid var(--line); color: var(--cream); font: 700 12px/1 var(--cond); padding: 6px 4px; cursor: pointer; }
+.disp-seg button.on { background: var(--mot); border-color: var(--mot); color: #111; }
+.vol-panel { max-height: calc(100vh - 60px); overflow-y: auto; }
+.drawer-tabs button { white-space: nowrap; }
+html.theme-light .drawer-tabs button { padding: 8px 9px; letter-spacing: 1px; }
+.drawer-tabs { overflow-x: auto; scrollbar-width: none; }
+.disp-row .vol-name { grid-area: auto; }
+.vol-panel { z-index: 6000; }
+.sound-toggles:has(.vol-panel) { z-index: 6000; }
+
+/* 次要说明（.muted）：12–13 号的细衬线在两种背景上都发虚，换成笔画更实的无衬线；最小 13 号 */
+.muted { font-family: var(--sans); font-weight: 400; }
+.info-box > p { font-size: 13px; }
+
+/* 浅色主题手调（生成器管不到的）：
+   1. 强调色在浅底上加深了，压在强调色色块上的黑字（选中的按钮、小标签）改成白字，约 6.5–9:1；
+   2. 小魔典圆圈里的头像标签自带深色底：换回深色主题的亮色和浅字；
+   3. 连线种类（信任 / 怀疑……）的颜色是固定的亮色，没选中时在纸色上看不清：和墨色混一半。 */
+html.theme-light :is(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) :is(.dot, .rc-lock, .mark-badge, .mm-tags button.on, .rc-marks button.on, .as-face.me i, .tut-next, .pg-win.good, .rp-team button.on, .rp-roles button.on, .rc-role-btn.set, .ri-night.on, .ri-chip.on, .ri-chip i, .ri-tag:not(.night), .cs-row b i, .disp-seg button.on, .acard-facts dt, .mg-note, .mg-role, .tag-int, .tag-psy, .tag-mot) { color: #fff; }
+html.theme-light :is(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mg-token {
+  --int: #5fb8cf; --psy: #9a7fd6; --phy: #d24a3a; --mot: #e2b52c; --opt: #d9603b; --ok: #3f9b62; color: #f2ede0;
+}
+html.theme-light :is(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mg-token :is(.mark-badge, .mg-note, .mg-role) { color: #111; }
+html.theme-light :is(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mg-dead { background: #141010; color: #ff8574; }
+html.theme-light :is(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) :is(.mg-kinds button:not(.on), .le-kinds button:not(.on), .le-chip) {
+  color: color-mix(in srgb, var(--c) 45%, #1c1913); border-color: color-mix(in srgb, var(--c) 60%, #1c1913);
+}
+/* 开场加载页不在读字界面里，字是浅色的：浅色主题下这一页仍用深底 */
+html.theme-light body:has(.splash) { background: var(--ink); }
+
+/* 多行信息和魔典表（间谍）：一人一行，座位、角色小图、角色名（阵营色）、名字、提示标记 */
+.said .ml-line { display: block; }
+.grim { list-style: none; margin: 6px 0 4px; padding: 0; display: grid; gap: 3px; }
+.grim li { display: grid; grid-template-columns: 22px 30px minmax(0, 1fr); grid-template-areas: "seat icon who" ". . tags"; align-items: center; column-gap: 7px; padding: 3px 6px 3px 4px; background: rgba(255, 255, 255, .03); border-left: 3px solid var(--int); }
+.grim li.evil { border-left-color: var(--phy); background: rgba(210, 74, 58, .07); }
+.grim-seat { grid-area: seat; font: 900 13px/1 var(--cond); text-align: center; color: var(--paper); }
+.grim-icon { grid-area: icon; width: 30px; height: 30px; border-radius: 50%; overflow: hidden; background: rgba(255, 255, 255, .06); }
+.grim-icon img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; display: block; }
+.grim-who { grid-area: who; min-width: 0; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; line-height: 1.3; }
+.grim-who b { font: 900 14px var(--sans); }
+.grim-who small { font: 400 12px var(--sans); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.grim-tags { grid-area: tags; display: flex; flex-wrap: wrap; gap: 3px; }
+.grim-tags i { font: normal 700 11px/1.5 var(--sans); padding: 0 5px; background: rgba(226, 181, 44, .16); color: var(--mot); }
+html.theme-light :is(.dock, .drawer) .grim li { background: rgba(40, 34, 24, .04); }
+html.theme-light :is(.dock, .drawer) .grim li.evil { background: rgba(161, 39, 29, .07); }
+html.theme-light :is(.dock, .drawer) .grim-seat { color: var(--lt-strong); }
+html.theme-light :is(.dock, .drawer) .grim-tags i { background: rgba(122, 90, 0, .12); }
+
+/* 白天当众发生的事（公开声明、开枪）：屏幕上方居中的横幅，不挡点击，只能点 × 关，7 秒以上自己收起 */
+.tc-banner { position: fixed; z-index: 120; left: 50%; top: 14vh; transform: translateX(-50%); width: min(620px, calc(100vw - 32px)); padding: 14px 44px 16px 22px; pointer-events: none; text-align: center;
+  background: rgba(10, 12, 12, .92); border: 1px solid var(--mot); box-shadow: 0 18px 50px rgba(0, 0, 0, .55); animation: tcBannerIn .35s cubic-bezier(.2, .9, .3, 1.2) both; }
+.tc-banner.tc-phy { border-color: var(--phy); background: rgba(40, 8, 8, .94); }
+.tc-banner .tc-kicker { display: block; margin-bottom: 4px; letter-spacing: 4px; }
+.tc-banner .tc-title { font-size: clamp(26px, 5vw, 38px); letter-spacing: 6px; }
+.tc-banner .tc-line { margin-top: 4px; font-size: 17px; line-height: 1.6; color: var(--paper); }
+.tc-banner-x { pointer-events: auto; position: absolute; top: 6px; right: 8px; width: 30px; height: 30px; background: none; border: 0; color: var(--muted); font: 400 22px/1 var(--sans); cursor: pointer; }
+.tc-banner-x:hover { color: var(--paper); }
+@keyframes tcBannerIn { from { opacity: 0; transform: translate(-50%, -14px) scale(.96); } }
+
+/* 信息框里有间谍魔典这种长信息：放宽高度，少在小框里来回滚 */
+.info-box .journal { max-height: min(460px, 62vh); }

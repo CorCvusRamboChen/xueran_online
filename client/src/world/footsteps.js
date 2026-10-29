@@ -2,6 +2,8 @@
 // 不同地面不同声音：雪地咯吱、石板清脆、木地板闷响、石地发硬、瓷砖短促、地毯发闷、碎石沙沙、码头木板空响。
 // 自己的脚步最响；别人的按距离变小、按左右声像，离太远就不放。开关存在本机。
 
+import { bus } from '../mixer.js';
+
 const KEY = 'botc.sfx';
 let enabled = true;
 try { enabled = localStorage.getItem(KEY) !== 'off'; } catch { /* 隐私模式 */ }
@@ -78,7 +80,7 @@ export function footstep(surface, volume = 1, pan = 0) {
   if (!a || a.state !== 'running') return;
   const g = a.createGain(); g.gain.value = volume * rand(0.8, 1);
   const p = a.createStereoPanner ? a.createStereoPanner() : null;
-  if (p) { p.pan.value = Math.max(-1, Math.min(1, pan)); g.connect(p).connect(a.destination); } else g.connect(a.destination);
+  if (p) { p.pan.value = Math.max(-1, Math.min(1, pan)); g.connect(p).connect(bus(a, 'sfx')); } else g.connect(bus(a, 'sfx'));
   SURFACES[surface](g, a.currentTime + 0.005);
 }
 
@@ -89,7 +91,7 @@ export function knock(volume = 1, pan = 0) {
   if (!a || a.state !== 'running') return;
   const g = a.createGain(); g.gain.value = volume;
   const p = a.createStereoPanner ? a.createStereoPanner() : null;
-  if (p) { p.pan.value = Math.max(-1, Math.min(1, pan)); g.connect(p).connect(a.destination); } else g.connect(a.destination);
+  if (p) { p.pan.value = Math.max(-1, Math.min(1, pan)); g.connect(p).connect(bus(a, 'sfx')); } else g.connect(bus(a, 'sfx'));
   for (let i = 0; i < 3; i++) {
     const t = a.currentTime + 0.01 + i * 0.22;
     thump(g, t, { freq: 160, dur: 0.12, gain: 0.8 });
@@ -103,7 +105,7 @@ export function doorKick(volume = 0.8, heavy = false, power = 0.5) {
   const a = audio();
   if (!a || a.state !== 'running') return;
   const g = a.createGain(); g.gain.value = volume;
-  g.connect(a.destination);
+  g.connect(bus(a, 'sfx'));
   const t = a.currentTime + 0.005;
   thump(g, t, { freq: heavy ? 38 : 60 - power * 15, dur: heavy ? 0.7 : 0.28 + power * 0.15, gain: 1 });
   burst(g, t, { dur: heavy ? 0.45 : 0.16 + power * 0.1, type: 'lowpass', freq: 600 + power * 400, gain: 1 });
@@ -118,7 +120,7 @@ export function heartbeat(volume = 0.35) {
   const a = audio();
   if (!a || a.state !== 'running') return;
   const g = a.createGain(); g.gain.value = volume;
-  g.connect(a.destination);
+  g.connect(bus(a, 'sfx'));
   const t = a.currentTime + 0.005;
   thump(g, t, { freq: 48, dur: 0.16, gain: 1 });
   thump(g, t + 0.17, { freq: 42, dur: 0.2, gain: 0.7 });
@@ -130,7 +132,7 @@ export function shove(volume = 0.4) {
   const a = audio();
   if (!a || a.state !== 'running') return;
   const g = a.createGain(); g.gain.value = volume;
-  g.connect(a.destination);
+  g.connect(bus(a, 'sfx'));
   const t = a.currentTime + 0.005;
   thump(g, t, { freq: 95, dur: 0.09, gain: 0.9 });
   burst(g, t, { dur: 0.05, type: 'lowpass', freq: 500, gain: 0.5 });
@@ -142,7 +144,7 @@ export function slash(volume = 0.7) {
   const a = audio();
   if (!a || a.state !== 'running') return;
   const g = a.createGain(); g.gain.value = volume;
-  g.connect(a.destination);
+  g.connect(bus(a, 'sfx'));
   const t = a.currentTime + 0.005;
   const src = a.createBufferSource(); src.buffer = noise;
   const f = a.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 2.5;
@@ -162,7 +164,7 @@ export function growl(volume = 0.5) {
   if (!a || a.state !== 'running') return;
   const g = a.createGain(); g.gain.value = volume;
   const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 520;
-  lp.connect(g).connect(a.destination);
+  lp.connect(g).connect(bus(a, 'sfx'));
   const t = a.currentTime + 0.005;
   for (const [hz, gain] of [[62, 0.5], [93, 0.3]]) {
     const o = a.createOscillator(); o.type = 'sawtooth';
@@ -178,7 +180,7 @@ export function growl(volume = 0.5) {
 /** 一路输出：音量 + 左右声像（远处的声音用）。 */
 function outBus(a, volume, pan) {
   const g = a.createGain(); g.gain.value = volume;
-  if (a.createStereoPanner) { const p = a.createStereoPanner(); p.pan.value = pan; g.connect(p).connect(a.destination); } else g.connect(a.destination);
+  if (a.createStereoPanner) { const p = a.createStereoPanner(); p.pan.value = pan; g.connect(p).connect(bus(a, 'ambient')); } else g.connect(bus(a, 'ambient'));
   return g;
 }
 
@@ -243,7 +245,7 @@ export function tick(urgent = false) {
   const a = audio();
   if (!a || a.state !== 'running') return;
   const g = a.createGain(); g.gain.value = urgent ? 0.5 : 0.32;
-  g.connect(a.destination);
+  g.connect(bus(a, 'sfx'));
   const t = a.currentTime + 0.01;
   thump(g, t, { freq: urgent ? 1400 : 1000, dur: 0.05, gain: 0.7 });
   burst(g, t, { dur: 0.02, freq: 3200, q: 4, gain: 0.35 });

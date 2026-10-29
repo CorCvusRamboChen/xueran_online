@@ -44,7 +44,7 @@ test('调查员：指出爪牙；间谍登记成善良时查不到他', () => {
   assert.match(ta, /\*\*投毒者\*\*/);
   assert.match(ta, /4号/);
   const b = mk(['investigator', 'chef', 'imp', 'spy', 'monk'], { misregister: 1 });
-  assert.match(textOf(night(b).messages, 'p1'), /没有可以告诉你的信息/);
+  assert.match(textOf(night(b).messages, 'p1'), /场上\*\*没有\*\*爪牙/);
 });
 
 test('间谍：每晚看到魔典', () => {
@@ -167,12 +167,12 @@ test('镇长：只剩三人且当天无人被处决，善良获胜', () => {
   assert.equal(g.winner, 'good');
 });
 
-test('管家：主人没举手时票不算', () => {
+test('管家：每晚要选主人；主人没举手时违规的票照算（官方）', () => {
   cover('butler');
   const g = mk(['butler', 'chef', 'imp', 'poisoner', 'monk']);
   night(g, { p1: ['p2'] });
   g.dawn();
-  assert.equal(g.recordVote('p3', ['p1']).count, 0);
+  assert.equal(g.recordVote('p3', ['p1']).count, 1, '违规票照算');
   assert.equal(g.recordVote('p4', ['p1', 'p2']).count, 2);
 });
 
@@ -387,4 +387,48 @@ test('AI 配板（暗流涌动）：强神打强神、弱神打弱神——挑�
     const sc = setupScoreTB(r);
     assert.ok(sc >= p10 && sc <= p90, `平衡分 ${sc} 不在 [${p10}, ${p90}]`);
   }
+});
+
+test('官方：夜里要选人的能力不能空过；小恶魔想空刀就选一名死人，今晚没人死', () => {
+  const g = mk(['fortuneteller', 'butler', 'imp', 'poisoner', 'chef', 'monk']);
+  g.startNight();
+  for (const id of ['p1', 'p2', 'p4']) assert.throws(() => g.submitChoice(id, []), /需要选择/);
+  g.submitChoice('p1', ['p5', 'p6']); g.submitChoice('p2', ['p5']); g.submitChoice('p4', ['p5']);
+  g.resolveNight();
+  g.dawn(); g.execute(g.get('p5')); g.endDay(); // 5 号死了
+  const alive = g.players.filter((p) => p.alive).length;
+  g.startNight();
+  assert.throws(() => g.submitChoice('p3', []), /需要选择/);
+  for (const pr of g.nightPrompts()) g.submitChoice(pr.playerId, pr.playerId === 'p3' ? ['p5'] : pr.options.slice(0, pr.count).filter((x) => x !== 'p5').concat(pr.options.slice(0, pr.count + 1)).slice(0, pr.count));
+  g.resolveNight();
+  assert.equal(g.players.filter((p) => p.alive).length, alive, '小恶魔选了死人：空刀，今晚没人死');
+});
+
+test('官方规则复查（暗流涌动）：僧侣保护的小恶魔自刀无事发生；处决死人送葬者没信息；5 人局只有洗衣妇一个镇民也有信息；白天红唇接任入夜告诉她；伪装两镇民一外来者', () => {
+  // 僧侣保护小恶魔，小恶魔自刀：不死、不传位
+  const a = mk(['monk', 'chef', 'imp', 'poisoner', 'scarletwoman', 'empath']);
+  night(a); a.dawn(); a.endDay();
+  night(a, { p1: ['p3'], p3: ['p3'], p4: ['p2'] });
+  assert.equal(a.get('p3').alive, true);
+  assert.equal(a.get('p5').role, 'scarletwoman', '没有传位');
+  // 处决一个已经死了的人：送葬者没信息
+  const b = mk(['undertaker', 'chef', 'imp', 'poisoner', 'monk', 'soldier', 'saint']);
+  night(b); b.dawn(); b.endDay();
+  night(b, { p3: ['p2'], p4: ['p5'], p5: ['p6'] }); // 2 号被杀
+  b.dawn();
+  b.execute(b.get('p2'));
+  assert.equal(textOf(night(b, { p3: ['p3'] }).messages, 'p1'), '', '处决死人：送葬者没有信息');
+  // 5 人局有男爵：场上只有洗衣妇一个镇民
+  const c = mk(['washerwoman', 'saint', 'imp', 'baron', 'recluse']);
+  assert.match(textOf(night(c).messages, 'p1'), /\*\*洗衣妇\*\*/);
+  // 白天处决小恶魔，红唇女郎接任：入夜时私下告诉她
+  const d = mk(['chef', 'empath', 'imp', 'scarletwoman', 'monk', 'soldier', 'saint']);
+  night(d); d.dawn();
+  d.execute(d.get('p3'));
+  assert.equal(d.get('p4').role, 'imp');
+  assert.match(textOf(d.evilMessages ?? [], 'p4'), /你现在是小恶魔/);
+  // 有不在场的外来者时：伪装是两个镇民加一个外来者
+  const e = mk(['chef', 'empath', 'imp', 'poisoner', 'monk', 'soldier', 'mayor']);
+  assert.equal(e.bluffs.filter((r) => ROLES[r].team === 'outsider').length, 1);
+  assert.equal(e.bluffs.filter((r) => ROLES[r].team === 'townsfolk').length, 2);
 });

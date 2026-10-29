@@ -106,7 +106,7 @@ export class Game {
    * @param {{rng?:()=>number, roles?:string[], misregister?:number}} opts
    *   misregister：陌客/间谍"错误登记"的固定概率（测试用）；不给就由说书人按局势判定
    */
-  constructor(players, { rng = Math.random, roles, misregister = null, evilInfo = null, script = 'tb', drunkAs = null, noBaron = false, deadDrunk = false } = {}) {
+  constructor(players, { rng = Math.random, roles, misregister = null, evilInfo = null, script = 'tb', drunkAs = null, noBaron = false, deadDrunk = false, lunaticGhost = false } = {}) {
     this.rng = rng;
     this.script = script === 'bmr' ? 'bmr' : 'tb';
     // 官方规则：7 人及以上第一夜恶魔和爪牙互认、恶魔拿 3 个伪装；6 人及以下都不给（房规可打开）
@@ -116,6 +116,7 @@ export class Game {
     this.id = Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36); // 这一局的编号（客户端按它分开存标记）
     this.misregister = misregister;
     this.deadDrunk = !!deadDrunk; // 房规：夜里被杀的信息角色照样拿当晚的信息，但按醉酒处理（官方：死了就没有能力）
+    this.lunaticGhost = !!lunaticGhost; // 房规（黯月初升）：以为自己是僵怖的疯子死后，在他看来是"假死"，没人死的夜里照样叫醒他（官方：死了就失去能力，不再醒）
     this.suspicion = {}; // 每个人被提名、得票的累计，说书人判断局势用
     this.timeline = [];  // 终局复盘：每晚谁选了谁、谁得到什么信息（真/假）、死亡、提名投票、说书人的判定
     this.st = new Storyteller(this, rng);
@@ -137,7 +138,8 @@ export class Game {
       // 恶魔的三个伪装：不在场的善良角色（不含酒鬼以为的那个）
       const taken = new Set([...inPlay, drunk?.shownRole]);
       const goodOut = (list) => shuffle(list.filter((r) => !taken.has(r) && r !== 'drunk'), rng);
-      this.bluffs = [...goodOut(TOWNSFOLK), ...goodOut(OUTSIDERS)].slice(0, 3);
+      const tf = goodOut(TOWNSFOLK); const os = goodOut(OUTSIDERS);
+      this.bluffs = os.length && tf.length >= 2 ? shuffle([...tf.slice(0, 2), os[0]], rng) : [...tf, ...os].slice(0, 3); // 官方建议：两个镇民加一个外来者
 
       this.redHerring = this.st.redHerring();
       this.firstDemon = this.players.find((p) => p.role === 'imp')?.id ?? null;
@@ -186,7 +188,7 @@ export class Game {
       'poisonTarget', 'monkTarget', 'butlerMaster', 'virginUsed', 'slayerUsed', 'lastExecuted', 'choices', 'nightDeaths', 'log',
       'block', 'blockVotes', 'blockTied', 'executedToday', 'shooters', 'firstDemon', 'evilInfo', 'evilKnown', 'bluffsShared', 'id',
       'script', 'fx', 'used', 'lastPick', 'pukkaVictim', 'poCharged', 'shabaLast', 'grandchild', 'gossipPending', 'gossipSaid',
-      'moonchildPick', 'pendingMoonchild', 'diedToday', 'outsiderDiedToday', 'mastermindDay', 'demonExecuted', 'nightRevived', 'newbies', 'deadDrunk'];
+      'moonchildPick', 'pendingMoonchild', 'diedToday', 'outsiderDiedToday', 'mastermindDay', 'demonExecuted', 'nightRevived', 'newbies', 'deadDrunk', 'lunaticGhost', 'evilMessages', 'midNight', 'lunaticFake', 'goonHit', 'pendingGoonNews', 'blocked', 'lunaticPicks'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -223,6 +225,8 @@ export class Game {
 
   /** 开局的恶魔把 3 个伪装告诉爪牙（现实里是私聊，这里一键分享）。 */
   shareBluffs(uid) {
+    // 疯子以为自己是恶魔：点了也照样显示"已告诉"，不能报错露馅（其实谁都没收到）
+    if (this.lunaticFake?.id === uid) { this.lunaticFake.shared = true; this.record('st', `疯子 ${this.tag(uid)} 以为自己把伪装告诉了"爪牙"（没有效果）`); return; }
     if (uid !== this.firstDemon || !this.evilKnown?.[uid]) throw new Error('只有第一夜拿到伪装的恶魔能分享');
     if (this.bluffsShared) return;
     this.bluffsShared = true;
@@ -342,6 +346,9 @@ export class Game {
     if (this.script === 'bmr') return this.submitChoiceBMR(playerId, targets, extra);
     const prompt = this.nightPrompts().find((x) => x.playerId === playerId);
     if (!prompt) throw new Error('你今晚不需要选择');
+    // 暗流涌动夜里要选人的能力都是"你要选择"（官方），不能空过；小恶魔想空刀就选一名已经死了的玩家
+    if (targets.length === 0 && prompt.options.length >= prompt.count) throw new Error(`需要选择 ${prompt.count} 名玩家`);
+    if (targets.length === 0) { this.choices[playerId] = []; return; } // 可选的人不够（比如活人太少）：只能不选
     if (targets.length !== prompt.count || new Set(targets).size !== targets.length) throw new Error(`需要选择 ${prompt.count} 名不同的玩家`);
     if (!targets.every((t) => prompt.options.includes(t))) throw new Error('选择了不可选的玩家');
     this.choices[playerId] = targets;
@@ -404,6 +411,7 @@ export class Game {
         case 'empath': say(p, `你两侧的存活邻座中有 **${this.empathInfo(p, lies())}** 名邪恶玩家。`); break;
         case 'fortuneteller': {
           if (!choice) break;
+          if (!choice.length) { say(p, '你今晚没有选人，没有得到信息。'); break; }
           const [a, b] = choice.map((id) => this.get(id));
           let yes = [a, b].some((q) => this.regDemon(q, '占卜师查验') || q.id === this.redHerring);
           if (broken && lies()) yes = this.st.fakeFortune(p, a, b, yes);
@@ -418,13 +426,17 @@ export class Game {
           break;
         }
         case 'butler':
-          if (choice) {
+          if (choice && !choice.length) { // 没选主人：没有人能"带"你投票，明天不能投
+            if (p.role === 'butler') this.butlerMaster = 'none';
+            say(p, '你今晚没有选主人：明天你不能投票。');
+          } else if (choice) {
             if (p.role === 'butler') this.butlerMaster = choice[0];
             say(p, `你的主人是 ${this.name(choice[0])}。明天只有他举手时你才能投票。`);
           }
           break;
         case 'spy':
-          say(p, `魔典：\n${this.grimoire()}`);
+          // 官方：间谍看到的魔典和说书人的一样，包括提示标记和恶魔拿到的伪装
+          say(p, `魔典（和说书人看到的一样）：\n${this.grimoire()}${this.bluffs?.length ? `\n恶魔拿到的伪装（不在场的角色）：${this.bluffs.map((r) => ROLES[r].name).join('、')}` : ''}`);
           break;
         default: break;
       }
@@ -448,8 +460,8 @@ export class Game {
 
   impKill(imp, target, messages) {
     if (!target || !target.alive) return;
+    if (this.monkTarget === target.id) return; // 被僧侣保护：包括小恶魔自刀——无事发生，不传位（官方）
     if (target.id === imp.id) { this.kill(imp, 'starpass', messages); return; }
-    if (this.monkTarget === target.id) return;
     if (target.role === 'soldier' && !this.broken(target)) return;
     if (target.role === 'mayor' && !this.broken(target)) {
       const others = this.alive().filter((q) => q.id !== target.id && q.id !== imp.id &&
@@ -487,6 +499,9 @@ export class Game {
     }
   }
 
+  /** 白天发生的死亡带出来的私信（比如红唇女郎接任恶魔）：官方是当晚唤醒告诉她，这里入夜时送到。 */
+  dayMessages() { return (this.evilMessages ??= []); }
+
   /** 洗衣妇/图书管理员/调查员：两人之一是某角色。lies：能力失效且说书人决定给假信息。 */
   infoPair(p, team, lies) {
     const others = this.players.filter((q) => q.id !== p.id);
@@ -495,7 +510,7 @@ export class Game {
     let target; let role;
     if (lies) {
       const fake = this.st.falsePair(p, team);
-      if (!fake) return team === 'outsider' ? '场上**没有**外来者。' : '没有可以告诉你的信息。';
+      if (!fake) return { outsider: '场上**没有**外来者。', minion: '场上**没有**爪牙。' }[team] ?? '没有可以告诉你的信息。';
       ({ target, role } = fake);
     } else {
       const cands = others.filter((q) => {
@@ -505,7 +520,8 @@ export class Game {
         if (q.role === 'spy') return !this.misreg(q, by);
         return ROLES[q.role].team === 'minion' || (q.role === 'recluse' && this.misreg(q, by));
       });
-      if (!cands.length) return team === 'outsider' ? '场上**没有**外来者。' : '没有可以告诉你的信息。';
+      if (!cands.length && team === 'townsfolk' && p.role === p.shownRole && TOWNSFOLK.includes(p.role)) cands.push(p);
+      if (!cands.length) return { outsider: '场上**没有**外来者。', minion: '场上**没有**爪牙。' }[team] ?? '没有可以告诉你的信息。';
       target = pick(cands, this.rng);
       role = ROLES[target.role].team === team ? target.role : pick(pool, this.rng);
     }
@@ -591,7 +607,8 @@ export class Game {
 
   /** 记录一次投票结果（yesIds 为举手的人）。死人举手会消耗他唯一的幽灵票。 */
   recordVote(nomineeId, yesIds) {
-    const voters = yesIds.filter((id) => this.canVote(id) && this.butlerOk(id, yesIds));
+    // 管家没跟着主人投的违规票也照算（官方：说书人不替管家把关，不算的话大家就知道谁是管家了）
+    const voters = yesIds.filter((id) => this.canVote(id));
     for (const id of voters) { const p = this.get(id); if (!this.visAlive(p)) p.ghostVote = false; }
     const count = voters.length;
     this.suspicion[nomineeId] = (this.suspicion[nomineeId] ?? 0) + count;
@@ -611,14 +628,14 @@ export class Game {
   execute(p) {
     if (this.script === 'bmr') return this.executeBMR(p);
     this.executedToday = true;
-    this.lastExecuted = p.id;
+    if (p.alive) this.lastExecuted = p.id; // 送葬者看的是"今天死于处决"的人：处决一个已经死了的人不算
     this.log.push(`${this.name(p.id)} 被处决`);
     if (p.role === 'saint' && p.alive && !this.broken(p)) {
       this.kill(p, 'execution');
       this.setWinner('evil', `圣徒 ${this.name(p.id)} 被处决`);
       return;
     }
-    this.kill(p, 'execution');
+    this.kill(p, 'execution', this.dayMessages());
     this.checkWinner();
   }
 
@@ -642,19 +659,18 @@ export class Game {
     if (this.phase !== 'day') throw new Error('只能在白天开枪');
     const s = this.get(shooterId); const t = this.get(targetId);
     if (!s || !t) throw new Error('玩家不在游戏中');
-    if (!s.alive) throw new Error('死亡玩家不能开枪');
     // 官方规则里谁都可以声称自己是猎手开枪（诈身份用），这里限制每人每局只能声称一次，免得反复乱点
     this.shooters ??= [];
     if (this.shooters.includes(s.id)) throw new Error('你这局已经开过枪了');
     this.shooters.push(s.id);
     let hit = false;
-    if (s.role === 'slayer' && !this.slayerUsed) {
+    if (s.role === 'slayer' && s.alive && !this.slayerUsed) { // 死了的猎手没有能力（照样可以假装开枪）
       this.slayerUsed = true;
       if (!this.broken(s) && t.alive && this.regDemon(t, '猎手开枪')) hit = true;
     }
     this.log.push(`${this.name(s.id)} 对 ${this.name(t.id)} 开枪 → ${hit ? '命中' : '无事发生'}`);
     this.record('slay', `${this.tag(s.id)} 向 ${this.tag(t.id)} 开枪 → ${hit ? '命中' : '无事发生'}`);
-    if (hit) { this.kill(t, 'slayer'); this.checkWinner(); }
+    if (hit) { this.kill(t, 'slayer', this.dayMessages()); this.checkWinner(); }
     return { hit };
   }
 
@@ -679,12 +695,18 @@ export class Game {
   /** 说书人手记：自动说书人做过的每个判定。 */
   get journal() { return this.st.journal; }
   stKill(id) { const p = this.get(id); if (p) { this.kill(p, 'storyteller'); this.checkWinner(); } }
-  stRevive(id) { const p = this.get(id); if (p) { p.alive = true; p.ghostVote = true; } }
+  stRevive(id) {
+    const p = this.get(id);
+    if (!p) return;
+    if (this.script === 'bmr') { this.revive(p, '说书人'); return; }
+    p.alive = true; p.ghostVote = true;
+  }
   setRole(id, role) {
     const p = this.get(id);
     if (!p || !ROLES[role]) throw new Error('无效的玩家或角色');
     p.role = role;
     p.shownRole = role;
+    if (this.script === 'bmr') p.evil = isEvilRole(role); // 黯月初升阵营单独记（莽夫会变），换角色要跟着换
   }
   setShownRole(id, role) { const p = this.get(id); if (p) p.shownRole = role; }
 
@@ -694,7 +716,7 @@ export class Game {
       if (!p.alive) tags.push(p.ghostVote ? '死亡（有幽灵票）' : '死亡');
       if (p.role === 'drunk') tags.push(`以为自己是${ROLES[p.shownRole].name}`);
       if (this.isPoisoned(p)) tags.push('中毒');
-      if (p.id === this.redHerring) tags.push('红鲱鱼');
+      if (p.id === this.redHerring) tags.push('占卜师的干扰项');
       if (p.id === this.butlerMaster) tags.push('管家的主人');
       if (p.id === this.monkTarget) tags.push('被僧侣保护');
       if (this.script === 'bmr') {
@@ -706,7 +728,7 @@ export class Game {
         if (this.used[p.id]) tags.push('能力已用');
       }
       const evil = this.evilOf(p) ? '【邪】' : '【善】';
-      return `${evil}${p.seat}号 ${p.name} — ${ROLES[p.role].name}${tags.length ? `（${tags.join('，')}）` : ''}`;
+      return `${evil}${p.seat}号 ${p.name} — ${ROLES[p.role].name}${tags.length ? `（${tags.join('、')}）` : ''}`; // 客户端按这个格式排成表（util.jsx 的 GrimoireLines）
     }).join('\n');
   }
 }

@@ -1,40 +1,23 @@
-// 新手教程的开场：几页带动效的介绍——故事背景 → 两个阵营 → 一天怎么过 → 怎么赢 → 三个关键操作的演示，
-// 最后进单人练习局。演示用的就是练习局里的那几个人（1 号你是共情者、2 号老格、7 号汉娜……），
-// 动画都是按进度 t 画出来的（useLoop），练习局里的分步提示（Tutorial.jsx）也复用这几段演示。
-import { useEffect, useState } from 'react';
-import { SCENE_ART, ROLE_ART, PEOPLE_ART } from './art.js';
-import { ATTR } from './flavor.js';
-import bakery from './assets/world/house-bakery-closed-lit.png';
+// 新手教程的开场：6 段全屏短动画，每段只讲一件事，讲完进单人练习局。
+//   1 恶魔藏在大家中间 → 2 身份是秘密的（自己点牌翻开）→ 3 夜里恶魔杀人、有人拿到线索
+//   → 4 白天对口供：两个人都说自己是士兵（必有一个说谎），再对上你的线索，两条都指向老格 → 5 自己举手，把恶魔投出去，好人赢
+//   → 6 抓不到恶魔、只剩 2 人，恶魔赢 → 收尾：三句话复述规则。
+// 只讲最核心的目标和一天的流程；角色分类、私聊锁门、小魔典这些留到练习局里边玩边学。
+// 演示里的人就是练习局那几个（1 号你是共情者、2 号老格是恶魔、7 号汉娜是士兵），推理和练习局一致。
+// 动画按时间 t（秒）直接算出来；需要你动手的那一步（翻牌、举手）时间会停住等你点。
+import { useEffect, useRef, useState } from 'react';
+import { ROLE_ART, PEOPLE_ART } from './art.js';
+import { audio, slash, growl, heartbeat, doorKick, tick, shove } from './world/footsteps.js';
+import { bus } from './mixer.js';
 
 const reduceMotion = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-
-/** 循环动画的进度 t（0~1，每 ms 毫秒一圈）。开了"减少动态效果"就停在 still。 */
-export function useLoop(ms, still = 0.7) {
-  const [t, setT] = useState(still);
-  useEffect(() => {
-    if (reduceMotion()) return undefined;
-    let raf = 0;
-    const t0 = performance.now();
-    const f = (now) => { setT(((now - t0) % ms) / ms); raf = requestAnimationFrame(f); };
-    raf = requestAnimationFrame(f);
-    return () => cancelAnimationFrame(raf);
-  }, [ms]);
-  return t;
-}
-
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const seg = (t, a, b) => clamp01((t - a) / (b - a));
 const ease = (x) => x * x * (3 - 2 * x);
-const lerp = (a, b, k) => a + (b - a) * k;
-const between = (t, a, b) => t >= a && t < b;
+const back = (x) => { const c = 1.7; return 1 + (c + 1) * (x - 1) ** 3 + c * (x - 1) ** 2; }; // 冲过头再回来
 
-// 演示画布：160 × 110 的坐标，HTML 元素按百分比摆，SVG 用同一个 viewBox，两边对得上
-const W = 160; const H = 110;
-const px = (x) => `${(x / W) * 100}%`;
-const py = (y) => `${(y / H) * 100}%`;
-
-/** 练习局里的 7 个人（和 src/server/tutorial.js 一致）。art 只是演示用的肖像。 */
-const SEATS = [
+/** 练习局里的 7 个人（和 src/server/tutorial.js 一致）。 */
+const P = [
   { seat: 1, name: '你', art: 'student' },
   { seat: 2, name: '老格', art: 'blacksmith' },
   { seat: 3, name: '玛蒂娜', art: 'flowerseller' },
@@ -43,402 +26,395 @@ const SEATS = [
   { seat: 6, name: '伊万', art: 'priest' },
   { seat: 7, name: '汉娜', art: 'veteran' },
 ];
-const CX = 80; const CY = 49; const R = 35;
-const angleOf = (i) => -90 + (i * 360) / SEATS.length;
-const ringPos = (i, r = R) => { const a = (angleOf(i) * Math.PI) / 180; return { x: CX + r * Math.cos(a), y: CY + r * Math.sin(a) }; };
+const DEMON = 1; // 老格
 
-function Seat({ p, x, y, size = 17, ring, dim, badge, badgeColor, hand, glow }) {
-  return (
-    <div className={`dm-seat ${glow ? 'glow' : ''}`} style={{ left: px(x), top: py(y), width: px(size), '--ring': ring ?? 'var(--paper)', opacity: dim ? 0.4 : 1 }}>
-      <img src={PEOPLE_ART[p.art]} alt="" draggable="false" />
-      <span className="dm-no">{p.seat}</span>
-      <span className="dm-name">{p.name}</span>
-      {badge && <span className="dm-badge" style={{ background: badgeColor ?? 'var(--paper)' }}>{badge}</span>}
-      {hand && <span className="dm-hand" aria-hidden="true">✋</span>}
-    </div>
-  );
-}
-
-/** 假的鼠标：x, y 是画布坐标；click 在 0~1 之间时画一圈点击波纹。 */
-function Cursor({ x, y, click = 0, right = false }) {
-  return (
-    <div className="dm-cursor" style={{ left: px(x), top: py(y) }}>
-      {click > 0 && click < 1 && <i className="dm-ripple" style={{ transform: `translate(-50%, -50%) scale(${0.3 + click * 1.4})`, opacity: 1 - click, borderColor: right ? 'var(--phy)' : 'var(--mot)' }} />}
-      <svg viewBox="0 0 12 18" aria-hidden="true"><path d="M1 1 L1 15 L4.6 11.6 L7.2 17 L9.4 16 L6.9 10.7 L11.5 10.5 Z" fill="#f4f4f0" stroke="#111" strokeWidth="1.2" strokeLinejoin="round" /></svg>
-      {right && click > 0 && click < 1 && <b className="dm-rclick">右键</b>}
-    </div>
-  );
-}
-
-/** 鼠标沿着几个关键点移动：keys = [[时间, x, y], …]。 */
-const path = (t, keys) => {
-  let i = 0;
-  while (i < keys.length - 1 && t > keys[i + 1][0]) i += 1;
-  const [t0, x0, y0] = keys[i];
-  const [t1, x1, y1] = keys[Math.min(i + 1, keys.length - 1)];
-  const k = t1 > t0 ? ease(seg(t, t0, t1)) : 1;
-  return { x: lerp(x0, x1, k), y: lerp(y0, y1, k) };
+/** 围成一圈的座位（和游戏里的座位圈一样，1 号在正上方，顺时针）。按屏幕实际大小算（像素，相对圈心）：
+ *  横屏圈宽一点，竖屏（手机）圈高一点。BOX 由 TutorialIntro 每次渲染前更新。 */
+const CY = 55; // 圈心在屏幕高度的 55%
+let BOX = { w: 1024, h: 700 };
+const ring = (i) => {
+  const a = ((-90 + (i * 360) / P.length) * Math.PI) / 180;
+  const rx = Math.min(BOX.w * 0.36, BOX.h * 0.4);
+  const ry = Math.min(BOX.h * 0.24, BOX.w * 0.42);
+  return { x: Math.cos(a) * rx, y: Math.sin(a) * ry };
 };
-const pulse = (t, at, len = 0.07) => (t >= at && t < at + len ? (t - at) / len : 0);
+const at = ({ x, y }, scale = 1) => ({ left: `calc(50% + ${x}px)`, top: `calc(${CY}% + ${y}px)`, '--s': scale });
 
-function Caption({ children }) {
-  return <div className="dm-cap" key={typeof children === 'string' ? children : undefined}>{children}</div>;
-}
-
-// ───────────────────────── 演示一：翻身份牌 ─────────────────────────
-export function FlipDemo() {
-  const t = useLoop(6500, 0.6);
-  const k = ease(seg(t, 0.22, 0.38)) - ease(seg(t, 0.9, 0.98));
-  const c = path(t, [[0, 140, 104], [0.18, 92, 60], [0.5, 92, 60], [0.62, 140, 104]]);
+/** 一个人：头像 + 名字，可以变暗、死掉、发光、举手、说话、换成恶魔的脸。 */
+function Face({ i, pos, scale = 1, dim, dead, ring: ringColor, glow, hand, art, label, labelColor, bubble, bubbleBelow, fall }) {
+  const p = P[i];
   return (
-    <div className="demo">
-      <div className="dm-card" style={{ left: px(80), top: py(50) }}>
-        <div className="dm-card-in" style={{ transform: `rotateY(${k * 180}deg)` }}>
-          <div className="dm-face back"><img src={ROLE_ART._back} alt="" draggable="false" /></div>
-          <div className="dm-face front" style={{ '--c': ATTR.townsfolk.color }}>
-            <img src={ROLE_ART.empath} alt="" draggable="false" />
-            <b>共情者</b>
-          </div>
-        </div>
-      </div>
-      <Cursor x={c.x} y={c.y} click={pulse(t, 0.19)} />
-      <Caption>{k < 0.5 ? '点身份牌把它翻开——别让旁边的人看见' : '你是共情者（镇民）：每晚得知两侧活着的邻座里有几个邪恶'}</Caption>
+    <div className={`f ${dead ? 'dead' : ''} ${dim ? 'dim' : ''} ${glow ? 'glow' : ''} ${fall ? 'fall' : ''}`} style={{ ...at(pos ?? ring(i), scale), '--ring': ringColor ?? 'var(--paper)', '--glow': glow ?? 'transparent' }}>
+      <div className="f-img"><img className={art ? "role" : ""} src={art ?? PEOPLE_ART[p.art]} alt="" draggable="false" /></div>
+      <span className="f-name"><i>{p.seat}</i>{p.name}</span>
+      {label && <span className="f-label" style={{ background: labelColor ?? 'var(--phy)' }}>{label}</span>}
+      {hand && <span className="f-hand" aria-hidden="true">✋</span>}
+      {bubble && <span className={`f-bubble ${bubbleBelow ? 'below' : ''}`}>{bubble}</span>}
     </div>
   );
 }
 
-// ───────────────────────── 演示二：夜里拿到信息、推理、打标记 ─────────────────────────
-export function EmpathDemo() {
-  const t = useLoop(10000, 0.8);
-  const pts = SEATS.map((_, i) => ringPos(i));
-  const draw = ease(seg(t, 0.1, 0.24));
-  const num = seg(t, 0.26, 0.32);
-  const hannah = t > 0.54;
-  const lao = t > 0.76;
-  const c = path(t, [[0, 120, 104], [0.44, 120, 104], [0.52, pts[6].x + 4, pts[6].y + 4], [0.62, pts[6].x + 4, pts[6].y + 4], [0.72, pts[1].x + 4, pts[1].y + 4], [1, pts[1].x + 4, pts[1].y + 4]]);
-  const cap = t < 0.1 ? '夜里，说书人唤醒你' : t < 0.42 ? '你得知：两侧的邻座（2 号、7 号）里有 1 个邪恶' : t < 0.66 ? '汉娜说自己是士兵，而且已经证实——她是好人' : '那邪恶的就是 2 号老格。右键他，在小魔典里标上「恶魔」';
+/** 抖屏：在 [起点, 时长] 这些时间段里抖，越往后越弱。 */
+const shake = (t, wins, amp = 1.6) => {
+  for (const [a, len] of wins) {
+    if (t >= a && t < a + len) {
+      const k = 1 - (t - a) / len;
+      return `translate(${Math.sin(t * 90) * amp * k}cqmin, ${Math.cos(t * 73) * amp * 0.7 * k}cqmin)`;
+    }
+  }
+  return 'none';
+};
+/** 闪一下：返回 0–1 的不透明度。 */
+const flash = (t, a, len = 0.45) => (t >= a && t < a + len ? 1 - (t - a) / len : 0);
+
+/** 钟声 / 胜利和弦（音效那一路）。 */
+function chime(freqs, vol = 0.25, dur = 2.4) {
+  const a = audio();
+  if (!a || a.state !== 'running') return;
+  const out = a.createGain(); out.gain.value = vol; out.connect(bus(a, 'sfx'));
+  const t = a.currentTime + 0.02;
+  freqs.forEach((f, k) => {
+    for (const [mul, g] of [[1, 1], [2.76, 0.25], [5.4, 0.08]]) {
+      const o = a.createOscillator(); o.type = 'sine'; o.frequency.value = f * mul;
+      const e = a.createGain(); const t0 = t + k * 0.09;
+      e.gain.setValueAtTime(0.0001, t0); e.gain.exponentialRampToValueAtTime(g * 0.5, t0 + 0.01); e.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(e).connect(out); o.start(t0); o.stop(t0 + dur + 0.05);
+    }
+  });
+}
+
+/** 时间到了放一次声音（快进跳过去的不补放）。 */
+function useCues(t, cues) {
+  const fired = useRef(new Set());
+  useEffect(() => {
+    cues.forEach(([when, fn], k) => {
+      if (t >= when && !fired.current.has(k)) { fired.current.add(k); if (t - when < 0.5) fn(); }
+    });
+  });
+}
+
+/** 大标题：出现时砸下来。 */
+const Headline = ({ children, tone }) => <h2 className={`hl ${tone ?? ''}`} key={typeof children === 'string' ? children : undefined}>{children}</h2>;
+const Sub = ({ children }) => <p className="sub">{children}</p>;
+
+// ───────────────────────── 1 恶魔藏在大家中间 ─────────────────────────
+function BeatDemon({ t }) {
+  useCues(t, [[3.1, () => { growl(0.6); heartbeat(0.5); }]]);
+  const sweep = t < 1.4 ? 0 : t < 2.9 ? (t - 1.4) / 1.5 : 1;
+  const spotI = t < 2.9 ? Math.min(P.length - 1, Math.floor(sweep * P.length)) : DEMON;
+  const reveal = t >= 3.1 && t < 4.3;
+  const spot = t >= 1.4 && t < 4.3;
+  const sp = ring(spotI);
   return (
-    <div className="demo night">
-      <svg className="dm-svg" viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
-        {[1, 6].map((j) => (
-          <line key={j} x1={pts[0].x} y1={pts[0].y} x2={lerp(pts[0].x, pts[j].x, draw)} y2={lerp(pts[0].y, pts[j].y, draw)} stroke="var(--int)" strokeWidth="1.2" strokeDasharray="3 2" opacity={draw ? 0.9 : 0} />
-        ))}
-      </svg>
-      {SEATS.map((p, i) => (
-        <Seat key={p.seat} p={p} {...pts[i]} glow={i === 0 && t < 0.3}
-          dim={t < 0.3 && i !== 0 && i !== 1 && i !== 6}
-          ring={i === 0 ? 'var(--mot)' : i === 6 && hannah ? ATTR.townsfolk.color : i === 1 && lao ? ATTR.demon.color : undefined}
-          badge={i === 6 && hannah ? '士兵' : i === 1 && lao ? '恶魔' : null}
-          badgeColor={i === 6 ? ATTR.townsfolk.color : ATTR.demon.color} />
+    <>
+      <Headline>镇上混进了一个恶魔</Headline>
+      <div className="spot" style={{ opacity: spot ? 1 : 0, '--sx': `calc(50% + ${sp.x}px)`, '--sy': `calc(${CY}% + ${sp.y}px)`, '--tint': reveal ? 'rgba(110, 0, 0, .6)' : 'rgba(0, 0, 0, .74)' }} />
+      {P.map((p, i) => t >= 0.35 + i * 0.12 && (
+        <Face key={i} i={i} scale={reveal && i === DEMON ? 1.35 : 1}
+          art={reveal && i === DEMON ? ROLE_ART.imp : undefined}
+          ring={reveal && i === DEMON ? 'var(--phy)' : undefined} glow={reveal && i === DEMON ? 'var(--phy)' : undefined} />
       ))}
-      {num > 0 && t < 0.5 && <div className="dm-num" style={{ left: px(CX), top: py(CY), transform: `translate(-50%, -50%) scale(${0.6 + 0.4 * ease(num)})`, opacity: num }}><b>1</b><small>个邪恶</small></div>}
-      {t >= 0.5 && <div className="dm-num soft" style={{ left: px(CX), top: py(CY) }}><b>?</b><small>推理</small></div>}
-      <Cursor x={c.x} y={c.y} click={pulse(t, 0.53) || pulse(t, 0.74)} right={t > 0.7} />
-      <Caption>{cap}</Caption>
-    </div>
+      <div className="flash red" style={{ opacity: flash(t, 3.1, 0.6) * 0.8 }} />
+      {t >= 4.3 && <Sub>它看起来和大家一模一样。<b>你们要把它找出来。</b></Sub>}
+    </>
   );
 }
+BeatDemon.dur = 5.4;
+BeatDemon.shakes = [[3.1, 0.55]];
 
-// ───────────────────────── 演示三：进房子、锁门、有人敲门 ─────────────────────────
-export function KnockDemo() {
-  const t = useLoop(9000, 0.65);
-  const locked = t > 0.13;
-  const walk = t < 0.8 ? ease(seg(t, 0.2, 0.44)) : 1 - ease(seg(t, 0.84, 1));
-  const knock = t > 0.46 && t < 0.62;
-  const panel = t > 0.56 && t < 0.84;
-  const c = path(t, [[0, 120, 100], [0.08, 30, 101], [0.18, 30, 101], [0.62, 128, 64], [0.72, 128, 47], [1, 128, 47]]);
-  const cap = t < 0.13 ? '你和玛蒂娜进了面包房：屋里是单独的语音，外面听不到' : t < 0.46 ? '点「锁门私聊」锁上门' : t < 0.62 ? '卢卡走到门口，只能敲门' : t < 0.84 ? '让他进来，还是假装没人？' : '卢卡只好走开了';
+// ───────────────────────── 2 你的身份是秘密 ─────────────────────────
+const MINI = [0, 1, 0, 0, 1, 0, 0]; // 1 = 坏人
+function BeatRole({ t, gate, act, acted }) {
+  useCues(t, [[0.6, () => doorKick(0.35, false, 0.3)], [gate + 0.05, () => shove(0.5)]]);
+  const drop = back(seg(t, 0.15, 0.6));
+  const flip = acted ? ease(seg(t, gate, gate + 0.5)) : 0;
+  const after = acted ? t - gate : -1;
   return (
-    <div className="demo day">
-      <img className="dm-house" src={bakery} alt="" draggable="false" style={{ left: px(64), top: py(50) }} />
-      <div className="dm-inside" style={{ left: px(46), top: py(5) }}>
-        <img src={PEOPLE_ART.student} alt="" /><img src={PEOPLE_ART.flowerseller} alt="" />
-        <span>屋里：你 · 玛蒂娜</span>
-      </div>
-      <div className={`dm-lock ${locked ? 'on' : ''}`} style={{ left: px(66), top: py(80) }}>{locked ? '🔒' : '🔓'}</div>
-      <Seat p={SEATS[4]} x={lerp(12, 46, walk)} y={lerp(96, 86, walk)} size={15} />
-      {knock && <div className="dm-knock" style={{ left: px(56), top: py(74) }}>咚咚</div>}
-      <button type="button" tabIndex={-1} className={`dm-btn ${locked ? 'on' : ''}`} style={{ left: px(4), top: py(96) }}>{locked ? '已锁门' : '锁门私聊'}</button>
-      {panel && (
-        <div className="dm-panel" style={{ left: px(110), top: py(24) }}>
-          <b>卢卡在敲门</b>
-          <span className="dm-mini">让他进来</span>
-          <span className={`dm-mini ${t > 0.72 ? 'on' : ''}`}>假装没人</span>
+    <>
+      <Headline>每个人拿到一张<em>秘密</em>身份牌</Headline>
+      <button type="button" className={`card ${!acted && t >= gate ? 'ask' : ''} ${after >= 0.9 ? 'up' : ''}`} onClick={() => !acted && t >= gate && act()} aria-label="翻开身份牌"
+        style={{ '--drop': `${(1 - drop) * -120}cqh`, '--tilt': `${(1 - drop) * -14}deg`, '--flip': `${flip * 180}deg` }}>
+        <span className="card-in">
+          <span className="card-face back"><img src={ROLE_ART._back} alt="" draggable="false" /></span>
+          <span className="card-face front"><img src={ROLE_ART.empath} alt="" draggable="false" /><b>你是好人</b></span>
+        </span>
+      </button>
+      {!acted && t >= gate && <div className="tap-hint">点一下，翻开你的牌</div>}
+      {after >= 0.9 && (
+        <div className="minis">
+          {MINI.map((evil, k) => (
+            <span key={k} className={`mini ${evil ? 'evil' : 'good'} ${after >= 1 + k * 0.12 ? 'show' : ''}`}>
+              <b>{after >= 1 + k * 0.12 ? (evil ? '坏人' : '好人') : ''}</b>
+            </span>
+          ))}
         </div>
       )}
-      <Cursor x={c.x} y={c.y} click={pulse(t, 0.1) || pulse(t, 0.71)} />
-      <Caption>{cap}</Caption>
-    </div>
+      {after >= 1.9 && <Sub>大多数人是<b className="good">好人</b>；少数是<b className="evil">坏人</b>——他们知道彼此是谁，<b>而且会撒谎</b>。</Sub>}
+    </>
   );
 }
+BeatRole.gate = 1;
+BeatRole.dur = 1 + 3.4;
+BeatRole.shakes = [[0.6, 0.3]];
 
-// ───────────────────────── 演示四：提名、投票时钟 ─────────────────────────
-const YES = new Set([2, 3, 5, 6, 0]); // 举手的：3、4、6、7 号和你（卢卡是爪牙、老格是恶魔，不举）
-const HAND_ORDER = [2, 3, 4, 5, 6, 0, 1]; // 指针从被提名者（2 号）的下一位开始顺时针转一圈
-export function VoteDemo() {
-  const t = useLoop(11000, 0.95);
-  const pts = SEATS.map((_, i) => ringPos(i));
-  const arrow = ease(seg(t, 0.12, 0.18));
-  const k = seg(t, 0.26, 0.82);
-  const step = Math.floor(k * (HAND_ORDER.length - 1) + 0.0001);
-  const handA = angleOf(2) + k * (HAND_ORDER.length - 1) * (360 / SEATS.length);
-  const youUp = t > 0.42;
-  const raised = (i) => t > 0.24 && YES.has(i) && (i !== 0 || youUp);
-  const lockedIdx = new Set(t > 0.26 ? HAND_ORDER.slice(0, step + 1) : []);
-  const votes = HAND_ORDER.slice(0, t > 0.26 ? step + 1 : 0).filter((i) => raised(i)).length;
-  const done = t > 0.84;
-  const c = path(t, [[0, 120, 104], [0.04, 146, 100], [0.08, 146, 100], [0.13, pts[1].x + 3, pts[1].y + 3], [0.3, pts[1].x + 3, pts[1].y + 3], [0.38, 146, 100], [1, 146, 100]]);
-  const ha = (handA * Math.PI) / 180;
-  const cap = t < 0.12 ? '回到广场：点「提名」……' : t < 0.2 ? '……再点 2 号老格。你提名了他' : t < 0.26 ? '你说理由，老格为自己辩护，然后开始投票' : !done ? '指针从 3 号开始顺时针转，转过谁，谁的票就锁定——在它转到你之前点「举手」' : '5 票，达到活人数的一半（7 人要 4 票）：老格被送上处决台';
+// ───────────────────────── 3 夜晚 ─────────────────────────
+const VICTIM = 3; // 卡拉
+const NEIGHBORS = [DEMON, 6]; // 你两边：2 号老格、7 号汉娜
+function BeatNight({ t }) {
+  useCues(t, [[1.6, () => slash(0.8)], [3.5, () => tick(false)]]);
+  const killed = t >= 2;
   return (
-    <div className="demo day">
-      <svg className="dm-svg" viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
-        <defs><marker id="dm-arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--opt)" /></marker></defs>
-        {arrow > 0 && <line x1={pts[0].x} y1={pts[0].y} x2={lerp(pts[0].x, pts[1].x, arrow * 0.8)} y2={lerp(pts[0].y, pts[1].y, arrow * 0.8)} stroke="var(--opt)" strokeWidth="1.6" markerEnd="url(#dm-arr)" />}
-        {t > 0.24 && t < 0.86 && (
-          <g>
-            <line x1={CX} y1={CY} x2={CX + (R - 9) * Math.cos(ha)} y2={CY + (R - 9) * Math.sin(ha)} stroke="var(--mot)" strokeWidth="2" strokeLinecap="round" />
-            <circle cx={CX} cy={CY} r="2.4" fill="var(--mot)" />
-          </g>
-        )}
-      </svg>
-      {SEATS.map((p, i) => (
-        <Seat key={p.seat} p={p} {...pts[i]} hand={raised(i)}
-          dim={lockedIdx.has(i) && !raised(i) && !done}
-          ring={i === 1 ? (done ? 'var(--phy)' : 'var(--opt)') : i === 0 ? 'var(--mot)' : lockedIdx.has(i) && raised(i) ? 'var(--ok)' : undefined}
-          badge={i === 1 && done ? '处决台' : i === 1 && t > 0.15 ? '被提名' : null}
-          badgeColor={done ? 'var(--phy)' : 'var(--opt)'} />
+    <>
+      <div className="moon" style={{ transform: `translateY(${(1 - ease(seg(t, 0, 1.2))) * 40}cqh)` }} />
+      <Headline tone="night">夜晚，恶魔杀一个人</Headline>
+      {P.map((p, i) => (
+        <Face key={i} i={i} dim={!(i === 0 && t >= 3.4) && !(i === VICTIM && t >= 1.5) && !(NEIGHBORS.includes(i) && t >= 3.6)} dead={i === VICTIM && killed} fall={i === VICTIM && killed}
+          label={i === VICTIM && killed ? '死了' : NEIGHBORS.includes(i) && t >= 3.6 ? '？' : null} labelColor={i === VICTIM ? 'var(--phy)' : 'var(--int)'}
+          glow={i === 0 && t >= 3.4 ? 'var(--int)' : undefined} ring={(i === 0 && t >= 3.4) || (NEIGHBORS.includes(i) && t >= 3.6) ? 'var(--int)' : undefined}
+          bubble={i === 0 && t >= 3.5 ? <>线索：你两边的人里<br /><big>有 1 个坏人</big></> : null} bubbleBelow />
       ))}
-      {t > 0.24 && <div className={`dm-count ${votes >= 4 ? 'ok' : ''}`} style={{ left: px(CX), top: py(CY + 13) }}>{votes} 票 / 需要 4</div>}
-      <button type="button" tabIndex={-1} className={`dm-btn ${t < 0.24 ? '' : youUp ? 'on' : 'hot'}`} style={{ left: px(124), top: py(96) }}>{t < 0.24 ? '提名' : youUp ? '已举手' : '举手'}</button>
-      <Cursor x={c.x} y={c.y} click={pulse(t, 0.05) || pulse(t, 0.13) || pulse(t, 0.4)} />
-      <Caption>{cap}</Caption>
-    </div>
+      {t >= 1.5 && t < 2.6 && (
+        <div className="claw" style={at(ring(VICTIM))}><i /><i /><i /></div>
+      )}
+      <div className="flash red" style={{ opacity: flash(t, 1.6, 0.5) * 0.7 }} />
+      {t >= 3.4 && <Sub>有些好人会在夜里收到<b className="good">一条线索</b>。</Sub>}
+    </>
   );
 }
+BeatNight.dur = 6;
+BeatNight.shakes = [[1.6, 0.5]];
 
-// ───────────────────────── 介绍页里的图 ─────────────────────────
-const PHASES = [
-  { name: '夜晚', icon: '☾', text: '大家闭上眼睛。说书人按顺序叫醒有夜间能力的人：有人得到信息，恶魔挑一个人杀掉（第一晚不杀）。' },
-  { name: '天亮', icon: '☀', text: '说书人宣布昨晚谁死了。死人还能说话，还剩一张票（整局只能用一次）。' },
-  { name: '自由活动', icon: '⌂', text: '在小镇里走动，进房子关门私聊、交换情报——也可能是在交换谎言。' },
-  { name: '提名', icon: '☝', text: '回到广场。每人每天最多提名一次，每人每天也最多被提名一次。' },
-  { name: '投票', icon: '✋', text: '指针绕一圈，举手人数达到活人数的一半，被提名者就上处决台（之后票更多的人会把他换下来）。' },
-  { name: '处决', icon: '⚖', text: '黄昏时处决台上的人被处决，天又黑了。' },
-];
-export function CycleDemo() {
-  const t = useLoop(21000, 4.5 / 6);
-  const cur = Math.min(PHASES.length - 1, Math.floor(t * PHASES.length));
-  const a = ((-90 + t * 360) * Math.PI) / 180;
-  const RR = 40;
-  const night = cur === 0 || cur === 5;
+// ───────────────────────── 4 白天：对口供 ─────────────────────────
+// 两条线索交叉：伊万和老格都说自己是士兵（必有一个说谎）；你的线索是"老格、汉娜里有 1 个坏人"。两边都有老格。
+const IVAN = 5;
+function BeatDay({ t }) {
+  useCues(t, [[2.9, () => shove(0.6)], [5.3, () => heartbeat(0.45)]]);
+  const clash = t >= 2.9;
+  const clue = t >= 4.1;
+  const pick = t >= 5.3;
+  const ivan = ring(IVAN); const lao = ring(DEMON);
+  const mx = (ivan.x + lao.x) / 2; const my = (ivan.y + lao.y) / 2;
+  const tag = (i) => {
+    if (pick && i === DEMON) return ['都指向他！', 'var(--phy)'];
+    if (clue && (i === DEMON || i === 6)) return ['线索', 'var(--int)'];
+    if (clash && (i === DEMON || i === IVAN)) return ['士兵？', 'var(--mot)'];
+    return null;
+  };
   return (
-    <div className={`demo cycle ${night ? 'night' : 'day'}`}>
-      <svg className="dm-svg" viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
-        <circle cx={CX} cy={CY} r={RR} fill="none" stroke="rgba(233,228,216,.22)" strokeWidth="1" strokeDasharray="2 2" />
-        <circle cx={CX + RR * Math.cos(a)} cy={CY + RR * Math.sin(a)} r="2.6" fill="var(--mot)" />
-      </svg>
-      {PHASES.map((p, i) => {
-        const pa = ((-90 + (i + 0.5) * 60) * Math.PI) / 180;
+    <>
+      <Headline tone="day">白天，揪出说谎的人</Headline>
+      {clash && !clue && (
+        <svg className="bolt" viewBox={`${-BOX.w / 2} ${(-BOX.h * CY) / 100} ${BOX.w} ${BOX.h}`} aria-hidden="true">
+          <polyline points={`${ivan.x},${ivan.y} ${mx - 5},${my + 4} ${mx + 5},${my - 4} ${lao.x},${lao.y}`} />
+        </svg>
+      )}
+      {P.map((p, i) => {
+        const tg = tag(i);
         return (
-          <div key={p.name} className={`dm-phase ${i === cur ? 'on' : ''}`} style={{ left: px(CX + RR * Math.cos(pa)), top: py(CY + RR * Math.sin(pa)) }}>
-            <i>{p.icon}</i><span>{p.name}</span>
-          </div>
+          <Face key={i} i={i} dead={i === VICTIM}
+            ring={pick && i === DEMON ? 'var(--phy)' : tg ? tg[1] : i === 0 && clue ? 'var(--int)' : undefined}
+            scale={pick && i === DEMON ? 1.3 : 1} glow={pick && i === DEMON ? 'var(--phy)' : undefined}
+            label={tg?.[0]} labelColor={tg?.[1]}
+            bubble={i === IVAN && t >= 0.8 && t < 4.1 ? '我是士兵。' : i === DEMON && t >= 1.8 && t < 4.1 ? '不，我才是士兵！' : i === 0 && clue ? <>我的线索：老格、汉娜里<br />有 1 个坏人</> : null}
+            bubbleBelow={i === 0} />
         );
       })}
-      <div className="dm-phase-text" key={cur} style={{ left: px(CX), top: py(CY) }}>
-        <b>{PHASES[cur].name}</b>
-        <p>{PHASES[cur].text}</p>
-      </div>
-    </div>
+      {clash && !clue && <div className="stamp">必有一个在说谎</div>}
+      {t >= 4.1 && <Sub>好人说真话，坏人编故事。<b>把线索对一对，就能找出最可疑的人。</b></Sub>}
+    </>
   );
 }
+BeatDay.dur = 7.2;
+BeatDay.shakes = [[2.9, 0.35]];
 
-const TEAMS = [
-  { team: 'townsfolk', role: 'washerwoman', side: '善良', text: '大多数人。每人有一个帮好人找线索的能力。' },
-  { team: 'outsider', role: 'butler', side: '善良', text: '也是好人，但能力会给好人添乱。' },
-  { team: 'minion', role: 'poisoner', side: '邪恶', text: '恶魔的帮手：下毒、捣乱，掩护恶魔。' },
-  { team: 'demon', role: 'imp', side: '邪恶', text: '每晚杀一个人。它死了，好人就赢了。' },
-];
-function TeamsDemo() {
+// ───────────────────────── 5 投票 ─────────────────────────
+const BOT_YES = [[2, 0.9], [6, 1.5]]; // 玛蒂娜、汉娜先举手
+function BeatVote({ t, gate, act, acted }) {
+  const after = acted ? t - gate : -1;
+  useCues(t, [
+    [0.9, () => tick(false)], [1.5, () => tick(false)], [gate + 0.02, () => tick(true)],
+    [gate + 0.9, () => doorKick(0.8, true, 0.9)], [gate + 2.1, () => growl(0.5)], [gate + 2.8, () => chime([523, 659, 784, 1046], 0.22)],
+  ]);
+  const toCenter = ease(seg(t, 0.2, 0.7));
+  const lp = ring(DEMON);
+  const pos = { x: lp.x * (1 - toCenter), y: lp.y * (1 - toCenter) - 0.08 * Math.min(BOX.w, BOX.h) * toCenter }; // 移到圈中间偏上，下面留地方放票数
+  const votes = BOT_YES.filter(([, w]) => t >= w).length + (acted ? 1 : 0);
+  const executed = after >= 0.9;
+  const revealed = after >= 2.1;
+  const won = after >= 2.8;
   return (
-    <div className="ti-teams">
-      {['善良', '邪恶'].map((side) => (
-        <div key={side} className={`ti-side ${side === '善良' ? 'good' : 'evil'}`}>
-          <h4>{side}阵营</h4>
-          <div className="ti-side-cards">
-            {TEAMS.filter((x) => x.side === side).map((x, i) => (
-              <div key={x.team} className="ti-team" style={{ '--c': ATTR[x.team].color, '--d': `${(side === '善良' ? 0 : 2) * 0.35 + i * 0.35 + 0.2}s` }}>
-                <img src={ROLE_ART[x.role]} alt="" draggable="false" />
-                <b>{{ townsfolk: '镇民', outsider: '外来者', minion: '爪牙', demon: '恶魔' }[x.team]}</b>
-                <p>{x.text}</p>
-              </div>
-            ))}
+    <>
+      <Headline tone={won ? 'good' : ''}>{won ? '好人获胜！' : '投票，处决最可疑的人'}</Headline>
+      {won && <div className="rays" />}
+      {P.map((p, i) => (i === DEMON ? null : (
+        <Face key={i} i={i} dead={i === VICTIM} hand={BOT_YES.some(([k, w]) => k === i && t >= w) || (i === 0 && acted)}
+          ring={i === 0 ? 'var(--mot)' : undefined} />
+      )))}
+      <Face i={DEMON} pos={pos} scale={1 + toCenter * 0.45} fall={executed && !revealed}
+        art={revealed ? ROLE_ART.imp : undefined} ring={revealed ? 'var(--phy)' : 'var(--opt)'} glow={revealed ? 'var(--phy)' : undefined}
+        label={revealed ? '他就是恶魔！' : '被提名'} labelColor={revealed ? 'var(--phy)' : 'var(--opt)'} />
+      {t >= 0.8 && !executed && (
+        <div className={`count ${votes >= 3 ? 'ok' : ''}`}>{votes} / 3 票<small>{votes >= 3 ? '够了！' : !acted && t >= gate ? '还差你这一票' : '活人的一半就够'}</small></div>
+      )}
+      {!acted && t >= gate && <button type="button" className="raise" onClick={act}>✋ 举手</button>}
+      {executed && !revealed && <div className="stamp big">处决</div>}
+      <div className="flash red" style={{ opacity: flash(t, gate + 0.9, 0.5) * 0.6 }} />
+      <div className="flash blue" style={{ opacity: acted ? flash(t, gate + 2.8, 0.8) * 0.6 : 0 }} />
+      {won && <Sub>把恶魔处决，<b className="good">好人就赢了</b>。</Sub>}
+    </>
+  );
+}
+BeatVote.gate = 2.2;
+BeatVote.dur = 2.2 + 4.4;
+BeatVote.shakes = [[2.2 + 0.9, 0.5]];
+
+// ───────────────────────── 6 恶魔怎么赢 ─────────────────────────
+const NIGHTS = [[3, 1.0], [5, 1.7], [0, 2.4], [6, 3.1], [2, 3.8]]; // 一晚死一个，最后剩老格和卢卡
+function BeatLose({ t }) {
+  useCues(t, [...NIGHTS.map(([, w]) => [w, () => slash(0.45)]), [4.5, () => { growl(0.7); heartbeat(0.6); }]]);
+  const lost = t >= 4.5;
+  const nightNow = NIGHTS.some(([, w]) => t >= w - 0.15 && t < w + 0.35);
+  return (
+    <>
+      <div className={`dusk ${nightNow ? 'on' : ''}`} />
+      <Headline tone={lost ? 'evil' : ''}>{lost ? '只剩 2 人：恶魔获胜' : '要是一直抓不到恶魔……'}</Headline>
+      {P.map((p, i) => {
+        const d = NIGHTS.find(([k]) => k === i);
+        const dead = d && t >= d[1];
+        return <Face key={i} i={i} dead={dead} fall={dead} art={lost && i === DEMON ? ROLE_ART.imp : undefined} ring={lost && i === DEMON ? 'var(--phy)' : undefined} glow={lost && i === DEMON ? 'var(--phy)' : undefined} scale={lost && i === DEMON ? 1.3 : 1} />;
+      })}
+      {t >= 1 && !lost && <div className="nights" key={NIGHTS.filter(([, w]) => t >= w).length}>第 {NIGHTS.filter(([, w]) => t >= w).length + 1} 晚</div>}
+      <div className="flash red" style={{ opacity: lost ? 0.25 + flash(t, 4.5, 0.7) * 0.5 : 0 }} />
+      {lost && <Sub>恶魔每晚杀一个人。<b>所以白天的每一票都很重要。</b></Sub>}
+    </>
+  );
+}
+BeatLose.dur = 6.2;
+BeatLose.shakes = [[4.5, 0.6]];
+
+// ───────────────────────── 收尾 ─────────────────────────
+const RECAP = ['恶魔藏在大家中间', '夜里，它杀一个人', '白天，大家投票处决它'];
+function BeatGo({ t, onStart, onClose }) {
+  return (
+    <>
+      <Headline>规则就这些</Headline>
+      <ol className="recap">
+        {RECAP.map((x, k) => t >= 0.3 + k * 0.35 && <li key={k}><i>{k + 1}</i>{x}</li>)}
+      </ol>
+      {t >= 1.5 && (
+        <>
+          <Sub>剩下的边玩边学。接下来是一局练习：你坐 1 号，是个<b className="good">好人</b>。</Sub>
+          <div className="go-row">
+            <button type="button" className="go" onClick={onStart}>开始练习局</button>
+            <button type="button" className="go-ghost" onClick={onClose}>回大厅</button>
           </div>
-        </div>
-      ))}
-    </div>
+        </>
+      )}
+    </>
   );
 }
+BeatGo.dur = 1.6;
+BeatGo.final = true;
 
-function WinDemo() {
-  const t = useLoop(9000, 0.97);
-  const tokens = (row) => SEATS.map((p, i) => {
-    let dead = false; let red = false;
-    if (row === 'good') { dead = i === 1 && t > 0.28; red = i === 1 && t > 0.2; }
-    else { const order = [2, 3, 6, 4, 0]; const j = order.indexOf(i); dead = j >= 0 && t > 0.2 + j * 0.12; }
-    return <span key={p.seat} className={`ti-tok ${dead ? 'dead' : ''} ${red ? 'red' : ''}`}><img src={PEOPLE_ART[p.art]} alt="" /></span>;
-  });
-  return (
-    <div className="ti-win">
-      <div className="ti-win-row">
-        <div className="ti-tokens">{tokens('good')}</div>
-        <p className={t > 0.34 ? 'on good' : ''}>{t > 0.34 ? '恶魔（老格）被处决 → 善良获胜' : '白天投票，把恶魔送上处决台……'}</p>
-      </div>
-      <div className="ti-win-row">
-        <div className="ti-tokens">{tokens('evil')}</div>
-        <p className={t > 0.72 ? 'on evil' : ''}>{t > 0.72 ? '只剩 2 个活人，恶魔还在 → 邪恶获胜' : '恶魔每晚杀人，好人又投错了人……'}</p>
-      </div>
-    </div>
-  );
-}
-
-/** 序章：钟面走到午夜，敲了十二下之后又多敲了一下（第十三下是红的）。 */
-const STRIKE0 = 0.24; const STRIKE_GAP = 0.046;
-function StoryDemo() {
-  const t = useLoop(15000, 0.9);
-  const sweep = ease(seg(t, 0.02, 0.22));
-  const minA = -90 + 240 + sweep * 120; // 11:40 → 12:00
-  const hourA = -90 + 330 + sweep * 30;
-  const n = t < STRIKE0 ? 0 : Math.min(13, Math.floor((t - STRIKE0) / STRIKE_GAP) + 1);
-  const since = t < STRIKE0 ? 1 : ((t - STRIKE0) % STRIKE_GAP) / STRIKE_GAP;
-  const red = n >= 13;
-  const C = { x: 80, y: 50 }; const r = 34;
-  const hand = (a, len) => ({ x2: C.x + len * Math.cos((a * Math.PI) / 180), y2: C.y + len * Math.sin((a * Math.PI) / 180) });
-  return (
-    <div className={`demo story ${red ? 'red' : 'night'}`}>
-      <svg className="dm-svg" viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
-        {n > 0 && n <= 13 && since < 1 && t < STRIKE0 + 13 * STRIKE_GAP && (
-          <circle cx={C.x} cy={C.y} r={r + 2 + since * 22} fill="none" stroke={red ? 'var(--phy)' : 'var(--cream)'} strokeWidth={1.4 * (1 - since)} opacity={1 - since} />
-        )}
-        <circle cx={C.x} cy={C.y} r={r} fill="#14140f" stroke={red ? 'var(--phy)' : 'var(--cream)'} strokeWidth="1.4" />
-        <circle cx={C.x} cy={C.y} r={r - 3} fill="none" stroke="rgba(233,228,216,.25)" strokeWidth=".5" />
-        {['XII', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'].map((s, i) => {
-          const a = ((-90 + i * 30) * Math.PI) / 180;
-          return <text key={s} x={C.x + (r - 8) * Math.cos(a)} y={C.y + (r - 8) * Math.sin(a) + 1.8} textAnchor="middle" fontSize="5" fill={i === 0 && red ? 'var(--phy)' : 'var(--cream)'} fontFamily="var(--num)">{s}</text>;
-        })}
-        <line x1={C.x} y1={C.y} {...hand(hourA, 16)} stroke="var(--cream)" strokeWidth="2.2" strokeLinecap="round" />
-        <line x1={C.x} y1={C.y} {...hand(minA, 25)} stroke={red ? 'var(--phy)' : 'var(--cream)'} strokeWidth="1.3" strokeLinecap="round" />
-        <circle cx={C.x} cy={C.y} r="1.8" fill={red ? 'var(--phy)' : 'var(--cream)'} />
-      </svg>
-      {n > 0 && <div className={`dm-strike ${red ? 'red' : ''}`} key={n} style={{ left: px(80), top: py(97) }}>{red ? '……第十三下' : `当——（${n}）`}</div>}
-      {red && <div className="dm-vignette" />}
-    </div>
-  );
-}
-
-/** 练习局分步提示里用的演示。 */
-export const TUT_DEMOS = { flip: FlipDemo, empath: EmpathDemo, knock: KnockDemo, vote: VoteDemo };
-
-// ───────────────────────── 开场的几页 ─────────────────────────
-const PAGES = [
-  {
-    id: 'story', kicker: '序章', title: '钟楼敲了十三下', bg: 'square-night', stage: StoryDemo,
-    lines: [
-      '钟楼镇是个安静的小地方：面包房早上冒烟，酒馆晚上点灯，钟楼每个钟点敲一次。',
-      '直到某天午夜，钟楼多敲了一下。第二天早上，有人倒在了自家门口。',
-      '恶魔混进了镇子，就藏在你们中间：白天它和大家一起在广场上聊天，夜里出来杀人。',
-      '你们唯一的武器，是白天的投票。可是谁说的是真话呢？',
-    ],
-  },
-  {
-    id: 'teams', kicker: '第一章', title: '两个阵营，四类角色', bg: 'lobby-hero', stage: TeamsDemo,
-    lines: [
-      '开局每个人秘密拿到一个角色。好人不知道彼此是谁，只能靠各自的能力拼出真相。',
-      '邪恶的人（7 人以上的局）一开始就互相认识，恶魔还会知道 3 个可以冒充的好人角色。',
-      '四类角色各有一个颜色：镇民蓝、外来者紫、爪牙黄、恶魔红，游戏里到处都用这套颜色。',
-    ],
-  },
-  {
-    id: 'cycle', kicker: '第二章', title: '一天怎么过', bg: 'square-day', stage: CycleDemo,
-    lines: [
-      '游戏在夜晚和白天之间轮转。说书人主持一切：叫醒角色、发信息、宣布死讯——这里大多由程序自动完成。',
-      '白天是你的主场：聊天、私聊、提名、投票。夜里你只需要等说书人叫你。',
-    ],
-  },
-  {
-    id: 'win', kicker: '第三章', title: '怎么赢', bg: 'square-day', stage: WinDemo,
-    lines: [
-      '善良阵营：处决恶魔就赢。',
-      '邪恶阵营：活着的人只剩 2 个、恶魔还活着就赢。',
-      '死人不出局：还能说话、出主意，还有一张票。',
-    ],
-  },
-  {
-    id: 'flip', kicker: '操作演示 1', title: '看看你是谁', bg: 'cottage-night', stage: FlipDemo,
-    lines: ['开局先翻开右边的身份牌。练习局里你是共情者：每晚说书人会告诉你，左右两个活着的邻座里有几个邪恶。'],
-  },
-  {
-    id: 'empath', kicker: '操作演示 2', title: '夜里的信息，白天的推理', bg: 'square-night', stage: EmpathDemo,
-    lines: [
-      '信息会出现在「身份」页最上面。把它和别人说的话放在一起推理。',
-      '右键（手机长按）一个人，可以在小魔典里给他标上镇民 / 外来者 / 爪牙 / 恶魔、猜他的角色、写笔记、连线——只有你自己看得到。',
-    ],
-  },
-  {
-    id: 'knock', kicker: '操作演示 3', title: '私聊和敲门', bg: 'square-day', stage: KnockDemo,
-    lines: ['白天可以在小镇里走动。走进一栋房子就进了这栋房子的私聊语音；锁上门，别人只能敲门，开不开由你决定。'],
-  },
-  {
-    id: 'vote', kicker: '操作演示 4', title: '提名和投票', bg: 'square-day', stage: VoteDemo,
-    lines: ['回到广场后提名你怀疑的人。投票时指针顺时针转一圈，在它转到你之前举手。票数达到活人数的一半就上处决台，黄昏处决。'],
-  },
+const BEATS = [
+  { C: BeatDemon, mood: 'dark' },
+  { C: BeatRole, mood: 'dark' },
+  { C: BeatNight, mood: 'night' },
+  { C: BeatDay, mood: 'day' },
+  { C: BeatVote, mood: 'day' },
+  { C: BeatLose, mood: 'night' },
+  { C: BeatGo, mood: 'dark' },
 ];
 
-/** 开场介绍。onStart：进练习局；onClose：回大厅。 */
-export function TutorialIntro({ onStart, onClose }) {
-  const [i, setI] = useState(0);
-  const page = PAGES[i];
-  const last = i === PAGES.length - 1;
-  const go = (d) => setI((x) => Math.max(0, Math.min(PAGES.length - 1, x + d)));
+/** 一段的时钟：秒数；gate 处停住等 act()；skip() 快进到下一个停点或结尾。 */
+function useBeatClock(C, freeze) {
+  const { gate, dur } = C;
+  const [raw, setRaw] = useState(0);
+  const [jump, setJump] = useState(() => (reduceMotion() ? 99 : 0));
+  const [actedAt, setActedAt] = useState(null);
+  useEffect(() => {
+    if (freeze) return undefined; // 定格时不用每帧刷新
+    let id = 0; const t0 = performance.now();
+    const f = (now) => { setRaw((now - t0) / 1000); id = requestAnimationFrame(f); };
+    id = requestAnimationFrame(f);
+    return () => cancelAnimationFrame(id);
+  }, []);
+  if (freeze) { // 预览页（?preview=intro&beat=&t=&acted=1）：停在某一帧，截图和检查用
+    const acted = gate != null && freeze.acted;
+    const t = gate != null && !acted ? Math.min(freeze.t, gate) : freeze.t;
+    return { t, acted, act: () => {}, waiting: false, done: false, skip: () => {}, gate };
+  }
+  const r = raw + jump;
+  const acted = actedAt != null;
+  const t = gate == null ? Math.min(r, dur) : !acted ? Math.min(r, gate) : Math.min(dur, gate + (r - actedAt));
+  const waiting = gate != null && !acted && t >= gate;
+  const done = t >= dur;
+  const act = () => setActedAt(r);
+  const skip = () => { const target = gate != null && !acted ? gate : dur; setJump((j) => j + Math.max(0, target - t) + 0.01); };
+  return { t, acted, act, waiting, done, skip, gate };
+}
+
+function Beat({ C, onStart, onClose, onNext, freeze }) {
+  const clock = useBeatClock(C, freeze);
+  const tr = shake(clock.t, C.shakes ?? []);
+  const click = (e) => {
+    if (e.target.closest('button') || C.final || clock.waiting) return;
+    if (clock.done) onNext(); else clock.skip();
+  };
   useEffect(() => {
     const k = (e) => {
-      if (e.key === 'ArrowRight') go(1);
-      else if (e.key === 'ArrowLeft') go(-1);
-      else if (e.key === 'Escape') onClose();
+      if (e.key !== ' ' && e.key !== 'Enter' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      if (clock.waiting) clock.act();
+      else if (clock.done) { if (C.final) onStart(); else onNext(); } else clock.skip();
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  });
+  return (
+    <div className="beat" onClick={click} role="presentation">
+      <div className="beat-in" style={{ transform: tr }}>
+        <C t={clock.t} gate={clock.gate} act={clock.act} acted={clock.acted} onStart={onStart} onClose={onClose} />
+      </div>
+      {clock.done && !C.final && <div className="next-hint">点击任意处继续 ▸</div>}
+      {!clock.done && !clock.waiting && !C.final && <div className="next-hint dim">点击快进</div>}
+    </div>
+  );
+}
+
+/** 开场介绍。onStart：进练习局；onClose：回大厅。 */
+export function TutorialIntro({ onStart, onClose, freeze = null }) {
+  const [i, setI] = useState(freeze?.beat ?? 0);
+  const [box, setBox] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  useEffect(() => {
+    const f = () => setBox({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', f);
+    return () => window.removeEventListener('resize', f);
+  }, []);
+  BOX = box;
+  const beat = BEATS[i];
+  useEffect(() => {
+    const k = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') setI((x) => Math.max(0, x - 1));
     };
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
   }, [onClose]);
-  const Stage = page.stage;
   return (
-    <div className="ti" role="dialog" aria-label="新手教程：游戏介绍">
-      <div className="ti-bg" key={page.bg} style={{ backgroundImage: SCENE_ART[page.bg] ? `url(${SCENE_ART[page.bg]})` : undefined }} />
-      <div className="ti-fog" aria-hidden="true" />
-      <header className="ti-head">
-        <span>新手教程 · 先花两分钟了解规则</span>
-        <div>
-          <button type="button" className="ti-link" onClick={onStart}>跳过介绍，直接练习</button>
-          <button type="button" className="ti-link" onClick={onClose} aria-label="关闭">✕</button>
+    <div className={`ti2 mood-${beat.mood}`} role="dialog" aria-label="新手教程：一分钟看懂规则">
+      <div className="ti2-bg" />
+      <header className="ti2-head">
+        <div className="ti2-prog">
+          {BEATS.map((b, k) => <button key={k} type="button" className={k < i ? 'seen' : k === i ? 'on' : ''} disabled={k > i} onClick={() => setI(k)} aria-label={`第 ${k + 1} 段`} />)}
+        </div>
+        <div className="ti2-tools">
+          {i > 0 && <button type="button" onClick={() => setI(i - 1)}>上一段</button>}
+          <button type="button" onClick={onStart}>跳过，直接练习</button>
+          <button type="button" onClick={onClose} aria-label="关闭">✕</button>
         </div>
       </header>
-      <main className={`ti-body ${Stage ? '' : 'solo'}`} key={page.id}>
-        <section className="ti-text">
-          <small className="ti-kicker">{page.kicker}</small>
-          <h2>{page.title}</h2>
-          {page.lines.map((l, j) => <p key={j} style={{ '--d': `${0.25 + j * (Stage ? 0.35 : 0.9)}s` }}>{l}</p>)}
-        </section>
-        {Stage && <section className="ti-stage"><Stage /></section>}
-      </main>
-      <footer className="ti-foot">
-        <button type="button" className="ti-prev" onClick={() => go(-1)} disabled={i === 0}>上一页</button>
-        <div className="ti-dots">
-          {PAGES.map((p, j) => <button key={p.id} type="button" className={j === i ? 'on' : j < i ? 'seen' : ''} onClick={() => setI(j)} aria-label={`第 ${j + 1} 页：${p.title}`} />)}
-        </div>
-        {last
-          ? <button type="button" className="ti-next go" onClick={onStart}>开始练习局</button>
-          : <button type="button" className="ti-next" onClick={() => go(1)}>下一页</button>}
-      </footer>
+      <Beat key={i} C={beat.C} freeze={freeze} onStart={onStart} onClose={onClose} onNext={() => setI((x) => Math.min(BEATS.length - 1, x + 1))} />
     </div>
   );
 }
