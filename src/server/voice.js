@@ -234,6 +234,12 @@ export class VoiceHub {
         return [...count.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
       },
 
+      /** 告诉平台这一局谁能说话（只有合作机器人用得上：它替我们管住围观的人；别的平台没有这一步）。 */
+      async announceGame(state) {
+        if (!p.game || !state.square) return null;
+        return p.game(guildId, state);
+      },
+
       /** 闭麦 / 解除（reason：speech 发言时让别人安静，watch 观战的人）。只闭在本局频道里的人；解除不论在哪。 */
       async setMuted(ids, on, reason = 'speech') {
         await guild();

@@ -118,6 +118,10 @@ curl -s -X POST -H "Authorization: Bearer <token>" -d '{"op":"state","guildId":"
 | `disallow` | `guildId`, `channelId`, `userId` | — | 收回权限 |
 | `channel` | `guildId`, `channelId` | `exists`, `isVoice`, `memberIds` | 频道在不在、是不是语音、里面有谁 |
 | `deleteChannel` | `guildId`, `channelId` | — | 删私聊房间（只能删自己建的） |
+| `open` | `guildId`, `userId` | `zoned`, `squareChannelId` / `reason` | 有人打开了活动（每人每个活动实例一次）。旺财据此建「血染钟楼专区」并把人拉进专区广场 |
+| `game` | `guildId`, `squareChannelId`, `active`，`active:true` 时加 `speakerIds`, `god`, `lock` | `watchers` | 这一局谁能说话（整份覆盖）：玩家真人 + 说书人 + 房主。开局、换房主、终局 / 暂停 / 解散时发，进行中 3 小时补发一次 |
+
+`open` / `game` 和"只在专区里生效"的规矩是旺财自己实现的（见旺财那边的 `botc-partner-game-op.md`），本仓库的 `botc-voice.js` 参考模块没有这两个 op。
 
 **推送**：有人进出语音频道、或者服务器闭麦 / 闭耳状态变了，`POST https://botc.rambooo.com/api/partner/voice`，
 同样带 `Authorization: Bearer <BOTC_SYNC_TOKEN>`，body：

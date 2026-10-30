@@ -144,3 +144,16 @@ test('私聊房间表存盘：对方机器人重启后还认得自己建的房�
   await wc2.ops.deleteChannel({ guildId: 'g', channelId });
   assert.ok(!d.channels.has(channelId));
 });
+
+test('旺财的 open / game：请求体照对方文档发', async () => {
+  const sent = [];
+  const platform = partnerPlatform({ url: 'http://wc', token: 't', fetch: async (_u, o) => { sent.push(JSON.parse(o.body)); return { json: async () => ({ ok: true, zoned: true, squareChannelId: 'sq' }) }; } });
+  assert.equal((await platform.open('g', 'a')).squareChannelId, 'sq');
+  await platform.game('g', { square: 'sq', active: true, speakerIds: ['a'], god: false, lock: true });
+  await platform.game('g', { square: 'sq', active: false });
+  assert.deepEqual(sent, [
+    { op: 'open', guildId: 'g', userId: 'a' },
+    { op: 'game', guildId: 'g', squareChannelId: 'sq', active: true, speakerIds: ['a'], god: false, lock: true },
+    { op: 'game', guildId: 'g', squareChannelId: 'sq', active: false },
+  ]);
+});

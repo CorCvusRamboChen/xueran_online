@@ -70,6 +70,16 @@ export function partnerPlatform({ url, token, fetch: f = globalThis.fetch, name 
     async exists(gid, ch) { return !!(await call('channel', { guildId: gid, channelId: ch })).exists; },
     async deleteChannel(gid, ch) { await call('deleteChannel', { guildId: gid, channelId: ch }); },
 
+    /** 有人打开了活动：对方据此建「血染钟楼专区」并把人拉进专区广场。→ { zoned, squareChannelId, reason } */
+    async open(gid, uid) { return call('open', { guildId: gid, userId: uid }); },
+
+    /** 这一局谁能说话（整份覆盖）：对方把专区语音里其余的人（围观）闭麦、禁打字；god 时让围观的人旁听私聊房。 */
+    async game(gid, { square, active, speakerIds = [], god = false, lock = true }) {
+      const body = { guildId: gid, squareChannelId: square, active };
+      if (active) Object.assign(body, { speakerIds: speakerIds.slice(0, 50), god, lock });
+      return call('game', body);
+    },
+
     /** 对方推来一条语音状态：{ guildId, userId, channelId, serverMute, serverDeaf }。 */
     push(s) {
       const gid = String(s?.guildId ?? ''); const uid = String(s?.userId ?? '');

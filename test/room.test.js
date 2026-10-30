@@ -828,32 +828,40 @@ test('造谣者自由声明：只有真造谣者的才问 AI；判为真今晚�
 });
 
 test('造谣：不是造谣者的人第二天还能再发表声明（每人每天一次，不是每局一次）', async () => {
-  const { room } = setup('auto');
-  room.settings.script = 'bmr';
-  await room.act('u1', 'join');
-  await room.act('u2', 'join');
-  await room.act('u1', 'addBots', { count: 5 });
-  await room.act('u1', 'assignRole', { player: 'u2', role: 'gossip' });
-  await room.act('u1', 'assignRole', { player: 'u1', role: 'fool' }); // 弄臣：第一次死亡不死，保证 u1 活到第二天
-  await room.act('u1', 'start');
-  try {
-    room.judgeReady = () => true;
-    room.judge = async () => ({ verdict: 'false', reason: '测试', by: '假的' });
-    const g = room.game;
-    for (let day = 1; day <= 2; day++) {
-      await untilDayBMR(room);
-      for (let k = 0; k < 100 && g.phase === 'night'; k++) await sleep(3);
-      assert.ok(!g.winner && g.get('u1').alive, `第 ${day} 天 u1 还活着、局还没结束`);
-      assert.equal(room.viewFor('u1').self.gossipDone, false, `第 ${day} 天开始时还没说过`);
-      await room.act('u1', 'gossip', { statement: { kind: 'free', text: `第${day}天：3号是恶魔` } });
-      assert.equal(room.viewFor('u1').self.gossipDone, true);
-      await room.gossipJudging;
-      await room.act('u1', 'gather');
-      await room.act('u1', 'dusk');
-      for (let k = 0; k < 50 && g.phase === 'day'; k++) await sleep(2);
-    }
-    assert.equal(g.timeline.filter((e) => /声称"第\d天/.test(e.text)).length, 2, '两天各说了一次');
-  } finally { room.reset(); }
+  // 夜里的击杀是随机的：偶尔 u1（弄臣）活不到第二天、或者局先结束了。这种局不算数，换一局重来（最多 3 局）
+  for (let attempt = 1; ; attempt++) {
+    const { room } = setup('auto');
+    room.settings.script = 'bmr';
+    await room.act('u1', 'join');
+    await room.act('u2', 'join');
+    await room.act('u1', 'addBots', { count: 5 });
+    await room.act('u1', 'assignRole', { player: 'u2', role: 'gossip' });
+    await room.act('u1', 'assignRole', { player: 'u1', role: 'fool' }); // 弄臣：第一次死亡不死
+    await room.act('u1', 'start');
+    let inconclusive = false;
+    try {
+      room.judgeReady = () => true;
+      room.judge = async () => ({ verdict: 'false', reason: '测试', by: '假的' });
+      const g = room.game;
+      for (let day = 1; day <= 2; day++) {
+        await untilDayBMR(room);
+        for (let k = 0; k < 100 && g.phase === 'night'; k++) await sleep(3);
+        if (g.winner || !g.get('u1').alive) { inconclusive = true; break; }
+        assert.equal(room.viewFor('u1').self.gossipDone, false, `第 ${day} 天开始时还没说过`);
+        await room.act('u1', 'gossip', { statement: { kind: 'free', text: `第${day}天：3号是恶魔` } });
+        assert.equal(room.viewFor('u1').self.gossipDone, true);
+        await room.gossipJudging;
+        await room.act('u1', 'gather');
+        await room.act('u1', 'dusk');
+        for (let k = 0; k < 50 && g.phase === 'day'; k++) await sleep(2);
+      }
+      if (!inconclusive) {
+        assert.equal(g.timeline.filter((e) => /声称"第\d天/.test(e.text)).length, 2, '两天各说了一次');
+        return;
+      }
+    } finally { room.reset(); }
+    assert.ok(attempt < 3, '连续 3 局 u1 都没活到第二天');
+  }
 });
 
 test('AI 判定：第一家失败换第二家；都失败返回 null', async () => {
@@ -1097,4 +1105,24 @@ test('疯子（7 人及以上）：界面上和真恶魔一样看得到"爪牙"�
   await room.act('u2', 'shareBluffs');
   assert.equal(self().bluffsShared, true, '显示已经告诉爪牙');
   await room.teardown();
+});
+
+test('告诉旺财谁能说话：开局发玩家名单（不含机器人和围观），内容不变不重发；结束发 active:false', async () => {
+  const voice = mockVoice();
+  voice.games = [];
+  voice.announceGame = async (st) => { voice.games.push(st); };
+  const { room } = setup('auto', voice);
+  room.users.set('u3', { id: 'u3', name: '围观', avatar: null });
+  await room.act('u1', 'settings', { spectatorGrimoire: true });
+  await room.act('u1', 'join');
+  await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 6 });
+  for (const id of ['u1', 'u2', 'u3']) room.online.add(id);
+  await room.act('u1', 'start');
+  await until(() => voice.games.length);
+  assert.deepEqual(voice.games[0], { square: 'square', active: true, speakerIds: ['u1', 'u2'], god: true, lock: true });
+  await room.syncWatchMute();
+  assert.equal(voice.games.length, 1, '没变就不重发');
+  await room.teardown();
+  assert.deepEqual(voice.games.at(-1), { square: 'square', active: false });
 });

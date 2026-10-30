@@ -179,14 +179,20 @@ export default function App() {
   };
 
   if (status.kind === 'error' || !s) {
+    const wrongPlace = status.kind === 'error' && /^请从.*文字频道进入/.test(status.error ?? ''); // 从语音频道打开：重新进入也没用，不给那个按钮
     return (
       <div className="splash">
         <PaintFilters />
         <h1 className="title">血染<br />钟楼</h1>
-        <p className="splash-note">{status.kind === 'error' ? status.error : status.kind === 'online' ? '正在走进这座小镇……' : step}</p>
-        {(slow || status.kind === 'error') && (
+        <p className={`splash-note ${wrongPlace ? 'splash-block' : ''}`}>{status.kind === 'error' ? status.error : status.kind === 'online' ? '正在走进这座小镇……' : step}</p>
+        {wrongPlace && (
           <div className="splash-help">
-            <p>{status.kind === 'error' ? '进不去？' : '等太久了？'}点下面重新进入；{fromKook ? '还不行就回 KOOK 频道重新领一次进入链接。' : '还不行就关掉活动再从语音频道打开一次。'}</p>
+            <p>先关掉这个活动，到上面说的文字频道，从输入框旁边的应用启动器打开。人留在语音频道里就行。</p>
+          </div>
+        )}
+        {!wrongPlace && (slow || status.kind === 'error') && (
+          <div className="splash-help">
+            <p>{status.kind === 'error' ? '进不去？' : '等太久了？'}点下面重新进入；{fromKook ? '还不行就回 KOOK 频道重新领一次进入链接。' : '还不行就关掉活动，再从文字频道打开一次。'}</p>
             <button type="button" className="splash-retry" onClick={() => location.reload()}>重新进入</button>
           </div>
         )}

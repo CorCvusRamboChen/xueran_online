@@ -170,6 +170,7 @@ export class Room {
         if (this.game && this.stId) throw new UserError('真人说书进行中，不能接管');
         this.hostId = uid;
         this.announce(`${this.name(uid)} 接管了房主`);
+        this.syncWatchMute();
         break;
       case 'settings': this.updateSettings(uid, p); break;
       case 'character': this.pickCharacter(uid, p.id ?? null); break;
@@ -189,6 +190,7 @@ export class Room {
       case 'skipNom': this.skipNom(uid); break;
       case 'hand': this.hand(uid, !!p.up); break;
       case 'history': return { games: this.history?.list(this.guildId) ?? [] };
+      case 'stats': return { stats: this.history?.stats?.(this.guildId) ?? null };
       case 'pastGame': return { game: this.history?.get(this.guildId, String(p.id ?? '')) ?? null };
       case 'shareBluffs': if (!this.game) throw new UserError('游戏还没开始'); this.game.shareBluffs(uid); break;
       case 'slay': this.slay(uid, p.target); break;
@@ -804,8 +806,28 @@ export class Room {
     return [...this.online].filter((id) => !this.game?.get(id) && id !== this.stId && id !== this.hostId);
   }
 
+  /**
+   * 告诉合作机器人（旺财）这一局谁能说话：玩家（真人）+ 说书人 + 房主。它把专区语音里其余的人
+   * 闭麦、禁打字，开了「观战者能看魔典」时还让他们旁听私聊房。终局 / 暂停 / 解散发 active:false。
+   * 内容没变就不重发；对方 6 小时没收到就全部解锁，所以进行中的局 3 小时补发一次。
+   */
+  async syncGame(force) {
+    const square = this.square ?? this.gameSquare;
+    if (!square) return;
+    const active = force ?? !!(this.game && !this.ended && !this.paused);
+    const st = active
+      ? { square, active, speakerIds: [...new Set([...this.realIds(), this.stId, this.hostId].filter(Boolean))], god: !!this.settings.spectatorGrimoire, lock: !!this.settings.muteSpectators }
+      : { square, active };
+    const key = JSON.stringify(st);
+    if (key === this.gameSent?.key && (!active || Date.now() - this.gameSent.at < 3 * 3600_000)) return;
+    this.gameSent = { key, at: Date.now() };
+    this.gameSquare = active ? square : null;
+    await this.safeVoice((v) => v.announceGame?.(st));
+  }
+
   /** 观战的人闭麦 / 解除（开局后、有人进出、终局时调用）。只动自己闭上的人。 */
   async syncWatchMute() {
+    this.syncGame();
     const want = new Set(this.game && !this.ended && this.square && this.settings.muteSpectators ? this.watcherIds() : []);
     const prev = new Set(this.watchMuted ?? []);
     const unmute = [...prev].filter((id) => !want.has(id));
@@ -1577,6 +1599,7 @@ export class Room {
     this.timers.clear();
     this.paused = true;
     this.announce('大家都离开了，对局暂停，语音里的闭麦闭耳已经放开。有人回来会自动接着打。', 'clock');
+    await this.syncGame();
     if (this.watchMuted?.length) { const ids = this.watchMuted; this.watchMuted = []; await this.safeVoice((v) => v.setMuted?.(ids, false, 'watch')); }
     await this.speakOnly(null);
     if (this.square) await this.safeVoice((v) => v.setAsleep(this.realIds(), false, this.square));
@@ -1615,6 +1638,7 @@ export class Room {
   async teardown() {
     for (const t of this.timers) clearTimeout(t);
     this.timers.clear();
+    await this.syncGame(false);
     if (this.watchMuted?.length) { const ids = this.watchMuted; this.watchMuted = []; await this.safeVoice((v) => v.setMuted?.(ids, false, 'watch')); }
     await this.speakOnly(null);
     await this.endRoam();

@@ -188,7 +188,7 @@ export function Lobby({ s, act, ask, onTutorial }) {
           </Panel>
         </section>
 
-        <PastGames ask={ask} />
+        <RecordAndHistory s={s} ask={ask} />
         <RoleShowcase script={st.script} />
       </div>
     </div>
@@ -208,31 +208,249 @@ export function Watchers({ s, hint }) {
   );
 }
 
-/** 往期对局：这个服务器最近打完的局，点开看所有人身份、票型和整局复盘。 */
-function PastGames({ ask }) {
+const pct = (w, n) => (n ? `${Math.round((w / n) * 100)}%` : '—');
+const rate = (pair) => (pair[0] ? pair[1] / pair[0] : 0);
+const TEAM_ROWS = [['townsfolk', '镇民', 'var(--int)'], ['outsider', '外来者', 'var(--psy)'], ['minion', '爪牙', 'var(--phy)'], ['demon', '恶魔', 'var(--phy)']];
+// 排行榜的排法；按比例排的要至少打过 3 局（不然 1 局 1 胜就是 100%）
+const SORTS = [
+  ['wins', '胜场', (p) => p.wins, () => true],
+  ['rate', '胜率', (p) => rate([p.games, p.wins]), (p) => p.games >= 3],
+  ['good', '好人胜率', (p) => rate(p.good), (p) => p.good[0] >= 3],
+  ['evil', '坏人胜率', (p) => rate(p.evil), (p) => p.evil[0] >= 3],
+  ['games', '局数', (p) => p.games, () => true],
+];
+
+/** 一行"标签 + 比例条 + 胜/局"。 */
+function RateRow({ label, pair, color = 'var(--int)', hint }) {
+  return (
+    <div className="rr" title={hint}>
+      <span className="rr-label">{label}</span>
+      <span className="rr-bar" style={{ '--w': rate(pair), '--c': color }} aria-hidden="true" />
+      <b className="rr-pct">{pct(pair[1], pair[0])}</b>
+      <span className="rr-num">{pair[1]} / {pair[0]}</span>
+    </div>
+  );
+}
+
+/** 场上表现的一格：大数字 + 名字 + 一行说明。 */
+function Tile({ value, label, sub, tone }) {
+  return (
+    <div className={`rec-tile ${tone ?? ''}`}>
+      <b>{value}</b>
+      <span>{label}</span>
+      {sub && <small>{sub}</small>}
+    </div>
+  );
+}
+
+/** 一个人的战绩卡：分成 阵营 / 身份 / 走势 / 常玩角色 / 场上表现 几段。 */
+function RecordCard({ p, isMe }) {
+  const roles = Object.entries(p.roles).filter(([id]) => ROLES[id]).sort((a, b) => b[1][0] - a[1][0] || b[1][1] - a[1][1]).slice(0, 3);
+  const noms = p.noms ?? [0, 0, 0];
+  const nominated = Array.isArray(p.nominated) ? p.nominated : [p.nominated ?? 0, 0];
+  return (
+    <div className="rec-card">
+      <div className="rec-who">
+        <Portrait p={{ id: p.id, name: p.name, avatar: p.avatar }} size={40} prefer="avatar" speak={false} frame={isMe ? 'var(--mot)' : '#6d6a62'} />
+        <div className="rec-who-txt">
+          <b>{isMe ? `你 · ${p.name}` : p.name}</b>
+          <small>{p.games} 局 · {p.wins} 胜 {p.games - p.wins} 负 · 最近一局 {new Date(p.last).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}</small>
+        </div>
+        <div className="rec-big"><b>{pct(p.wins, p.games)}</b><small>总胜率</small></div>
+      </div>
+
+      <section className="rec-sec">
+        <h3>阵营</h3>
+        <div className="rec-rates">
+          <RateRow label="当好人" pair={p.good} color="var(--int)" />
+          <RateRow label="当坏人" pair={p.evil} color="var(--phy)" />
+          <RateRow label="活到终局" pair={[p.games, p.alive]} color="var(--cream)" hint="终局时还活着的局数" />
+        </div>
+      </section>
+
+      <section className="rec-sec">
+        <h3>身份</h3>
+        <div className="rec-teams">
+          {TEAM_ROWS.map(([k, name, c]) => (
+            <div key={k} className={p.teams[k][0] ? '' : 'none'} style={{ '--c': c }}>
+              <small>{name}</small>
+              <b>{p.teams[k][0] ? pct(p.teams[k][1], p.teams[k][0]) : '—'}</b>
+              <span>{p.teams[k][1]} / {p.teams[k][0]}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rec-sec">
+        <h3>走势 <small>最近 {p.recent.length} 局 · {p.streak >= 2 ? `${p.streak} 连胜中 · ` : ''}最长 {p.bestStreak} 连胜</small></h3>
+        <ol className="rec-form">
+          {p.recent.map((r, i) => (
+            <li key={i} className={`${r.w ? 'w' : 'l'} ${r.evil ? 'evil' : 'good'}`} title={`${ROLES[r.role]?.name ?? ''} · ${r.w ? '赢' : '输'}`}>
+              {ROLE_ART[r.role] ? <img src={ROLE_ART[r.role]} alt="" /> : null}
+              <i>{r.w ? '胜' : '负'}</i>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {!!roles.length && (
+        <section className="rec-sec">
+          <h3>常玩角色</h3>
+          <ul className="rec-roles">
+            {roles.map(([id, [g, w]]) => (
+              <li key={id}>
+                <span className="rec-ricon">{ROLE_ART[id] ? <img src={ROLE_ART[id]} alt="" /> : null}</span>
+                <b style={{ color: ATTR[ROLES[id].team]?.color }}>{ROLES[id].name}</b>
+                <span className="rr-bar" style={{ '--w': w / g, '--c': ATTR[ROLES[id].team]?.color ?? 'var(--int)' }} aria-hidden="true" />
+                <span className="rec-rnum">{w} 胜 / {g} 局</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="rec-sec">
+        <h3>场上表现</h3>
+        <div className="rec-tiles">
+          <Tile value={noms[0]} label="提名" sub={noms[0] ? `${noms[1]} 次提到邪恶（${pct(noms[1], noms[0])}）· ${noms[2]} 次送上台` : '还没提名过'} />
+          <Tile value={nominated[0]} label="被提名" sub={nominated[0] ? `${nominated[1]} 次被送上处决台` : '还没被提名过'} />
+          <Tile value={p.votes[0] ? pct(p.votes[1], p.votes[0]) : '—'} label="好人举手准度" sub={p.votes[0] ? `举手 ${p.votes[0]} 次，${p.votes[1]} 次举在邪恶身上` : '当好人时还没举过手'} tone="int" />
+          <Tile value={`${p.executed ?? 0} / ${p.nightKilled ?? 0}`} label="被处决 / 夜里死" sub={`活到终局 ${p.alive} 局`} tone="phy" />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/**
+ * 战绩和往期对局（大厅最下面一整块）：这个服务器打完的所有局（服务器 statsFor / listGames）。
+ * 左边是一个人的战绩卡（默认是你，点右边表里的人看他的）；右边两页：排行榜（表头可以点着换排法）和往期对局
+ * （选中的人参加过的局会标出他那局的角色和输赢）。
+ */
+function RecordAndHistory({ s, ask }) {
+  const [st, setSt] = useState(null);
   const [games, setGames] = useState(null);
+  const [pick, setPick] = useState(null);
+  const [sort, setSort] = useState('wins');
+  const [tab, setTab] = useState('board');
   const [open, setOpen] = useState(null);
-  useEffect(() => { ask?.('history').then((r) => setGames(r?.games ?? [])); }, []);
-  if (!games?.length) return null;
+  useEffect(() => {
+    ask?.('stats').then((r) => setSt(r?.stats ?? null)).catch(() => {});
+    ask?.('history').then((r) => setGames(r?.games ?? [])).catch(() => {});
+  }, []);
+  if (!st?.games && !games?.length) return null;
+  const players = st?.players ?? [];
+  const me = players.find((p) => p.id === s.me);
+  const shown = players.find((p) => p.id === pick) ?? me;
+  const [, , key, ok] = SORTS.find((x) => x[0] === sort);
+  const board = players.filter(ok).sort((a, b) => key(b) - key(a) || b.games - a.games);
   const show = async (id) => { const r = await ask('pastGame', { id }); if (r?.game) setOpen(r.game); };
   const when = (t) => new Date(t).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const th = (k, label) => (
+    <th scope="col" aria-sort={sort === k ? 'descending' : 'none'}>
+      <button type="button" className={sort === k ? 'on' : ''} onClick={() => setSort(k)}>{label}{sort === k ? ' ↓' : ''}</button>
+    </th>
+  );
   return (
-    <section className="lobby-roles glass pnl past-games">
-      <header className="roles-head"><h2>往期对局</h2><p className="muted">这个服务器最近打完的局。点开看所有人的身份、票型和整局复盘。</p></header>
-      <ul className="pg-list">
-        {games.map((g) => (
-          <li key={g.id}>
-            <button type="button" onClick={() => show(g.id)}>
-              <span className={`pg-win ${g.winner}`}>{g.winner === 'good' ? '善良胜' : '邪恶胜'}</span>
-              <span className="pg-when">{when(g.endedAt)}</span>
-              <span className="pg-meta">{g.players.length} 人 · {g.days} 天</span>
-              <span className="pg-reason">{g.reason}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
+    <section className="lobby-roles glass pnl past-games rh">
+      <header className="roles-head">
+        <h2>战绩与往期对局</h2>
+        <p className="muted">{st?.games ? `这个服务器打完了 ${st.games} 局，善良赢 ${pct(st.goodWins, st.games)}，邪恶赢 ${pct(st.games - st.goodWins, st.games)}。` : ''}点表里的人看他的战绩，点往期的局看所有人的身份、票型和整局复盘。</p>
+      </header>
+      <div className="rh-grid">
+        <div className="rh-left">
+          {shown ? <RecordCard p={shown} isMe={shown.id === s.me} /> : <p className="rec-none">你还没在这个服务器打完过一局。点右边表里的人，看看他们的战绩。</p>}
+          {pick && pick !== s.me && me && <button type="button" className="rec-back" onClick={() => setPick(null)}>← 看我自己的</button>}
+        </div>
+        <div className="rh-right">
+          <div className="rh-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={tab === 'board'} className={tab === 'board' ? 'on' : ''} onClick={() => setTab('board')}>排行榜 <small>{players.length} 人</small></button>
+            <button type="button" role="tab" aria-selected={tab === 'games'} className={tab === 'games' ? 'on' : ''} onClick={() => setTab('games')}>往期对局 <small>最近 {games?.length ?? 0} 局</small></button>
+          </div>
+          {tab === 'board' ? (
+            board.length ? (
+              <div className="rh-scroll">
+                <table className="rh-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">#</th>
+                      <th scope="col" className="rh-name">玩家</th>
+                      {th('games', '局数')}
+                      {th('wins', '胜场')}
+                      {th('rate', '胜率')}
+                      {th('good', '好人胜率')}
+                      {th('evil', '坏人胜率')}
+                      <th scope="col">最近 5 局</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {board.map((p, i) => (
+                      <tr key={p.id} className={`${p.id === s.me ? 'me' : ''} ${p.id === shown?.id ? 'on' : ''}`} onClick={() => setPick(p.id)}>
+                        <td className="rh-rank">{i + 1}</td>
+                        <td className="rh-name">
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setPick(p.id); }}>
+                            <Portrait p={{ id: p.id, name: p.name, avatar: p.avatar }} size={22} prefer="avatar" speak={false} frame="#6d6a62" />
+                            <span>{p.name}{p.id === s.me ? '（你）' : ''}</span>
+                          </button>
+                        </td>
+                        <td>{p.games}</td>
+                        <td>{p.wins}</td>
+                        <td><Pct pair={[p.games, p.wins]} c="var(--mot)" /></td>
+                        <td><Pct pair={p.good} c="var(--int)" /></td>
+                        <td><Pct pair={p.evil} c="var(--phy)" /></td>
+                        <td>
+                          <ol className="rh-form">
+                            {p.recent.slice(-5).map((r, k) => <li key={k} className={`${r.w ? 'w' : 'l'} ${r.evil ? 'evil' : 'good'}`} title={`${ROLES[r.role]?.name ?? ''} · ${r.w ? '赢' : '输'}`} />)}
+                          </ol>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <p className="rec-none">{`还没有人${sort === 'good' ? '当好人' : sort === 'evil' ? '当坏人' : '打'}满 3 局。`}</p>
+          ) : (
+            games?.length ? (
+              <ul className="pg-list">
+                {games.map((g) => {
+                  const mine = shown && g.players.find((q) => q.id === shown.id);
+                  const evil = mine && ['minion', 'demon'].includes(ROLES[mine.role]?.team);
+                  const won = mine && (g.winner === 'evil') === evil;
+                  return (
+                    <li key={g.id}>
+                      <button type="button" onClick={() => show(g.id)}>
+                        <span className={`pg-win ${g.winner}`}>{g.winner === 'good' ? '善良胜' : '邪恶胜'}</span>
+                        <span className="pg-when">{when(g.endedAt)}</span>
+                        <span className="pg-meta">{g.players.length} 人 · {g.days} 天</span>
+                        <span className="pg-reason">{g.reason}</span>
+                        {mine && ROLES[mine.role] && (
+                          <span className={`pg-mine ${won ? 'w' : 'l'}`} title={`${shown.id === s.me ? '你' : shown.name}这局是${ROLES[mine.role].name}`}>
+                            {shown.id === s.me ? '你' : shown.name} · <b style={{ color: ATTR[ROLES[mine.role].team]?.color }}>{ROLES[mine.role].name}</b> · {won ? '赢' : '输'}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : <p className="rec-none">还没有打完的局。</p>
+          )}
+        </div>
+      </div>
       {open && createPortal(<PastGame game={open} onClose={() => setOpen(null)} />, document.body)}
     </section>
+  );
+}
+
+/** 表格里的比例：百分比 + 细条 + 胜/局（没打过就是一条横线）。 */
+function Pct({ pair, c }) {
+  if (!pair[0]) return <span className="rh-pct none">—</span>;
+  return (
+    <span className="rh-pct" style={{ '--w': rate(pair), '--c': c }}>
+      <b>{pct(pair[1], pair[0])}</b>
+      <i aria-hidden="true" />
+      <small>{pair[1]}/{pair[0]}</small>
+    </span>
   );
 }
 

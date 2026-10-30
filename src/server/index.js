@@ -10,11 +10,12 @@ import { Client, Events, GatewayIntentBits } from 'discord.js';
 import { Room, UserError } from './room.js';
 import { VoiceHub } from './voice.js';
 import { ttsHandler, ttsEnabled } from './tts.js';
-import { saveSoon, flushAll, loadAll, archiveGame, listGames, getGame } from './store.js';
+import { saveSoon, flushAll, loadAll, archiveGame, listGames, getGame, statsFor } from './store.js';
 import { startTutorial } from './tutorial.js';
 import { KookBot, KOOK_PREFIX } from './kook.js';
 import { verifyTicket } from './tickets.js';
 import { partnerPlatform } from './partner.js';
+import { voiceLaunchBlocked } from './launch.js';
 import { timingSafeEqual } from 'node:crypto';
 
 const { DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_TOKEN } = process.env;
@@ -278,6 +279,22 @@ function guardMoves(voice, channelId, room) {
   return { ...voice, openRoom: skip('openRoom', null), addToRoom: skip('addToRoom'), removeFromRoom: skip('removeFromRoom'), closeRoom: skip('closeRoom'), moveAll: skip('moveAll'), move: skip('move', false) };
 }
 
+/**
+ * 合作机器人的服务器：有人打开活动就告诉对方（活动没写 Discord 状态，对方看不出谁在玩）。
+ * 对方据此建「血染钟楼专区」把人拉进专区广场。每个人在这个活动实例里只说一次（断线重连不再说）。
+ */
+function openForPartner(room, guildId, user) {
+  room.partnerOpened ??= new Set();
+  if (room.partnerOpened.has(user.id)) return;
+  room.partnerOpened.add(user.id);
+  partner.open(guildId, user.id).then((j) => {
+    console.log(`🩸 ${user.name} 打开了活动，${PARTNER_NAME}：${j.zoned ? `已在专区广场 ${j.squareChannelId}` : `没进专区（${j.reason ?? '?'}）`}`);
+  }).catch((e) => {
+    room.partnerOpened.delete(user.id);
+    console.warn(`[partner] open 失败：${e.message}`);
+  });
+}
+
 const isKook = (guildId) => guildId.startsWith(KOOK_PREFIX);
 
 /** 这一局用哪个机器人管语音：KOOK 的房间（服务器 id 带 kook- 前缀）用 KOOK 机器人，其余用 Discord 的。 */
@@ -301,7 +318,7 @@ function roomFor(guildId, channelId, hostId) {
     }
     room.onPos = (r, id, move) => { broadcastPos(r, id, move); saveSoon(r); };
     room.onEnded = archiveGame;
-    room.history = { list: listGames, get: getGame };
+    room.history = { list: listGames, get: getGame, stats: statsFor };
     room.peers = () => rooms.values(); // 开局时查同一个语音频道有没有别的局
     rooms.set(key, room);
     sockets.set(room, new Set());
@@ -338,6 +355,12 @@ wss.on('connection', (ws) => {
         const guildId = ticket ? `${KOOK_PREFIX}${ticket.g}` : msg.dev ? 'dev' : msg.guildId;
         const channelId = ticket ? String(ticket.c) : msg.dev ? String(msg.dev.table || 'table') : msg.channelId;
         if (!guildId || !channelId) throw new UserError('请在服务器频道里打开（私信里玩不了）');
+        if (!msg.dev && !ticket) { // Discord 活动才有这个问题；KOOK 是浏览器里玩的
+          const key = `${guildId}:${channelId}`;
+          if (await voiceLaunchBlocked({ room: rooms.get(key), voice: voiceFor(guildId, key), channelId })) {
+            throw new UserError(PARTNER_GUILDS.has(guildId) ? '请从钟楼专区的开局文字频道进入' : '请从文字频道进入');
+          }
+        }
         const room = roomFor(guildId, channelId, user.id);
         ws.uid = user.id;
         ws.room = room;
@@ -351,6 +374,7 @@ wss.on('connection', (ws) => {
         room.presence?.();
         broadcast(room);
         room.syncWatchMute?.().catch?.(() => {});
+        if (partner && PARTNER_GUILDS.has(guildId)) openForPartner(room, guildId, user);
         if (!msg.dev) console.log(`👤 ${user.name} 进入 ${guildId}:${channelId}（${room.game ? '游戏中' : '大厅'}）`);
         return;
       }

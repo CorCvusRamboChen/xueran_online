@@ -1,0 +1,3 @@
+html,body{margin:0;background:#0e1010;overflow:hidden}
+.bg{position:absolute;inset:0;background:url(../../client/src/assets/art/scenes/lobby-hero.webp) 60% 40%/cover no-repeat}
+.t{font-family:"Noto Serif SC";font-weight:900;color:#f4f4f0;margin:0;text-shadow:0 4px 30px rgba(0,0,0,.8)}
