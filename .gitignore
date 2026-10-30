@@ -15,3 +15,6 @@ Thumbs.db
 
 # Serena（编辑器插件）的本地配置
 .serena/
+
+# 官网首屏宣传片：由 scripts/site-trailer.sh 从 design/trailer 转出，只留本地
+site/media/trailer/*.mp4

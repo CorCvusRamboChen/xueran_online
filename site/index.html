@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>血染钟楼 Online</title>
+<meta name="description" content="在 Discord 里开一局血染钟楼：AI 房主当说书人，走进房子自动进那间的语音。暗流涌动、黯月初升两个剧本，规则照官方百科，村规一键开关。">
+<meta property="og:title" content="血染钟楼 Online · Discord 活动">
+<meta property="og:description" content="没人当说书人？AI 房主来。把机器人拉进你的服务器，今晚就开一局。">
+<meta property="og:image" content="https://rambooo.com/botc/media/trailer/poster.jpg">
+<meta property="og:url" content="https://rambooo.com/botc/">
+<meta name="theme-color" content="#0e1010">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Libre+Baskerville:ital@1&family=Noto+Sans+SC:wght@400;700;900&family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=6">
+<script>document.documentElement.classList.add('js')</script>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-discord" viewBox="0 0 127.14 96.36"><path fill="currentColor" d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15ZM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69Zm42.24 0C78.41 65.69 73.25 60 73.25 53s5-12.74 11.44-12.74S96.23 46 96.12 53s-5.04 12.69-11.43 12.69Z"/></symbol>
+  <symbol id="i-github" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></symbol>
+  <symbol id="i-speaker" viewBox="0 0 24 24"><path fill="currentColor" d="M11 4.2v15.6a1 1 0 0 1-1.7.7L5.6 17H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h2.6l3.7-3.5a1 1 0 0 1 1.7.7Zm3.5 2.6a1 1 0 0 1 1.4 0 7.3 7.3 0 0 1 0 10.4 1 1 0 0 1-1.4-1.4 5.3 5.3 0 0 0 0-7.6 1 1 0 0 1 0-1.4Z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><path fill="currentColor" d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1Zm2 0h6V7a3 3 0 0 0-6 0v3Z"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M7 4.5v15l12-7.5Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path fill="currentColor" d="M6 4h4v16H6Zm8 0h4v16h-4Z"/></symbol>
+  <symbol id="i-full" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></symbol>
+</svg>
+
+<header class="topbar">
+  <a class="brand" href="#top"><span class="tag tag-light">血染钟楼</span><span class="brand-sub">Online</span></a>
+  <nav class="tabs" aria-label="页面导航">
+    <a href="#scripts">剧本</a>
+    <a href="#voice">Discord 语音</a>
+    <a href="#storyteller">AI 说书人</a>
+    <a href="#rules">按照百科</a>
+    <a href="#houserules">村规开关</a>
+    <a href="#marks">连线标记</a>
+    <a href="#faq">问答</a>
+  </nav>
+  <div class="top-actions">
+    <a class="btn btn-secondary" href="https://github.com/CorCvusRamboChen/xueran_online" target="_blank" rel="noopener">
+      <svg class="ico" aria-hidden="true"><use href="#i-github"/></svg><span>GitHub 仓库</span>
+    </a>
+    <a class="btn btn-primary top-invite" data-invite href="https://github.com/CorCvusRamboChen/xueran_online#2-拉机器人进服务器">
+      <svg class="ico" aria-hidden="true"><use href="#i-discord"/></svg><span>添加到 Discord</span>
+    </a>
+  </div>
+</header>
+
+<main>
+
+<!-- 首屏：宣传片铺满，上面一块游戏里的面板 -->
+<section class="hero" id="top">
+  <video class="hero-video" data-trailer autoplay muted loop playsinline preload="metadata" poster="media/trailer/poster.jpg" aria-label="血染钟楼 Online 宣传片：实机画面，两座小镇、私聊、AI 房主、村规和小魔典">
+    <source src="media/trailer/trailer-1280.mp4" type="video/mp4" media="(max-width: 700px)">
+    <source src="media/trailer/trailer-2560.mp4" type="video/mp4" media="(min-width: 1600px), (min-width: 1000px) and (min-resolution: 1.5dppx)">
+    <source src="media/trailer/trailer-1920.mp4" type="video/mp4">
+  </video>
+  <div class="pnl hero-pnl reveal">
+    <span class="cross tl"></span><span class="cross tr"></span><span class="cross bl"></span><span class="cross br"></span>
+    <div class="pnl-head"><span class="tag tag-light">钟楼镇 · Discord 活动</span><span class="pnl-extra c-red">内测中</span></div>
+    <h1>在 Discord 里<br>开一局血染钟楼</h1>
+    <p class="lead">没人当说书人？AI 房主来。走进房子，Discord 自动把你拉进那间的语音。拉机器人进服务器，喊上朋友就能玩。</p>
+    <div class="btn-row">
+      <a class="btn btn-primary big" data-invite href="https://github.com/CorCvusRamboChen/xueran_online#2-拉机器人进服务器">
+        <svg class="ico" aria-hidden="true"><use href="#i-discord"/></svg><span>添加到 Discord</span>
+      </a>
+      <a class="btn btn-secondary big" href="#scripts">看看有什么</a>
+    </div>
+    <div class="stats">
+      <div class="stat"><b class="stat-num">2</b><span class="stat-label" style="--u: var(--psy)">个剧本</span></div>
+      <div class="stat"><b class="stat-num">47</b><span class="stat-label" style="--u: var(--int)">张能力牌</span></div>
+      <div class="stat"><b class="stat-num">53</b><span class="stat-label" style="--u: var(--mot)">套推荐配置</span></div>
+      <div class="stat"><b class="stat-num">5–15</b><span class="stat-label" style="--u: var(--phy)">人一局</span></div>
+    </div>
+  </div>
+  <div class="hudbar hero-hud">
+    <button class="hud-btn" type="button" data-trailer-play aria-label="暂停宣传片" hidden><svg class="ico-l" aria-hidden="true"><use href="#i-pause"/></svg><small>暂停</small></button>
+    <button class="hud-btn" type="button" data-trailer-full aria-label="全屏看宣传片" hidden><svg class="ico-l" aria-hidden="true"><use href="#i-full"/></svg><small>全屏</small></button>
+    <span class="hud-time"><small>宣传片 · 0:57</small><b>内测中</b></span>
+  </div>
+</section>
+
+<!-- 1 · 剧本 -->
+<section class="sec" id="scripts" aria-labelledby="scripts-h">
+  <div class="sec-head">
+    <div><p class="sec-num reveal"><b>1</b><span>剧本</span></p><h2 id="scripts-h" class="reveal">两个剧本，两座小镇</h2></div>
+    <p class="reveal">每个剧本一张自己的地图。标了号的房子都能走进去，各有一个语音频道。更多剧本正在制作中。</p>
+  </div>
+  <div class="scripts">
+    <article class="script reveal">
+      <div class="script-map" data-map>
+        <img src="media/map-tb-1000.webp" srcset="media/map-tb-1000.webp 1000w, media/map-tb-2000.webp 2000w" sizes="(max-width: 960px) 100vw, 50vw" width="2000" height="1250" alt="暗流涌动的小镇实机画面：雪夜的钟楼镇，钟楼在正中，南边是结冰的海和码头" loading="lazy">
+        <ol class="pins" aria-hidden="true">
+          <li class="pin pin-gather" style="--x:60.4%;--y:39.1%"><b>集</b><span>钟楼广场</span></li>
+          <li class="pin pin-b" style="--x:60.4%;--y:13.9%" data-pin="1"><b>1</b><span>酒馆</span></li>
+          <li class="pin pin-r" style="--x:94.3%;--y:38.1%" data-pin="2"><b>2</b><span>教堂</span></li>
+          <li class="pin" style="--x:27.1%;--y:37.6%" data-pin="3"><b>3</b><span>铁匠铺</span></li>
+          <li class="pin" style="--x:61.2%;--y:64.9%" data-pin="4"><b>4</b><span>面包房</span></li>
+          <li class="pin pin-b" style="--x:27.6%;--y:13.3%" data-pin="5"><b>5</b><span>图书馆</span></li>
+          <li class="pin pin-r" style="--x:96.2%;--y:67.7%" data-pin="6"><b>6</b><span>墓园</span></li>
+        </ol>
+        <span class="tag tag-light">雪夜 · 钟楼镇</span>
+      </div>
+      <div class="script-body">
+        <header><h3>暗流涌动</h3><small>Trouble Brewing</small></header>
+        <p>官方的入门剧本。信息角色多，规则直观，第一次玩就选它。只有一个恶魔：小恶魔。</p>
+        <p class="script-mix"><span><b class="c-int">13</b> 镇民</span><span><b class="c-psy">4</b> 外来者</span><span><b class="c-mot">4</b> 爪牙</span><span><b class="c-phy">1</b> 恶魔</span></p>
+        <div class="houses"><span class="houses-l">6 间能进的房子</span><span data-house-chip="1"><b>1</b>酒馆</span><span data-house-chip="2"><b>2</b>教堂</span><span data-house-chip="3"><b>3</b>铁匠铺</span><span data-house-chip="4"><b>4</b>面包房</span><span data-house-chip="5"><b>5</b>图书馆</span><span data-house-chip="6"><b>6</b>墓园</span></div>
+        <button class="btn btn-secondary" type="button" data-goto-script="tb">看暗流涌动的 22 个角色</button>
+      </div>
+    </article>
+    <article class="script reveal">
+      <div class="script-map" data-map>
+        <img src="media/map-bmr-1000.webp" srcset="media/map-bmr-1000.webp 1000w, media/map-bmr-2000.webp 2000w" sizes="(max-width: 960px) 100vw, 50vw" width="2000" height="1250" alt="黯月初升的小镇实机画面：黄昏的黯月驿站，玩家在旅店门前的广场上集合，溪谷从中间穿过，石桥连着两岸" loading="lazy">
+        <ol class="pins" aria-hidden="true">
+          <li class="pin pin-gather" style="--x:44.7%;--y:47.7%"><b>集</b><span>驿站广场</span></li>
+          <li class="pin pin-b" style="--x:56.6%;--y:11.2%" data-pin="1"><b>1</b><span>黯月旅店</span></li>
+          <li class="pin pin-r" style="--x:77.6%;--y:52.6%" data-pin="2"><b>2</b><span>茶馆</span></li>
+          <li class="pin" style="--x:14%;--y:46.3%" data-pin="3"><b>3</b><span>溪边磨坊</span></li>
+          <li class="pin pin-r" style="--x:87.7%;--y:82.8%" data-pin="4"><b>4</b><span>修道院礼拜堂</span></li>
+          <li class="pin" style="--x:50%;--y:92.4%" data-pin="5"><b>5</b><span>乌鸦墓园</span></li>
+          <li class="pin pin-b" style="--x:15.8%;--y:9.8%" data-pin="6"><b>6</b><span>钟表工坊</span></li>
+          <li class="pin" style="--x:13.2%;--y:79.3%" data-pin="7"><b>7</b><span>猎人小屋</span></li>
+        </ol>
+        <span class="tag tag-light">黄昏 · 黯月驿站</span>
+      </div>
+      <div class="script-body">
+        <header><h3>黯月初升</h3><small>Bad Moon Rising</small></header>
+        <p>进阶剧本：夜里死得多，能保护人的角色也多。四个恶魔各有各的杀法，猜恶魔是谁之前，先得猜是哪一个。</p>
+        <p class="script-mix"><span><b class="c-int">13</b> 镇民</span><span><b class="c-psy">4</b> 外来者</span><span><b class="c-mot">4</b> 爪牙</span><span><b class="c-phy">4</b> 恶魔</span></p>
+        <div class="houses"><span class="houses-l">7 间能进的房子</span><span data-house-chip="1"><b>1</b>黯月旅店</span><span data-house-chip="2"><b>2</b>茶馆</span><span data-house-chip="3"><b>3</b>溪边磨坊</span><span data-house-chip="4"><b>4</b>修道院礼拜堂</span><span data-house-chip="5"><b>5</b>乌鸦墓园</span><span data-house-chip="6"><b>6</b>钟表工坊</span><span data-house-chip="7"><b>7</b>猎人小屋</span></div>
+        <button class="btn btn-secondary" type="button" data-goto-script="bmr">看黯月初升的 25 个角色</button>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- 2 · Discord 语音 -->
+<section class="sec sec-split" id="voice" aria-labelledby="voice-h">
+  <div class="st-copy">
+    <p class="sec-num reveal"><b>2</b><span>Discord 语音</span></p>
+    <h2 id="voice-h" class="reveal">走进房子，<br>语音跟着你走</h2>
+    <p class="reveal">线下私聊得躲进走廊，全场都看着你。这里你在地图上走进哪间房子，Discord 就把你拉进那间的语音频道。</p>
+    <ul class="duties">
+      <li class="reveal"><span class="tag tag-dark">新建</span><p>机器人新建那间房子的语音频道，把你拉进去。频道只有屋里的人看得到。</p></li>
+      <li class="reveal"><span class="tag tag-dark">锁门</span><p>屋里的人可以锁门，门外的人只能敲：让他进来，或者假装没人。</p></li>
+      <li class="reveal"><span class="tag tag-dark">回收</span><p>人走光了，频道自动删掉。敲钟集合，所有人回到钟楼广场。</p></li>
+    </ul>
+  </div>
+  <div class="voice-demo reveal" data-ui>
+    <div class="dc">
+      <div class="dc-head"><b>你的服务器</b><span>示意</span></div>
+      <p class="dc-cat">血染钟楼</p>
+      <ul class="dc-list" data-dc aria-live="polite"></ul>
+    </div>
+    <div class="pnl voice-pnl">
+      <span class="cross tl"></span><span class="cross tr"></span><span class="cross bl"></span><span class="cross br"></span>
+      <div class="pnl-head"><span class="tag tag-light">街上</span><span class="pnl-extra">点一间房子走进去</span></div>
+      <div class="house-pick">
+        <button class="btn btn-secondary" type="button" data-house="钟楼广场">钟楼广场</button>
+        <button class="btn btn-secondary" type="button" data-house="酒馆">酒馆</button>
+        <button class="btn btn-secondary" type="button" data-house="铁匠铺">铁匠铺</button>
+        <button class="btn btn-secondary" type="button" data-house="图书馆">图书馆</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" type="button" data-lock aria-pressed="false" disabled><svg class="ico" aria-hidden="true"><use href="#i-lock"/></svg><span>锁门</span></button>
+      </div>
+      <p class="pnl-line" data-voice-status>你在钟楼广场。教堂里阿澈和小满锁着门在私聊。</p>
+    </div>
+  </div>
+  <figure class="shot shot-wide reveal">
+    <button class="shot-open" type="button" data-full="media/shots/tavern-1920.webp" aria-label="放大看：走进酒馆">
+      <img src="media/shots/tavern-960.webp" srcset="media/shots/tavern-960.webp 960w, media/shots/tavern-1920.webp 1920w" sizes="(max-width: 1440px) 100vw, 1360px" width="1920" height="1080" alt="游戏画面：钟楼镇的酒馆屋顶掀开，能看到屋里的桌椅和走进去的玩家；右栏是房子面板，有锁门按钮" loading="lazy">
+    </button>
+    <figcaption><span class="tag tag-dark">实机</span>走进酒馆，屋顶掀开，屋里只有你们几个。右上角是房子面板：锁门私聊、邀请别人、出去。</figcaption>
+  </figure>
+</section>
+
+<!-- 3 · AI 说书人 -->
+<section class="sec sec-split" id="storyteller" aria-labelledby="st-h">
+  <div class="st-copy">
+    <p class="sec-num reveal"><b>3</b><span>AI 说书人</span></p>
+    <h2 id="st-h" class="reveal">没人当说书人？<br>AI 房主来。</h2>
+    <p class="reveal">说书人要背规则、记全场身份、编假信息、控局势，最难找。AI 房主替你做；房主也可以自己当说书人，审核、改写每一条夜晚信息。</p>
+    <ol class="numbered">
+      <li class="reveal"><b class="step-num">01</b><div><h3>配板</h3><p>53 套推荐配置，官方的优先。人数对不上，AI 配平，不出一边倒的板子。</p></div></li>
+      <li class="reveal"><b class="step-num">02</b><div><h3>夜晚</h3><p>入夜全场闭麦闭耳，按官方夜间顺序挨个叫醒。所有人选完就立刻结算，不用干等。</p></div></li>
+      <li class="reveal"><b class="step-num">03</b><div><h3>假信息</h3><p>醉酒、中毒的人拿到的假信息前后对得上：给他编一整套「假世界」，别人也有办法反证。</p></div></li>
+      <li class="reveal"><b class="step-num">04</b><div><h3>局势</h3><p>哪边落后，就在规则内帮一把：看爪牙死了几个、恶魔被怀疑多深、好人死了几个。</p></div></li>
+      <li class="reveal"><b class="step-num">05</b><div><h3>手记</h3><p>每个判定都记进手记，终局公开。说书人不是黑箱。</p></div></li>
+    </ol>
+  </div>
+  <div class="st-shots reveal">
+    <figure class="shot" data-shots>
+      <div class="drawer-tabs" role="tablist" aria-label="一局里 AI 房主做的事">
+        <button type="button" role="tab" class="on" aria-selected="true" data-shot="0">开局</button>
+        <button type="button" role="tab" aria-selected="false" data-shot="1">夜里</button>
+        <button type="button" role="tab" aria-selected="false" data-shot="2">天亮</button>
+      </div>
+      <button class="shot-open" type="button" data-full="media/shots/lobby-1920.webp" aria-label="放大看这张截图">
+        <img data-shot-img src="media/shots/lobby-960.webp" srcset="media/shots/lobby-960.webp 960w, media/shots/lobby-1920.webp 1920w" sizes="(max-width: 960px) 100vw, 54vw" width="1920" height="1080" alt="游戏大厅：座位上坐了 6 个人，房间设置里说书人选了「AI 房主」" loading="lazy">
+      </button>
+      <figcaption data-shot-cap><span class="tag tag-dark">实机</span>大厅里说书人选「AI 房主」，配置用推荐预设；人数对不上，就由 AI 来配。</figcaption>
+    </figure>
+    <div class="journal">
+      <header><span class="tag tag-red">说书人手记</span><small>终局公开 · 示例</small></header>
+      <p>4 号今晚中毒，真实答案是 1，给 0。3 号白天自称士兵，这条让他看起来更干净。局势：邪恶略占上风。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 4 · 按照百科 -->
+<section class="sec" id="rules" aria-labelledby="rules-h">
+  <div class="sec-head">
+    <div><p class="sec-num reveal"><b>4</b><span>按照百科</span></p><h2 id="rules-h" class="reveal">规则照官方百科实现</h2></div>
+    <p class="reveal">照集石官方中文百科：47 个角色的能力、夜间顺序、人数配置，都按百科写。每张能力牌都是为这个游戏画的。点一个角色看看。</p>
+  </div>
+  <div class="ri reveal" data-ui>
+    <div class="pnl ri-list">
+      <span class="cross tl"></span><span class="cross tr"></span><span class="cross bl"></span><span class="cross br"></span>
+      <div class="drawer-tabs" role="tablist" aria-label="剧本">
+        <button type="button" role="tab" class="on" aria-selected="true" data-script="tb">暗流涌动 <i>22</i></button>
+        <button type="button" role="tab" aria-selected="false" data-script="bmr">黯月初升 <i>25</i></button>
+      </div>
+      <input class="ri-search" type="search" placeholder="搜角色或能力里的词，比如：中毒、处决" aria-label="搜角色" data-ri-search>
+      <div class="ri-teams" data-ri-teams>
+        <p class="muted">开启 JavaScript 以后，这里能按阵营查看全部角色。</p>
+      </div>
+    </div>
+    <article class="ri-detail" data-ri-detail aria-live="polite"></article>
+  </div>
+</section>
+
+<!-- 5 · 村规开关 -->
+<section class="sec sec-split" id="houserules" aria-labelledby="hr-h">
+  <div class="st-copy">
+    <p class="sec-num reveal"><b>5</b><span>村规开关</span></p>
+    <h2 id="hr-h" class="reveal">村规单独列出，<br>一键开关</h2>
+    <p class="reveal">官方规则之外，各家都有自己的玩法。常见的村规单独列在大厅的「房间设置」里，想怎么玩，房主说了算。</p>
+    <p class="reveal muted">右边是游戏里的那块面板。开关试试，下面会写清官方怎么规定、打开后有什么不同。</p>
+  </div>
+  <div class="pnl rules-pnl reveal" data-ui>
+    <span class="cross tl"></span><span class="cross tr"></span><span class="cross bl"></span><span class="cross br"></span>
+    <div class="pnl-head"><span class="tag tag-light">房间设置 · 规则</span><span class="pnl-extra">房主才能改</span></div>
+    <ul class="settings" data-rules></ul>
+  </div>
+  <figure class="shot shot-wide reveal">
+    <button class="shot-open" type="button" data-full="media/shots/vote-1920.webp" aria-label="放大看：隐藏票型的投票">
+      <img src="media/shots/vote-960.webp" srcset="media/shots/vote-960.webp 960w, media/shots/vote-1920.webp 1920w" sizes="(max-width: 1440px) 100vw, 1360px" width="1920" height="1080" alt="游戏画面：黯月初升的驿站广场上投票，3 号站在绞刑架下，指针指向 4 号，右上角的票数显示问号" loading="lazy">
+    </button>
+    <figcaption><span class="tag tag-dark">实机</span>开着「投票时隐藏票型」：指针转到谁，谁决定举不举手；右上角的票数是「?」，投完才公开。</figcaption>
+  </figure>
+</section>
+
+<!-- 6 · 连线标记 -->
+<section class="sec" id="marks" aria-labelledby="marks-h">
+  <div class="sec-head">
+    <div><p class="sec-num reveal"><b>6</b><span>连线标记</span></p><h2 id="marks-h" class="reveal">小魔典：右键标记，<br>左键连线</h2></div>
+    <p class="reveal">猜身份、写笔记、画关系线，在集会广场上直接标、直接连。只存在你自己的设备上，别人看不到；下一局自动清空。</p>
+  </div>
+  <div class="marks-stage">
+    <div class="square reveal" data-ui aria-label="集会广场：八个座位围成一圈">
+      <img class="square-ground" src="media/square-night.webp" width="1600" height="1600" alt="" loading="lazy">
+      <svg class="links" data-links viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+      <ol class="seats" data-seats></ol>
+    </div>
+    <div class="pnl marks-pnl reveal">
+      <span class="cross tl"></span><span class="cross tr"></span><span class="cross bl"></span><span class="cross br"></span>
+      <div class="pnl-head"><span class="tag tag-light">小魔典</span><button class="btn-text" type="button" data-marks-clear>清空</button></div>
+      <p class="tool-l">标记：你觉得他是哪一类</p>
+      <div class="tools" data-tools-tag></div>
+      <p class="tool-l">连线：两个人之间的关系</p>
+      <div class="tools" data-tools-link></div>
+      <p class="pnl-line" data-marks-status aria-live="polite">先选一种标记或连线，再点广场上的人。</p>
+      <p class="muted marks-note">游戏里右键头像打标记、左键拖出连线；手机上长按。</p>
+    </div>
+  </div>
+  <figure class="shot shot-wide reveal">
+    <button class="shot-open" type="button" data-full="media/shots/marks-1920.webp" aria-label="放大看：游戏里的小魔典">
+      <img src="media/shots/marks-960.webp" srcset="media/shots/marks-960.webp 960w, media/shots/marks-1920.webp 1920w" sizes="(max-width: 1440px) 100vw, 1360px" width="1920" height="1080" alt="游戏画面：钟楼广场上八个人围成一圈，右键 3 号弹出小魔典菜单，可以选阵营、猜角色、写笔记" loading="lazy">
+    </button>
+    <figcaption><span class="tag tag-dark">实机</span>右键 3 号汉娜：选阵营、从这个剧本的角色里猜他是谁、写一句笔记、选连线颜色。</figcaption>
+  </figure>
+</section>
+
+<!-- 问答 -->
+<section class="sec sec-split" id="faq" aria-labelledby="faq-h">
+  <div class="st-copy">
+    <h2 id="faq-h" class="reveal">常见问题</h2>
+    <p class="reveal">没写到的，去 GitHub 仓库提个 issue。</p>
+    <a class="btn btn-secondary reveal" href="https://github.com/CorCvusRamboChen/xueran_online/issues" target="_blank" rel="noopener"><svg class="ico" aria-hidden="true"><use href="#i-github"/></svg><span>提问题</span></a>
+  </div>
+  <div class="faq-list pnl reveal">
+    <span class="cross tl"></span><span class="cross tr"></span><span class="cross bl"></span><span class="cross br"></span>
+    <details name="faq" open>
+      <summary>机器人要哪些权限，为什么？</summary>
+      <p>查看频道、发消息、连接语音、管理频道、管理身份组、移动成员、闭麦、闭耳。闭麦闭耳用来入夜「闭眼」；移动成员用来把你拉进房子的语音；管理频道和身份组用来给私聊房间设权限，锁上门别人就进不来。</p>
+    </details>
+    <details name="faq">
+      <summary>怎么开一局？</summary>
+      <p>一、点「添加到 Discord」把机器人拉进你的服务器（要有「管理服务器」权限）。二、大家进同一个语音频道，房主也要在里面，那里就是钟楼广场。三、在文字频道点输入框旁的应用启动器，选「血染钟楼」；从文字频道开，机器人在语音之间拉人时不会把你踢出活动。四、房主选剧本、说书模式和村规，大家点「加入游戏」。第一次拉机器人大约一分钟，一局一小时上下。</p>
+    </details>
+    <details name="faq">
+      <summary>AI 房主是 ChatGPT 那种大模型吗？</summary>
+      <p>不是。AI 房主是一套照官方规则写的自动说书算法：配板、叫醒、结算、编假信息、看局势帮落后的一方，判定全记进手记、终局公开。它不和你聊天。</p>
+    </details>
+    <details name="faq">
+      <summary>要几个人才能开？</summary>
+      <p>5 到 15 人。人不够的话，房主可以在大厅里补机器人玩家，凑满再开。</p>
+    </details>
+    <details name="faq">
+      <summary>新手没玩过，能跟上吗？</summary>
+      <p>有开场动画和练习局，分步提示里带小演示：翻身份牌、夜里选人、进房子锁门、提名投票，都先演一遍给你看。能力说明里的规则词，鼠标放上去就有解释。</p>
+    </details>
+    <details name="faq">
+      <summary>手机上能玩吗？</summary>
+      <p>能。Discord 手机端也能打开活动，手机上有自己的竖屏布局：广场改成竖着的圆，面板排在画面下方。</p>
+    </details>
+    <details name="faq">
+      <summary>收费吗？是官方的吗？</summary>
+      <p>不收费。这是非官方的粉丝作品，不以盈利为目的，与 The Pandemonium Institute 无关。</p>
+    </details>
+    <details name="faq">
+      <summary>中途掉线或者服务器重启怎么办？</summary>
+      <p>掉线重新打开活动就回到原来的座位。后端重启的话，进行中的这一局会丢；闭耳状态会记下来，重启后自动解除，不会有人一直被静音。</p>
+    </details>
+    <details name="faq">
+      <summary>能自己部署一份吗？</summary>
+      <p>能。代码全在 <a class="link" href="https://github.com/CorCvusRamboChen/xueran_online" target="_blank" rel="noopener">GitHub 仓库</a>，README 写了怎么建 Discord 应用、填 .env、跑起来。</p>
+    </details>
+  </div>
+</section>
+
+<!-- 收尾 -->
+<section class="cta" id="play" aria-labelledby="play-h">
+  <img class="cta-ground" src="media/map-bmr-1000.webp" srcset="media/map-bmr-1000.webp 1000w, media/map-bmr-2000.webp 2000w" sizes="100vw" width="2000" height="1250" alt="" loading="lazy">
+  <div class="pnl cta-pnl reveal">
+    <span class="cross tl"></span><span class="cross tr"></span><span class="cross bl"></span><span class="cross br"></span>
+    <div class="pnl-head"><span class="tag tag-red">敲钟集合</span><span class="pnl-extra">5–15 人</span></div>
+    <h2 id="play-h">今晚就开一局</h2>
+    <p>把机器人拉进服务器，喊上朋友进语音频道。剩下的交给钟楼。</p>
+    <div class="btn-row">
+      <a class="btn btn-primary big" data-invite href="https://github.com/CorCvusRamboChen/xueran_online#2-拉机器人进服务器">
+        <svg class="ico" aria-hidden="true"><use href="#i-discord"/></svg><span>添加到 Discord</span>
+      </a>
+      <a class="btn btn-secondary big" href="https://github.com/CorCvusRamboChen/xueran_online" target="_blank" rel="noopener">
+        <svg class="ico" aria-hidden="true"><use href="#i-github"/></svg><span>GitHub 仓库</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="foot-row">
+    <a class="brand" href="#top"><span class="tag tag-light">血染钟楼</span><span class="brand-sub">Online</span></a>
+    <nav class="foot-links" aria-label="页脚">
+      <a href="#scripts">剧本</a><a href="#voice">Discord 语音</a><a href="#storyteller">AI 说书人</a><a href="#rules">按照百科</a><a href="#houserules">村规开关</a><a href="#marks">连线标记</a><a href="#faq">问答</a>
+      <a href="https://github.com/CorCvusRamboChen/xueran_online" target="_blank" rel="noopener">GitHub 仓库</a>
+      <a href="https://github.com/CorCvusRamboChen/xueran_online/issues" target="_blank" rel="noopener">提问题</a>
+    </nav>
+  </div>
+  <p class="legal">非官方粉丝作品，不以盈利为目的，与 The Pandemonium Institute 无关。游戏画面均为内测版实机录制，其中宣传片里的 Discord 语音频道部分为示意动画，部分玩家由机器人扮演。</p>
+</footer>
+
+<script src="main.js?v=6" defer></script>
+</body>
+</html>
