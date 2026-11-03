@@ -74,3 +74,16 @@
 
 .av-host { margin-top: 10px; }
 .avalon .lead .chip { display: inline-block; white-space: nowrap; margin: 2px 4px 2px 0; line-height: 1.7; }
+
+/* 自选任务：队长挑任务的按钮；任务记录板上能挑的任务描虚线 */
+.av-qpick { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 6px 0 10px; }
+.av-qpick button { display: flex; flex-direction: column; align-items: center; padding: 6px 2px; background: transparent; color: var(--cream); border: 1px solid rgba(233, 228, 216, .45); cursor: pointer; }
+.av-qpick button b { font: 900 13px var(--sans); color: inherit; }
+.av-qpick button small { font: 700 10px var(--sans); color: var(--muted); white-space: nowrap; }
+.av-qpick button.on { background: var(--mot); border-color: var(--mot); color: #1d1606; }
+.av-qpick button.on small { color: #1d1606; }
+.av-qpick button.success { border-color: var(--int); }
+.av-qpick button.fail { border-color: var(--phy); }
+.av-qpick button:disabled { opacity: .35; cursor: not-allowed; }
+.av-quest.open { border-style: dashed; border-color: var(--mot); }
+.av-warn { color: var(--mot); }

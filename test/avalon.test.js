@@ -98,7 +98,7 @@ test('任务票：好人不能出失败；只记失败票张数；一张失败�
   assert.throws(() => g.reveal(), /还有人没出/);
   assert.equal(g.play('p4', false), true);
   const out = g.reveal();
-  assert.deepEqual(out, { round: 1, result: 'fail', fails: 1 });
+  assert.deepEqual(out, { round: 1, quest: 1, result: 'fail', fails: 1 });
   assert.equal(g.quests[0].result, 'fail');
   assert.deepEqual(g.quests[0].team, ['p1', 'p4']);
   assert.equal(g.round, 2);
@@ -160,7 +160,10 @@ test('三次任务成功进入刺杀：刺客指对梅林坏人赢，指错好�
   };
   const g = run();
   assert.throws(() => g.assassinate('p5', 'p1'), /只有刺客/);
-  assert.throws(() => g.assassinate('p4', 'p4'), /其他玩家/);
+  assert.throws(() => g.assassinate('p4', 'p4'), /只能指认好人/);
+  assert.throws(() => g.assassinate('p4', 'p5'), /只能指认好人/, '规则书：刺客指认一名好人，认识的同伴不能选');
+  assert.deepEqual(g.assassinOptions(), ['p1', 'p2', 'p3']);
+  assert.throws(() => g.suggestTarget('p5', 'p4'), /只能建议好人/);
   g.suggestTarget('p5', 'p2'); // 莫甘娜给刺客出主意
   assert.deepEqual(g.suggest, { p5: 'p2' });
   assert.throws(() => g.suggestTarget('p3', 'p1'), /同伴/);
@@ -169,6 +172,54 @@ test('三次任务成功进入刺杀：刺客指对梅林坏人赢，指错好�
   const g2 = run();
   assert.deepEqual(g2.assassinate('p4', 'p1'), { merlin: true });
   assert.equal(g2.winner, 'evil');
+});
+
+test('刺客不认识奥伯伦：可以指认他（指错，好人赢）', () => {
+  const g = started(['merlin', 'percival', 'loyal', 'loyal', 'assassin', 'morgana', 'oberon']);
+  quest(g, ['p1', 'p2'], []);
+  quest(g, ['p1', 'p2', 'p3'], []);
+  quest(g, ['p1', 'p2', 'p3'], []);
+  assert.ok(g.assassinOptions().includes('p7'));
+  assert.ok(!g.assassinOptions().includes('p6'));
+  g.assassinate('p5', 'p7');
+  assert.equal(g.winner, 'good');
+});
+
+test('梅林可以不放（基础局）：没有刺客、派西维尔、莫甘娜，三次任务成功好人直接赢', () => {
+  const roles = avalonRoles(7, { merlin: false });
+  assert.deepEqual(roles.filter(isGood), ['loyal', 'loyal', 'loyal', 'loyal']);
+  assert.ok(!roles.includes('assassin') && !roles.includes('morgana'));
+  assert.equal(roles.filter((r) => !isGood(r)).length, 3);
+  const g = started(['loyal', 'loyal', 'loyal', 'minion', 'minion'], { options: { merlin: false } });
+  quest(g, ['p1', 'p2'], []);
+  quest(g, ['p1', 'p2', 'p3'], []);
+  quest(g, ['p1', 'p2'], []);
+  assert.equal(g.winner, 'good');
+  assert.equal(g.stage, 'ended');
+});
+
+test('自选任务（官方可选规则）：队长挑任务，每个只做一次，第 5 个要先成功两个，第 4 个仍要 2 张失败', () => {
+  const g = started(['merlin', 'percival', 'loyal', 'loyal', 'assassin', 'morgana', 'mordred'], { options: { targeting: true } });
+  assert.equal(g.questNo, null);
+  assert.deepEqual(g.questOptions(), [1, 2, 3, 4]);
+  assert.throws(() => g.propose('p1', ['p1', 'p2']), /先选/);
+  assert.throws(() => g.propose('p1', ['p1', 'p2'], 5), /第 5 个任务要先成功两个/);
+  assert.throws(() => g.propose('p1', ['p1', 'p2'], 4), /要选 4 个人/);
+  g.propose('p1', ['p1', 'p2', 'p3', 'p5'], 4);
+  voteAll(g, false); // 否决：下一任队长重新挑
+  assert.equal(g.questNo, null);
+  g.propose('p2', ['p1', 'p2', 'p3', 'p5'], 4);
+  voteAll(g, true);
+  for (const id of g.team) g.play(id, id !== 'p5');
+  assert.equal(g.reveal().result, 'success', '第 4 个任务 1 张失败不算失败');
+  assert.equal(g.quests[3].round, 1);
+  assert.deepEqual(g.questOptions(), [1, 2, 3]);
+  g.propose(g.leaderId(), ['p1', 'p2'], 1);
+  voteAll(g, true);
+  for (const id of g.team) g.play(id, true);
+  g.reveal();
+  assert.deepEqual(g.questOptions(), [2, 3, 5], '成功两个之后才能做第 5 个');
+  assert.equal(g.proposals.at(-1).quest, 1);
 });
 
 test('湖中仙女：第 2、3、4 轮后用，看阵营只有自己知道，不能查拿过的人', () => {
@@ -235,8 +286,9 @@ test('房间：阿瓦隆只能 5–10 人；加机器人加到 10 个为止', as
 });
 
 test('房间：机器人能跑完整局（真人超时由系统代选），视图不漏别人的身份', async () => {
-  for (const n of [5, 7, 10]) {
-    const room = await avalonRoom(n - 1, { avalonLady: n >= 7 });
+  const runs = [[5, {}], [7, { avalonLady: true, avalonTargeting: true }], [10, { avalonLady: true }], [6, { avalonRoles: { merlin: false } }]];
+  for (const [n, extra] of runs) {
+    const room = await avalonRoom(n - 1, extra);
     await room.act('u1', 'start');
     const g = room.game;
     assert.ok(g.avalon);

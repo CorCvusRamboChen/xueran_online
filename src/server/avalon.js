@@ -6,7 +6,8 @@ import { ttsUrl } from './tts.js';
 
 /** 阿瓦隆的房间设置（并进 DEFAULT_SETTINGS）。 */
 export const AVALON_SETTINGS = {
-  avalonRoles: { percival: true, morgana: true, mordred: true, oberon: false }, // 可选角色（梅林、刺客总在）
+  avalonRoles: { merlin: true, percival: true, morgana: true, mordred: true, oberon: false }, // 可选角色（merlin：梅林和刺客一起）
+  avalonTargeting: false, // 官方可选规则「自选任务」
   avalonLady: false,      // 湖中仙女（官方的可选规则，推荐 7 人及以上）
   avalonRoamMinutes: 2,   // 每轮任务开始前自由活动几分钟（0 = 不自由活动，直接在广场组队）
 };
@@ -41,6 +42,7 @@ export class AvalonTable {
       s.avalonRoles = cur;
     }
     if (typeof p.avalonLady === 'boolean') s.avalonLady = p.avalonLady;
+    if (typeof p.avalonTargeting === 'boolean') s.avalonTargeting = p.avalonTargeting;
     if (p.avalonRoamMinutes != null) s.avalonRoamMinutes = Math.min(10, Math.max(0, Number(p.avalonRoamMinutes) || 0));
   }
 
@@ -48,7 +50,7 @@ export class AvalonTable {
   async start(seats) {
     const r = this.room;
     const s = r.settings;
-    const g = new Avalon(seats.map(({ id, name }) => ({ id, name })), { options: { ...AVALON_SETTINGS.avalonRoles, ...s.avalonRoles, lady: !!s.avalonLady } });
+    const g = new Avalon(seats.map(({ id, name }) => ({ id, name })), { options: { ...AVALON_SETTINGS.avalonRoles, ...s.avalonRoles, lady: !!s.avalonLady, targeting: !!s.avalonTargeting } });
     r.game = g;
     r.homes = null;
     const square = await r.safeVoice((v) => v.findSquare(r.hostId, seats.map((p) => p.id)));
@@ -57,7 +59,7 @@ export class AvalonTable {
     const roles = g.players.map((p) => p.role);
     const evil = roles.filter((x) => !isGood(x)).length;
     const special = [...new Set(roles.filter((x) => !['loyal', 'minion'].includes(x)))].map((x) => AVALON_ROLES[x].name);
-    r.announce(`游戏开始！《阿瓦隆》${g.n} 人：好人 ${g.n - evil} · 坏人 ${evil}。在场的特殊角色：${special.join('、')}${g.lady ? '；用湖中仙女' : ''}。`, 'start');
+    r.announce(`游戏开始！《阿瓦隆》${g.n} 人：好人 ${g.n - evil} · 坏人 ${evil}。${special.length ? `在场的特殊角色：${special.join('、')}` : '基础局：没有梅林和刺客，三次任务成功好人直接获胜'}${g.lady ? '；用湖中仙女' : ''}${g.options.targeting ? '；自选任务（队长挑做哪个任务，第 5 个任务要先成功两个）' : ''}。`, 'start');
     this.story('阿瓦隆', pickN([
       `${g.n} 名骑士围坐在圆桌旁。亚瑟王的光芒之下，有人在为莫德雷德做事。`,
       `圆桌只有一张，骑士却分成了两派。完成三次任务，或者让三次任务失败——谁先做到，谁就赢。`,
@@ -65,7 +67,7 @@ export class AvalonTable {
     if (!r.square) r.announce('没检测到大家所在的语音频道，自由活动的私聊不会生效（房主先进语音再开局即可）。');
     r.syncWatchMute();
     r.watchVoice();
-    r.announce('闭上眼睛，确认身份：坏人互相认识（奥伯伦除外），梅林看到坏人（莫德雷德除外），派西维尔看到梅林和莫甘娜。看完点「我看好了」。', 'night');
+    r.announce(`闭上眼睛，确认身份：坏人互相认识（奥伯伦除外）${g.assassinId() ? '，梅林看到坏人（莫德雷德除外）' : ''}${g.idsWith('percival').length ? '，派西维尔看到梅林和莫甘娜' : ''}。看完点「我看好了」。`, 'night');
     for (const p of g.players) if (r.isFake(p.id)) g.setReady(p.id);
     this.arm('reveal');
     if (g.ready.length === g.n) this.room.later(this.wait(1500), () => this.begin());
@@ -122,7 +124,8 @@ export class AvalonTable {
     const g = this.g;
     if (g.stage !== 'propose' || r.ended) return;
     const q = g.quest();
-    r.announce(`第 ${g.round} 轮任务：要 ${q.size} 个人${q.need > 1 ? `，要 ${q.need} 张失败票才会失败` : ''}。队长是 **${g.name(g.leaderId())}**。`, 'day');
+    if (q) r.announce(`第 ${g.round} 轮任务：要 ${q.size} 个人${q.need > 1 ? `，要 ${q.need} 张失败票才会失败` : ''}。队长是 **${g.name(g.leaderId())}**。`, 'day');
+    else r.announce(`第 ${g.round} 轮：队长 **${g.name(g.leaderId())}** 组队时自己挑做哪个任务（还能做：${g.questOptions().map((k) => `任务 ${k}（${g.quests[k - 1].size} 人）`).join('、')}）。`, 'day');
     const minutes = r.settings.avalonRoamMinutes ?? AVALON_SETTINGS.avalonRoamMinutes;
     if (minutes > 0) {
       r.deadline = null;
@@ -144,7 +147,7 @@ export class AvalonTable {
     if (g.stage !== 'propose' || r.ended) return;
     this.arm('propose');
     const leader = g.leaderId();
-    if (r.isFake(leader)) r.later(this.wait(2500, 5000), () => { if (g.stage === 'propose' && g.leaderId() === leader && !r.roam) this.propose(leader, this.botTeam(leader)); });
+    if (r.isFake(leader)) r.later(this.wait(2500, 5000), () => { if (g.stage === 'propose' && g.leaderId() === leader && !r.roam) this.botPropose(leader); });
   }
 
   // ───────────── 操作 ─────────────
@@ -156,7 +159,7 @@ export class AvalonTable {
       case 'ready': if (g.setReady(uid)) this.begin(); break;
       case 'propose':
         if (r.roam) throw new Error('先集合（自由活动结束后队长再组队）');
-        this.propose(uid, Array.isArray(p.team) ? p.team : []); break;
+        this.propose(uid, Array.isArray(p.team) ? p.team : [], p.quest ?? null); break;
       case 'vote': this.vote(uid, !!p.yes); break;
       case 'quest': this.play(uid, !!p.success); break;
       case 'lady': this.useLady(uid, p.target); break;
@@ -166,11 +169,11 @@ export class AvalonTable {
     }
   }
 
-  propose(uid, team) {
+  propose(uid, team, questNo = null) {
     const r = this.room;
     const g = this.g;
-    g.propose(uid, team);
-    r.announce(`队长 **${g.name(uid)}** 提名 ${g.team.map((id) => `**${g.name(id)}**`).join('、')} 去做第 ${g.round} 轮任务（第 ${g.attempt} 次组队${g.attempt === MAX_REJECTS ? '，再被否决坏人直接获胜' : ''}）。所有人投票：赞成还是反对？`, 'vote');
+    g.propose(uid, team, questNo);
+    r.announce(`队长 **${g.name(uid)}** 提名 ${g.team.map((id) => `**${g.name(id)}**`).join('、')} 去做${g.options.targeting ? `任务 ${g.questNo}（第 ${g.round} 轮` : `第 ${g.round} 轮任务（`}第 ${g.attempt} 次组队${g.attempt === MAX_REJECTS ? '，再被否决坏人直接获胜' : ''}）。所有人投票：赞成还是反对？`, 'vote');
     this.arm('vote');
     for (const p of g.players) if (r.isFake(p.id)) r.later(this.wait(1200, 4000), () => { if (g.stage === 'vote' && !(p.id in g.votes)) this.vote(p.id, this.botVote(p.id)); });
     r.changed();
@@ -215,7 +218,7 @@ export class AvalonTable {
     r.cancel(this.timer);
     r.deadline = null;
     const out = g.reveal();
-    r.announce(`第 ${out.round} 轮任务${out.result === 'success' ? '**成功**' : '**失败**'}：${out.fails} 张失败票。现在 ${g.wins('success')} 次成功 · ${g.wins('fail')} 次失败。`, out.result === 'success' ? 'day' : 'death');
+    r.announce(`第 ${out.round} 轮${g.options.targeting ? `（任务 ${out.quest}）` : '任务'}${out.result === 'success' ? '**成功**' : '**失败**'}：${out.fails} 张失败票。现在 ${g.wins('success')} 次成功 · ${g.wins('fail')} 次失败。`, out.result === 'success' ? 'day' : 'death');
     if (g.winner) return this.finish();
     this.then(g.stage === 'assassin' ? 'assassin' : g.stage === 'lady' ? 'lady' : 'round');
   }
@@ -268,7 +271,7 @@ export class AvalonTable {
       case 'propose': {
         const leader = g.leaderId();
         r.announce(`队长 ${g.name(leader)} 没在时限内组队，替他随机选了。`, 'clock');
-        this.propose(leader, this.botTeam(leader, true));
+        this.botPropose(leader, true);
         break;
       }
       case 'vote': {
@@ -345,7 +348,7 @@ export class AvalonTable {
     this.timer = r.later(left, () => { if (this.key() === key) this.timeout(); });
     // 机器人接着做它该做的
     if (g.stage === 'reveal') { for (const p of g.players) if (r.isFake(p.id)) g.setReady(p.id); if (g.ready.length === g.n) r.later(this.wait(1500), () => this.begin()); }
-    if (g.stage === 'propose' && r.isFake(g.leaderId())) r.later(this.wait(3000), () => { if (g.stage === 'propose') this.propose(g.leaderId(), this.botTeam(g.leaderId())); });
+    if (g.stage === 'propose' && r.isFake(g.leaderId())) r.later(this.wait(3000), () => { if (g.stage === 'propose') this.botPropose(g.leaderId()); });
     if (g.stage === 'vote') for (const p of g.players) if (r.isFake(p.id) && !(p.id in g.votes)) r.later(this.wait(1200, 3000), () => { if (g.stage === 'vote' && !(p.id in g.votes)) this.vote(p.id, this.botVote(p.id)); });
     if (g.stage === 'quest') for (const id of g.missingCards()) if (r.isFake(id)) r.later(this.wait(1500, 3000), () => { if (g.stage === 'quest' && !(id in g.cards)) this.play(id, this.botCard(id)); });
     if (g.stage === 'lady' && r.isFake(g.lady.holder)) r.later(this.wait(3000), () => { if (g.stage === 'lady') this.useLady(g.lady.holder, pickN(g.ladyOptions(), 1)[0]); });
@@ -366,9 +369,16 @@ export class AvalonTable {
   }
 
   /** 机器人队长组队：带上自己；好人挑最不可疑的，坏人带一个同伴（第 1 轮不带）再补好人。random：完全随机（真人超时）。 */
-  botTeam(leader, random = false) {
+  /** 机器人（或超时的真人）队长组队：自选任务时先挑人数最少的任务（random 时随便挑一个）。 */
+  botPropose(leader, random = false) {
     const g = this.g;
-    const size = g.quest().size;
+    const opts = g.questOptions();
+    const questNo = random ? pickN(opts, 1)[0] : [...opts].sort((a, b) => g.quests[a - 1].size - g.quests[b - 1].size || a - b)[0];
+    this.propose(leader, this.botTeam(leader, random, g.quests[questNo - 1].size), questNo);
+  }
+
+  botTeam(leader, random = false, size = this.g.quest().size) {
+    const g = this.g;
     const others = g.players.map((p) => p.id).filter((id) => id !== leader);
     if (random) return [leader, ...pickN(others, size - 1)];
     if (isGood(g.roleOf(leader))) {
@@ -417,13 +427,12 @@ export class AvalonTable {
     const a = g.assassinId();
     const tip = this.topSuggestion();
     if (tip) return tip;
-    const allies = new Set([a, ...g.knowledge(a).map((k) => k.id)]);
     const score = {};
     for (const pr of g.proposals) {
-      const dirty = pr.team.some((x) => allies.has(x));
+      const dirty = pr.team.some((x) => !g.assassinOptions().includes(x));
       for (const [id, yes] of Object.entries(pr.votes)) if (dirty && !yes) score[id] = (score[id] ?? 0) + 1;
     }
-    const cands = pickN(g.players.map((p) => p.id).filter((id) => !allies.has(id)), g.n);
+    const cands = pickN(g.assassinOptions(), g.n);
     return cands.sort((x, y) => (score[y] ?? 0) - (score[x] ?? 0))[0];
   }
 
@@ -466,6 +475,9 @@ export class AvalonTable {
       },
       avalon: {
         stage, round: g.round, attempt: g.attempt, maxRejects: MAX_REJECTS,
+        questNo: g.questNo,                                          // 这一轮做哪个任务（自选任务时队长组队前是 null）
+        questOptions: stage === 'propose' ? g.questOptions() : [],  // 队长能挑的任务
+        targeting: !!g.options.targeting,
         leader: stage === 'reveal' ? null : g.leaderId(),
         team: g.team,
         quests: g.quests,
@@ -497,6 +509,7 @@ export class AvalonTable {
         suggestions: stage === 'assassin' && isAssassin ? g.suggest : null,
         mySuggest: stage === 'assassin' ? g.suggest?.[uid] ?? null : null,
         canSuggest: stage === 'assassin' && !isAssassin && g.knowledge(g.assassinId()).some((k) => k.id === uid),
+        assassinOptions: stage === 'assassin' && (isAssassin || g.knowledge(g.assassinId()).some((k) => k.id === uid)) ? g.assassinOptions() : null, // 刺客能指认的人（同伴出主意也只能从这里挑）
         inbox: r.inbox.get(uid) ?? [],
       };
     }

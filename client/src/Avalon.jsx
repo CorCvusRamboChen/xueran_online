@@ -17,6 +17,7 @@ export function AvalonGame({ s, act, ask, parts: { RoamActions, History, SoundTo
   const me = s.self;
   const [tab, setTab] = useState(null);
   const [picked, setPicked] = useState([]);
+  const [pickQuest, setPickQuest] = useState(null); // 自选任务：队长挑的任务
   const [quit, setQuit] = useState(false);
   const g = (id) => s.players.find((p) => p.id === id);
   const name = (id) => { const p = g(id); return p ? `${p.seat}号 ${p.name}` : '?'; };
@@ -26,14 +27,17 @@ export function AvalonGame({ s, act, ask, parts: { RoamActions, History, SoundTo
   const roaming = !!s.roam;
   const leaderMe = a.leader === s.me;
   const assassinMe = a.stage === 'assassin' && a.assassin === s.me;
-  // 现在点肖像是在选什么：队长选队员 / 湖中仙女选人 / 刺客指认 / 同伴给刺客出主意
+  // 这一轮做哪个任务：平常服务器定好了；自选任务时队长先在面板里挑
+  const questNo = a.questNo ?? (a.stage === 'propose' && leaderMe ? pickQuest : null);
+  // 现在点肖像是在选什么：队长选队员 / 湖中仙女选人 / 刺客指认 / 同伴给刺客出主意（刺客只能指认好人：自己和认识的同伴不在里面）
   const pickSpec = s.phase === 'ended' || roaming ? null
-    : a.stage === 'propose' && leaderMe ? { count: a.quests[a.round - 1].size, options: s.players.map((p) => p.id), what: 'team' }
+    : a.stage === 'propose' && leaderMe ? (questNo ? { count: a.quests[questNo - 1].size, options: s.players.map((p) => p.id), what: 'team' } : null)
       : a.stage === 'lady' && a.lady?.options ? { count: 1, options: a.lady.options, what: 'lady' }
-        : assassinMe ? { count: 1, options: s.players.map((p) => p.id).filter((id) => id !== s.me), what: 'assassin' }
-          : a.stage === 'assassin' && me?.canSuggest ? { count: 1, options: s.players.map((p) => p.id).filter((id) => id !== a.assassin), what: 'suggest' } : null;
+        : assassinMe ? { count: 1, options: me.assassinOptions ?? [], what: 'assassin' }
+          : a.stage === 'assassin' && me?.canSuggest ? { count: 1, options: me.assassinOptions ?? [], what: 'suggest' } : null;
   const pickKey = `${a.stage}-${a.round}-${a.attempt}-${pickSpec?.what}`;
-  useEffect(() => { setPicked([]); }, [pickKey]);
+  useEffect(() => { setPicked([]); }, [pickKey, pickQuest]);
+  useEffect(() => { setPickQuest(null); }, [`${a.stage}-${a.round}-${a.attempt}`]);
   const onTap = (p) => {
     if (!pickSpec?.options.includes(p.id)) return;
     setPicked((cur) => {
@@ -80,7 +84,7 @@ export function AvalonGame({ s, act, ask, parts: { RoamActions, History, SoundTo
           <TownMap s={s} onMove={me ? (x, y) => act('move', { x, y }) : () => null} />
         ) : (
           <Town s={ring} picked={picked} pickable={pickSpec?.options ?? null} onTap={onTap}>
-            <QuestBoard a={a} />
+            <QuestBoard a={a} questNo={questNo} />
           </Town>
         )}
         <SoundToggles onFixVoice={me && s.phase !== 'ended' ? () => act('fixVoice') : null} />
@@ -90,7 +94,7 @@ export function AvalonGame({ s, act, ask, parts: { RoamActions, History, SoundTo
       <section className={`dock ${hot ? 'dock-hot' : ''}`}>
         {roaming && <TalkCard s={s} a={a} name={name} />}
         {roaming ? <RoamActions s={s} act={act} name={name} face={face} setMode={() => {}} />
-          : <Stage s={s} a={a} me={me} av={av} act={act} name={name} picked={picked} pickSpec={pickSpec} g={g} />}
+          : <Stage s={s} a={a} me={me} av={av} act={act} name={name} picked={picked} pickSpec={pickSpec} g={g} questNo={questNo} setPickQuest={setPickQuest} />}
         {s.isHost && s.phase !== 'ended' && (
           <div className="link-row av-host">
             {quit ? <button type="button" onClick={() => act('end')} onMouseLeave={() => setQuit(false)}>确定结束这局、回到大厅</button>
@@ -117,12 +121,14 @@ export function AvalonGame({ s, act, ask, parts: { RoamActions, History, SoundTo
 }
 
 /** 画面正中：五个任务格（人数、要几张失败票、成败）和否决计数。 */
-export function QuestBoard({ a }) {
+export function QuestBoard({ a, questNo = a.questNo }) {
+  const open = a.targeting && !questNo ? new Set(a.questOptions) : new Set(); // 自选任务：队长还没挑时，能挑的几个任务描虚线
   return (
     <div className="av-board">
       <div className="av-quests">
         {a.quests.map((q, i) => (
-          <div key={i} className={`av-quest ${q.result ?? ''} ${i + 1 === a.round && !q.result && a.stage !== 'ended' ? 'now' : ''}`} title={`第 ${i + 1} 轮：${q.size} 人${q.need > 1 ? `，要 ${q.need} 张失败票才失败` : ''}`}>
+          <div key={i} className={`av-quest ${q.result ?? ''} ${i + 1 === questNo && !q.result && a.stage !== 'ended' ? 'now' : ''} ${open.has(i + 1) ? 'open' : ''}`}
+            title={`${a.targeting ? `任务 ${i + 1}` : `第 ${i + 1} 轮`}：${q.size} 人${q.need > 1 ? `，要 ${q.need} 张失败票才失败` : ''}${a.targeting && i === 4 && !q.result ? '（先成功两个任务才能做）' : ''}${q.round && a.targeting ? `，第 ${q.round} 轮做的` : ''}`}>
             <b>{q.result === 'success' ? '成' : q.result === 'fail' ? '败' : q.size}</b>
             {q.result ? <small>{q.fails} 张失败</small> : q.need > 1 ? <small>要 2 张失败</small> : <small>{q.size} 人</small>}
           </div>
@@ -138,17 +144,36 @@ export function QuestBoard({ a }) {
 
 /** 自由活动时上面那张小卡：这轮要干什么。 */
 function TalkCard({ s, a, name }) {
-  const q = a.quests[a.round - 1];
+  const q = a.questNo && a.quests[a.questNo - 1];
   return (
     <Panel title={`第${cnNum(a.round)}轮任务 · 自由活动`} tone="mot">
-      <p className="lead">队长 <b>{name(a.leader)}</b> 集合后组 {q.size} 人的队伍{q.need > 1 ? `（这一轮要 ${q.need} 张失败票才失败）` : ''}。先去找人私聊吧。</p>
+      <p className="lead">队长 <b>{name(a.leader)}</b> 集合后{q ? `组 ${q.size} 人的队伍${q.need > 1 ? `（这一轮要 ${q.need} 张失败票才失败）` : ''}` : '自己挑做哪个任务、再组队'}。先去找人私聊吧。</p>
     </Panel>
   );
 }
 
+/** 自选任务：队长先挑这一轮做哪个任务。 */
+function QuestPicker({ a, value, onPick }) {
+  return (
+    <div className="av-qpick">
+      {a.quests.map((q, i) => {
+        const k = i + 1;
+        const can = a.questOptions.includes(k);
+        return (
+          <button key={k} type="button" className={`${value === k ? 'on' : ''} ${q.result ?? ''}`} disabled={!can} onClick={() => onPick(k)}
+            title={!can ? (q.result ? '做过了' : '先成功两个任务才能做第 5 个') : ''}>
+            <b>任务 {k}</b><small>{q.result ? (q.result === 'success' ? '成功' : '失败') : `${q.size} 人${q.need > 1 ? ' · 要 2 张失败' : ''}`}</small>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** 每一步的操作面板。 */
-function Stage({ s, a, me, av, act, name, picked, pickSpec, g }) {
-  const q = a.quests[a.round - 1];
+function Stage({ s, a, me, av, act, name, picked, pickSpec, g, questNo, setPickQuest }) {
+  const q = questNo ? a.quests[questNo - 1] : null;
+  const qLabel = a.targeting && questNo ? `任务 ${questNo}` : null;
   if (s.phase === 'ended') {
     const good = s.winner?.team === 'good';
     return (
@@ -180,15 +205,21 @@ function Stage({ s, a, me, av, act, name, picked, pickSpec, g }) {
     return (
       <>
         {rejected && <VoteResult rec={last} s={s} name={name} />}
-        {pickSpec?.what === 'team' ? (
-          <Panel title={`你是队长 · 选 ${q.size} 名队员`} tone="mot" className="choose-pnl">
-            <p className="lead">点座位圈上的肖像选人（可以带上自己）。{a.attempt > 1 ? `这一轮已经否决 ${a.attempt - 1} 次` : ''}{a.attempt === a.maxRejects ? '——这次再被否决，坏人直接获胜。' : ''}</p>
-            <Chips ids={picked} need={q.size} name={name} />
-            <div className="btn-row"><Btn kind="primary" disabled={picked.length !== q.size} onClick={() => av('propose', { team: picked })}>提名这支队伍</Btn></div>
+        {a.leader === s.me ? (
+          <Panel title={q ? `你是队长 · ${qLabel ? `${qLabel} · ` : ''}选 ${q.size} 名队员` : '你是队长 · 先挑任务'} tone="mot" className="choose-pnl">
+            {a.targeting && <>
+              <p className="lead">自选任务：先挑这一轮做哪个任务（每个任务只做一次，第 5 个要先成功两个）。</p>
+              <QuestPicker a={a} value={questNo} onPick={setPickQuest} />
+            </>}
+            {q && <>
+              <p className="lead">点座位圈上的肖像选人（可以带上自己）。{a.attempt > 1 ? `这一轮已经否决 ${a.attempt - 1} 次` : ''}{a.attempt === a.maxRejects ? '——这次再被否决，坏人直接获胜。' : ''}</p>
+              <Chips ids={picked} need={q.size} name={name} />
+              <div className="btn-row"><Btn kind="primary" disabled={picked.length !== q.size} onClick={() => av('propose', { team: picked, quest: questNo })}>提名这支队伍</Btn></div>
+            </>}
           </Panel>
         ) : (
           <Panel title={`第${cnNum(a.round)}轮 · 组队`} tone="light">
-            <p className="lead">队长 <b>{name(a.leader)}</b> 正在挑 {q.size} 名队员{a.attempt > 1 ? `（第 ${a.attempt} 次组队）` : ''}。在语音里说说你想让谁去。</p>
+            <p className="lead">队长 <b>{name(a.leader)}</b> 正在{q ? `挑 ${q.size} 名队员` : '挑做哪个任务、再挑队员'}{a.attempt > 1 ? `（第 ${a.attempt} 次组队）` : ''}。在语音里说说你想让谁去。</p>
           </Panel>
         )}
       </>
@@ -199,7 +230,7 @@ function Stage({ s, a, me, av, act, name, picked, pickSpec, g }) {
     const mine = me?.myVote;
     return (
       <Panel title={`投票 · 第${cnNum(a.round)}轮第 ${a.attempt} 次组队`} tone="phy" className="choose-pnl">
-        <p className="lead">队长 <b>{name(a.leader)}</b> 提名：{a.team.map((id) => <span key={id} className="chip">{name(id)}</span>)}</p>
+        <p className="lead">队长 <b>{name(a.leader)}</b> 提名{qLabel ? `去做${qLabel}${q.need > 1 ? '（要 2 张失败票才失败）' : ''}` : ''}：{a.team.map((id) => <span key={id} className="chip">{name(id)}</span>)}</p>
         <p className="muted">所有人同时投，投完一起公开。过半赞成就组队成功。{a.attempt === a.maxRejects ? '这是这一轮第 5 次组队：再被否决，坏人直接获胜。' : ''}</p>
         <div className="stats"><Stat value={a.voted.length} label="已投" color="var(--opt)" /><Stat value={Math.floor(s.players.length / 2) + 1} label="通过要赞成" color="var(--cream)" /></div>
         {me && (
@@ -358,20 +389,21 @@ function RoleSheet({ me, a, name }) {
 /** 任务记录板：每一轮每一次组队的队长、队员、每个人的票，和任务结果。 */
 function Record({ a, s, g }) {
   const ps = s.players;
-  const rounds = a.quests.map((q, i) => ({ q, i: i + 1, props: a.proposals.filter((x) => x.round === i + 1) })).filter((x) => x.props.length || x.q.result);
+  const rows = a.proposals.map((pr) => ({ pr, q: a.quests[(pr.quest ?? pr.round) - 1] })); // 一行一次组队
   return (
     <Panel title="任务记录板" tone="light">
       <QuestBoard a={a} />
-      {!rounds.length && <p className="muted">还没有组过队。每次组队的队长、队员和每个人的票都会记在这里。</p>}
+      {!rows.length && <p className="muted">还没有组过队。每次组队的队长、队员和每个人的票都会记在这里。</p>}
       <div className="av-record">
         <table>
           <thead>
-            <tr><th>轮</th><th>队长</th>{ps.map((p) => <th key={p.id} title={p.name}>{p.seat}</th>)}<th>结果</th></tr>
+            <tr><th>轮</th>{a.targeting && <th>任务</th>}<th>队长</th>{ps.map((p) => <th key={p.id} title={p.name}>{p.seat}</th>)}<th>结果</th></tr>
           </thead>
           <tbody>
-            {rounds.flatMap(({ q, i, props }) => props.map((pr, k) => (
-              <tr key={`${i}-${k}`} className={pr.approved ? 'ok' : ''}>
-                <td>{i}-{pr.attempt}</td>
+            {rows.map(({ pr, q }) => (
+              <tr key={`${pr.round}-${pr.attempt}`} className={pr.approved ? 'ok' : ''}>
+                <td>{pr.round}-{pr.attempt}</td>
+                {a.targeting && <td>{pr.quest}</td>}
                 <td>{g(pr.leader)?.seat}号</td>
                 {ps.map((p) => (
                   <td key={p.id} className={`${pr.team.includes(p.id) ? 'on' : ''} ${pr.votes[p.id] ? 'y' : 'n'}`} title={`${p.seat}号 ${pr.votes[p.id] ? '赞成' : '反对'}${pr.team.includes(p.id) ? ' · 队员' : ''}`}>
@@ -380,7 +412,7 @@ function Record({ a, s, g }) {
                 ))}
                 <td>{!pr.approved ? '否决' : q.result ? `${q.result === 'success' ? '成功' : '失败'} · ${q.fails} 败` : '进行中'}</td>
               </tr>
-            )))}
+            ))}
           </tbody>
         </table>
       </div>
@@ -424,16 +456,22 @@ export function AvalonSettings({ st, set, n, Toggle, Select }) {
   const opts = { ...DEFAULT_OPTIONS, ...st.avalonRoles };
   const roles = AVALON_TEAMS[n] ? avalonRoles(n, opts) : null;
   const flip = (k) => set({ avalonRoles: { ...opts, [k]: !opts[k] } });
+  // 规则书：5 人局用派西维尔时，要放莫甘娜或莫德雷德（不然派西维尔一眼就认出梅林）
+  const lonePercival = n === 5 && roles?.includes('percival') && !roles.includes('morgana') && !roles.includes('mordred');
   return (
     <div className="setting-wrap"><div className="setting-groups">
       <div className="setting-col">
         <div className="setting-group">
           <h4>可选角色</h4>
-          <Toggle label="派西维尔（看到梅林和莫甘娜）" on={opts.percival} onChange={() => flip('percival')} />
-          <Toggle label="莫甘娜（在派西维尔眼里像梅林）" on={opts.morgana} onChange={() => flip('morgana')} />
+          <Toggle label="梅林和刺客（关掉就是基础局）" on={opts.merlin} onChange={() => flip('merlin')} />
+          <Toggle label="派西维尔（看到梅林和莫甘娜）" on={opts.percival && opts.merlin} disabled={!opts.merlin} onChange={() => flip('percival')} />
+          <Toggle label="莫甘娜（在派西维尔眼里像梅林）" on={opts.morgana && opts.merlin} disabled={!opts.merlin} onChange={() => flip('morgana')} />
           <Toggle label="莫德雷德（梅林看不到）" on={opts.mordred} onChange={() => flip('mordred')} />
           <Toggle label="奥伯伦（不认识同伴）" on={opts.oberon} onChange={() => flip('oberon')} />
-          <p className="muted setting-note">梅林和刺客总在。坏人位置不够时按莫甘娜、莫德雷德、奥伯伦的顺序放，其余是爪牙和忠臣。</p>
+          <p className="muted setting-note">{opts.merlin
+            ? '坏人位置不够时按莫甘娜、莫德雷德、奥伯伦的顺序放，其余是爪牙和忠臣。规则书建议新手一次只加一个特殊角色。'
+            : '基础局：没有梅林和刺客（派西维尔、莫甘娜也不放），三次任务成功好人直接获胜。'}</p>
+          {lonePercival && <p className="setting-note av-warn">规则书建议：5 人局用派西维尔时，要放莫甘娜或莫德雷德。</p>}
           {roles && <p className="muted setting-note">{n} 人这局：{roles.map((r) => AVALON_ROLES[r].name).join('、')}</p>}
         </div>
       </div>
@@ -441,9 +479,10 @@ export function AvalonSettings({ st, set, n, Toggle, Select }) {
         <div className="setting-group">
           <h4>流程</h4>
           <Toggle label="湖中仙女（第 2、3、4 轮后查一个人的阵营）" on={!!st.avalonLady} onChange={(v) => set({ avalonLady: v })} />
+          <Toggle label="自选任务（队长挑做哪个任务）" on={!!st.avalonTargeting} onChange={(v) => set({ avalonTargeting: v })} />
           <Select label="每轮任务前自由活动" value={st.avalonRoamMinutes ?? 2} options={[0, 1, 2, 3, 5]} unit="分钟" zero="不自由活动" onChange={(v) => set({ avalonRoamMinutes: v })} />
           <Toggle label="随机排座位" on={st.shuffle} onChange={(v) => set({ shuffle: v })} />
-          <p className="muted setting-note">队长组队 2 分钟、投票 1 分钟、出任务票 45 秒，到点没动作的替他随机选。湖中仙女官方推荐 7 人及以上用。</p>
+          <p className="muted setting-note">队长组队 2 分钟、投票 1 分钟、出任务票 45 秒，到点没动作的替他随机选。湖中仙女官方推荐 7 人及以上用。自选任务是规则书里的可选规则：每个任务只做一次，第 5 个要先成功两个，7 人起第 4 个仍要 2 张失败票。</p>
         </div>
         <div className="setting-group">
           <h4>观战</h4>

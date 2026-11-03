@@ -35,8 +35,12 @@ export const QUEST_SIZES = {
 export const failsNeeded = (n, round) => (n >= 7 && round === 4 ? 2 : 1);
 /** 同一轮连续这么多次组队被否决，坏人直接获胜。 */
 export const MAX_REJECTS = 5;
-/** 房主能开关的可选角色。默认照常见推荐：派西维尔和莫甘娜成对出现；坏人有第三个位置（7 人及以上）时放莫德雷德；奥伯伦默认不放。 */
-export const DEFAULT_OPTIONS = { percival: true, morgana: true, mordred: true, oberon: false, lady: false };
+/**
+ * 房主能开关的可选角色和可选规则。默认照常见推荐：派西维尔和莫甘娜成对出现；坏人有第三个位置（7 人及以上）时放莫德雷德；奥伯伦默认不放。
+ * merlin：梅林和刺客（规则书：大多数局都放，但不是必须；不放就是基础局，三次任务成功好人直接赢）。
+ * targeting：官方可选规则「自选任务」——队长自己挑做哪个任务，每个任务只做一次，第 5 个任务要先成功两个才能做。
+ */
+export const DEFAULT_OPTIONS = { merlin: true, percival: true, morgana: true, mordred: true, oberon: false, lady: false, targeting: false };
 
 export const isGood = (role) => !!AVALON_ROLES[role]?.good;
 
@@ -53,8 +57,9 @@ const shuffleArr = (arr, rng) => {
 export function avalonRoles(n, options = {}) {
   const o = { ...DEFAULT_OPTIONS, ...options };
   const [good, evil] = AVALON_TEAMS[n];
-  const g = ['merlin', ...(o.percival ? ['percival'] : [])];
-  const e = ['assassin', ...['morgana', 'mordred', 'oberon'].filter((r) => o[r])].slice(0, evil);
+  // 没有梅林就没有刺客；派西维尔和莫甘娜都是围着梅林转的，也一起不放
+  const g = o.merlin ? ['merlin', ...(o.percival ? ['percival'] : [])] : [];
+  const e = [...(o.merlin ? ['assassin'] : []), ...['morgana', 'mordred', 'oberon'].filter((r) => o[r] && (o.merlin || r !== 'morgana'))].slice(0, evil);
   while (g.length < good) g.push('loyal');
   while (e.length < evil) e.push('minion');
   return [...g, ...e];
@@ -64,6 +69,7 @@ export function avalonRoles(n, options = {}) {
 const REASONS = {
   rejects: `同一轮连续 ${MAX_REJECTS} 次组队被否决`,
   fails: '三次任务失败',
+  success: '三次任务成功',
   missed: (who) => `三次任务成功，刺客没认出梅林（指认了 ${who}）`,
   found: (who) => `三次任务成功，但刺客认出了梅林（${who}）`,
 };
@@ -82,14 +88,15 @@ export class Avalon {
     const list = roles ?? shuffleArr(avalonRoles(n, this.options), rng);
     this.players = players.map((p, i) => ({ id: p.id, name: p.name, seat: i + 1, role: list[i], alive: true }));
     this.stage = 'reveal';      // reveal 身份确认 / propose 队长组队 / vote 全体投票 / quest 出任务票 / lady 湖中仙女 / assassin 刺杀 / ended
-    this.round = 1;             // 第几轮任务（1–5）
+    this.round = 1;             // 第几轮任务（1–5）：做过几个任务再加一
+    this.questNo = this.options.targeting ? null : 1; // 这一轮做哪个任务（1–5）：平常就是第几轮；自选任务时由队长组队时选
     this.leader = leader ?? Math.floor(rng() * n); // 队长的座位下标
     this.attempt = 1;           // 这一轮第几次组队
     this.team = [];             // 这次提名的队员
     this.votes = {};            // 这次投票：id → true 赞成 / false 反对（全部投完才公开）
     this.cards = {};            // 这次任务：id → true 成功 / false 失败（永远不公开谁出了什么）
     this.quests = QUEST_SIZES[n].map((size, i) => ({ size, need: failsNeeded(n, i + 1), result: null, fails: null, team: null, leader: null }));
-    this.proposals = [];        // 每次组队：{ round, attempt, leader, team, votes, approved }，投完公开
+    this.proposals = [];        // 每次组队：{ round, quest, attempt, leader, team, votes, approved }，投完公开
     this.ready = [];            // 身份确认：看完的人
     // 湖中仙女：给第一任队长右手边（上一个座位）的人。官方推荐 7 人及以上用，这里不强制
     this.lady = this.options.lady ? { holder: this.players[(this.leader - 1 + n) % n].id, used: [], log: [] } : null;
@@ -120,7 +127,12 @@ export class Avalon {
   nightPrompts() { return []; } // 房间里通用的代码（倒计时、说书人面板）会问：阿瓦隆夜里没有人要选
   missingChoices() { return []; }
   leaderId() { return this.players[this.leader].id; }
-  quest() { return this.quests[this.round - 1]; }
+  quest() { return this.questNo ? this.quests[this.questNo - 1] : null; }
+  /** 这一轮能做哪些任务：平常只有这一轮的；自选任务时是还没做过的，第 5 个要先成功两个。 */
+  questOptions() {
+    if (!this.options.targeting) return [this.round];
+    return this.quests.map((q, i) => i + 1).filter((k) => !this.quests[k - 1].result && (k < 5 || this.wins('success') >= 2));
+  }
   roleOf(id) { return this.get(id)?.role; }
   idsWith(...roles) { return this.players.filter((p) => roles.includes(p.role)).map((p) => p.id); }
   wins(side) { return this.quests.filter((q) => q.result === side).length; }
@@ -157,10 +169,14 @@ export class Avalon {
     this.note(`第 1 轮任务开始，队长 ${this.name(this.leaderId())}`);
   }
 
-  /** 队长提名队员（人数要正好是这一轮要的，可以带上自己）。 */
-  propose(id, team) {
+  /** 队长提名队员（人数要正好是这一轮要的，可以带上自己）。自选任务时还要选做哪个任务（questNo）。 */
+  propose(id, team, questNo = null) {
     this.require('propose');
     if (id !== this.leaderId()) throw new Error('只有队长能组队');
+    if (this.options.targeting) {
+      if (!this.questOptions().includes(Number(questNo))) throw new Error(Number(questNo) === 5 ? '第 5 个任务要先成功两个任务才能做' : '先选这一轮做哪个任务（做过的不能再做）');
+      this.questNo = Number(questNo);
+    }
     const ids = [...new Set(team)];
     if (ids.length !== this.quest().size) throw new Error(`这一轮要选 ${this.quest().size} 个人`);
     if (ids.some((x) => !this.get(x))) throw new Error('只能选这局的玩家');
@@ -189,7 +205,7 @@ export class Avalon {
     if (this.missingVotes().length) throw new Error('还有人没投票');
     const yes = Object.values(this.votes).filter(Boolean).length;
     const approved = yes * 2 > this.n;
-    const rec = { round: this.round, attempt: this.attempt, leader: this.leaderId(), team: [...this.team], votes: { ...this.votes }, yes, approved };
+    const rec = { round: this.round, quest: this.questNo, attempt: this.attempt, leader: this.leaderId(), team: [...this.team], votes: { ...this.votes }, yes, approved };
     this.proposals.push(rec);
     this.note(`第 ${this.round} 轮第 ${this.attempt} 次组队（队长 ${this.name(rec.leader)}）：${rec.team.map((x) => this.name(x)).join('、')}，${yes} 赞成 ${this.n - yes} 反对，${approved ? '通过' : '否决'}`);
     if (approved) {
@@ -201,6 +217,7 @@ export class Avalon {
     this.attempt += 1;
     this.nextLeader();
     this.team = [];
+    if (this.options.targeting) this.questNo = null; // 下一任队长重新挑任务
     this.stage = 'propose';
     return rec;
   }
@@ -232,10 +249,14 @@ export class Avalon {
     q.team = [...this.team];
     q.leader = this.leaderId();
     q.attempt = this.attempt;
-    this.note(`第 ${this.round} 轮任务${q.result === 'success' ? '成功' : '失败'}（${q.fails} 张失败票${q.need > 1 ? `，这一轮要 ${q.need} 张才失败` : ''}）`);
-    const out = { round: this.round, result: q.result, fails: q.fails };
+    q.round = this.round;
+    this.note(`第 ${this.round} 轮${this.options.targeting ? `（任务 ${this.questNo}）` : '任务'}${q.result === 'success' ? '成功' : '失败'}（${q.fails} 张失败票${q.need > 1 ? `，这一轮要 ${q.need} 张才失败` : ''}）`);
+    const out = { round: this.round, quest: this.questNo, result: q.result, fails: q.fails };
     if (this.wins('fail') >= 3) { this.end('evil', REASONS.fails); return out; }
-    if (this.wins('success') >= 3) { this.stage = 'assassin'; this.suggest = {}; return out; }
+    if (this.wins('success') >= 3) {
+      if (!this.assassinId()) { this.end('good', REASONS.success); return out; } // 基础局没有梅林和刺客
+      this.stage = 'assassin'; this.suggest = {}; return out;
+    }
     if (this.lady && this.round >= 2 && this.round <= 4) { this.stage = 'lady'; return out; }
     this.nextRound();
     return out;
@@ -247,6 +268,7 @@ export class Avalon {
     this.team = [];
     this.votes = {};
     this.cards = {};
+    this.questNo = this.options.targeting ? null : this.round;
     this.nextLeader();
     this.stage = 'propose';
     this.note(`第 ${this.round} 轮任务开始，队长 ${this.name(this.leaderId())}`);
@@ -274,8 +296,13 @@ export class Avalon {
     return { good };
   }
 
-  /** 刺杀时能指认谁：除了刺客自己的所有人。 */
   assassinId() { return this.idsWith('assassin')[0] ?? null; }
+  /** 刺客能指认谁：规则书写的是「指认一名好人」——自己和认识的同伴不能选（不认识的奥伯伦选得到，选了就是指错）。 */
+  assassinOptions() {
+    const a = this.assassinId();
+    const allies = new Set([a, ...this.knowledge(a).map((k) => k.id)]);
+    return this.players.map((p) => p.id).filter((id) => !allies.has(id));
+  }
 
   /** 坏人同伴给刺客出主意（只有刺客认识的同伴能出，刺客自己看得到）。 */
   suggestTarget(id, target) {
@@ -283,7 +310,7 @@ export class Avalon {
     const allies = this.knowledge(this.assassinId()).map((k) => k.id);
     if (!allies.includes(id)) throw new Error('只有刺客的同伴能出主意');
     if (target == null) delete this.suggest[id];
-    else if (!this.get(target)) throw new Error('只能选这局的玩家');
+    else if (!this.assassinOptions().includes(target)) throw new Error('只能建议好人（你们认识的同伴不用猜）');
     else this.suggest[id] = target;
   }
 
@@ -291,7 +318,7 @@ export class Avalon {
   assassinate(id, target) {
     this.require('assassin');
     if (id !== this.assassinId()) throw new Error('只有刺客能指认梅林');
-    if (target === id || !this.get(target)) throw new Error('指认一名其他玩家');
+    if (!this.assassinOptions().includes(target)) throw new Error('只能指认好人（你和你认识的同伴不能选）');
     const merlin = this.roleOf(target) === 'merlin';
     this.guess = { by: id, target, merlin };
     this.note(`刺客 ${this.name(id)} 指认 ${this.name(target)} 是梅林——${merlin ? '指对了' : '指错了'}`);
@@ -316,6 +343,8 @@ export class Avalon {
   static fromJSON(s) {
     const g = new Avalon();
     const { avalon, ...rest } = s;
-    return Object.assign(g, rest);
+    Object.assign(g, rest);
+    if (!('questNo' in rest)) g.questNo = g.round; // 加自选任务之前的存档
+    return g;
   }
 }
