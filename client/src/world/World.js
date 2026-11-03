@@ -10,7 +10,8 @@ import { Application, Container, Sprite, Graphics, Texture, ImageSource, Matrix,
 import { positionAt, houseAt, distToLine } from '../../../src/shared/map.js';
 import { TILE, TILE_PX, TILESET_COLS, COBBLE } from '../../../src/shared/tiles.js';
 import { footstep, knock } from './footsteps.js';
-import { setLake } from '../ambience.js';
+import { setLake, setWind } from '../ambience.js';
+import { setZoneNow } from './ambience.js';
 import { loadTileset } from './tileset.js';
 import { PROPS, RASTER_SCALE, raster, houseFloor } from './sprites.jsx';
 import { serverNow, hue } from '../util.jsx';
@@ -262,6 +263,7 @@ export function autoFogSpots(town) {
   for (const c of town.circles) if (c.kind === 'trees') add(c.x + (rnd() - 0.5) * c.r, c.y + (rnd() - 0.5) * c.r, 0.8);
   const extra = Math.round((town.w * town.h) / 90000);
   for (let i = 0; i < extra; i++) add(rnd() * town.w, rnd() * town.h, 0.55);
+  for (const s of town.fogSpots ?? []) add(s.x, s.y, s.a);
   return out;
 }
 /** 一团地面雾的软圆（编辑器里用 CSS 画同样的渐变）。 */
@@ -269,8 +271,8 @@ export const FOG_BLOB_STOPS = [[0, 0.9], [0.45, 0.45], [1, 0]];
 
 /** 底稿（交给 Codex 重绘的整张小镇）覆盖的世界像素范围。手绘大图要和它一样大、一一对齐。 */
 export const GUIDE = { x: -1440, y: -120, w: 3280, h: 1760 };
-/** 这张地图的手绘底图实际铺多大：地图数据整体放大过（artScale，见 maps/bmr.js）时，底图跟着拉伸。 */
-export const guideOf = (town) => { const k = town?.artScale ?? 1; return { x: GUIDE.x * k, y: GUIDE.y * k, w: GUIDE.w * k, h: GUIDE.h * k }; };
+/** 这张地图的手绘底图实际铺多大：地图数据整体放大过（artScale，见 maps/bmr.js）时，底图跟着拉伸；地图比默认范围大时在数据里写 guide。 */
+export const guideOf = (town) => { if (town?.guide) return town.guide; const k = town?.artScale ?? 1; return { x: GUIDE.x * k, y: GUIDE.y * k, w: GUIDE.w * k, h: GUIDE.h * k }; };
 /** 世界像素 → 地面上的逻辑坐标。 */
 export const unIso = (sx, sy) => ({ x: (sx + 2 * sy) / 2, y: (2 * sy - sx) / 2 });
 
@@ -372,17 +374,47 @@ function paintPlainGround(town, ox, oy, w, h) {
   ctx.scale(k, k);
   ctx.translate(-ox, -oy);
   ctx.fillStyle = pal.ground; ctx.fillRect(ox, oy, w, h);
+  // 分区的地面：边缘虚化，一片慢慢过渡到另一片；后写的区在下面（一个点算第一个圈住它的区）
+  const zones = town.zones ?? [];
+  const zonePath = (z) => { ctx.beginPath(); z.poly.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); };
+  if (zones.length) {
+    // 画在一张很小的图上再放大，放大时的插值就是虚边（ctx.filter 的模糊又慢，有的手机还不支持）
+    const q = 24; const pad = q * 4;
+    const small = document.createElement('canvas');
+    small.width = Math.ceil((w + pad * 2) / q); small.height = Math.ceil((h + pad * 2) / q);
+    const sc = small.getContext('2d');
+    sc.scale(1 / q, 1 / q); sc.translate(pad - ox, pad - oy);
+    for (const z of [...zones].reverse()) {
+      sc.fillStyle = z.ground; sc.beginPath(); z.poly.forEach(([x, y], i) => (i ? sc.lineTo(x, y) : sc.moveTo(x, y))); sc.closePath(); sc.fill();
+    }
+    for (const b of town.patches ?? []) { sc.fillStyle = b.color; sc.beginPath(); sc.ellipse(b.x, b.y, b.rx, b.ry, 0, 0, 7); sc.fill(); }
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(small, ox - pad, oy - pad, small.width * q, small.height * q);
+  }
   // 地上的落叶、草斑
   for (let i = 0; i < 1400; i++) {
     const x = hash(i, 11) * town.w; const y = hash(i, 12) * town.h;
     if (x < ox - 20 || x > ox + w + 20 || y < oy - 20 || y > oy + h + 20) continue;
-    ctx.fillStyle = pal.speck[i % pal.speck.length];
+    const zone = town.zoneAt?.(x, y);
+    if (zone?.sparse && hash(i, 17) > zone.sparse) continue;
+    const speck = zone?.speck ?? pal.speck;
+    ctx.fillStyle = speck[i % speck.length];
     ctx.globalAlpha = 0.35 + hash(i, 13) * 0.4;
     ctx.beginPath(); ctx.ellipse(x, y, 2 + hash(i, 14) * 5, 1.2 + hash(i, 15) * 2.5, hash(i, 16) * 3, 0, 7); ctx.fill();
   }
+  // 花圃：深一点的草地上撒满花点（梦殒春宵）
+  for (const [i, b] of (town.flowerbeds ?? []).entries()) {
+    ctx.globalAlpha = 0.9; ctx.fillStyle = b.dead ? '#7a6f4e' : pal.bed;
+    ctx.beginPath(); ctx.ellipse(b.x, b.y, b.rx, b.ry, 0, 0, 7); ctx.fill();
+    for (let j = 0; j < (b.rx * b.ry) / 42; j++) {
+      const a = hash(i + 40, j) * 7; const d = Math.sqrt(hash(i + 41, j)) * 0.94;
+      ctx.fillStyle = (b.dead ? ['#6a5a3a', '#8a7a52', '#5a4a30'] : pal.speck)[j % 3];
+      ctx.beginPath(); ctx.arc(b.x + Math.cos(a) * d * b.rx, b.y + Math.sin(a) * d * b.ry, 2.4 + hash(i + 42, j) * 2.4, 0, 7); ctx.fill();
+    }
+  }
   ctx.globalAlpha = 1;
-  const stroke = (pts, width, color, dash) => {
-    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const stroke = (pts, width, color, dash, cap = 'round') => {
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = cap; ctx.lineJoin = 'round';
     ctx.setLineDash(dash ?? []);
     ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
     ctx.setLineDash([]);
@@ -392,13 +424,36 @@ function paintPlainGround(town, ox, oy, w, h) {
   const roads = [...town.roads].sort((a, b) => (rank[a.kind] ?? 1) - (rank[b.kind] ?? 1));
   for (const r of roads) stroke(r.pts, r.half * 2 + 4, '#3a3226');
   for (const r of roads) stroke(r.pts, r.half * 2, pal[r.kind] ?? pal.lane);
-  for (const r of roads) if (r.kind === 'coach') stroke(r.pts, 2, '#8a7c62', [10, 14]); // 车辙
+  for (const r of roads) if (r.kind === 'coach' && !zones.length) stroke(r.pts, 2, '#8a7c62', [10, 14]); // 车辙
+  // 分区的路面：同一条路经过哪个区就是哪种路：花街铺石、营地压出车辙、遗迹的石板碎得露出地面
+  const paveZone = (z, list) => {
+    ctx.save(); zonePath(z); ctx.clip();
+    for (const r of list) {
+      stroke(r.pts, r.half * 2, z.road);
+      if (z.pave === 'cobble') stroke(r.pts, r.half * 2 - 2, z.paveColor, [2, 13], 'butt');
+      if (z.pave === 'ruts') for (const d of [-0.45, 0.45]) stroke(r.pts.map(([x, y]) => [x + d * r.half, y + d * r.half]), 3, z.paveColor, [16, 9], 'butt');
+      if (z.pave === 'broken') stroke(r.pts, r.half * 2 + 6, z.ground, [13, 41], 'butt');
+    }
+    ctx.restore();
+  };
+  // 先铺外面的区，再铺环路以内的区，最后把环路补一遍：环路是花园的边界，归外面的区，路口不能被里面的路盖住
+  const outer = [...zones].reverse().filter((z) => z.road && !z.inner);
+  outer.forEach((z) => paveZone(z, roads));
+  zones.filter((z) => z.inner).forEach((z) => paveZone(z, roads.filter((r) => r.kind !== 'coach')));
+  outer.forEach((z) => paveZone(z, roads.filter((r) => r.kind === 'coach')));
   // 集合点：一块圆形石板地
   const G = town.gather;
   ctx.fillStyle = pal.plaza; ctx.strokeStyle = INK_CSS; ctx.lineWidth = 1.4;
   ctx.beginPath(); ctx.arc(G.x, G.y, G.r, 0, 7); ctx.fill(); ctx.stroke();
   ctx.setLineDash([3, 3]); ctx.strokeStyle = '#6d665a';
   ctx.beginPath(); ctx.arc(G.x, G.y, G.r - 8, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+  // 通往地下洞穴的暗口：一圈旧石头围着黑洞（梦殒春宵）
+  for (const m of town.hatches ?? []) {
+    ctx.fillStyle = 'rgba(92, 74, 44, .55)'; ctx.beginPath(); ctx.arc(m.x, m.y, 36, 0, 7); ctx.fill(); // 周围的花枯了一圈
+    ctx.fillStyle = '#7a7568'; ctx.strokeStyle = INK_CSS; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(m.x, m.y, 15, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#17181a'; ctx.beginPath(); ctx.arc(m.x, m.y, 9, 0, 7); ctx.fill();
+  }
   // 溪：岸 → 水 → 一道亮一点的水流
   const band = town.water?.band;
   if (band) {
@@ -441,6 +496,7 @@ const INK_CSS = '#1d2524';
 
 const WIN_LIT = 0xf0c66a;
 const WIN_DARK = 0x2d3a3a;
+const FLOWER_BOX = 0xa878c8;
 
 /** 前面两堵墙（东墙 +x、南墙 +y）+ 窗。 */
 function frontWalls(g, b, seed) {
@@ -449,7 +505,8 @@ function frontWalls(g, b, seed) {
   const wall = hex(b.wall);
   face(g, [[x1, y, 0], [x1, y1, 0], [x1, y1, H], [x1, y, H]], shade(wall, -0.22));
   face(g, [[x, y1, 0], [x1, y1, 0], [x1, y1, H], [x, y1, H]], wall);
-  const floors = H > 58 ? 2 : 1;
+  const floors = b.shape === 'tent' ? 0 : H > 58 ? 2 : 1;
+  const planter = (a, c, s0, s1, z, tone) => b.flowers && onWall(g, a, c, s0, s1, z - 7, z - 1, shade(FLOWER_BOX, tone)); // 窗台花箱
   for (let f = 0; f < floors; f++) {
     const z0 = H * (floors === 2 ? [0.14, 0.56][f] : 0.3); const z1 = z0 + H * (floors === 2 ? 0.26 : 0.34);
     const nS = Math.max(1, Math.floor(w / 42)); const nE = Math.max(1, Math.floor(h / 42));
@@ -457,12 +514,21 @@ function frontWalls(g, b, seed) {
       if (b.door?.side === 'bottom' && Math.abs(x + ((i + 0.5) / nS) * w - b.door.x) < 26 && f === 0) continue;
       const lit = b.lit === true || (b.lit !== false && hash(seed + i, f) > 0.55);
       onWall(g, [x, y1], [x1, y1], (i + 0.3) / nS, (i + 0.7) / nS, z0, z1, lit ? WIN_LIT : WIN_DARK);
+      planter([x, y1], [x1, y1], (i + 0.24) / nS, (i + 0.76) / nS, z0, 0);
     }
     for (let i = 0; i < nE; i++) {
       if (b.door?.side === 'right' && Math.abs(y + ((i + 0.5) / nE) * h - b.door.y) < 26 && f === 0) continue;
       const lit = b.lit === true || (b.lit !== false && hash(seed + i, f + 7) > 0.6);
       onWall(g, [x1, y], [x1, y1], (i + 0.3) / nE, (i + 0.7) / nE, z0, z1, lit ? shade(WIN_LIT, -0.12) : shade(WIN_DARK, -0.2));
+      planter([x1, y], [x1, y1], (i + 0.24) / nE, (i + 0.76) / nE, z0, -0.18);
     }
+  }
+  // 帐篷没有窗：能进的那几顶在檐下挂一圈灯，一看就和不能进的旧帐篷不一样
+  if (b.shape === 'tent' && b.lit === true) {
+    const bulbs = (ax, ay, bx, by) => {
+      for (let t = 0.04; t < 1; t += 0.08) g.circle(...P(ax + (bx - ax) * t, ay + (by - ay) * t, H - 7), 3.6).fill(WIN_LIT).stroke({ width: 0.7, color: INK });
+    };
+    bulbs(x, y1, x1, y1); bulbs(x1, y1, x1, y);
   }
   // 墙根一道深色
   face(g, [[x, y1, 0], [x1, y1, 0], [x1, y1, 4], [x, y1, 4]], shade(wall, -0.4), { width: 0.6, color: INK });
@@ -472,8 +538,8 @@ function frontWalls(g, b, seed) {
 /** 屋顶的尺寸和烟囱位置（画屋顶、算建筑轮廓共用，保证两边一致）。 */
 function roofGeom(b, seed) {
   const { x, y, w, h, height: H } = b;
-  const rh = Math.min(w, h) * 0.38;
-  const chimney = hash(seed, 99) > 0.25
+  const rh = Math.min(w, h) * (b.shape === 'tent' ? 0.8 : 0.38);
+  const chimney = !b.shape && hash(seed, 99) > 0.25
     ? { cx: x + w * (0.25 + hash(seed, 98) * 0.5), cy: y + h * 0.3, s: 12, z0: H + rh * 0.4, z1: H + rh + 18 }
     : null;
   return { o: 8, rh, chimney };
@@ -485,7 +551,8 @@ function silhouette(b, seed) {
   const { o, rh, chimney } = roofGeom(b, seed);
   const x1 = x + w; const y1 = y + h;
   const pts = [[x, y1, 0], [x1, y1, 0], [x1, y, 0], [x - o, y - o, H], [x1 + o, y - o, H], [x1 + o, y1 + o, H], [x - o, y1 + o, H]];
-  if (w >= h) pts.push([x - o, (y + y1) / 2, H + rh], [x1 + o, (y + y1) / 2, H + rh]);
+  if (b.shape === 'tent') pts.push([x + w / 2, y + h / 2, H + rh + 24]);
+  else if (w >= h) pts.push([x - o, (y + y1) / 2, H + rh], [x1 + o, (y + y1) / 2, H + rh]);
   else pts.push([(x + x1) / 2, y - o, H + rh], [(x + x1) / 2, y1 + o, H + rh]);
   if (chimney) {
     const { cx, cy, s: c, z1 } = chimney;
@@ -505,6 +572,7 @@ function hull(points) {
 }
 
 function roof(g, b, seed) {
+  if (b.shape === 'tent') return tentTop(g, b, seed);
   const { x, y, w, h, height: H } = b;
   const x1 = x + w; const y1 = y + h;
   const { o, rh, chimney } = roofGeom(b, seed);
@@ -538,6 +606,25 @@ function roof(g, b, seed) {
     face(g, [[cx, cy, z1], [cx + s, cy, z1], [cx + s, cy + s, z1], [cx, cy + s, z1]], 0x1d2524);
   }
   return H + rh + 20;
+}
+
+/** 帐篷顶：四面收到一根中杆上，红白相间的条纹，顶上一面小旗。返回最高点的高度。 */
+function tentTop(g, b, seed) {
+  const { x, y, w, h, height: H } = b;
+  const x1 = x + w; const y1 = y + h;
+  const { o, rh } = roofGeom(b, seed);
+  const apex = [x + w / 2, y + h / 2, H + rh];
+  const stripes = (a, c, tone) => {
+    const n = Math.max(4, Math.round(Math.hypot(c[0] - a[0], c[1] - a[1]) / 34));
+    const at = (t) => [a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t, H];
+    for (let i = 0; i < n; i++) face(g, [at(i / n), at((i + 1) / n), apex], shade(hex(i % 2 ? b.stripe : b.roof), tone));
+  };
+  stripes([x - o, y1 + o], [x1 + o, y1 + o], 0);
+  stripes([x1 + o, y1 + o], [x1 + o, y - o], -0.2);
+  const [tx, ty] = P(...apex);
+  g.moveTo(tx, ty).lineTo(tx, ty - 22).stroke({ width: 1.6, color: INK });
+  g.poly([tx, ty - 22, tx + 15, ty - 17, tx, ty - 12]).fill(hex(b.roof)).stroke({ width: 1, color: INK });
+  return H + rh + 24;
 }
 
 /** 门（和锁）：画在门所在的那面墙上。 */
@@ -591,6 +678,38 @@ function fence(g, hs, sides) {
     }
   }
   g.stroke({ width: 1.6, color: 0x2b3130 });
+}
+
+/** 遗迹地窖：一圈塌得断断续续的矮石墙，back=北/西两边，front=南/东两边，门口留空。 */
+function rubbleWall(g, hs, sides) {
+  const { x, y, w, h, door: d } = hs;
+  const seg = { n: [[x, y], [x + w, y]], w: [[x, y], [x, y + h]], s: [[x, y + h], [x + w, y + h]], e: [[x + w, y], [x + w, y + h]] };
+  for (const k of sides) {
+    const [[ax, ay], [bx, by]] = seg[k];
+    const len = Math.hypot(bx - ax, by - ay);
+    for (let t = 0; t < len - 20; t += 34) {
+      const at = (u) => [ax + ((bx - ax) * u) / len, ay + ((by - ay) * u) / len];
+      const [px, py] = at(t); const [qx, qy] = at(t + 26);
+      if (hash(t, len + sides.length) < 0.25 || Math.hypot((px + qx) / 2 - d.x, (py + qy) / 2 - d.y) < 40) continue;
+      const z = 12 + hash(t, len) * 16;
+      face(g, [[px, py, 0], [qx, qy, 0], [qx, qy, z], [px, py, z]], k === 'n' || k === 's' ? 0x8f8a7e : 0x77725f);
+    }
+  }
+}
+
+/** 地窖口：石地上一个往下收的方坑，一级级台阶通到黑暗的地下洞穴。 */
+function pitStairs(g, hs) {
+  const cx = hs.x + hs.w * 0.58; const cy = hs.y + hs.h * 0.52;
+  for (let i = 0; i < 6; i++) {
+    const k = 1 - i * 0.15; const a = 76 * k; const b = 54 * k;
+    face(g, [[cx - a, cy - b, 0], [cx + a, cy - b, 0], [cx + a, cy + b, 0], [cx - a, cy + b, 0]], i === 5 ? 0x0e0f10 : shade(0x8a8474, -0.13 * i));
+  }
+}
+
+/** 一根断柱，脚点在原点。 */
+function brokenColumn(g, height) {
+  g.rect(-9, -height, 18, height).fill(0x9c9686).stroke({ width: 1.1, color: INK });
+  g.poly([-9, -height, -2, -height - 6, 9, -height + 1]).fill(0x8a8474).stroke({ width: 1, color: INK });
 }
 
 /** 一块墓碑（立着的小纸片）。 */
@@ -656,6 +775,40 @@ function beacon(g, c) {
   return H + 30;
 }
 
+/** 遗迹断塔：一边塌掉的石塔，藤蔓爬上塔身，塔脚一个黑洞洞的破口（进不去，所以不亮）。返回顶部高度。 */
+function ruin(g, c) {
+  const s = c.r * 0.76; const { x: cx, y: cy } = c;
+  const x0 = cx - s; const x1 = cx + s; const y0 = cy - s; const y1 = cy + s; const H = 170;
+  const wall = 0x8f8a7e;
+  face(g, [[x1, y0, 0], [x1, y1, 0], [x1, y1, H * 0.72], [x1, cy + s * 0.2, H * 0.6], [x1, cy - s * 0.3, H * 0.82], [x1, y0, H * 0.7]], shade(wall, -0.25));
+  face(g, [[x0, y1, 0], [x1, y1, 0], [x1, y1, H * 0.72], [cx + s * 0.3, y1, H * 0.84], [cx - s * 0.2, y1, H * 0.76], [x0, y1, H]], wall);
+  for (const z of [H * 0.24, H * 0.5]) g.moveTo(...P(x0, y1, z)).lineTo(...P(x1, y1, z)).lineTo(...P(x1, y0, z)).stroke({ width: 0.7, color: INK });
+  onWall(g, [x0, y1], [x1, y1], 0.34, 0.66, 0, 34, 0x2a2622);
+  for (let i = 0; i < 26; i++) { // 藤蔓从地面往上爬，越高越稀
+    const t = hash(i, 71); const z = Math.pow(hash(i, 72), 1.7) * H * 0.7;
+    g.circle(...P(x0 + (x1 - x0) * t, y1, z), 4 + hash(i, 73) * 4).fill(i % 5 ? 0x5a7a44 : 0x46663a);
+  }
+  return H + 10;
+}
+
+/** 石雕喷泉：大水池、中间一根柱子托着小盘，水是淡紫色的。 */
+function fountain(g, c) {
+  const [x, y] = P(c.x, c.y); const rx = c.r * 1.4; const ry = rx / 2;
+  const disc = (z, r, fill) => g.ellipse(x, y - z, r, r / 2).fill(fill).stroke({ width: 1.2, color: INK });
+  g.rect(x - rx, y - 13, rx * 2, 13).fill(0x8e8a7e);
+  g.ellipse(x, y, rx, ry).fill(0x8e8a7e).stroke({ width: 1.2, color: INK });
+  g.moveTo(x - rx, y).lineTo(x - rx, y - 13).moveTo(x + rx, y).lineTo(x + rx, y - 13).stroke({ width: 1.2, color: INK });
+  disc(13, rx, 0xa7a294); disc(14, rx * 0.84, 0xb9a8dc);
+  g.rect(x - 5, y - 40, 10, 26).fill(0x9a9588).stroke({ width: 1, color: INK });
+  disc(40, rx * 0.44, 0xa7a294); disc(41, rx * 0.34, 0xc9bbe6);
+  // 水池中间的花柱：全图最常看见的东西，站在哪个路口都能照着它找回集合点
+  g.rect(x - 4, y - 214, 8, 174).fill(0x8a6b48).stroke({ width: 1, color: INK });
+  for (let z = 56; z < 214; z += 13) g.circle(x + (z % 2 ? 4 : -4), y - z, 5.5).fill(z % 3 ? 0x9a72cc : 0x5a7f46).stroke({ width: 0.7, color: INK });
+  g.ellipse(x, y - 216, 17, 10).fill(0x5a7f46).stroke({ width: 1, color: INK });
+  for (let i = 0; i < 8; i++) g.circle(x + Math.cos(i * 0.785) * 14, y - 216 + Math.sin(i * 0.785) * 7, 3.6).fill(i % 2 ? 0xd9b6ea : 0x9a72cc);
+  return 232;
+}
+
 /** 老井：一圈矮石墙 + 两根柱子撑着小顶。 */
 function well(g, c) {
   const { x, y, r } = c; const s = r * 0.8;
@@ -684,12 +837,12 @@ function gallows(g, c) {
 }
 
 /** 一片树林：圈里散着几棵枫树（橙红，叶上有黑斑）和黑松，从后往前画。返回最高的树梢高度。 */
-function trees(g, c, seed) {
+function trees(g, c, seed, colors) {
   const n = Math.max(3, Math.round((c.r * c.r) / 900));
   const list = [];
   for (let i = 0; i < n * 3 && list.length < n; i++) {
     const a = hash(seed, i * 3) * Math.PI * 2; const d = Math.sqrt(hash(seed, i * 3 + 1)) * c.r * 0.82;
-    const t = { x: c.x + Math.cos(a) * d, y: c.y + Math.sin(a) * d, pine: hash(seed, i * 3 + 2) < 0.4, k: 0.8 + hash(seed, i * 7) * 0.5 };
+    const t = { x: c.x + Math.cos(a) * d, y: c.y + Math.sin(a) * d, pine: !colors && hash(seed, i * 3 + 2) < 0.4, k: 0.8 + hash(seed, i * 7) * 0.5 };
     if (list.every((o) => Math.hypot(o.x - t.x, o.y - t.y) > 16)) list.push(t);
   }
   list.sort((a, b) => a.x + a.y - (b.x + b.y));
@@ -706,17 +859,248 @@ function trees(g, c, seed) {
       top = Math.max(top, h + 10);
     } else {
       const r = 20 * t.k; const cy = by - 22 * t.k - r * 0.8;
-      const col = [0xc4502a, 0xe08a3a, 0xa8402a][Math.floor(hash(t.x, t.y) * 3)];
+      const pal = colors ?? [0xc4502a, 0xe08a3a, 0xa8402a];
+      const col = pal[Math.floor(hash(t.x, t.y) * pal.length)];
       g.circle(bx, cy, r).fill(col).stroke({ width: 1.2, color: INK });
       g.circle(bx - r * 0.35, cy - r * 0.3, r * 0.5).fill(shade(col, 0.15));
-      for (let j = 0; j < 4; j++) g.circle(bx + (hash(j, t.x) - 0.5) * r * 1.2, cy + (hash(j, t.y) - 0.5) * r * 1.2, 1.6).fill(0x2a1a14); // 黑斑
+      if (!colors) for (let j = 0; j < 4; j++) g.circle(bx + (hash(j, t.x) - 0.5) * r * 1.2, cy + (hash(j, t.y) - 0.5) * r * 1.2, 1.6).fill(0x2a1a14); // 黑斑
       top = Math.max(top, 22 * t.k + r * 1.8 + 6);
     }
   }
   return top;
 }
 
-const LANDMARKS = { beacon, well, gallows };
+/** 一段修剪过的绿篱：一堆圆滚滚的灌木，开满紫罗兰。 */
+function hedge(g, c, seed) {
+  const list = [];
+  for (let i = 0; i < 9; i++) {
+    const a = hash(seed, i * 2 + 1) * Math.PI * 2; const d = Math.sqrt(hash(seed, i * 2 + 2)) * c.r * 0.72;
+    list.push({ x: c.x + Math.cos(a) * d, y: c.y + Math.sin(a) * d });
+  }
+  list.sort((a, b) => a.x + a.y - (b.x + b.y));
+  for (const [i, t] of list.entries()) {
+    const [bx, by] = P(t.x, t.y, 0); const r = 24 + hash(seed, i + 30) * 8;
+    g.ellipse(bx, by - r * 0.7, r * 1.15, r).fill(shade(0x4f7344, (i % 3) * 0.07 - 0.06)).stroke({ width: 1, color: INK });
+    for (let j = 0; j < 6; j++) {
+      g.circle(bx + (hash(seed + i, j) - 0.5) * r * 1.7, by - r * 0.7 + (hash(seed + i, j + 9) - 0.6) * r * 1.5, 2.2).fill(j % 3 ? 0x9a72cc : 0xd9b6ea);
+    }
+  }
+  return 62;
+}
+
+/** 拱门：路两边两根柱子，上面一道弧。花架是木头缠花，遗迹的是断了半边的石券。 */
+function arch(g, a) {
+  const H = 66; const rise = 26; const k = a.along === 'y' ? [1, 0] : [0, 1];
+  const end = (s) => [a.x + k[0] * a.half * s, a.y + k[1] * a.half * s];
+  const color = a.stone ? 0x8f8a7e : 0x6a4c34; const width = a.stone ? 9 : 5;
+  const arc = (t) => [...end(t * 2 - 1), H + Math.sin(t * Math.PI) * rise];
+  const last = a.stone ? 0.62 : 1; // 石券塌掉一截
+  g.moveTo(...P(...end(-1), 0)).lineTo(...P(...end(-1), H)).stroke({ width, color });
+  g.moveTo(...P(...end(1), 0)).lineTo(...P(...end(1), a.stone ? H * 0.7 : H)).stroke({ width, color });
+  g.moveTo(...P(...arc(0)));
+  for (let i = 1; i <= 12; i++) g.lineTo(...P(...arc((i / 12) * last)));
+  g.stroke({ width, color });
+  for (let i = 0; i <= 18 && !a.stone; i++) g.circle(...P(...arc(i / 18)), 3.4 + hash(i, a.x) * 2.6).fill(i % 2 ? 0x9a72cc : 0x5a7f46);
+  return H + rise + 10;
+}
+
+/** 宴会长桌：铺白布的长桌，摆着杯盘和花。 */
+function banquet(g, b) {
+  const { x, y, w, h, height: H } = b; const x1 = x + w; const y1 = y + h;
+  face(g, [[x1, y, 0], [x1, y1, 0], [x1, y1, H], [x1, y, H]], 0xb9b2a2);
+  face(g, [[x, y1, 0], [x1, y1, 0], [x1, y1, H], [x, y1, H]], 0xdcd5c4);
+  face(g, [[x, y, H], [x1, y, H], [x1, y1, H], [x, y1, H]], 0xf0eadc);
+  for (let i = 1; i < 7; i++) {
+    const [sx, sy] = P(x + (i / 7) * w, y + h / 2, H);
+    if (i % 3) g.circle(sx, sy - 2, 3).fill(i % 2 ? 0x8a2f4e : 0xd9a441).stroke({ width: 0.8, color: INK });
+    else g.ellipse(sx, sy - 4, 7, 6).fill(0x9a72cc).stroke({ width: 0.8, color: INK });
+  }
+  return H + 10;
+}
+
+/** 马戏团的旧篷车：一节木车厢，弧顶，两个大轮子。 */
+function wagon(g, b) {
+  const { x, y, w, h, height: H } = b; const x1 = x + w; const y1 = y + h;
+  const wall = hex(b.wall); const col = hex(b.roof);
+  face(g, [[x1, y, 8], [x1, y1, 8], [x1, y1, H], [x1, y, H]], shade(wall, -0.22));
+  face(g, [[x, y1, 8], [x1, y1, 8], [x1, y1, H], [x, y1, H]], wall);
+  const arc = (px, t) => [px, y1 - t * h, H + Math.sin(t * Math.PI) * 24];
+  for (let i = 0; i < 6; i++) face(g, [arc(x, i / 6), arc(x1, i / 6), arc(x1, (i + 1) / 6), arc(x, (i + 1) / 6)], shade(i % 2 ? col : hex(b.stripe), i > 2 ? -0.16 : 0));
+  for (const px of [x + w * 0.2, x + w * 0.8]) g.circle(...P(px, y1 + 2, 16), 15).fill(0x4a3424).stroke({ width: 1.2, color: INK });
+  return H + 34;
+}
+
+/** 摊子：木柜台，上面一块往前斜的条纹布篷，两根细柱撑着。 */
+function stall(g, b) {
+  const { x, y, w, h, height: H } = b; const x1 = x + w; const y1 = y + h;
+  const counter = 0x8a6b48; const z = H * 0.55;
+  face(g, [[x1, y, 0], [x1, y1, 0], [x1, y1, z], [x1, y, z]], shade(counter, -0.24));
+  face(g, [[x, y1, 0], [x1, y1, 0], [x1, y1, z], [x, y1, z]], counter);
+  face(g, [[x, y, z], [x1, y, z], [x1, y1, z], [x, y1, z]], shade(counter, 0.14));
+  for (const px of [x + 4, x1 - 4]) g.moveTo(...P(px, y1 - 2, z)).lineTo(...P(px, y1 - 2, H + 10)).stroke({ width: 2.4, color: 0x4a3424 });
+  const n = Math.max(4, Math.round(w / 24));
+  for (let i = 0; i < n; i++) {
+    const a = x - 8 + ((w + 16) * i) / n; const c = x - 8 + ((w + 16) * (i + 1)) / n;
+    face(g, [[a, y - 4, H + 24], [c, y - 4, H + 24], [c, y1 + 12, H + 4], [a, y1 + 12, H + 4]], hex(i % 2 ? b.stripe : b.roof));
+  }
+  return H + 30;
+}
+
+/** 断墙：一段段高低不齐的旧石墙。 */
+function lowWall(g, b) {
+  const { x, y, w, h, height: H } = b;
+  const along = w >= h; const len = along ? w : h; const n = Math.ceil(len / 26);
+  for (let i = 0; i < n; i++) {
+    const z = H * (0.5 + hash(i, x + y) * 0.5); const col = shade(0x8f8a7e, hash(i, x) * 0.1 - 0.05);
+    const a = (i * len) / n; const c = ((i + 1) * len) / n - 2;
+    const [x0, y0, x1, y1] = along ? [x + a, y, x + c, y + h] : [x, y + a, x + w, y + c];
+    face(g, [[x1, y0, 0], [x1, y1, 0], [x1, y1, z], [x1, y0, z]], shade(col, -0.24));
+    face(g, [[x0, y1, 0], [x1, y1, 0], [x1, y1, z], [x0, y1, z]], col);
+    face(g, [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]], shade(col, 0.14));
+  }
+  return H;
+}
+
+/** 宏伟遗迹：两级石台基上两排巨柱，大多断了，只有一段横梁还架着。 */
+function ruinHall(g, b) {
+  const { x, y, w, h, height: H } = b; const x1 = x + w; const y1 = y + h;
+  const stone = 0x9c9686; const base = 16;
+  for (const [d, z0, z1] of [[0, 0, 8], [9, 8, base]]) {
+    face(g, [[x1 - d, y + d, z0], [x1 - d, y1 - d, z0], [x1 - d, y1 - d, z1], [x1 - d, y + d, z1]], shade(stone, -0.28));
+    face(g, [[x + d, y1 - d, z0], [x1 - d, y1 - d, z0], [x1 - d, y1 - d, z1], [x + d, y1 - d, z1]], shade(stone, -0.08));
+    face(g, [[x + d, y + d, z1], [x1 - d, y + d, z1], [x1 - d, y1 - d, z1], [x + d, y1 - d, z1]], shade(stone, 0.08));
+  }
+  const column = (cx, cy, top) => {
+    const s = 11;
+    face(g, [[cx + s, cy - s, base], [cx + s, cy + s, base], [cx + s, cy + s, top], [cx + s, cy - s, top]], shade(stone, -0.24));
+    face(g, [[cx - s, cy + s, base], [cx + s, cy + s, base], [cx + s, cy + s, top], [cx - s, cy + s, top]], stone);
+    face(g, [[cx - s, cy - s, top], [cx + s, cy - s, top], [cx + s, cy + s, top], [cx - s, cy + s, top]], shade(stone, 0.14));
+  };
+  const n = 6; const at = (i) => x + 28 + (i / (n - 1)) * (w - 56);
+  const back = [1, 1, 1, 1, 0.42, 0.66]; const front = [0.34, 0.74, 0.22, 0.5, 0.86, 0.3];
+  back.forEach((k, i) => column(at(i), y + 30, H * k));
+  face(g, [[at(0) - 16, y + 44, H], [at(3) + 16, y + 44, H], [at(3) + 16, y + 44, H + 16], [at(0) - 16, y + 44, H + 16]], shade(stone, 0.04));
+  face(g, [[at(0) - 16, y + 16, H + 16], [at(3) + 16, y + 16, H + 16], [at(3) + 16, y + 44, H + 16], [at(0) - 16, y + 44, H + 16]], shade(stone, 0.16));
+  front.forEach((k, i) => column(at(i), y1 - 30, H * k));
+  for (let i = 0; i < 18; i++) { // 石缝里长出来的绿
+    const [sx, sy] = P(x + hash(i, 81) * w, y1 - hash(i, 82) * 8, base + hash(i, 83) * 26);
+    g.circle(sx, sy, 3 + hash(i, 84) * 4).fill(0x5a7a44);
+  }
+  return H + 22;
+}
+
+/** 一小块方石头 / 木箱。 */
+function block(g, x, y, z, s, h, col) {
+  face(g, [[x + s, y - s, z], [x + s, y + s, z], [x + s, y + s, z + h], [x + s, y - s, z + h]], shade(col, -0.24));
+  face(g, [[x - s, y + s, z], [x + s, y + s, z], [x + s, y + s, z + h], [x - s, y + s, z + h]], col);
+  face(g, [[x - s, y - s, z + h], [x + s, y - s, z + h], [x + s, y + s, z + h], [x - s, y + s, z + h]], shade(col, 0.14));
+}
+
+/** 叠起来的货箱。 */
+function crates(g, c) {
+  block(g, c.x - 4, c.y + 3, 0, c.r * 0.62, 17, 0x8a6b48);
+  block(g, c.x + 5, c.y - 4, 0, c.r * 0.5, 14, 0x7a5c3e);
+  block(g, c.x - 2, c.y + 2, 17, c.r * 0.44, 12, 0x9a7a54);
+  return 34;
+}
+
+/** 两只木桶。 */
+function barrels(g, c) {
+  for (const [dx, dy] of [[-5, -4], [5, 5]]) {
+    const [x, y] = P(c.x + dx, c.y + dy);
+    g.rect(x - 8, y - 20, 16, 20).fill(0x7a5436).stroke({ width: 1, color: INK });
+    g.ellipse(x, y - 20, 8, 4).fill(0x94704a).stroke({ width: 1, color: INK });
+    g.ellipse(x, y, 8, 4).fill(0x7a5436).stroke({ width: 1, color: INK });
+    g.moveTo(x - 8, y - 11).lineTo(x + 8, y - 11).stroke({ width: 1, color: 0x3a2a1c });
+  }
+  return 30;
+}
+
+/** 路牌：一根柱子，两块指向不同方向的彩色木板。 */
+function sign(g, c) {
+  const [x, y] = P(c.x, c.y);
+  g.moveTo(x, y).lineTo(x, y - 66).stroke({ width: 3.5, color: 0x4a3424 });
+  for (const [i, s] of [[0, 1], [1, -1]]) {
+    const z = 60 - i * 15;
+    g.poly([x, y - z, x + s * 32, y - z, x + s * 39, y - z + 5, x + s * 32, y - z + 10, x, y - z + 10]).fill(hex(c.boards[i])).stroke({ width: 1, color: INK });
+  }
+  return 72;
+}
+
+/** 插彩旗的木杆。 */
+function pole(g, c) {
+  const [x, y] = P(c.x, c.y);
+  g.moveTo(x, y).lineTo(x, y - 96).stroke({ width: 3, color: 0x5a4028 });
+  g.poly([x, y - 96, x + 18, y - 90, x, y - 84]).fill(0xb03a48).stroke({ width: 1, color: INK });
+  return 100;
+}
+
+/** 花园长椅。 */
+function bench(g, c) {
+  const { x, y } = c;
+  block(g, x - 10, y, 0, 2.5, 8, 0x4a3424); block(g, x + 10, y, 0, 2.5, 8, 0x4a3424);
+  face(g, [[x - 14, y - 5, 9], [x + 14, y - 5, 9], [x + 14, y + 5, 9], [x - 14, y + 5, 9]], 0x8a6b48);
+  face(g, [[x - 14, y - 5, 9], [x + 14, y - 5, 9], [x + 14, y - 5, 22], [x - 14, y - 5, 22]], 0x7a5c3e);
+  return 24;
+}
+
+/** 铁火盆：遗迹地窖门口的一点火光（能进的地方才有光）。 */
+function brazier(g, c) {
+  const [x, y] = P(c.x, c.y);
+  g.ellipse(x, y - 2, 40, 20).fill({ color: 0xd2702a, alpha: 0.14 });
+  g.moveTo(x - 8, y).lineTo(x, y - 22).moveTo(x + 8, y).lineTo(x, y - 22).stroke({ width: 2, color: 0x2a2622 });
+  g.ellipse(x, y - 24, 12, 5).fill(0x2a2622).stroke({ width: 1, color: INK });
+  g.ellipse(x, y - 31, 8, 9).fill({ color: 0xd2502a, alpha: 0.9 });
+  g.ellipse(x, y - 34, 4, 6).fill({ color: 0xf2b25c, alpha: 0.9 });
+  return 44;
+}
+
+/** 碎石堆。 */
+function rubble(g, c) {
+  const s = c.r * 0.34;
+  block(g, c.x - s, c.y - s * 0.5, 0, s, 10, 0x8a8474); block(g, c.x + s, c.y - s, 0, s * 0.8, 7, 0x7a7568);
+  block(g, c.x, c.y + s, 0, s * 1.1, 13, 0x9c9686); block(g, c.x - s * 0.4, c.y + s * 0.6, 13, s * 0.7, 8, 0x8a8474);
+  return 28;
+}
+
+/** 枯树：光秃的树干和几根枝杈。 */
+function deadTrees(g, c, seed) {
+  const n = Math.max(2, Math.round((c.r * c.r) / 1000));
+  const list = [];
+  for (let i = 0; i < n; i++) {
+    const a = hash(seed, i * 3) * Math.PI * 2; const d = Math.sqrt(hash(seed, i * 3 + 1)) * c.r * 0.7;
+    list.push({ x: c.x + Math.cos(a) * d, y: c.y + Math.sin(a) * d, k: 0.9 + hash(seed, i * 7) * 0.5 });
+  }
+  list.sort((a, b) => a.x + a.y - (b.x + b.y));
+  for (const [i, t] of list.entries()) {
+    const [bx, by] = P(t.x, t.y); const h = 62 * t.k;
+    g.ellipse(bx + 6, by + 2, 12, 4).fill({ color: 0x000000, alpha: 0.18 });
+    g.moveTo(bx, by).lineTo(bx + 2, by - h).stroke({ width: 4.5, color: 0x3a342c });
+    for (let j = 0; j < 4; j++) {
+      const z = h * (0.5 + j * 0.15); const s = j % 2 ? 1 : -1; const l = (26 - j * 3) * t.k;
+      g.moveTo(bx + 1, by - z).lineTo(bx + s * l, by - z - l * (0.6 + hash(i, j) * 0.5)).stroke({ width: 2, color: 0x3a342c });
+    }
+  }
+  return 92;
+}
+
+/** 一串彩旗：两点之间往下垂的绳子，挂着三角小旗。 */
+function garland(g, { a, b }) {
+  const n = Math.max(6, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / 26));
+  const sag = 26 + Math.hypot(b[0] - a[0], b[1] - a[1]) * 0.05;
+  const at = (t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t - Math.sin(t * Math.PI) * sag];
+  g.moveTo(...P(...at(0)));
+  for (let i = 1; i <= n; i++) g.lineTo(...P(...at(i / n)));
+  g.stroke({ width: 1, color: 0x4a3a2a });
+  const flags = [0xb03a48, 0xe0b458, 0x9a72cc, 0xefe6d2];
+  for (let i = 1; i < n; i++) {
+    const [x, y] = P(...at(i / n));
+    g.poly([x - 5, y, x + 5, y, x, y + 11]).fill(flags[i % flags.length]).stroke({ width: 0.7, color: INK });
+  }
+}
+
+const LANDMARKS = { beacon, well, gallows, ruin, fountain, crates, barrels, sign, pole, bench, brazier, rubble };
+const SHAPES = { table: banquet, wagon, stall, ruin: ruinHall, lowwall: lowWall }; // 不能进的建筑里不是房子的那些（帐篷只换屋顶，走 roof()）
 
 // ───────────── 小人 ─────────────
 
@@ -821,8 +1205,9 @@ export class World {
   async init(el, map, houses) {
     const town = this.town;
     // 这张地图的手绘大图和房子图（还没画的地图就用程序画的灰盒）
-    const paintedBase = baseFor(town.id);
-    this.paintedHouses = housesArtFor(town.id);
+    // 小剧本的地图是前两张图的变体：art 指向借用的那套手绘图
+    const paintedBase = baseFor(town.art ?? town.id);
+    this.paintedHouses = housesArtFor(town.art ?? town.id);
     const app = new Application();
     await app.init({
       resizeTo: el, background: 0x1a1d1d, antialias: false, preference: 'webgl', powerPreference: 'high-performance', // 手绘图不需要多重采样抗锯齿（高分辨率下很费）；笔记本上请求独立显卡
@@ -880,7 +1265,7 @@ export class World {
     const roofs = town.palette?.roofs ?? ['#3f5a5c', '#4a4440', '#5a3a30', '#46524a'];
     town.obstacles.forEach((o, i) => {
       // litHousesOnly：只有能进的房子亮灯（地图设计约定），不能进的建筑窗户全暗
-      const b = { ...o, wall: walls[i % walls.length], roof: roofs[i % roofs.length], snow: town.roofSnow, lit: !town.litHousesOnly };
+      const b = { ...o, wall: o.wall ?? walls[i % walls.length], roof: o.roof ?? roofs[i % roofs.length], snow: town.roofSnow, lit: !town.litHousesOnly };
       const box = { x0: o.x, y0: o.y, x1: o.x + o.w, y1: o.y + o.h };
       if (base) { // 手绘：从大图里切出这栋楼
         const poly = silhouette(b, i * 13);
@@ -888,8 +1273,9 @@ export class World {
         return;
       }
       const g = new Graphics();
-      frontWalls(g, b, i * 13);
-      const top = roof(g, b, i * 13);
+      const shape = SHAPES[o.shape];
+      if (!shape) frontWalls(g, b, i * 13);
+      const top = shape ? shape(g, b, i * 13) : roof(g, b, i * 13);
       this.addStatic(g, box, boxBounds(o.x, o.y, o.w, o.h, top), { poly: hexOf(o.x, o.y, o.w, o.h, (o.height + top) / 2) });
     });
 
@@ -899,19 +1285,19 @@ export class World {
     if (TOWER.kind !== 'tower' && base) {
       // 手绘大图里已经画了树林 / 地标：按占地和高度从大图里切出来，参与前后遮挡（挡住我时会半透明）
       const s = TOWER.r * (TOWER.kind === 'trees' ? 0.82 : 0.75);
-      const top = ({ trees: 95, beacon: 180, well: 50, gallows: 100 }[TOWER.kind] ?? 60) * (town.artScale ?? 1);
+      const top = ({ trees: 95, beacon: 180, ruin: 180, fountain: 232, well: 50, gallows: 100 }[TOWER.kind] ?? 60) * (town.artScale ?? 1);
       const poly = hexOf(TOWER.x - TOWER.r, TOWER.y - TOWER.r, TOWER.r * 2, TOWER.r * 2, top);
       this.addStatic(cutout(base, poly, guideOf(town)), { x0: TOWER.x - s, y0: TOWER.y - s, x1: TOWER.x + s, y1: TOWER.y + s }, screenBounds(poly), { poly });
       continue;
     }
     if (TOWER.kind !== 'tower') {
       const tg = new Graphics();
-      const top = TOWER.kind === 'trees' ? trees(tg, TOWER, ci * 31 + 7) : LANDMARKS[TOWER.kind]?.(tg, TOWER) ?? 0;
+      const top = TOWER.hedge ? hedge(tg, TOWER, ci * 31 + 7) : TOWER.dead ? deadTrees(tg, TOWER, ci * 31 + 7) : TOWER.kind === 'trees' ? trees(tg, TOWER, ci * 31 + 7, TOWER.colors ?? town.treeColors) : LANDMARKS[TOWER.kind]?.(tg, TOWER) ?? 0;
       // 占地框按树干 / 塔身算小一点，人能走到树冠后面
       const s = TOWER.r * (TOWER.kind === 'trees' ? 0.82 : 0.75);
       const box = { x0: TOWER.x - s, y0: TOWER.y - s, x1: TOWER.x + s, y1: TOWER.y + s };
       const bounds = boxBounds(TOWER.x - TOWER.r, TOWER.y - TOWER.r, TOWER.r * 2, TOWER.r * 2, top);
-      this.addStatic(tg, box, bounds, TOWER.kind === 'beacon' ? { poly: hexOf(TOWER.x - s, TOWER.y - s, s * 2, s * 2, top * 0.6) } : {});
+      this.addStatic(tg, box, bounds, TOWER.kind === 'beacon' || TOWER.kind === 'ruin' ? { poly: hexOf(TOWER.x - s, TOWER.y - s, s * 2, s * 2, top * 0.6) } : {});
       continue;
     }
     if (base) {
@@ -933,6 +1319,27 @@ export class World {
       const top = tower(tg, TOWER);
       this.addStatic(tg, tBox, boxBounds(TOWER.x - TOWER.r, TOWER.y - TOWER.r, TOWER.r * 2, TOWER.r * 2, top), { poly: hexOf(TOWER.x - TOWER.r, TOWER.y - TOWER.r, TOWER.r * 2, TOWER.r * 2, 190) });
     }
+    }
+
+    // 拱门：人从底下穿过去，占地只有柱子那一条
+    for (const a of town.arches ?? []) {
+      const along = a.along === 'y'; const hw = along ? a.half : 6; const hh = along ? 6 : a.half;
+      const box = { x0: a.x - hw, y0: a.y - hh, x1: a.x + hw, y1: a.y + hh };
+      if (base) {
+        const poly = hexOf(a.x - hw, a.y - hh, hw * 2, hh * 2, 102);
+        this.addStatic(cutout(base, poly, guideOf(town)), box, screenBounds(poly), { poly });
+      } else {
+        const g = new Graphics();
+        const top = arch(g, a);
+        this.addStatic(g, box, boxBounds(a.x - hw, a.y - hh, hw * 2, hh * 2, top));
+      }
+    }
+
+    // 彩旗：挂在半空，手绘图里已经画了就不再叠
+    if (!base && town.garlands?.length) {
+      const g = new Graphics();
+      town.garlands.filter((q) => !(this.guide && q.onHouse)).forEach((q) => garland(g, q)); // 挂在房子上的彩旗跟房子一起画，底稿里只有地基
+      this.topFog.addChild(g);
     }
 
     // 摆设（Tiled 里的 props 层）
@@ -977,7 +1384,11 @@ export class World {
 
     if (town.fog && !this.guide) this.buildFog(town.fog);
     if (town.weather === 'snow') this.buildSnow();
+    else if (town.weather === 'festival') { this.buildSnow({ count: 60, speed: 0.1, storm: false }); this.buildFireworks(); }
+    else if (town.weather === 'drizzle') this.buildRain();
     else if (town.weather === 'leaves') this.buildLeaves();
+    else if (town.weather === 'petals') this.buildLeaves(['#b79ad8', '#e8a8bf', '#f2e6c8'], 12);
+    if (town.lanterns?.length) this.buildLanterns(town.lanterns);
     app.renderer.on('resize', () => this.layout());
     app.ticker.add(() => this.frame());
   }
@@ -986,7 +1397,7 @@ export class World {
    * 暴风雪：一层细密的雪片顺着风往右下猛刮（不要前景的大雪片）。镜头移动时雪按比例错开（视差），
    * 有一点纵深感。画在屏幕坐标里，盖在整个小镇上面。
    */
-  buildSnow() {
+  buildSnow({ count = 260, speed = 0.3, storm = true } = {}) {
     const dot = (r, soft) => {
       const c = document.createElement('canvas'); c.width = c.height = r * 4;
       const ctx = c.getContext('2d');
@@ -1010,9 +1421,156 @@ export class World {
       }
       return { items, parallax };
     };
-    this.snowLayers = [layer(far, 260, [0.3, 0.7], [0.12, 0.34], 0.3, 0.6)];
+    this.snowLayers = [layer(far, count, [0.3, 0.7], [0.12, 0.34], speed, 0.6)];
+    if (!storm) { this.snowLayers[0].drift = 0.15; return; } // 雪停了：零星几片，慢慢往下落
     // 雪片顺着 45° 的风向拉长一点（和等距视角的斜线一致），像被吹着跑
     for (const f of this.snowLayers[0].items) { f.sp.scale.y *= 1.9; f.sp.rotation = -Math.PI / 4; }
+  }
+
+  /** 细雨（窃窃私语）：又细又淡的雨丝，几乎竖直往下落，比雪快得多。和雪共用 snowFrame。 */
+  buildRain() {
+    const c = document.createElement('canvas'); c.width = 2; c.height = 26;
+    const ctx = c.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 0, 26);
+    g.addColorStop(0, 'rgba(210,225,230,0)'); g.addColorStop(1, 'rgba(210,225,230,1)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 2, 26);
+    const tex = Texture.from(c);
+    this.snow = new Container();
+    this.app.stage.addChild(this.snow);
+    const items = [];
+    for (let i = 0; i < 150; i++) {
+      const sp = new Sprite(tex);
+      sp.anchor.set(0.5); sp.rotation = -0.12;
+      sp.scale.set(0.6 + Math.random() * 0.5);
+      sp.alpha = 0.08 + Math.random() * 0.16;
+      this.snow.addChild(sp);
+      items.push({ sp, x: Math.random(), y: Math.random(), v: 1.1 * (0.8 + Math.random() * 0.4), sway: 0 });
+    }
+    this.snowLayers = [{ items, parallax: 0.7, drift: 0.12 }];
+  }
+
+  /**
+   * 烟花（无上愉悦）：按 45° 视角的立体来做。每隔几秒从镜头里的某条街上升起一支火箭，拖着一道细尾巴到半空，
+   * 在空中按球面炸开：几十颗火星各带一小段拖尾（按上一瞬间的位置连线），受重力往下弯、越飞越慢，最后闪几下熄灭；
+   * 炸开的一瞬有一团很短的光晕。坐标是世界的 (x, y, 高度)，用和地图一样的投影画，所以球面炸开在画面上是正确的扁圆。
+   * 两种：牡丹（彩色、炸得快）和柳（金色、慢、垂得长）。火星用正常混合、颜色要浓：底下大多是雪地，叠加混合在白雪上看不见。
+   */
+  buildFireworks() {
+    this.fw = { g: new Graphics(), flashes: new Container(), rockets: [], sparks: [], next: 2 };
+    this.fw.flashTex = Texture.from(fogBlob(64));
+    this.world.addChild(this.fw.flashes, this.fw.g);
+  }
+
+  /** 屏幕上的一点对应的地面（高度 0）坐标。 */
+  groundAt(sx, sy) {
+    const k = this.world.scale.x || 1;
+    const wx = (sx - this.world.x) / k; const wy = (sy - this.world.y) / k;
+    return { x: wy + wx / 2, y: wy - wx / 2 };
+  }
+
+  fireworksFrame(dt) {
+    const F = this.fw;
+    if (!F) return;
+    dt = Math.min(dt, 0.05);
+    F.next -= dt;
+    if (F.next <= 0) {
+      F.next = 2.5 + Math.random() * 4.5;
+      const W = this.app.screen.width; const H = this.app.screen.height;
+      const o = this.groundAt(W * (0.25 + Math.random() * 0.5), H * (0.6 + Math.random() * 0.3));
+      const willow = Math.random() < 0.3;
+      const color = willow ? 0xf2b33c : [0xe8402a, 0x2f9e5a, 0x3a72d8, 0xd2409e, 0xf0a020][Math.floor(Math.random() * 5)];
+      F.rockets.push({ x: o.x, y: o.y, z: 0, vz: 380 + Math.random() * 60, top: 260 + Math.random() * 110, color, willow });
+    }
+    for (const r of F.rockets) {
+      r.z += r.vz * dt; r.vz *= 1 - dt * 0.5;
+      if (r.z < r.top) continue;
+      r.done = true;
+      const n = r.willow ? 64 : 96; const speed = r.willow ? 150 : 230;
+      for (let i = 0; i < n; i++) {
+        // 球面上均匀取方向
+        const u = Math.random() * 2 - 1; const t = Math.random() * Math.PI * 2; const q = Math.sqrt(1 - u * u);
+        const v = speed * (0.85 + Math.random() * 0.3);
+        F.sparks.push({ x: r.x, y: r.y, z: r.z, vx: q * Math.cos(t) * v, vy: q * Math.sin(t) * v, vz: u * v, age: 0,
+          life: (r.willow ? 2.6 : 1.5) + Math.random() * 0.6, color: Math.random() < 0.12 ? 0xfff1c8 : r.color, willow: r.willow });
+      }
+      const p = iso(r.x, r.y, r.z);
+      const fl = new Sprite(F.flashTex);
+      fl.anchor.set(0.5); fl.tint = 0xfff0c0; fl.position.set(p.x, p.y); fl.width = fl.height = 40;
+      F.flashes.addChild(fl);
+    }
+    F.rockets = F.rockets.filter((r) => !r.done);
+    for (const fl of [...F.flashes.children]) {
+      fl.alpha -= dt * 3.5; fl.width = fl.height = fl.width + dt * 260;
+      if (fl.alpha <= 0) fl.destroy();
+    }
+    const g = F.g;
+    g.clear();
+    const px = 1 / (this.world.scale.x || 1); // 线宽按屏幕像素算：镜头拉远时火星不会细到看不见
+    for (const r of F.rockets) { // 火箭：一道细尾巴
+      const a = iso(r.x, r.y, r.z); const b = iso(r.x, r.y, Math.max(0, r.z - 34));
+      g.moveTo(b.x, b.y).lineTo(a.x, a.y).stroke({ width: 1.6 * px, color: 0xffe2a0, alpha: 0.85 });
+    }
+    F.sparks = F.sparks.filter((f) => {
+      f.age += dt;
+      if (f.age >= f.life) return false;
+      const drag = f.willow ? 1.6 : 1.9;
+      f.vx *= 1 - dt * drag; f.vy *= 1 - dt * drag; f.vz *= 1 - dt * drag;
+      f.vz -= (f.willow ? 70 : 55) * dt; // 重力：往下弯
+      f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt;
+      const left = 1 - f.age / f.life;
+      const tail = (f.willow ? 0.32 : 0.16) * Math.min(1, f.age * 4); // 拖尾：上一小段时间里的位置（刚炸开时短）
+      const at = (k) => iso(f.x - f.vx * tail * k, f.y - f.vy * tail * k, f.z - f.vz * tail * k + (f.willow ? 10 * k * k : 0));
+      const flicker = left < 0.3 ? (Math.sin(f.age * 50 + f.x) > 0 ? 1 : 0.25) : 1; // 快熄时闪几下
+      const alpha = Math.min(1, left * 1.6) * flicker;
+      const pts = [at(0), at(0.35), at(0.7), at(1)];
+      // 先垫一道深色的宽线：底下多是白雪，没有暗边的火星看不清
+      g.moveTo(pts[0].x, pts[0].y).lineTo(pts[2].x, pts[2].y).stroke({ width: 3.6 * px, color: 0x1a1008, alpha: alpha * 0.28 });
+      [1, 0.55, 0.22].forEach((k, i) => g.moveTo(pts[i].x, pts[i].y).lineTo(pts[i + 1].x, pts[i + 1].y).stroke({ width: (2 - i * 0.4) * px, color: f.color, alpha: alpha * k }));
+      g.circle(pts[0].x, pts[0].y, 1.9 * px).fill({ color: f.age < 0.25 ? 0xfff6dc : f.color, alpha });
+      return true;
+    });
+  }
+
+  /** 灯笼串（无上愉悦）：两端挂在屋角和钟楼上，中间垂下来一道弧，上面一串暖光，慢慢一明一暗。 */
+  buildLanterns(list) {
+    const cord = new Graphics();
+    const glowTex = Texture.from(fogBlob(64));
+    this.lanternGlows = [];
+    const lights = new Container();
+    const pools = new Container(); // 地上的暖光：画在地面雾那一层（雪地上、房子和人底下）
+    for (const [[ax, ay, az], [bx, by, bz]] of list) {
+      const pts = [];
+      for (let i = 0; i <= 12; i++) {
+        const t = i / 12;
+        pts.push(iso(ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t - 26 * Math.sin(Math.PI * t)));
+      }
+      cord.moveTo(pts[0].x, pts[0].y);
+      for (const q of pts.slice(1)) cord.lineTo(q.x, q.y);
+      pts.slice(1, -1).forEach((q, i) => {
+        const color = [0xffcf6b, 0xff8a4a, 0xffe6a0][i % 3];
+        const glow = new Sprite(glowTex);
+        glow.anchor.set(0.5); glow.tint = color; glow.blendMode = 'add'; glow.width = glow.height = 46; glow.alpha = 0.55;
+        glow.position.set(q.x, q.y + 5);
+        const bulb = new Graphics().roundRect(q.x - 3.5, q.y, 7, 10, 3).fill(color).stroke({ width: 1, color: 0x5a2a12, alpha: 0.6 });
+        lights.addChild(glow, bulb);
+        this.lanternGlows.push({ glow, ph: Math.random() * Math.PI * 2 });
+        if (i % 2) return;
+        const t = (i + 1) / 12; // 灯正下方地上的那一点
+        const g = iso(ax + (bx - ax) * t, ay + (by - ay) * t);
+        const pool = new Sprite(glowTex);
+        pool.anchor.set(0.5); pool.tint = 0xffb45a; pool.blendMode = 'add'; pool.alpha = 0.22;
+        pool.width = 150; pool.height = 75;
+        pool.position.set(g.x, g.y);
+        pools.addChild(pool);
+      });
+    }
+    cord.stroke({ width: 1.4, color: 0x2a1c12, alpha: 0.8 });
+    this.groundFog.addChild(pools);
+    this.topFog.addChild(cord, lights);
+  }
+
+  lanternFrame(t) {
+    for (const l of this.lanternGlows ?? []) l.glow.alpha = 0.45 + 0.15 * Math.sin(t * 1.7 + l.ph);
   }
 
   snowFrame(dt, t) {
@@ -1025,7 +1583,7 @@ export class World {
     for (const L of this.snowLayers) {
       for (const f of L.items) {
         f.y += f.v * dt - (dy * L.parallax) / H;
-        f.x += (f.v * (H / W) * dt) - (dx * L.parallax) / W; // 暴风雪：正 45° 往右下刮（横竖走同样的像素）
+        f.x += (f.v * (H / W) * dt) * (L.drift ?? 1) - (dx * L.parallax) / W; // 暴风雪：正 45° 往右下刮（横竖走同样的像素）；drift 小的几乎竖直落
         f.x -= Math.floor(f.x); f.y -= Math.floor(f.y);
         f.sp.position.set(f.x * W + Math.sin(t * 2.2 + f.sway) * 4, f.y * H);
         if (f.spin) f.sp.rotation += f.spin * dt;
@@ -1106,20 +1664,20 @@ export class World {
     }
   }
 
-  /** 落叶：稀稀拉拉的几片橙红叶子打着旋往右下飘（黯月初升）。和雪共用 snowFrame。 */
-  buildLeaves() {
+  /** 落叶：稀稀拉拉的几片橙红叶子打着旋往右下飘（黯月初升）；换颜色、加数量就是花瓣（梦殒春宵）。和雪共用 snowFrame。 */
+  buildLeaves(colors = ['#c4502a', '#e08a3a', '#8a3a22'], count = 5) {
     const leaf = (col) => {
       const c = document.createElement('canvas'); c.width = 14; c.height = 8;
       const ctx = c.getContext('2d');
       ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(7, 4, 6, 3, 0, 0, 7); ctx.fill();
       return Texture.from(c);
     };
-    const texs = ['#c4502a', '#e08a3a', '#8a3a22'].map(leaf);
+    const texs = colors.map(leaf);
     this.snow = new Container();
     this.app.stage.addChild(this.snow);
     const items = [];
     // 只有零星几片，而且在远处：小、淡、飘得慢、跟镜头的视差也小
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < count; i++) {
       const sp = new Sprite(texs[i % texs.length]);
       sp.anchor.set(0.5);
       sp.scale.set(0.35 + Math.random() * 0.25);
@@ -1178,11 +1736,13 @@ export class World {
       const shell = new Graphics();
       const doorOpen = new Graphics(); const doorLocked = new Graphics();
       let top = 30;
-      if (!hs.height) { // 露天的（墓园）：一圈矮栅栏
-        fence(back, hs, ['n', 'w']);
+      if (!hs.height) { // 露天的（墓园）：一圈矮栅栏；遗迹地窖是断墙和下沉的洞口
+        const edge = hs.pit ? rubbleWall : fence;
+        if (hs.pit) pitStairs(back, hs);
+        edge(back, hs, ['n', 'w']);
         door(doorOpen, hs, false); door(doorLocked, hs, true);
         back.addChild(doorOpen, doorLocked);
-        fence(shell, hs, ['s', 'e']);
+        edge(shell, hs, ['s', 'e']);
       } else {
         backWalls(back, hs);
         frontWalls(shell, { ...hs, door: { ...hs.door, side: hs.side }, lit: this.town.litHousesOnly || undefined }, hs.x);
@@ -1195,8 +1755,17 @@ export class World {
       const entry = { hs, shell, doorOpen, doorLocked, labelZ: top + 14 };
       entry.back = this.addStatic(back, box, bounds, { house: hs, kind: 'back' });
       entry.front = this.addStatic(front, box, bounds, { house: hs, kind: 'front', poly: hexOf(hs.x, hs.y, hs.w, hs.h, (hs.height + top) / 2) });
+      // 遗迹地窖的断柱
+      if (hs.pit) {
+        for (const [u, v, tall] of [[0.1, 0.14, 70], [0.34, 0.1, 44], [0.86, 0.14, 58], [0.12, 0.82, 34], [0.9, 0.8, 50]]) {
+          const tx = hs.x + hs.w * u; const ty = hs.y + hs.h * v;
+          const g = new Graphics(); brokenColumn(g, tall);
+          const [sx, sy] = P(tx, ty); g.position.set(sx, sy);
+          this.addStatic(g, { x0: tx - 8, y0: ty - 8, x1: tx + 8, y1: ty + 8 }, { l: sx - 10, r: sx + 10, t: sy - tall - 7, b: sy + 2 });
+        }
+      }
       // 墓碑
-      if (!hs.height) {
+      if (!hs.height && !hs.pit) {
         for (let i = 0; i < 8; i++) {
           const tx = hs.x + 36 + (i % 4) * 46 + (Math.floor(i / 4) % 2) * 18; const ty = hs.y + 50 + Math.floor(i / 4) * 70;
           const g = new Graphics(); tomb(g, !!this.town.roofSnow);
@@ -1282,7 +1851,14 @@ export class World {
 
   /** 没有手绘图的空房子：画成普通的体块建筑，免得只剩一块空地基。 */
   buildIdleBox(hs) {
-    if (!hs.height) return; // 露天的墓园没开放就只是一块空地
+    if (!hs.height) { // 露天的墓园没开放就只是一块空地；遗迹地窖的洞口还在，只是不能私聊
+      if (!hs.pit) return;
+      const pit = new Graphics();
+      pitStairs(pit, hs);
+      rubbleWall(pit, hs, ['n', 'w', 's', 'e']);
+      this.addStatic(pit, { x0: hs.x, y0: hs.y, x1: hs.x + hs.w, y1: hs.y + hs.h }, boxBounds(hs.x, hs.y, hs.w, hs.h, 30), { idle: true });
+      return;
+    }
     const g = new Graphics();
     const b = { ...hs, snow: this.town.roofSnow, door: null, lit: !this.town.litHousesOnly };
     frontWalls(g, b, hs.x);
@@ -1498,6 +2074,13 @@ export class World {
     // 水边的声音：离海 / 溪越近越响（码头、桥上最响）
     const ear = mine?.at ?? G;
     setLake(Math.max(0, Math.min(1, 1 - this.town.waterDist(ear.x, ear.y) / 260)));
+    // 走进另一个分区：换地名、风声和环境声
+    const zone = this.town.zoneAt?.(ear.x, ear.y) ?? null;
+    if (zone !== this.zone) {
+      this.zone = zone;
+      setWind(zone?.wind ?? 1); setZoneNow(zone?.id ?? null);
+      this.onZone?.(zone);
+    }
     this.sortScene(list);
 
     // 房子：有人在里面（或者我在里面）就剖开；挡住我的建筑半透明
@@ -1537,6 +2120,8 @@ export class World {
     this.layout();
     this.snowFrame(dt, t);
     this.fogFrame(dt, t);
+    this.fireworksFrame(dt);
+    this.lanternFrame(t);
 
     // 给 HTML 层的屏幕坐标
     const screen = { walkers: {}, houses: {}, zoom: this.zoom, project: (x, y, z) => this.toScreen(x, y, z) };
@@ -1555,9 +2140,10 @@ export class World {
     if (town.circles.some((c) => c.kind === 'tower' && Math.hypot(x - c.x, y - c.y) < c.r + 42)) return 'stone';
     if (!this.ground) { // 没有 Tiled 地面：按路算
       const road = town.roads.find((rd) => distToLine(rd.pts, x, y) < rd.half);
-      if (road) return road.kind === 'trail' ? 'gravel' : 'cobble';
+      const zone = town.zoneAt?.(x, y);
+      if (road) return zone?.roadSurface ?? (road.kind === 'trail' ? 'gravel' : 'cobble');
       if (Math.hypot(x - town.gather.x, y - town.gather.y) < town.gather.r) return 'cobble';
-      return town.ground ?? 'snow';
+      return zone?.surface ?? town.ground ?? 'snow';
     }
     const c = Math.floor(x / TILE); const r = Math.floor(y / TILE);
     const id = (this.ground?.data[r * this.map.width + c] ?? 1) - 1;

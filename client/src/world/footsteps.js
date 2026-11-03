@@ -184,6 +184,64 @@ function outBus(a, volume, pan) {
   return g;
 }
 
+/** 鸟叫：几声快速滑音的短啁啾。 */
+export function birdSong(volume = 0.12, pan = 0) {
+  if (!enabled) return;
+  const a = audio();
+  if (!a || a.state !== 'running') return;
+  const out = outBus(a, volume, pan);
+  const base = 2600 + Math.random() * 1400;
+  let t = a.currentTime + 0.02;
+  for (let i = 0, n = 3 + Math.floor(Math.random() * 4); i < n; i++) {
+    const o = a.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(base * (1 + Math.random() * 0.3), t);
+    o.frequency.exponentialRampToValueAtTime(base * (0.8 + Math.random() * 0.5), t + 0.09);
+    const e = a.createGain();
+    e.gain.setValueAtTime(0.0001, t); e.gain.exponentialRampToValueAtTime(0.5, t + 0.02); e.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    o.connect(e).connect(out);
+    o.start(t); o.stop(t + 0.12);
+    t += 0.11 + Math.random() * 0.08;
+  }
+}
+
+/** 远处马戏团的风琴：一小段走调的旋律，闷闷地飘过来。 */
+export function calliope(volume = 0.1, pan = 0) {
+  if (!enabled) return;
+  const a = audio();
+  if (!a || a.state !== 'running') return;
+  const out = outBus(a, volume, pan);
+  const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1500;
+  lp.connect(out);
+  let t = a.currentTime + 0.02;
+  for (const hz of [392, 523, 494, 523, 659, 587, 494, 440]) {
+    const o = a.createOscillator(); o.type = 'triangle';
+    o.frequency.value = hz * (0.985 + Math.random() * 0.03); // 走调
+    const e = a.createGain();
+    e.gain.setValueAtTime(0.0001, t); e.gain.exponentialRampToValueAtTime(0.5, t + 0.03); e.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+    o.connect(e).connect(lp);
+    o.start(t); o.stop(t + 0.28);
+    t += 0.24;
+  }
+}
+
+/** 地下的吟唱：两个低音慢慢涌上来又退下去，几乎只是感觉到。 */
+export function lowChant(volume = 0.2, pan = 0) {
+  if (!enabled) return;
+  const a = audio();
+  if (!a || a.state !== 'running') return;
+  const out = outBus(a, volume, pan);
+  const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 340;
+  lp.connect(out);
+  const t = a.currentTime + 0.02;
+  for (const hz of [73.4, 110, 146.8]) {
+    const o = a.createOscillator(); o.type = 'sawtooth'; o.frequency.value = hz;
+    const e = a.createGain();
+    e.gain.setValueAtTime(0.0001, t); e.gain.exponentialRampToValueAtTime(0.4, t + 1.6); e.gain.exponentialRampToValueAtTime(0.0001, t + 4);
+    o.connect(e).connect(lp);
+    o.start(t); o.stop(t + 4.1);
+  }
+}
+
 /** 远处的狼嚎：一声长嚎（音高先升后落、带颤音），常常还有另一只应和；低通加回声，像是从林子深处传来。 */
 export function wolfHowl(volume = 0.2, pan = 0) {
   if (!enabled) return;

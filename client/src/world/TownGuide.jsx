@@ -31,11 +31,11 @@ export function TownGuide() {
 
   useEffect(() => {
     let dead = false;
-    import('./World.js').then(async ({ World, GUIDE }) => {
-      const w = await World.create(ref.current, TOWN, TILED, TOWN.housesFor(10), { guide: true });
+    import('./World.js').then(async ({ World, guideOf }) => {
+      const w = await World.create(ref.current, TOWN, TILED, TOWN.housesFor(), { guide: true });
       if (dead) { w.destroy(); return; }
       world.current = w;
-      setSize(GUIDE);
+      setSize(guideOf(TOWN));
       w.exportGuide().toBlob((b) => setUrl(URL.createObjectURL(b)), 'image/png');
     });
     return () => { dead = true; world.current?.destroy(); };
@@ -44,7 +44,7 @@ export function TownGuide() {
   const exportHouses = async () => {
     setBusy(true);
     const { World, houseCrop } = await import('./World.js');
-    const list = TOWN.housesFor(10);
+    const list = TOWN.housesFor();
     const out = [];
     for (const mode of ['closed', 'open']) {
       const w = await World.create(hidden.current, TOWN, TILED, list, { guide: mode });

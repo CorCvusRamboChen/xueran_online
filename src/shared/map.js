@@ -3,6 +3,9 @@
 // 每个剧本一张独立的地图（数据在 maps/ 下），寻路、进屋、站位都只读地图数据：getMap(剧本)。
 import TB from './maps/tb.js';
 import BMR from './maps/bmr.js';
+import SNV from './maps/snv.js';
+import NGJ from './maps/ngj.js';
+import LUF from './maps/luf.js';
 
 export const SPEED = 240; // 每秒走多少单位
 export const CELL = 20;   // 寻路网格每格 20 单位
@@ -28,6 +31,16 @@ export function distToLine(pts, x, y) {
   return best;
 }
 
+/** 点在不在多边形里。 */
+export function inPoly(poly, x, y) {
+  let hit = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i]; const [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) hit = !hit;
+  }
+  return hit;
+}
+
 export const houseAt = (houses, x, y) => houses.find((h) => inRect(h, x, y)) ?? null;
 
 /** 门外（k>0）或门内（k<0）k 个单位的点。 */
@@ -40,7 +53,7 @@ export class TownMap {
     this.gw = this.w / CELL;
     this.gh = this.h / CELL;
     this.grids = new Map();
-    this.allHouseList = this.housesFor(99);
+    this.allHouseList = this.housesFor();
     // 每个玩家在镇上的"家"：不能进的普通建筑，门开在南面（朝镜头），门口一步能站人的才算
     this.homeList = this.obstacles.map((o) => ({ id: o.id, x: o.x, y: o.y, w: o.w, h: o.h, door: { x: o.x + o.w / 2, y: o.y + o.h, nx: 0, ny: 1 } }))
       .filter((o) => { const p = doorPoint(o, 24); return !this.blockedAt(this.allHouseList, p.x, p.y); });
@@ -66,9 +79,9 @@ export class TownMap {
     }
   }
 
-  /** 人少开前几间房子，人多（9 人以上）全开。 */
-  housesFor(n) {
-    return this.houses.slice(0, n > 8 ? this.open[1] : this.open[0]).map((h) => {
+  /** 能进的房子：不管多少人都全开。 */
+  housesFor() {
+    return this.houses.map((h) => {
       const [x, y, nx, ny] = DOOR[h.side](h);
       return { ...h, door: { x, y, nx, ny } };
     });
@@ -100,6 +113,9 @@ export class TownMap {
       return Math.abs(dx * ux + dy * uy) <= along + pad && Math.abs(-dx * uy + dy * ux) <= across + pad;
     }) ?? null;
   }
+
+  /** 这一点在哪个分区（没有分区的地图是 null）。 */
+  zoneAt(x, y) { return this.zones?.find((z) => inPoly(z.poly, x, y)) ?? null; }
 
   /** 这个点能不能站人。 */
   blockedAt(houses, x, y) {
@@ -304,7 +320,8 @@ export class TownMap {
 
 const round = (p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 });
 
-export const MAPS = { tb: new TownMap(TB), bmr: new TownMap(BMR) };
+// 两个小剧本用前两张图的变体（同一套手绘图和布局，换色调、天气和点缀；art 记着用哪套手绘图）
+export const MAPS = { tb: new TownMap(TB), bmr: new TownMap(BMR), snv: new TownMap(SNV), ngj: new TownMap(NGJ), luf: new TownMap(LUF) };
 /** 剧本 → 地图（没有专属地图的剧本用暗流涌动的）。 */
 export const getMap = (script) => MAPS[script] ?? MAPS.tb;
 

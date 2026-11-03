@@ -179,7 +179,7 @@ export const BMR_METHODS = {
   addFx(kind, target, source, until, why) {
     if (!target) return;
     this.fx.push({ kind, target, source, until, why });
-    this.record('st', `${why}：${this.tag(target)} ${{ drunk: '醉酒', poison: '中毒', safe: '今晚不会死', exeSafe: '明天被处决不会死' }[kind]}`);
+    this.record('st', `${why}：${this.tag(target)} ${{ drunk: '醉酒', poison: '中毒', curse: '被诅咒', safe: '今晚不会死', exeSafe: '明天被处决不会死' }[kind]}`);
   },
 
   /** 茶艺师两侧最近的存活玩家（被当作死亡的僵怖不算）。 */

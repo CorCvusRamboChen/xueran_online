@@ -1,12 +1,13 @@
 // 机器人在语音里干的活：夜里服务器闭麦闭耳、发言时让别人闭麦、开私聊语音房间、拉人、送回广场。
 //
-// 部署到别人的服务器时要守住两条：
+// 部署到别人的服务器时要守住三条：
 // 1. 只动这一局的人、只在这一局的频道里动手。闭麦闭耳、拉人之前先看这个人在不在本局管着的频道里
 //    （广场、各房子、私聊房间，见 Room.managedChannels）；在别的频道聊天的人一概不碰。
 // 2. 自己闭上的自己一定解开，别人闭上的不碰。服务器闭麦是跟着人走的（换频道也还在），
 //    所以机器人记一本账（data/voice-held.json）：谁、因为哪一局、哪个原因（发言 / 观战 / 夜里）被它闭上。
 //    原因都没了就解开；人当时不在语音里解不开，等他下次进语音再解；机器人重启时把账上的全部解开，
 //    还在进行的局读档后会重新闭上该闭的人。管理员事先闭上的人（账上没有的）机器人既不闭也不解。
+// 3. 机器人不大过管理员：机器人闭上的人被管理员手动解开了，这一段（原因都结束前）就不再闭他；闭耳同理。
 //
 // 平台差异（Discord / KOOK）都在"平台接口"里（见 discordPlatform 和 kook.js 的 kookPlatform），这里只管账和规矩：
 //   onReady(fn)、onVoice(fn(guildId, userId))：登录好了 / 某人的语音状态变了
@@ -61,10 +62,18 @@ export function discordPlatform(client) {
       await ch(gid, id)?.permissionOverwrites.edit(uid, { ViewChannel: true, Connect: true, Speak: true, SendMessages: true, ReadMessageHistory: true });
     },
     async disallow(gid, id, uid) { await ch(gid, id)?.permissionOverwrites.delete(uid); },
-    members: (gid, id) => [...(ch(gid, id)?.members.keys() ?? [])],
+    members: (gid, id) => [...(ch(gid, id)?.members.keys() ?? [])].filter((uid) => uid !== client.user?.id), // 机器人自己不算（语音判定时它留在广场，不能被当成观众闭麦）
     exists: (gid, id) => !!ch(gid, id),
     async deleteChannel(gid, id) { await ch(gid, id)?.delete(); },
   };
+}
+
+/**
+ * 每个人同时做（不同人的账互不相干）。一个一个等的话，合作机器人每个请求最多等 8 秒，
+ * 九个人要先查状态再改闭麦，最坏两分多钟，入夜、黄昏、终局都卡在这里。有人失败不影响别人。
+ */
+async function eachAtOnce(ids, fn) {
+  await Promise.all(ids.map((id) => Promise.resolve().then(() => fn(id)).catch((e) => console.warn(`[voice] ${id}：${e.message}`))));
 }
 
 export class VoiceHub {
@@ -76,7 +85,8 @@ export class VoiceHub {
     this.p = platform?.guilds ? discordPlatform(platform) : platform;
     this.roomAlive = roomAlive;
     this.file = file;
-    this.held = new Map();    // "guild:user" → { room, reasons: Set('speech'|'watch'|'asleep'), mute, deaf, foreignMute, foreignDeaf }
+    this.held = new Map();    // "guild:user" → { room, reasons: Set('speech'|'watch'|'asleep'), mute, deaf, foreignMute, foreignDeaf, yieldMute, yieldDeaf }
+    this.queues = new Map();  // "guild:user" → 这个人上一个还没做完的操作
     this.scopes = new Map();  // roomKey → () => Set(本局管着的频道)；不存盘，读档的局会重新登记
     // 上次运行留下的：重启后一律解开（mute / deaf 记的是"机器人确实闭上过"）
     try {
@@ -96,7 +106,7 @@ export class VoiceHub {
     this.p.onReady(() => this.syncAll());
     this.p.onVoice((gid, uid) => {
       const k = `${gid}:${uid}`;
-      if (this.held.has(k)) this.sync(k).catch((e) => console.warn('[voice]', e.message));
+      if (this.held.has(k)) this.sync(k, null, true).catch((e) => console.warn('[voice]', e.message));
     });
     if (sweepMs) {
       this.sweeper = setInterval(() => this.sweep().catch(() => {}), sweepMs);
@@ -119,38 +129,64 @@ export class VoiceHub {
     return !!fallback && channelId === fallback;
   }
 
+  /**
+   * 同一个人的操作排队一个个做。发言换人时"闭他"和"解他"几乎同时到：闭的那次要先问状态（合作机器人要等 HTTP），
+   * 不排队的话解的那次看账上还没他、直接跳过，闭的那次后到 → 这个人一直闭着，几轮提名下来所有人都闭上了。
+   */
+  queue(k, fn) {
+    const run = (this.queues.get(k) ?? Promise.resolve()).then(fn);
+    const tail = run.catch(() => {});
+    this.queues.set(k, tail);
+    tail.then(() => { if (this.queues.get(k) === tail) this.queues.delete(k); });
+    return run;
+  }
+
   /** 给一个人加 / 去掉一个闭麦原因，然后对一遍。 */
-  async hold(guildId, room, id, reason, on, fallback = null) {
+  hold(guildId, room, id, reason, on, fallback = null) {
     const k = `${guildId}:${id}`;
-    let e = this.held.get(k);
-    if (on) {
-      if (!e) {
-        // 第一次记账：如果他已经被别人（管理员）闭上了，那一项记成"别人的"，以后不碰
-        const vs = await this.p.state(guildId, id);
-        e = this.held.get(k) ?? { room, reasons: new Set(), mute: false, deaf: false, foreignMute: !!vs?.serverMute, foreignDeaf: !!vs?.serverDeaf };
-        this.held.set(k, e);
+    return this.queue(k, async () => {
+      let e = this.held.get(k);
+      if (on) {
+        if (!e) {
+          // 第一次记账：如果他已经被别人（管理员）闭上了，那一项记成"别人的"，以后不碰
+          const vs = await this.p.state(guildId, id);
+          e = { room, reasons: new Set(), mute: false, deaf: false, foreignMute: !!vs?.serverMute, foreignDeaf: !!vs?.serverDeaf };
+          this.held.set(k, e);
+        }
+        e.room = room;
+        e.reasons.add(reason);
+      } else {
+        if (!e) return;
+        e.reasons.delete(reason);
       }
-      e.room = room;
-      e.reasons.add(reason);
-    } else {
-      if (!e) return;
-      e.reasons.delete(reason);
-    }
-    await this.sync(k, fallback);
+      await this.syncNow(k, fallback);
+    });
+  }
+
+  sync(k, fallback = null, observed = false) {
+    return this.queue(k, () => this.syncNow(k, fallback, observed));
   }
 
   /**
    * 对一遍这个人：该闭的闭上（只在本局频道里才闭），该解的解开（在哪个频道都解，服务器闭麦跟着人走）。
    * 不在语音里改不了：账留着，等他下次进语音（onVoice）或定时清理时再来。
+   * observed：刚收到他的语音状态变化（onVoice）。机器人闭上的被解开了 = 管理员手动解的，让给管理员。
    */
-  async sync(k, fallback = null) {
+  async syncNow(k, fallback = null, observed = false) {
     const e = this.held.get(k);
     if (!e) return;
     const i = k.indexOf(':');
     const gid = k.slice(0, i); const uid = k.slice(i + 1);
     const vs = this.p.hasGuild(gid) ? await this.p.state(gid, uid) : null;
-    const wantMute = e.reasons.size > 0 && !e.foreignMute;
-    const wantDeaf = e.reasons.has('asleep') && !e.foreignDeaf;
+    if (vs?.channelId && observed && e.reasons.size && this.inScope(e.room, vs.channelId, fallback)) {
+      if (e.mute && !vs.serverMute) { e.mute = false; e.yieldMute = true; }
+      if (e.deaf && !vs.serverDeaf) { e.deaf = false; e.yieldDeaf = true; }
+      // 让出去之后又闭上了（多半是机器人自己上一次闭麦的状态晚到了）：还是记成机器人的，到时候照样解开
+      if (e.yieldMute && vs.serverMute) { e.yieldMute = false; e.mute = true; }
+      if (e.yieldDeaf && vs.serverDeaf) { e.yieldDeaf = false; e.deaf = true; }
+    }
+    const wantMute = e.reasons.size > 0 && !e.foreignMute && !e.yieldMute;
+    const wantDeaf = e.reasons.has('asleep') && !e.foreignDeaf && !e.yieldDeaf;
     if (vs?.channelId) {
       const here = this.inScope(e.room, vs.channelId, fallback);
       const patch = {};
@@ -192,12 +228,14 @@ export class VoiceHub {
   }
 
   /** 这个人的账：本局不该闭他的原因全清掉再对一遍（玩家点"语音归位"时用）。 */
-  async release(guildId, room, id, keep = []) {
+  release(guildId, room, id, keep = []) {
     const k = `${guildId}:${id}`;
-    const e = this.held.get(k);
-    if (!e) return;
-    if (e.room === room) for (const r of [...e.reasons]) if (!keep.includes(r)) e.reasons.delete(r);
-    await this.sync(k);
+    return this.queue(k, async () => {
+      const e = this.held.get(k);
+      if (!e) return;
+      if (e.room === room) for (const r of [...e.reasons]) if (!keep.includes(r)) e.reasons.delete(r);
+      await this.syncNow(k);
+    });
   }
 
   /** 给某一局用的语音控制器（Room 只认这几个方法）。roomKey 用来记账和认频道范围。 */
@@ -243,13 +281,13 @@ export class VoiceHub {
       /** 闭麦 / 解除（reason：speech 发言时让别人安静，watch 观战的人）。只闭在本局频道里的人；解除不论在哪。 */
       async setMuted(ids, on, reason = 'speech') {
         await guild();
-        for (const id of ids) await hub.hold(guildId, roomKey, id, reason, on);
+        await eachAtOnce(ids, (id) => hub.hold(guildId, roomKey, id, reason, on));
       },
 
       /** 夜里闭麦闭耳 / 天亮解除。只闭在广场（本局频道）里的人；中途进来的进语音时补上。 */
       async setAsleep(ids, on, squareId) {
         await guild();
-        for (const id of ids) await hub.hold(guildId, roomKey, id, 'asleep', on, squareId);
+        await eachAtOnce(ids, (id) => hub.hold(guildId, roomKey, id, 'asleep', on, squareId));
       },
 
       /** 玩家自己点"语音归位"：除了 keep 里的原因（比如现在还是夜里），本局给他的闭麦全部解开。 */

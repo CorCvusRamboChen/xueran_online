@@ -8,7 +8,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // 按真实时间等（Windows 上 setTimeout 最短约 15 毫秒，按次数数的等待会比想的长很多或短很多）。
 // 读档后服务器故意留 3–5 秒缓冲再接着走，等的上限要比这个长。
 const until = async (cond, ms = 8000) => { const end = Date.now() + ms; while (!cond() && Date.now() < end) await sleep(5); };
-const FAST = { chooseSeconds: 0.05, voteSeconds: 0.002, voteCountdown: 0.005, pauseMs: 5, killSceneMs: 0 };
+// 闭麦闭耳、隐藏票型现在默认关；这里的测试要测这两个功能，所以打开
+const FAST = { chooseSeconds: 0.05, voteSeconds: 0.002, voteCountdown: 0.005, pauseMs: 5, killSceneMs: 0, nightDeafen: true, hideVotes: true };
 
 function mockVoice() {
   const calls = [];
@@ -30,6 +31,7 @@ function mockVoice() {
 function setup(mode, voice = mockVoice()) {
   const room = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice, settings: { ...FAST, mode, shuffle: false } });
   room.dawnPad = [0, 0]; // 黯月初升"选完后随机 20–45 秒才天亮"：测试里不等
+  room.moonchildWaitMs = 5; // 处决后的遗言时间：测试里不等
   for (const [id, name] of [['u1', '阿一'], ['u2', '阿二']]) room.users.set(id, { id, name, avatar: null });
   return { room, voice };
 }
@@ -170,7 +172,7 @@ test('自由活动：走进房子进语音、锁门敲门、集合关掉所有�
   await assert.rejects(room.act('u2', 'roam'), /只有说书人/);
   await room.act('u1', 'roam', { minutes: 0 });
   const view = room.viewFor('u2');
-  assert.equal(view.roam.houses.length, 4, '7 人 4 间房子');
+  assert.equal(view.roam.houses.length, room.town.houses.length, '不管多少人，房子全开');
   assert.ok(view.roam.pos.u2, '有起始位置');
   const tavern = view.roam.houses.find((h) => h.id === 'tavern');
   const inside = { x: tavern.x + 50, y: tavern.y + 60 };
@@ -267,7 +269,7 @@ test('AI 房主：集合后自动开放提名；陈述、辩护、投票、入�
   assert.equal(room.pendingNom.stage, 'accuse', '提名者先陈述');
   for (let k = 0; k < 200 && room.pendingNom; k++) await sleep(3);
   assert.ok(room.vote || room.lastVote, '陈述、辩护后自动开始投票');
-  for (let k = 0; k < 400 && (room.vote || g.phase === 'day'); k++) await sleep(3);
+  for (let k = 0; k < 3000 && (room.vote || g.phase === 'day'); k++) await sleep(3); // 机器人可能再提名一轮，要多等一会儿
   assert.notEqual(g.phase, 'day', '提名时间到了自动入夜');
   assert.ok(room.log.some((l) => l.kind === 'story' && /投票|举手|票/.test(l.text)), '投票有旁白');
   await room.teardown();
@@ -543,7 +545,7 @@ for (const [label, preset] of [['随机角色', null], ['推荐配置·邪恶狂
       if (room.roam) { // 自由活动用黯月初升自己的地图：旅店能走进去
         const v = room.viewFor('u1').roam;
         assert.equal(v.map, 'bmr');
-        assert.deepEqual(v.houses.map((h) => h.id), ['inn', 'teahouse', 'mill', 'chapel', 'crowyard']);
+        assert.deepEqual(v.houses.map((h) => h.id), room.town.houses.map((h) => h.id));
         if (days === 1 && g.get('u1')) {
           const inn = v.houses[0];
           room.move('u1', inn.x + 60, inn.y + 60);
@@ -1125,4 +1127,249 @@ test('告诉旺财谁能说话：开局发玩家名单（不含机器人和围�
   assert.equal(voice.games.length, 1, '没变就不重发');
   await room.teardown();
   assert.deepEqual(voice.games.at(-1), { square: 'square', active: false });
+});
+
+test('房主卡住：大厅里房主离线自动交给在座的人；开着活动挂机的房主过一会儿才能被接管', async () => {
+  const { room } = setup('auto');
+  room.hostGoneMs = 5;
+  room.users.set('u3', { id: 'u3', name: '阿三', avatar: null });
+  for (const id of ['u1', 'u2', 'u3']) room.online.add(id);
+  await room.act('u2', 'join');
+  await assert.rejects(room.act('u3', 'claimHost'), /过一会儿再试/, '房主刚进来不能抢');
+  assert.equal(room.viewFor('u3').hostName, '阿一');
+  room.hostSeen = 0; // 挂机很久了
+  await room.act('u3', 'claimHost');
+  assert.equal(room.hostId, 'u3');
+  room.online.delete('u3');
+  room.presence();
+  await until(() => room.hostId !== 'u3', 500);
+  assert.equal(room.hostId, 'u2', '离线后交给在座的人，不是没坐下的 u1');
+  await room.teardown();
+});
+
+test('黯月初升：房主在等天亮的时候点「立刻天亮」，这一夜照样结算（信息、选择都在），不会直接跳到白天', async () => {
+  const { room } = setup('auto');
+  room.settings.script = 'bmr';
+  await room.act('u1', 'join');
+  await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 6 });
+  await room.act('u1', 'assignRole', { player: 'u2', role: 'shabaloth' });
+  await room.act('u1', 'assignRole', { player: 'u1', role: 'chambermaid' });
+  await room.act('u1', 'assignRole', { player: 'bot-1', role: 'godfather' }); // 爪牙别随机到刺客：侍女被刺杀就拿不到第 2 夜的信息了
+  await room.act('u1', 'start');
+  await untilDay(room);
+  await until(() => room.game.phase === 'day');
+  await room.dusk();
+  await until(() => room.game.night === 2 && room.game.phase === 'night');
+  const g = room.game;
+  for (const id of g.missingChoices().filter((x) => !room.isFake(x))) {
+    const pr = g.nightPrompts().find((x) => x.playerId === id);
+    await room.act(id, 'choose', { night: g.night, targets: pr.options.filter((x) => x !== id && x !== 'u1' && x !== 'u2').slice(0, pr.count) });
+  }
+  room.dawnAt = Date.now() + 60_000; // 黯月初升：恶魔选完后在等定好的天亮时刻
+  await room.act('u1', 'dawn');
+  await until(() => room.game.phase === 'day');
+  assert.equal(room.game.phase, 'day');
+  assert.ok(room.game.timeline.some((t) => t.when === '第2夜' && t.kind === 'choice'), '第 2 夜的选择记下来了');
+  assert.ok(room.inbox.get('u1').some((m) => m.phase === '第2夜'), '侍女拿到了第 2 夜的信息');
+  await room.teardown();
+});
+
+test('语音慢的时候：闭麦大家同时做，终局先公布结果再收尾语音', async () => {
+  const { room } = setup('auto');
+  await room.act('u1', 'join');
+  await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 5 });
+  await room.act('u1', 'start');
+  await untilDay(room);
+  const g = room.game;
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  let started = 0;
+  room.voice.setAsleep = () => { started += 1; return gate; };
+  g.setWinner('good', '测试');
+  const done = room.endGame();
+  await sleep(20);
+  assert.ok(room.log.some((l) => l.kind === 'end'), '语音还没收尾，结果已经公布');
+  assert.equal(started, 1);
+  release();
+  await done;
+  await room.teardown();
+});
+
+test('合作机器人慢：大家同时闭麦，不用一个个等', async () => {
+  const { VoiceHub } = await import('../src/server/voice.js');
+  const [fs, path, os] = await Promise.all([import('node:fs'), import('node:path'), import('node:os')]);
+  const seen = [];
+  const p = {
+    hasGuild: () => true,
+    async state() { await sleep(200); return { channelId: 'sq', serverMute: false, serverDeaf: false }; }, // 每个人查一次状态都要 0.2 秒（一次闭麦查两次）
+    async edit(gid, uid) { seen.push(uid); },
+    onReady() {}, onVoice() {},
+  };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'botc-voice-'));
+  const hub = new VoiceHub(p, { file: path.join(dir, 'held.json'), oldFile: null, sweepMs: 0 }); // 别碰本机 data/ 里的账
+  const v = hub.forGuild('g', 'k');
+  const t = Date.now();
+  await v.setAsleep(['a', 'slow', 'b', 'c'], true, 'sq');
+  assert.ok(Date.now() - t < 900, `同时做：四个人加起来 1.6 秒，实际 ${Date.now() - t} 毫秒`);
+  assert.deepEqual(seen.sort(), ['a', 'b', 'c', 'slow']);
+});
+
+test('黄昏已经结算过：入夜前的停顿里不能再提名（提名会被入夜吞掉）', async () => {
+  const { room } = setup('auto');
+  await room.act('u1', 'join');
+  await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 6 });
+  await room.act('u1', 'start');
+  await untilDay(room);
+  await until(() => room.game.phase === 'day');
+  room.settings.pauseMs = 5000;
+  await room.dusk();
+  assert.throws(() => room.nominate('u1', 'u2'), /黄昏/);
+  await room.teardown();
+});
+
+/** 黯月初升：u2 拿 role，第 1 天被放上处决台，走到黄昏。机器人的保命能力去掉，u2 一定死。 */
+async function deathAtDusk(wait, role = 'moonchild') {
+  const { room } = setup('auto');
+  room.settings.script = 'bmr';
+  room.moonchildWaitMs = wait;
+  await room.act('u1', 'join');
+  await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 6 });
+  await room.act('u1', 'assignRole', { player: 'u2', role });
+  await room.act('u1', 'assignRole', { player: 'u1', role: role === 'chambermaid' ? 'grandmother' : 'chambermaid' });
+  await room.act('u1', 'start');
+  await untilDay(room);
+  await until(() => room.game.phase === 'day');
+  const g = room.game;
+  g.fx = [];
+  for (const p of g.players) if (['pacifist', 'devilsadvocate', 'tealady'].includes(p.role)) { p.role = 'fool'; p.shownRole = 'fool'; }
+  g.block = 'u2';
+  await room.dusk();
+  return room;
+}
+
+test('月之子白天被投出去：黄昏等他选人，选完才入夜；公告不提月之子', async () => {
+  const room = await deathAtDusk(60_000);
+  const g = room.game;
+  assert.equal(g.get('u2').alive, false);
+  await sleep(40);
+  assert.equal(g.phase, 'day', '等他选人，不入夜');
+  assert.equal(room.viewFor('u2').self.moonchild, 'real');
+  assert.ok(room.viewFor('u1').moonchildDue > Date.now(), '大家都看到倒计时');
+  await room.act('u2', 'moonchild', { target: 'u1' });
+  assert.equal(room.viewFor('u1').moonchildDue, null);
+  await until(() => g.night === 2);
+  assert.equal(g.night, 2, '选完就入夜');
+  assert.ok(g.timeline.some((t) => t.text.startsWith('月之子 ')));
+  assert.ok(!room.log.some((l) => l.text.includes('月之子')), '公开记录里没有"月之子"');
+  await room.teardown();
+});
+
+test('月之子到时间没选：随机替他选一个存活的人，然后入夜', async () => {
+  const room = await deathAtDusk(10);
+  const g = room.game;
+  await until(() => g.night === 2);
+  assert.equal(g.night, 2);
+  assert.equal(g.pendingMoonchild, null);
+  assert.ok(g.timeline.some((t) => t.text.startsWith('月之子 ')), '替他选了');
+  await room.teardown();
+});
+
+test('别的角色被处决：有一样的遗言时间和按钮，假装选人的公告和真月之子一样，但没有效果', async () => {
+  const room = await deathAtDusk(60_000, 'chambermaid');
+  const g = room.game;
+  assert.equal(room.viewFor('u2').self.moonchild, 'fake');
+  assert.ok(room.viewFor('u1').moonchildDue > Date.now(), '倒计时和真月之子一样');
+  await assert.rejects(room.act('u1', 'moonchild', { target: 'u2' }), /现在不需要你选人/, '活人不能选');
+  await room.act('u2', 'moonchild', { target: 'u1' });
+  assert.ok(room.log.some((l) => l.text === `**${g.name('u2')}** 公开选择了 **${g.name('u1')}**。`));
+  assert.equal(g.moonchildPick, null, '没有效果');
+  await until(() => g.night === 2);
+  assert.equal(g.night, 2);
+  await room.teardown();
+});
+
+test('别的角色被处决：点「不选」就直接入夜，什么都不公告', async () => {
+  const room = await deathAtDusk(60_000, 'chambermaid');
+  const g = room.game;
+  await room.act('u2', 'moonchildSkip');
+  await until(() => g.night === 2);
+  assert.equal(g.night, 2);
+  assert.ok(!room.log.some((l) => l.text.includes('公开选择了')));
+  await room.teardown();
+});
+
+test('读旧存档：当时只开了几间房子，现在全开，缺的房子补上（不补的话一读档服务器就崩）', async () => {
+  const { room, voice } = setup('auto');
+  await room.act('u1', 'join');
+  await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 3 });
+  await room.act('u1', 'start');
+  await untilDay(room);
+  await until(() => room.roam);
+  const snap = JSON.parse(JSON.stringify(room.snapshot()));
+  snap.roam.state = snap.roam.state.slice(0, 4);
+  await room.teardown();
+  const next = new Room({ key: snap.key, guildId: snap.guildId, hostId: snap.hostId, voice });
+  next.restore(snap);
+  assert.equal(next.viewFor('u1').roam.houses.length, next.town.houses.length, '所有房子都在，读档不报错');
+  await next.teardown();
+});
+
+test('天亮后、自由活动开始前的空档不能提名（提名会占住状态，自由活动起不来，这一天就卡死了）', async () => {
+  const { room } = setup('auto');
+  room.settings.pauseMs = 200;
+  await room.act('u1', 'join');
+  await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 6 });
+  await room.act('u1', 'start');
+  await untilDay(room);
+  await until(() => room.game.phase === 'day');
+  assert.equal(room.roam, null, '还在空档里');
+  assert.throws(() => room.nominate('u1', 'u2'), /现在还不能提名/);
+  await until(() => room.roam);
+  assert.ok(room.roam, '自由活动照常开始');
+  await room.teardown();
+});
+
+test('房间设置：闭麦闭耳、隐藏票型默认关；老房间读档时改一次，之后照房主设的', () => {
+  const fresh = new Room({ key: 'k2', guildId: 'g', hostId: 'u1', voice: mockVoice() });
+  assert.equal(fresh.settings.nightDeafen, false);
+  assert.equal(fresh.settings.hideVotes, false);
+  const old = new Room({ key: 'k3', guildId: 'g', hostId: 'u1', voice: mockVoice() });
+  old.restore({ hostId: 'u1', settings: { nightDeafen: true, hideVotes: true } }); // 改默认值之前存的房间
+  assert.equal(old.settings.nightDeafen, false);
+  assert.equal(old.settings.hideVotes, false);
+  const kept = new Room({ key: 'k4', guildId: 'g', hostId: 'u1', voice: mockVoice() });
+  kept.restore({ hostId: 'u1', settings: { nightDeafen: true, hideVotes: true, settingsVersion: 2 } }); // 改了以后房主自己打开的
+  assert.equal(kept.settings.nightDeafen, true);
+  assert.equal(kept.settings.hideVotes, true);
+});
+
+test('房主自己让出房主：交给在线的真人玩家（先找坐着的），没人在线就不让；真人说书进行中不能让', async () => {
+  const { room } = setup('auto');
+  await room.act('u1', 'join');
+  await room.act('u1', 'addBots', { count: 2 });
+  room.online.add('u1');
+  await assert.rejects(room.act('u1', 'releaseHost'), /没有别人在线/);
+  room.users.set('w9', { id: 'w9', name: '观战的', avatar: null });
+  room.online.add('w9');
+  await room.act('u2', 'join');
+  room.online.add('u2');
+  await assert.rejects(room.act('u2', 'releaseHost'), /你不是房主/);
+  await room.act('u1', 'releaseHost');
+  assert.equal(room.hostId, 'u2', '坐着的真人优先于观战的');
+  assert.ok(room.log.some((l) => /让出了房主/.test(l.text)));
+  const h = setup('human').room;
+  await h.act('u1', 'join').catch(() => {});
+  await h.act('u2', 'join');
+  await h.act('u1', 'addBots', { count: 4 });
+  for (const id of ['u1', 'u2']) h.online.add(id);
+  await h.act('u1', 'start');
+  await assert.rejects(h.act('u1', 'releaseHost'), /真人说书进行中/);
+  await h.teardown();
+  await room.teardown();
 });

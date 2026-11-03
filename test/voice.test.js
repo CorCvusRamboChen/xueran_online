@@ -105,6 +105,45 @@ test('管理员事先闭上的人：机器人不闭也不解', async () => {
   assert.equal(states.get('a').serverMute, true, '别人闭上的麦还在');
 });
 
+test('机器人不大过管理员：闭上的人被管理员手动解开，这一段不再闭；下一段照常', async () => {
+  const { client, states, put } = fakeClient();
+  const hub = mk(client, tmp());
+  const v = hub.forGuild('g', 'room1');
+  v.setScope(() => new Set(['square']));
+  put('a', 'square');
+  await v.setMuted(['a'], true, 'speech');
+  await v.setAsleep(['a'], true, 'square');
+  assert.equal(states.get('a').serverMute, true);
+  put('a', 'square', { serverMute: false, serverDeaf: false }); // 管理员右键解开
+  await settle();
+  assert.equal(states.get('a').serverMute, false, '不再闭回去');
+  assert.equal(states.get('a').serverDeaf, false);
+  await v.setMuted(['a'], false, 'speech');
+  await v.setAsleep(['a'], false, 'square');
+  assert.ok(!hub.held.has('g:a'), '这一段结束，账清掉');
+  await v.setMuted(['a'], true, 'speech');
+  assert.equal(states.get('a').serverMute, true, '下一个人发言时照常闭');
+});
+
+test('提名换人发言：闭和解几乎同时到，正在发言的人不会被闭上，结束后没人留着闭麦', async () => {
+  const { client, states, put } = fakeClient();
+  const hub = mk(client, tmp());
+  const v = hub.forGuild('g', 'room1');
+  v.setScope(() => new Set(['square']));
+  for (const id of ['a', 'b', 'c']) put(id, 'square');
+  // 和 Room.speakOnly 一样不等上一次做完：a 陈述（闭 b、c）→ b 辩护（解 b、闭 a）→ 投票（全解）
+  const accuse = v.setMuted(['b', 'c'], true, 'speech');
+  const defend = Promise.all([v.setMuted(['b'], false, 'speech'), v.setMuted(['a'], true, 'speech')]);
+  await Promise.all([accuse, defend]);
+  assert.equal(states.get('b').serverMute, false, '辩护的人能说话');
+  assert.equal(states.get('a').serverMute, true);
+  assert.equal(states.get('c').serverMute, true);
+  const vote = v.setMuted(['a', 'c'], false, 'speech');
+  const next = v.setMuted(['c'], true, 'speech'); // 紧接着下一个提名
+  await Promise.all([vote, next, v.setMuted(['c'], false, 'speech')]);
+  for (const id of ['a', 'b', 'c']) assert.equal(states.get(id).serverMute, false, `${id} 没被留着闭麦`);
+});
+
 test('机器人重启：上次闭上的全部解开（读档的局会再闭该闭的人）；旧版 asleep.json 也认', async () => {
   const dir = tmp();
   const { client, states, put } = fakeClient();

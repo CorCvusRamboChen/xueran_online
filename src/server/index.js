@@ -15,7 +15,11 @@ import { startTutorial } from './tutorial.js';
 import { KookBot, KOOK_PREFIX } from './kook.js';
 import { verifyTicket } from './tickets.js';
 import { partnerPlatform } from './partner.js';
+import { squadpoolSync } from './squadpool.js';
 import { voiceLaunchBlocked } from './launch.js';
+import { discordHearing, hearingReady } from './hearing.js';
+import { sttReady } from './stt.js';
+import { MicInbox, micDemo, micIngest, micValid } from './mic.js';
 import { timingSafeEqual } from 'node:crypto';
 
 const { DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_TOKEN } = process.env;
@@ -29,9 +33,10 @@ const TICKET_SECRET = process.env.KOOK_TICKET_SECRET
 
 // ───────────── 机器人（管语音） ─────────────
 let hub = null;
+let client = null;
 let botReady = Promise.resolve();
 if (DISCORD_TOKEN) {
-  const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
+  client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
   // 账上挂着闭麦的局：还在进行（没结束、没暂停）才算数，不然定时解开
   hub = new VoiceHub(client, { roomAlive: (key) => { const r = rooms.get(key); return !!(r?.game && !r.ended && !r.paused); } });
   botReady = new Promise((ok) => client.once(Events.ClientReady, ok));
@@ -192,7 +197,15 @@ app.post('/api/clientlog', express.json({ type: () => true, limit: '4kb' }), (re
 });
 setInterval(() => clientLogs.clear(), 10 * 60_000).unref();
 
-app.get('/api/config', (_req, res) => res.json({ clientId: DISCORD_CLIENT_ID ?? null, devLogin: DEV_LOGIN }));
+app.get('/api/config', (_req, res) => res.json({ clientId: DISCORD_CLIENT_ID ?? null, devLogin: DEV_LOGIN, publicUrl: PUBLIC_URL }));
+
+// 收音页：令牌就是身份，只发给被洗脑的本人
+if (DEV_LOGIN) micDemo();
+app.get('/api/mic/:token', (req, res) => res.status(micValid(req.params.token) ? 204 : 410).end());
+app.post('/api/mic/:token', express.raw({ type: 'audio/wav', limit: '2mb' }), async (req, res) => {
+  const { status, text } = await micIngest(req.params.token, req.body);
+  res.status(status).json({ text: text ?? '' });
+});
 
 app.post('/api/token', async (req, res) => {
   try {
@@ -288,6 +301,7 @@ function openForPartner(room, guildId, user) {
   if (room.partnerOpened.has(user.id)) return;
   room.partnerOpened.add(user.id);
   partner.open(guildId, user.id).then((j) => {
+    if (j.squareChannelId) room.partnerSquare = j.squareChannelId; // 还没开局就知道广场：组队大厅的卡片靠它
     console.log(`🩸 ${user.name} 打开了活动，${PARTNER_NAME}：${j.zoned ? `已在专区广场 ${j.squareChannelId}` : `没进专区（${j.reason ?? '?'}）`}`);
   }).catch((e) => {
     room.partnerOpened.delete(user.id);
@@ -311,12 +325,16 @@ function roomFor(guildId, channelId, hostId) {
   if (!room) {
     const voice = voiceFor(guildId, key);
     room = new Room({ key, guildId, hostId, voice, onChange: (r) => { broadcast(r); saveSoon(r); } });
+    if (sttReady()) room.micFor = () => new MicInbox();
+    // 语音判定疯狂：只有自家机器人的服务器接得上（旺财代管的服务器里没有我们的机器人，KOOK 不是 Discord）
+    if (client && hearingReady() && !PARTNER_GUILDS.has(guildId) && !isKook(guildId) && guildId !== 'dev') room.hearingFor = (channelId) => discordHearing(client, guildId, channelId);
     if (voice) {
       voice.setScope(() => room.managedChannels()); // 只在本局的频道里闭麦、拉人
       // Discord 活动从语音频道启动时拉人会把人踢出活动；KOOK 是浏览器里玩的，没有这个问题
       room.voice = isKook(guildId) ? voice : guardMoves(voice, channelId, room);
     }
     room.onPos = (r, id, move) => { broadcastPos(r, id, move); saveSoon(r); };
+    room.onQuiet = saveSoon;
     room.onEnded = archiveGame;
     room.history = { list: listGames, get: getGame, stats: statsFor };
     room.peers = () => rooms.values(); // 开局时查同一个语音频道有没有别的局
@@ -469,4 +487,29 @@ for (const snap of loadAll()) {
 // 关服（部署、launchd 重启）前把没写完的存档写掉
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { flushAll(); process.exit(0); });
 
+// 组队大厅（SquadPool）的钟楼卡片：只报合作机器人代管的服务器，别的服务器的局不公开
+if (process.env.SQUADPOOL_BASE_URL && process.env.SQUADPOOL_SYNC_TOKEN && PARTNER_GUILDS.size) {
+  // 旺财只推专区里的语音变化，所以推来的频道都是专区频道：记下来，没人打开活动也能上卡
+  const zoneChannels = new Map();
+  partner?.onVoice(async (guildId, userId) => {
+    const { channelId } = await partner.state(guildId, userId).catch(() => ({}));
+    if (!channelId || zoneChannels.has(channelId)) return;
+    zoneChannels.set(channelId, guildId);
+    console.log(`🗂️ 发现专区语音频道 ${channelId}`);
+  });
+  const profile = async (id) => {
+    const user = await client?.users.fetch(id).catch(() => null);
+    return { name: user?.globalName ?? user?.username ?? '玩家', avatar: user?.displayAvatarURL({ extension: 'png', size: 128 }) ?? '', bot: !!user?.bot };
+  };
+  const voice = partner && {
+    channels: () => [...zoneChannels],
+    members: (guildId, channelId) => partner.members(guildId, channelId),
+    forget: (channelId) => zoneChannels.delete(channelId),
+    profile,
+  };
+  squadpoolSync({ baseUrl: process.env.SQUADPOOL_BASE_URL, token: process.env.SQUADPOOL_SYNC_TOKEN, rooms, guildIds: PARTNER_GUILDS, guildName: process.env.SQUADPOOL_GUILD_NAME ?? '', voice }).start();
+  console.log('🗂️ 钟楼房间同步到组队大厅已开启');
+}
+
+statsFor(''); // 先把往期存档读一遍：不然第一次开局时才读，所有房间的计时器都要停一下
 server.listen(PORT, () => console.log(`🕰️ 血染钟楼 Activity 服务已启动：http://localhost:${PORT}${DEV_LOGIN ? '（已开启 DEV_LOGIN，可直接用浏览器测试）' : ''}`));

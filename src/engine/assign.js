@@ -1,7 +1,8 @@
 // 房主指定角色：指定了的座位用指定的角色，其余座位按官方人数表随机补齐。
 // 男爵（+2 外来者）、教父（±1 外来者）按最终的爪牙重新算人数；房主指定得比人数表多时，以房主为准，少补镇民。
-import { ROLES, DISTRIBUTION, rolesOf } from './roles.js';
+import { ROLES, DISTRIBUTION, rolesOf, inScript } from './roles.js';
 import { SMALL_GAME_AVOID } from './bmr.js';
+import { demonShift } from './snv.js';
 
 const shuffle = (arr, rng) => {
   const a = [...arr];
@@ -19,7 +20,7 @@ export function buildRoles(seatIds, assigned, script, rng = Math.random, { noBar
   const fixed = new Set();
   for (const id of seatIds) {
     const r = assigned?.[id];
-    if (r && ROLES[r]?.script === script && !fixed.has(r)) { want[id] = r; fixed.add(r); }
+    if (r && ROLES[r] && inScript(r, script) && !fixed.has(r)) { want[id] = r; fixed.add(r); }
   }
   const teamOf = (r) => ROLES[r].team;
   const have = (team) => [...fixed].filter((r) => teamOf(r) === team);
@@ -34,9 +35,12 @@ export function buildRoles(seatIds, assigned, script, rng = Math.random, { noBar
   const demons = have('demon'); const dp = pool('demon');
   while (demons.length < d && dp.length) demons.push(dp.shift());
   if (script === 'tb' && minions.includes('baron')) { t -= 2; o += 2; }
+  // 小剧本只有两个外来者：男爵已有一个外来者时只加一个
+  if (script === 'ngj' && minions.includes('baron')) { const add = Math.max(0, Math.min(2, rolesOf(script, 'outsider').length - o)); t -= add; o += add; }
   if (script === 'bmr' && minions.includes('godfather')) {
     if (o === 0 || rng() < 0.5) { t -= 1; o += 1; } else { t += 1; o -= 1; }
   }
+  if (script === 'snv') [t, o] = demonShift(demons[0], t, o);
 
   // 要补的角色：先邪恶，再外来者，最后镇民（房主指定多了，就从最后的镇民开始去掉）
   const fill = [...minions, ...demons].filter((r) => !fixed.has(r));
@@ -54,6 +58,7 @@ export function buildRoles(seatIds, assigned, script, rng = Math.random, { noBar
  * 角色难度：1 简单、2 中等、3 难（给新手发身份用）。大体上外来者简单；每晚拿信息、要自己推理的"大能力"镇民和要算计的邪恶角色难。
  * 暗流涌动：占卜师（红鲱鱼、要连续推理）、镇长（要懂替死和终局）、酒鬼（拿错信息还不知道）、间谍（看魔典还要装好人）、小恶魔（要会传位、编身份）难。
  * 黯月初升：赌徒（猜错就死）、侍臣、造谣者（时机和措辞很讲究）、莽夫（阵营会变）、疯子（以为自己是恶魔）、主谋、僵怖、珀难。
+ * 梦殒春宵：博学者、舞蛇人、哲学家（都要拿主意或者判断真假）、畸形秀演员（要藏身份）、麻脸巫婆、亡骨魔、涡流难。
  */
 export const ROLE_DIFFICULTY = {
   tb: {
@@ -72,8 +77,18 @@ export const ROLE_DIFFICULTY = {
     assassin: 1, godfather: 2, devilsadvocate: 2, mastermind: 3,
     pukka: 2, shabaloth: 2, zombuul: 3, po: 3,
   },
+  snv: {
+    clockmaker: 1, oracle: 1, flowergirl: 1, towncrier: 1, sage: 1, juggler: 2,
+    dreamer: 2, seamstress: 2, artist: 2, mathematician: 2, savant: 3, snakecharmer: 3, philosopher: 3,
+    sweetheart: 1, barber: 1, klutz: 2, mutant: 3,
+    witch: 1, eviltwin: 2, cerenovus: 2, pithag: 3,
+    nodashii: 2, fanggu: 2, vigormortis: 3, vortox: 3,
+  },
+  // 窃窃私语的新角色：失忆者（要自己猜能力）、食人族（能力会变、还不告诉他）难
+  luf: { fisherman: 1, balloonist: 2, amnesiac: 3, cannibal: 3, goblin: 1, widow: 2, leviathan: 2 },
 };
-const difficulty = (script, r) => ROLE_DIFFICULTY[script]?.[r] ?? 2;
+// 小剧本的角色借自各个剧本：按角色查，哪张表里有就用哪张
+const difficulty = (script, r) => ROLE_DIFFICULTY[script]?.[r] ?? Object.values(ROLE_DIFFICULTY).find((m) => m[r] != null)?.[r] ?? 2;
 /** 难角色（难度 3），兼容旧代码。 */
 export const HARD_ROLES = Object.fromEntries(Object.entries(ROLE_DIFFICULTY).map(([sc, m]) => [sc, new Set(Object.keys(m).filter((r) => m[r] >= 3))]));
 

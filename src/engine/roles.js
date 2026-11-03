@@ -1,5 +1,5 @@
-// 两个剧本的全部角色：暗流涌动（Trouble Brewing，script: 'tb'）和黯月初升（Bad Moon Rising，script: 'bmr'）。
-// firstNight / otherNight 是夜晚行动顺序（0 = 这一晚不醒；两个剧本各自排序），
+// 三个剧本的全部角色：暗流涌动（Trouble Brewing，script: 'tb'）、黯月初升（Bad Moon Rising，script: 'bmr'）和梦殒春宵（Sects & Violets，script: 'snv'）。
+// firstNight / otherNight 是夜晚行动顺序（0 = 这一晚不醒；各剧本各自排序），
 // choose 描述该角色夜里要选什么：count 几名玩家、alive 只能选活人、notSelf 不能选自己、notLast 不能和上一夜相同、
 // dead 只能选死人、role 还要选一个角色、optional 可以不用（"每局一次"的能力）。
 
@@ -133,15 +133,145 @@ const BMR = {
     choose: { count: 1, optional: true },
     ability: '每个夜晚*，你可以选择一名玩家：他死亡。如果你上次选择时没有选择任何玩家，当晚你要选择三名玩家：他们死亡。' },
 };
+// ───────────────────────── 梦殒春宵 ─────────────────────────
+// 能力文字是照官方规则用自己的话写的。firstNight / otherNight 只表示这一晚醒不醒，具体顺序看 shared/nightOrder.js。
+// choose 里多出来的：good 只能选善良角色。
+const SNV = {
+  // ── 镇民 ──
+  clockmaker: { name: '钟表匠', en: 'Clockmaker', team: 'townsfolk', firstNight: 1, otherNight: 1,
+    ability: '你的首个夜晚，你会得知恶魔和最近的爪牙相隔多远（邻座是 1）。' },
+  dreamer: { name: '筑梦师', en: 'Dreamer', team: 'townsfolk', firstNight: 1, otherNight: 1,
+    choose: { count: 1, notSelf: true },
+    ability: '每个夜晚，选一名其他玩家：你会看到一个善良角色和一个邪恶角色，他是其中之一。' },
+  snakecharmer: { name: '舞蛇人', en: 'Snake Charmer', team: 'townsfolk', firstNight: 1, otherNight: 1,
+    choose: { count: 1, alive: true },
+    ability: '每个夜晚，选一名存活的玩家：如果选中恶魔，你们互换角色和阵营，对方中毒。' },
+  mathematician: { name: '数学家', en: 'Mathematician', team: 'townsfolk', firstNight: 1, otherNight: 1,
+    ability: '每个夜晚，你会得知从上个黎明到现在，有几名玩家的能力被别人的能力弄得没有正常生效。' },
+  flowergirl: { name: '卖花女孩', en: 'Flowergirl', team: 'townsfolk', firstNight: 0, otherNight: 1,
+    ability: '除首夜外的每个夜晚，你会得知今天白天有没有恶魔投过票。' },
+  towncrier: { name: '城镇公告员', en: 'Town Crier', team: 'townsfolk', firstNight: 0, otherNight: 1,
+    ability: '除首夜外的每个夜晚，你会得知今天白天有没有爪牙发起过提名。' },
+  oracle: { name: '神谕者', en: 'Oracle', team: 'townsfolk', firstNight: 0, otherNight: 1,
+    ability: '除首夜外的每个夜晚，你会得知死亡的玩家里有几名是邪恶的。' },
+  savant: { name: '博学者', en: 'Savant', team: 'townsfolk', firstNight: 0, otherNight: 0,
+    ability: '每个白天，你可以私下问说书人一次，得到两条信息：一条真，一条假。（在行动面板里点「询问说书人」）' },
+  seamstress: { name: '女裁缝', en: 'Seamstress', team: 'townsfolk', firstNight: 1, otherNight: 1,
+    choose: { count: 2, notSelf: true, optional: true, once: true },
+    ability: '每局一次，夜里你可以选两名其他玩家：你会得知他们是不是同一阵营。' },
+  philosopher: { name: '哲学家', en: 'Philosopher', team: 'townsfolk', firstNight: 1, otherNight: 1,
+    choose: { count: 0, role: true, good: true, optional: true, once: true },
+    ability: '每局一次，夜里你可以选一个善良角色：你获得它的能力。如果这个角色在场，它的持有者醉酒。' },
+  artist: { name: '艺术家', en: 'Artist', team: 'townsfolk', firstNight: 0, otherNight: 0,
+    ability: '每局一次，白天你可以私下问说书人一个是非问题，得到答案。（在行动面板里点「提问」）' },
+  juggler: { name: '杂耍艺人', en: 'Juggler', team: 'townsfolk', firstNight: 0, otherNight: 1,
+    ability: '你的首个白天，可以公开猜最多五次玩家的角色，当晚得知猜对了几个。（在行动面板里点「公开猜测」）' },
+  sage: { name: '贤者', en: 'Sage', team: 'townsfolk', firstNight: 0, otherNight: 1,
+    ability: '如果恶魔杀死了你，当晚你会得知两名玩家，其中一名是杀你的恶魔。' },
+  // ── 外来者 ──
+  mutant: { name: '畸形秀演员', en: 'Mutant', team: 'outsider', firstNight: 0, otherNight: 0,
+    ability: '如果你「疯狂」地证明自己是外来者，你可能被处决。' },
+  sweetheart: { name: '心上人', en: 'Sweetheart', team: 'outsider', firstNight: 0, otherNight: 1,
+    ability: '你死亡时，会有一名玩家从此醉酒。' },
+  barber: { name: '理发师', en: 'Barber', team: 'outsider', firstNight: 0, otherNight: 1,
+    ability: '你死亡的当晚，恶魔可以选两名玩家（不能选其他恶魔）交换角色。' },
+  klutz: { name: '呆瓜', en: 'Klutz', team: 'outsider', firstNight: 0, otherNight: 0,
+    ability: '你得知自己死亡时，要公开选一名存活的玩家：如果他是邪恶的，你的阵营落败。' },
+  // ── 爪牙 ──
+  eviltwin: { name: '镜像双子', en: 'Evil Twin', team: 'minion', firstNight: 1, otherNight: 0,
+    ability: '你和一名对立阵营的玩家互相知道对方的角色。善良的那位被处决，邪恶获胜。你们都活着时，善良无法获胜。' },
+  witch: { name: '女巫', en: 'Witch', team: 'minion', firstNight: 1, otherNight: 1,
+    choose: { count: 1 },
+    ability: '每个夜晚，选一名玩家：他明天白天发起提名就会死亡。只剩三名存活玩家时，你失去这个能力。' },
+  cerenovus: { name: '洗脑师', en: 'Cerenovus', team: 'minion', firstNight: 1, otherNight: 1,
+    choose: { count: 1, role: true, good: true },
+    ability: '每个夜晚，选一名玩家和一个善良角色：他明天白天和夜晚要「疯狂」地证明自己是这个角色，不然可能被处决。' },
+  pithag: { name: '麻脸巫婆', en: 'Pit-Hag', team: 'minion', firstNight: 0, otherNight: 1,
+    choose: { count: 1, role: true },
+    ability: '除首夜外的每个夜晚，选一名玩家和一个角色：如果这个角色不在场，他变成它。如果因此造出恶魔，当晚的死亡由说书人决定。' },
+  // ── 恶魔 ──
+  fanggu: { name: '方古', en: 'Fang Gu', team: 'demon', firstNight: 0, otherNight: 1,
+    choose: { count: 1 },
+    ability: '除首夜外的每个夜晚，选一名玩家：他死亡。第一个被你这样杀死的外来者改为变成邪恶的方古，你代替他死亡。[+1 外来者]' },
+  vigormortis: { name: '亡骨魔', en: 'Vigormortis', team: 'demon', firstNight: 0, otherNight: 1,
+    choose: { count: 1 },
+    ability: '除首夜外的每个夜晚，选一名玩家：他死亡。被你杀死的爪牙保留能力，并让他邻近的一名镇民中毒。[-1 外来者]' },
+  nodashii: { name: '诺-达鲺', en: 'No Dashii', team: 'demon', firstNight: 0, otherNight: 1,
+    choose: { count: 1 },
+    ability: '除首夜外的每个夜晚，选一名玩家：他死亡。你两侧最近的两名镇民中毒。' },
+  vortox: { name: '涡流', en: 'Vortox', team: 'demon', firstNight: 0, otherNight: 1,
+    choose: { count: 1 },
+    ability: '除首夜外的每个夜晚，选一名玩家：他死亡。镇民的能力都产生错误信息。白天没有人被处决，邪恶获胜。' },
+};
+// ───────────────────────── 窃窃私语里新出现的角色（官方实验性角色） ─────────────────────────
+// 能力文字照官方规则用自己的话写。顺序看 shared/nightOrder.js。
+const LUF = {
+  balloonist: { name: '气球驾驶员', en: 'Balloonist', team: 'townsfolk', firstNight: 1, otherNight: 1,
+    ability: '每个夜晚，你会得知一名玩家，他和你上一晚得知的那名玩家角色类型不同。[+0 或 +1 外来者]' },
+  amnesiac: { name: '失忆者', en: 'Amnesiac', team: 'townsfolk', firstNight: 0, otherNight: 0,
+    ability: '你不知道自己的能力是什么。每个白天可以私下猜一次，说书人会告诉你猜得有多准。（在行动面板里点「猜我的能力」）' },
+  fisherman: { name: '渔夫', en: 'Fisherman', team: 'townsfolk', firstNight: 0, otherNight: 0,
+    ability: '每局一次，白天你可以私下请说书人给一条帮你的阵营获胜的建议。（在行动面板里点「请教说书人」）' },
+  cannibal: { name: '食人族', en: 'Cannibal', team: 'townsfolk', firstNight: 0, otherNight: 0,
+    ability: '你拥有最近一个死于处决的玩家的能力（你不会被告知是什么）。如果他是邪恶的，你中毒，直到下一个善良玩家死于处决。' },
+  widow: { name: '寡妇', en: 'Widow', team: 'minion', firstNight: 1, otherNight: 0,
+    choose: { count: 1 },
+    ability: '你的首个夜晚，你会看到魔典，并选一名玩家：他中毒，直到你死亡。之后会有一名善良玩家得知寡妇在场。' },
+  goblin: { name: '哥布林', en: 'Goblin', team: 'minion', firstNight: 0, otherNight: 0,
+    ability: '如果你被提名后、投票前公开声明自己是哥布林，并且当天被处决，你的阵营获胜。（被提名时点「我是哥布林」）' },
+  leviathan: { name: '利维坦', en: 'Leviathan', team: 'demon', firstNight: 0, otherNight: 0,
+    ability: '你不杀人。所有人都知道利维坦在场。如果有超过一名善良玩家被处决，邪恶获胜；第五个白天结束时，邪恶获胜。' },
+};
+
+// ───────────────────────── 失忆者专用的原创能力 ─────────────────────────
+// 官方：失忆者的能力可以是现有能力、类似的能力或原创能力。这几个是在现有能力上改的变种，只会作为失忆者的隐藏能力出现，
+// 不属于任何剧本（script: 'amnesiac'，rolesOf / inScript 都不会列出来）。结算在 engine/snv.js。
+const AMNESIAC_ONLY = {
+  amn_gun: { name: '一发子弹', en: 'Loaded Gun', team: 'townsfolk', firstNight: 0, otherNight: 0,
+    ability: '每局一次，白天你可以公开向一名玩家开枪：他死亡，不管他是谁。' },
+  amn_judge: { name: '审判之枪', en: 'Judgement', team: 'townsfolk', firstNight: 0, otherNight: 0,
+    ability: '每局一次，白天你可以公开向一名玩家开枪：如果他是邪恶的，他死亡。' },
+  amn_pardon: { name: '特赦', en: 'Pardon', team: 'townsfolk', firstNight: 0, otherNight: 0,
+    ability: '每局一次，白天有人在处决台上时，你可以公开特赦：他走下处决台，今天不再处决任何人。' },
+  amn_detect: { name: '恶魔探测', en: 'Demon Sense', team: 'townsfolk', firstNight: 1, otherNight: 1,
+    choose: { count: 2 },
+    ability: '每个夜晚，选择两名玩家：你会得知他们之中有没有恶魔。' },
+  amn_echo: { name: '处决回声', en: 'Echo', team: 'townsfolk', firstNight: 0, otherNight: 1,
+    ability: '除首夜外的每个夜晚，如果今天白天有人被处决，你会得知他是不是善良的。' },
+};
+
 for (const [id, r] of Object.entries(ROLES)) r.script = 'tb';
 for (const [id, r] of Object.entries(BMR)) { r.script = 'bmr'; ROLES[id] = r; }
+for (const [id, r] of Object.entries(SNV)) { r.script = 'snv'; ROLES[id] = r; }
+for (const [id, r] of Object.entries(LUF)) { r.script = 'luf'; ROLES[id] = r; }
+for (const [id, r] of Object.entries(AMNESIAC_ONLY)) { r.script = 'amnesiac'; r.virtual = true; ROLES[id] = r; }
 
+/**
+ * 剧本。engine：用哪套规则引擎（两个小剧本借梦殒春宵那套：它的醉酒中毒、换角色、阵营单独记都是通用的）；
+ * map：用哪张地图（小剧本用前两张图的变体，见 shared/maps/）；roles：角色从各个剧本挑出来的，按官方剧本页的顺序；
+ * players：人数范围（官方的汀西维尔小剧本是 5–6 人）。
+ */
 export const SCRIPTS = {
-  tb: { id: 'tb', name: '暗流涌动', en: 'Trouble Brewing' },
-  bmr: { id: 'bmr', name: '黯月初升', en: 'Bad Moon Rising' },
+  tb: { id: 'tb', name: '暗流涌动', en: 'Trouble Brewing', engine: 'tb' },
+  bmr: { id: 'bmr', name: '黯月初升', en: 'Bad Moon Rising', engine: 'bmr' },
+  snv: { id: 'snv', name: '梦殒春宵', en: 'Sects & Violets', engine: 'snv' },
+  ngj: { id: 'ngj', name: '无上愉悦', en: 'No Greater Joy', engine: 'snv', teensy: true, players: [5, 6],
+    roles: ['clockmaker', 'investigator', 'empath', 'chambermaid', 'artist', 'sage', 'drunk', 'klutz', 'scarletwoman', 'baron', 'imp'] },
+  luf: { id: 'luf', name: '窃窃私语', en: 'Laissez un Faire', engine: 'snv', teensy: true, players: [5, 6],
+    roles: ['balloonist', 'savant', 'amnesiac', 'fisherman', 'artist', 'cannibal', 'mutant', 'lunatic', 'widow', 'goblin', 'leviathan'] },
+  // 娱乐模式（用户 2026-11-04 要的「只有猎人和狼人的板子」）：好人全是猎手，坏人全是小恶魔（狼人），见 game.js 的 rollRagnarok
+  rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'tb', ragnarok: true, roles: ['slayer', 'imp'] },
 };
-/** 某个剧本某个类型的角色 id 列表。 */
-export const rolesOf = (script, team) => Object.keys(ROLES).filter((id) => ROLES[id].script === script && (!team || ROLES[id].team === team));
+/** 诸神黄昏几只狼人（小恶魔）：其余全是猎手。 */
+export const ragnarokWolves = (n) => (n <= 6 ? 1 : n <= 9 ? 2 : n <= 12 ? 3 : 4);
+/** 剧本用的规则引擎：'tb' | 'bmr' | 'snv'。 */
+export const engineOf = (script) => SCRIPTS[script]?.engine ?? 'tb';
+/** 这个角色在不在这个剧本里。 */
+export const inScript = (id, script) => (SCRIPTS[script ?? 'tb']?.roles ? SCRIPTS[script].roles.includes(id) : (ROLES[id]?.script ?? 'tb') === (script ?? 'tb'));
+/** 某个剧本某个类型的角色 id 列表（小剧本按剧本页的顺序）。 */
+export const rolesOf = (script, team) => (SCRIPTS[script]?.roles ?? Object.keys(ROLES)).filter((id) => ROLES[id] && inScript(id, script) && (!team || ROLES[id].team === team));
+/** 剧本的人数范围。 */
+export const playersOf = (script) => SCRIPTS[script]?.players ?? [MIN_PLAYERS, MAX_PLAYERS];
 
 export const TEAM_NAME = { townsfolk: '镇民', outsider: '外来者', minion: '爪牙', demon: '恶魔' };
 

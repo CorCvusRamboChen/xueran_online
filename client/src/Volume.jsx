@@ -1,5 +1,5 @@
 // 设置面板：总音量和音乐 / 环境声 / 音效 / 播报四路，各一根滑条（存在本机，见 mixer.js），松手时放一声试听；
-// 下面是显示：字号（文字多的界面整体放大缩小）和深色 / 浅色主题（见 display.js）。
+// 下面是显示：字号（文字多的界面整体放大缩小，见 display.js）。
 import { useEffect, useRef, useState } from 'react';
 import { CHANNELS, rawLevel, setLevel, onMix } from './mixer.js';
 import { knock, wolfHowl } from './world/footsteps.js';
@@ -58,13 +58,6 @@ function DisplaySettings() {
           ))}
         </div>
       </div>
-      <div className="disp-row">
-        <span className="vol-name">背景<small>浅色背景字更清楚</small></span>
-        <div className="disp-seg">
-          <button type="button" className={d.theme !== 'light' ? 'on' : ''} onClick={() => setDisplay({ theme: 'dark' })}>深色</button>
-          <button type="button" className={d.theme === 'light' ? 'on' : ''} onClick={() => setDisplay({ theme: 'light' })}>浅色</button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -74,7 +67,7 @@ export function VolumeButton({ className = '', label = '设置' }) {
   const [open, setOpen] = useState(false);
   return (
     <span className="vol-wrap">
-      <button type="button" className={`vol-btn ${className} ${open ? 'on' : ''}`} onClick={() => setOpen((x) => !x)} title="音量、字号、深色 / 浅色背景">{label}</button>
+      <button type="button" className={`vol-btn ${className} ${open ? 'on' : ''}`} onClick={() => setOpen((x) => !x)} title="音量和字号">{label}</button>
       {open && <VolumePanel onClose={() => setOpen(false)} />}
     </span>
   );

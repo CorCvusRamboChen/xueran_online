@@ -136,8 +136,9 @@ b { color: var(--opt-hi); font-weight: 900; }
   .drawer-tabs { background: transparent; position: static; }
   /* 右栏钉在屏幕里：上面的操作面板不动，只有下面的记录、票型这些标签页自己滚 */
   .game { height: calc(100vh - 32px - var(--sait)); grid-template-rows: auto minmax(0, 1fr); }
-  .dock { max-height: 62vh; overflow: hidden auto; scrollbar-width: thin; }
-  .drawer, .drawer.open { align-self: stretch; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  /* 滚动条的位置一直留着：小魔典的圆圈高度跟着宽度走，滚动条一出一没宽度就变，高度刚好卡在临界值时会来回闪 */
+  .dock { max-height: 62vh; overflow: hidden auto; scrollbar-width: thin; scrollbar-gutter: stable; }
+  .drawer, .drawer.open { align-self: stretch; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable; }
   .drawer-body { padding-bottom: 28px; } /* 最后一条别贴着底边，看起来像滑不到 */
   @media (max-height: 760px) { .dock { max-height: 48vh; } } /* 窗口矮时操作面板别把下面的标签页挤成一小条 */
   .drawer-tabs { position: sticky; top: 0; background: var(--ink); }
@@ -341,12 +342,22 @@ body:has(.lobby) { padding-top: 0; } /* 大厅背景图铺到灵动岛底下，�
 .dist-empty { margin: 0 0 12px; }
 .lr-item.me .lr-name { background: var(--mot); color: #111; }
 .lr-seat { position: absolute; left: calc(50% - 32px); top: -6px; background: var(--paper); color: #111; font: 700 12px/16px var(--cond); min-width: 16px; text-align: center; padding: 0 3px; }
-.setting-groups { display: grid; gap: 4px 28px; }
-@media (min-width: 640px) { .setting-groups { grid-template-columns: 1fr 1fr; } }
-.setting-group h4 { margin: 10px 0 2px; font: 900 11px/1.8 var(--sans); letter-spacing: 3px; color: var(--mot); }
+.setting-groups { display: grid; gap: 4px 28px; margin-top: 4px; }
+/* 两列要够宽才排（房间设置面板窄的时候一列，免得「房规」标签折到第二行） */
+.setting-wrap { container-type: inline-size; }
+@container (min-width: 560px) { .setting-groups { grid-template-columns: 1fr 1fr; } }
+.setting-group h4 { margin: 14px 0 2px; padding-bottom: 4px; font: 900 11px/1.8 var(--sans); letter-spacing: 3px; color: var(--mot); border-bottom: 1px solid rgba(233, 228, 216, .35); }
+.setting-col .setting-group:first-child h4 { margin-top: 10px; }
+.setting-group .setting { padding: 6px 0; min-height: 38px; }
+.setting-group .setting > span { font-weight: 700; }
+.setting-group .setting select { padding: 4px 8px; font-size: 13px; min-width: 96px; }
+.rule-tag { display: inline-block; white-space: nowrap; margin-left: 6px; padding: 0 4px; font: 700 10px/16px var(--sans); font-style: normal; letter-spacing: 1px; color: var(--mot); border: 1px solid rgba(240, 180, 60, .45); vertical-align: 1px; }
+.host-only-note { margin-top: 10px; }
 .mode-row { border-bottom: 0; }
 .lobby-roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 14px 8px; }
 .lr-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.lr-invite { width: 52px; height: 62px; display: grid; place-items: center; padding: 0; cursor: pointer; background: rgba(17, 19, 19, .35); border: 2px dashed rgba(233, 228, 216, .45); color: rgba(233, 228, 216, .7); font: 300 30px/1 var(--sans); transition: border-color .15s, color .15s, background .15s; }
+.lr-invite:hover { border-color: var(--mot); color: var(--mot); background: rgba(240, 180, 60, .08); }
 .lr-name { background: #111; font: 900 11px/1.6 var(--sans); padding: 0 5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kick { position: absolute; top: -8px; right: 4px; background: #111; color: var(--muted); border: 1px solid var(--line); width: 20px; height: 20px; cursor: pointer; line-height: 1; }
 .setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
@@ -354,6 +365,23 @@ body:has(.lobby) { padding-top: 0; } /* 大厅背景图铺到灵动岛底下，�
 .setting select { width: auto; min-width: 110px; }
 .setting-note { margin: 4px 0 6px; }
 .seg { display: flex; border: 1px solid rgba(233, 228, 216, .45); }
+.script-pick { padding: 8px 0 4px; }
+.script-pick-label { display: block; font: 900 13px var(--sans); letter-spacing: 1px; margin-bottom: 6px; }
+.script-group + .script-group { margin-top: 8px; }
+.script-group-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; font: 900 11px/1.6 var(--sans); letter-spacing: 2px; color: var(--mot); }
+.script-group-head span { color: var(--muted); letter-spacing: 1px; font-weight: 700; }
+.script-cards { display: grid; gap: 6px; grid-template-columns: repeat(3, 1fr); }
+.script-cards.n2 { grid-template-columns: repeat(2, 1fr); }
+.script-card { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; padding: 7px 10px 7px 12px; cursor: pointer; background: rgba(17, 19, 19, .55); border: 1px solid rgba(233, 228, 216, .22); border-left: 4px solid var(--sc); color: var(--muted); }
+.script-card b { font: 900 15px/1.3 var(--sans); letter-spacing: 1px; color: var(--paper); }
+.script-card small { font: 700 11px/1.4 var(--sans); color: var(--sc); letter-spacing: 1px; }
+.script-card i { font: 400 11px/1.4 var(--sans); font-style: normal; }
+.script-card:hover:not(:disabled) { border-color: rgba(233, 228, 216, .5); border-left-color: var(--sc); }
+.script-card.on { background: var(--paper); border-color: var(--paper); border-left-color: var(--sc); color: #3a3a36; }
+.script-card.on b { color: #111; }
+.script-card.on small { color: #111; }
+.script-card:disabled { cursor: default; }
+@media (max-width: 520px) { .script-cards { grid-template-columns: 1fr 1fr; } }
 .seg button { background: none; border: 0; padding: 7px 12px; cursor: pointer; font: 900 12px var(--sans); letter-spacing: 1px; color: var(--muted); }
 .seg button.on { background: var(--paper); color: #111; }
 .seg button:disabled { cursor: default; }
@@ -525,9 +553,9 @@ body:has(.lobby) { padding-top: 0; } /* 大厅背景图铺到灵动岛底下，�
   background: rgba(10, 12, 12, .9); border: 1px solid var(--line); color: var(--cream); font: 900 12px/1 var(--sans); letter-spacing: 1px; }
 .room-chip.locked { border-color: rgba(226, 181, 44, .6); }
 .room-chip.mine { box-shadow: inset 0 0 0 1px var(--mot); }
-.rc-faces { display: flex; }
-.rc-faces .portrait { margin-left: -5px; }
-.rc-faces .portrait:first-child { margin-left: 0; }
+.rc-faces { display: flex; gap: 7px; padding-top: 3px; }
+.rc-face { position: relative; display: block; }
+.rc-face i { position: absolute; left: -4px; top: -4px; background: #111; color: #fff; font: 900 9px/1.4 var(--sans); padding: 0 3px; font-style: normal; }
 .rc-lock { background: var(--mot); color: #111; padding: 2px 5px; font-size: 11px; letter-spacing: 0; }
 .room-state { font: 700 12px/1 var(--cond); letter-spacing: 2px; color: var(--muted); }
 .room-state.locked { color: var(--mot); }
@@ -1438,9 +1466,11 @@ span.lr-newbie { cursor: default; }
 /* 提名 / 投票时左上角有票数小块：声音开关挪到右下角（和走地图时一样），别挤在一起 */
 .scene:has(.vote-stats) .sound-toggles { top: auto; bottom: 84px; }
 .scene:has(.vote-stats) .sound-toggles .vol-panel { top: auto; bottom: calc(100% + 6px); }
+.scene:has(.cs:not(.moved)) .sound-toggles { top: auto; bottom: 84px; } /* 技能表开在右上角时别压住这排按钮 */
+.scene:has(.cs:not(.moved)) .sound-toggles .vol-panel { top: auto; bottom: calc(100% + 6px); }
 .vs-chip { max-width: 420px; }
 /* 操作面板里人多时，「确认 / 不选」那排按钮贴在面板底部，不用往下滚才找到 */
-@media (min-width: 860px) { .dock .choose-pnl .btn-row { position: sticky; bottom: 0; z-index: 2; background: linear-gradient(transparent, var(--ink) 30%); padding-top: 10px; margin-bottom: -2px; } }
+@media (min-width: 860px) { .dock .choose-pnl .btn-row, .dock .moonchild-pnl .btn-row { position: sticky; bottom: 0; z-index: 2; background: linear-gradient(transparent, var(--ink) 30%); padding-top: 10px; margin-bottom: -2px; } }
 /* 广场座位圈左键连线（Town.jsx） */
 .town-linkbar { position: absolute; z-index: 40; left: 50%; top: 8px; transform: translateX(-50%); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px; width: max-content; max-width: calc(100% - 16px); background: rgba(10, 12, 12, .94); border: 1px solid var(--line); border-top: 2px solid var(--mot); padding: 6px 10px; font: 700 12px var(--sans); color: var(--cream); box-shadow: 0 8px 22px rgba(0, 0, 0, .6); }
 .town-linkbar b { color: var(--mot); }
@@ -1454,224 +1484,8 @@ span.lr-newbie { cursor: default; }
 .gossip-modal .gossip-form { border: 0; padding: 0; margin: 0; }
 
 /* ───────── 字号：文字多的界面整体缩放（display.js 设 --ui-zoom）───────── */
-.dock, .drawer, .lobby-right, .tut, .gossip-modal, .sheet, .role-modal { zoom: var(--ui-zoom, 1); }
+.dock, .drawer, .lobby-right, .tut, .gossip-modal, .sheet, .role-modal, .mark-menu { zoom: var(--ui-zoom, 1); }
 
-/* ───────── 浅色主题（自动生成：scripts/gen-light-theme.py 从上面的样式里把深底换成纸色、浅字换成墨色；只作用在读字的界面里，地图和过场不变）───────── */
-/* 文字三层（纸色底 #faf7f0 上）：主 #1c1913 约 16:1、强调 #0f0d0a、次要 #45403a 约 9.5:1——原来次要 #6a6457 只有 5:1，又细又小，看着像融进底色 */
-html.theme-light { --lt-bg: #e9e3d4; --lt-panel: rgba(250, 247, 240, .98); --lt-text: #1c1913; --lt-strong: #0f0d0a; --lt-muted: #45403a; }
-html.theme-light body { background: var(--lt-bg); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) {
-  color: var(--lt-text); color-scheme: light;
-  --line: rgba(40, 34, 24, .22); --muted: #45403a; --cream: #1c1913;
-  /* 强调色在浅底上当文字用：整体加深，11 号小字也过 4.5:1 */
-  --mot: #7a5a00; --int: #135f78; --psy: #553ca0; --phy: #a1271d; --opt: #a8401a; --ok: #226a40;
-  -webkit-font-smoothing: auto; /* 浅底上灰度平滑会把字吃细 */
-}
-@media (min-width: 860px) { html.theme-light .dock, html.theme-light .drawer { background: var(--lt-panel); border: 1px solid rgba(40, 34, 24, .15); padding: 10px 12px; } }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) b, html.theme-light b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .muted, html.theme-light .muted:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .toast, html.theme-light .toast:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .splash-note, html.theme-light .splash-note:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .title, html.theme-light .title:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tag-dark, html.theme-light .tag-dark:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .pnl, html.theme-light .pnl:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: var(--lt-panel); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .flavor-line, html.theme-light .flavor-line:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .btn-secondary, html.theme-light .btn-secondary:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); border-color: rgba(40, 34, 24, 0.63); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .btn-secondary:hover:not(:disabled) { background: rgba(40, 34, 24, 0.1); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .btn-ghost, html.theme-light .btn-ghost:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .btn-ghost:hover:not(:disabled) { color: var(--lt-text); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .chip.empty, html.theme-light .chip.empty:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); border: 1px dashed rgba(40, 34, 24, 0.43); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .line, html.theme-light .line:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .flavor, html.theme-light .flavor:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .said b, html.theme-light .said b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .drawer.open, html.theme-light .drawer.open:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(246, 242, 233, 0.97); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .drawer-tabs, html.theme-light .drawer-tabs:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(246, 242, 233, 0.97); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .drawer-tabs button, html.theme-light .drawer-tabs button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .drawer-tabs button.on, html.theme-light .drawer-tabs button.on:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .drawer-tabs, html.theme-light .drawer-tabs:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: var(--lt-bg); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .me-sq, html.theme-light .me-sq:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #2a2620; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .me-seat, html.theme-light .me-seat:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tally b.need, html.theme-light .tally b.need:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .clock-hand, html.theme-light .clock-hand:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .speech, html.theme-light .speech:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .skillcard, html.theme-light .skillcard:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; border: 1px solid rgba(40, 34, 24, 0.38); box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .skill-art, html.theme-light .skill-art:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f3efe6; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .roster-card, html.theme-light .roster-card:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: var(--lt-panel); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .info-item, html.theme-light .info-item:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: var(--lt-panel); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) textarea, html.theme-light textarea:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip), html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) select, html.theme-light select:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f4f0e7; color: var(--lt-text); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .sheet-bg, html.theme-light .sheet-bg:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(248, 244, 235, 0.9); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .menu .menu-item, html.theme-light .menu .menu-item:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(247, 243, 234, 0.9); color: var(--lt-text); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .menu .btn-primary.menu-item, html.theme-light .menu .btn-primary.menu-item:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #2a2620; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .menu .menu-item:disabled, html.theme-light .menu .menu-item:disabled:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); background: rgba(247, 243, 234, 0.9); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .menu-wait, html.theme-light .menu-wait:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .lobby-tips, html.theme-light .lobby-tips:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .lobby .glass, html.theme-light .lobby .glass:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(246, 242, 233, 0.9); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dist-legend, html.theme-light .dist-legend:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .kick, html.theme-light .kick:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .seg, html.theme-light .seg:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { border: 1px solid rgba(40, 34, 24, 0.53); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .seg button, html.theme-light .seg button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .switch, html.theme-light .switch:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { border: 1px solid rgba(40, 34, 24, 0.58); background: #f3efe6; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tips, html.theme-light .tips:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .zzz, html.theme-light .zzz:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .pick, html.theme-light .pick:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.05); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .pick:hover { border-color: rgba(40, 34, 24, 0.58); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .id-name, html.theme-light .id-name:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .acard, html.theme-light .acard:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f6f2e9; border: 1px solid rgba(40, 34, 24, 0.28); box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .acard-art, html.theme-light .acard-art:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f8f4eb; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .acard-when .night, html.theme-light .acard-when .night:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(246, 242, 233, 0.9); color: #2a2620; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .acard-text, html.theme-light .acard-text:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .acard-facts dd, html.theme-light .acard-facts dd:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .reminder, html.theme-light .reminder:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .acard-reminders small, html.theme-light .acard-reminders small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .acard-flavor, html.theme-light .acard-flavor:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .guide-houses figcaption, html.theme-light .guide-houses figcaption:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .titlecard, html.theme-light .titlecard:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(ellipse at center, rgba(246, 242, 233, 0.9), rgba(248, 244, 235, 0.94)); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .titlecard.tc-night, html.theme-light .titlecard.tc-night:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(ellipse at center, rgba(245, 241, 232, 0.9), rgba(248, 244, 235, 0.96)); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .titlecard.tc-dawn, html.theme-light .titlecard.tc-dawn:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: linear-gradient(to top, rgba(248, 244, 235, 0.9), rgba(248, 244, 235, 0.9) 38%, transparent 62%); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .titlecard.tc-phy, html.theme-light .titlecard.tc-phy:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(ellipse at center, rgba(245, 241, 232, 0.9), rgba(248, 244, 235, 0.96)); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tc-title, html.theme-light .tc-title:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tc-phy .tc-title, html.theme-light .tc-phy .tc-title:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #2a2620; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tc-line, html.theme-light .tc-line:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .sc-roll, html.theme-light .sc-roll:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .sc-flavor, html.theme-light .sc-flavor:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .replay-filters button, html.theme-light .replay-filters button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .replay-filters button.on, html.theme-light .replay-filters button.on:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .replay-group h4, html.theme-light .replay-group h4:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .replay-kind, html.theme-light .replay-kind:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .replay-group li.rk-st, html.theme-light .replay-group li.rk-st:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .replay-group li.broken > span:last-child, html.theme-light .replay-group li.broken > span:last-child:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .room-chip, html.theme-light .room-chip:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(246, 242, 233, 0.9); color: var(--lt-text); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .room-chip.locked, html.theme-light .room-chip.locked:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { border-color: rgba(40, 34, 24, 0.6799999999999999); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .room-state, html.theme-light .room-state:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rp, html.theme-light .rp:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .sq-board b, html.theme-light .sq-board b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .sq-board small, html.theme-light .sq-board small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .sq-status, html.theme-light .sq-status:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .link-row button, html.theme-light .link-row button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .link-row button:hover { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mark-menu, html.theme-light .mark-menu:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mm-title, html.theme-light .mm-title:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mm-role, html.theme-light .mm-role:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mm-foot button, html.theme-light .mm-foot button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mm-foot button:last-child, html.theme-light .mm-foot button:last-child:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rc-note, html.theme-light .rc-note:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .roles-head h2, html.theme-light .roles-head h2:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .roles-team h3 small, html.theme-light .roles-team h3 small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .role-tile, html.theme-light .role-tile:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(247, 243, 234, 0.9); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .role-tile:hover { background: rgba(40, 34, 24, 0.06); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rt-art, html.theme-light .rt-art:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f8f4eb; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rt-body, html.theme-light .rt-body:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rt-body b, html.theme-light .rt-body b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rt-body b i, html.theme-light .rt-body b i:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .role-modal-close, html.theme-light .role-modal-close:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tut, html.theme-light .tut:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tut-exit, html.theme-light .tut-exit:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tut h3, html.theme-light .tut h3:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tut p, html.theme-light .tut p:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tut .tut-wait, html.theme-light .tut .tut-wait:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tut-skip, html.theme-light .tut-skip:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .bb-n, html.theme-light .bb-n:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .bb-item, html.theme-light .bb-item:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .center-hand, html.theme-light .center-hand:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(247, 243, 234, 0.9); color: var(--lt-strong); box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .center-locked, html.theme-light .center-locked:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .bluff-card, html.theme-light .bluff-card:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f6f2e9; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .bc-art, html.theme-light .bc-art:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f8f4eb; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .bluff-card b, html.theme-light .bluff-card b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .bluff-card small, html.theme-light .bluff-card small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .splash-help p, html.theme-light .splash-help p:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vt, html.theme-light .vt:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(247, 243, 234, 0.9); color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-day h4, html.theme-light .vh-day h4:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-card, html.theme-light .vh-card:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.02); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-head > b, html.theme-light .vh-head > b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-count, html.theme-light .vh-count:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-count b, html.theme-light .vh-count b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-line, html.theme-light .vh-line:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-line b, html.theme-light .vh-line b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vh-voter, html.theme-light .vh-voter:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .invite-people button, html.theme-light .invite-people button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .update-bar, html.theme-light .update-bar:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .pg-list button, html.theme-light .pg-list button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.03); color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .pg-when, html.theme-light .pg-when:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip), html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .pg-meta, html.theme-light .pg-meta:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .past-game, html.theme-light .past-game:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f6f2e9; box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .pg-p small, html.theme-light .pg-p small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .info-box, html.theme-light .info-box:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.05); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .info-box header small, html.theme-light .info-box header small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .w-label, html.theme-light .w-label:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .wd-preview, html.theme-light .wd-preview:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(ellipse at 50% 85%, rgba(40, 34, 24, 0.14), transparent 60%), #f6f2e9; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .wd-label, html.theme-light .wd-label:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .wd-pick b, html.theme-light .wd-pick b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .wd-pick button, html.theme-light .wd-pick button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rp-team button, html.theme-light .rp-team button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .gossip-form select, html.theme-light .gossip-form select:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip), html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .preset-select, html.theme-light .preset-select:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .gossip-form textarea, html.theme-light .gossip-form textarea:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .home-tag, html.theme-light .home-tag:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { border: 1px solid rgba(40, 34, 24, 0.58); background: rgba(246, 242, 233, 0.9); color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .home-tag.picked, html.theme-light .home-tag.picked:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { border-color: rgba(40, 34, 24, 1); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .morph, html.theme-light .morph:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(circle at 50% 45%, #f6f2e9, #f8f4eb 70%); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-room, html.theme-light .dk-room:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(circle at 50% 60%, #f2eee5, #f7f3ea 70%); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-door, html.theme-light .dk-door:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: linear-gradient(90deg, #efebe2, #5d412b 50%, #efebe2); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-door i, html.theme-light .dk-door i:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f3efe6; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-qte, html.theme-light .dk-qte:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-qte b, html.theme-light .dk-qte b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-qte span, html.theme-light .dk-qte span:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-bar, html.theme-light .dk-bar:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { border: 2px solid rgba(40, 34, 24, 1); background: #f5f1e8; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-qte em, html.theme-light .dk-qte em:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #2a2620; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dk-line, html.theme-light .dk-line:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .role-assign .ra-toggle, html.theme-light .role-assign .ra-toggle:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .role-assign .ra-warn, html.theme-light .role-assign .ra-warn:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ra-row select, html.theme-light .ra-row select:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ra-clear button, html.theme-light .ra-clear button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dkl-door, html.theme-light .dkl-door:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f7f3ea; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dkl-doorway, html.theme-light .dkl-doorway:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: linear-gradient(180deg, #b8cbe0, #5d7290 60%, #efebe2); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dkl-claws i, html.theme-light .dkl-claws i:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: linear-gradient(90deg, transparent, #ff2a1a 25%, #ffd0b0 50%, #f0ece3 80%, transparent); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .dkl-fade, html.theme-light .dkl-fade:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(circle, transparent 30%, #f6f2e9 100%); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .layout-editor, html.theme-light .layout-editor:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f6f2e9; color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .le-panel button, html.theme-light .le-panel button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .le-panel button.on, html.theme-light .le-panel button.on:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { border-color: rgba(40, 34, 24, 1); color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .le-msg, html.theme-light .le-msg:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .le-fog-dot, html.theme-light .le-fog-dot:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.35); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .term-tip, html.theme-light .term-tip:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-text); box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .no-cols li, html.theme-light .no-cols li:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.04); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .no-n, html.theme-light .no-n:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .no-art, html.theme-light .no-art:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(248, 244, 235, 0.9); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .no-why, html.theme-light .no-why:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .role-picker .rp-none, html.theme-light .role-picker .rp-none:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .role-picker .rp-none.on, html.theme-light .role-picker .rp-none.on:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rc-role-btn, html.theme-light .rc-role-btn:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip), html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .rc-link-btn, html.theme-light .rc-link-btn:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--c, var(--lt-text)); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mark-menu .mm-sub, html.theme-light .mark-menu .mm-sub:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ki-row.peace, html.theme-light .ki-row.peace:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip), html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ki-row.none, html.theme-light .ki-row.none:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.04); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ki-tag, html.theme-light .ki-tag:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .history-all, html.theme-light .history-all:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mg-circle, html.theme-light .mg-circle:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: radial-gradient(circle at 50% 50%, rgba(40, 34, 24, 0.06), transparent 70%); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mm-note, html.theme-light .mm-note:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-text); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .tut-demo-toggle, html.theme-light .tut-demo-toggle:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vol-panel, html.theme-light .vol-panel:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vol-name, html.theme-light .vol-name:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vol-name small, html.theme-light .vol-name small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vol-row input[type="range"]::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--mot) var(--v), rgba(40, 34, 24, 0.15) var(--v)); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .vol-row input[type="range"]::-moz-range-track { background: rgba(40, 34, 24, 0.15); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-top, html.theme-light .ri-top:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: var(--lt-panel); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-search, html.theme-light .ri-search:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; color: var(--lt-text); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-night, html.theme-light .ri-night:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-chip em, html.theme-light .ri-chip em:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); background: rgba(246, 242, 233, 0.9); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-detail, html.theme-light .ri-detail:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(247, 243, 234, 0.9); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-art, html.theme-light .ri-art:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f8f4eb; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-body header b, html.theme-light .ri-body header b:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-body header small, html.theme-light .ri-body header small:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-tag.night, html.theme-light .ri-tag.night:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f0ece3; color: #2a2620; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-body p, html.theme-light .ri-body p:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-more, html.theme-light .ri-more:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-more:hover { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .cs, html.theme-light .cs:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(246, 242, 233, 0.96); box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .cs-sc, html.theme-light .cs-sc:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .cs-row:hover, html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .cs-row.open, html.theme-light .cs-row.open:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: rgba(40, 34, 24, 0.05); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .cs-row > span, html.theme-light .cs-row > span:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: #4a463d; }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .cs-full, html.theme-light .cs-full:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-multi-bar, html.theme-light .ri-multi-bar:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-multi-bar button, html.theme-light .ri-multi-bar button:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-text); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-x, html.theme-light .ri-x:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-muted); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .ri-x:hover { color: var(--lt-strong); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .gossip-modal, html.theme-light .gossip-modal:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { background: #f5f1e8; box-shadow: 0 10px 30px rgba(40, 34, 24, .18); }
-html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .gossip-modal h3, html.theme-light .gossip-modal h3:where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) { color: var(--lt-strong); }
 /* 设置面板里的「显示」 */
 .disp { display: grid; gap: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
 .disp-row { display: grid; gap: 4px; }
@@ -1680,7 +1494,6 @@ html.theme-light :where(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vo
 .disp-seg button.on { background: var(--mot); border-color: var(--mot); color: #111; }
 .vol-panel { max-height: calc(100vh - 60px); overflow-y: auto; }
 .drawer-tabs button { white-space: nowrap; }
-html.theme-light .drawer-tabs button { padding: 8px 9px; letter-spacing: 1px; }
 .drawer-tabs { overflow-x: auto; scrollbar-width: none; }
 .disp-row .vol-name { grid-area: auto; }
 .vol-panel { z-index: 6000; }
@@ -1690,21 +1503,6 @@ html.theme-light .drawer-tabs button { padding: 8px 9px; letter-spacing: 1px; }
 .muted { font-family: var(--sans); font-weight: 400; }
 .info-box > p { font-size: 13px; }
 
-/* 浅色主题手调（生成器管不到的）：
-   1. 强调色在浅底上加深了，压在强调色色块上的黑字（选中的按钮、小标签）改成白字，约 6.5–9:1；
-   2. 小魔典圆圈里的头像标签自带深色底：换回深色主题的亮色和浅字；
-   3. 连线种类（信任 / 怀疑……）的颜色是固定的亮色，没选中时在纸色上看不清：和墨色混一半。 */
-html.theme-light :is(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) :is(.dot, .rc-lock, .mark-badge, .mm-tags button.on, .rc-marks button.on, .as-face.me i, .tut-next, .pg-win.good, .rp-team button.on, .rp-roles button.on, .rc-role-btn.set, .ri-night.on, .ri-chip.on, .ri-chip i, .ri-tag:not(.night), .cs-row b i, .disp-seg button.on, .acard-facts dt, .mg-note, .mg-role, .tag-int, .tag-psy, .tag-mot) { color: #fff; }
-html.theme-light :is(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mg-token {
-  --int: #5fb8cf; --psy: #9a7fd6; --phy: #d24a3a; --mot: #e2b52c; --opt: #d9603b; --ok: #3f9b62; color: #f2ede0;
-}
-html.theme-light :is(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mg-token :is(.mark-badge, .mg-note, .mg-role) { color: #111; }
-html.theme-light :is(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) .mg-dead { background: #141010; color: #ff8574; }
-html.theme-light :is(.dock, .drawer, .lobby-right, .sheet-bg, .mark-menu, .vol-panel, .cs, .tut, .term-tip) :is(.mg-kinds button:not(.on), .le-kinds button:not(.on), .le-chip) {
-  color: color-mix(in srgb, var(--c) 45%, #1c1913); border-color: color-mix(in srgb, var(--c) 60%, #1c1913);
-}
-/* 开场加载页不在读字界面里，字是浅色的：浅色主题下这一页仍用深底 */
-html.theme-light body:has(.splash) { background: var(--ink); }
 
 /* 多行信息和魔典表（间谍）：一人一行，座位、角色小图、角色名（阵营色）、名字、提示标记 */
 .said .ml-line { display: block; }
@@ -1719,10 +1517,6 @@ html.theme-light body:has(.splash) { background: var(--ink); }
 .grim-who small { font: 400 12px var(--sans); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .grim-tags { grid-area: tags; display: flex; flex-wrap: wrap; gap: 3px; }
 .grim-tags i { font: normal 700 11px/1.5 var(--sans); padding: 0 5px; background: rgba(226, 181, 44, .16); color: var(--mot); }
-html.theme-light :is(.dock, .drawer) .grim li { background: rgba(40, 34, 24, .04); }
-html.theme-light :is(.dock, .drawer) .grim li.evil { background: rgba(161, 39, 29, .07); }
-html.theme-light :is(.dock, .drawer) .grim-seat { color: var(--lt-strong); }
-html.theme-light :is(.dock, .drawer) .grim-tags i { background: rgba(122, 90, 0, .12); }
 
 /* 白天当众发生的事（公开声明、开枪）：屏幕上方居中的横幅，不挡点击，只能点 × 关，7 秒以上自己收起 */
 .tc-banner { position: fixed; z-index: 120; left: 50%; top: max(14vh, calc(var(--sait) + 16px)); transform: translateX(-50%); width: min(620px, calc(100vw - 32px)); padding: 14px 44px 16px 22px; pointer-events: none; text-align: center;
@@ -1739,7 +1533,7 @@ html.theme-light :is(.dock, .drawer) .grim-tags i { background: rgba(122, 90, 0,
 .info-box .journal { max-height: min(460px, 62vh); }
 
 /* 大厅背景：横向压暗那层原来盖在"底部渐变到页面底色"上面，图的最底下一条和页面底色接不上（看得出一道色差）。
-   底部渐变放到最上层，最后 12% 是纯页面底色；整个大厅也垫同一个底色（浅色主题下 body 是纸色，大厅不跟着变）。 */
+   底部渐变放到最上层，最后 12% 是纯页面底色；整个大厅也垫同一个底色。 */
 .lobby { background: var(--ink); }
 .lobby-bg::after { background:
   linear-gradient(0deg, var(--ink) 0%, var(--ink) 12%, rgba(14, 16, 16, 0) 50%),
@@ -1900,6 +1694,13 @@ html.theme-light :is(.dock, .drawer) .grim-tags i { background: rgba(122, 90, 0,
 .rec-roles .rec-ricon { width: 26px; height: 26px; }
 .rec-roles b { font: 700 13px var(--sans); white-space: nowrap; }
 .rec-rnum { font: 400 12px var(--sans); color: var(--muted); white-space: nowrap; }
+.rec-mates { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.rec-mate { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: rgba(17, 19, 19, .5); border-left: 3px solid var(--int); }
+.rec-mate.bad { border-left-color: var(--phy); }
+.rec-mate > div { display: flex; flex-direction: column; min-width: 0; }
+.rec-mate small { font: 700 10px/1.4 var(--sans); letter-spacing: 2px; color: var(--muted); }
+.rec-mate b { font: 900 14px/1.4 var(--sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rec-mate span { font: 400 12px/1.4 var(--sans); color: var(--muted); }
 .rec-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .rec-tile { display: grid; gap: 1px; padding: 8px 10px; background: rgba(233, 228, 216, .04); border-left: 2px solid var(--mot); }
 .rec-tile.int { border-left-color: var(--int); }
@@ -1912,3 +1713,23 @@ html.theme-light :is(.dock, .drawer) .grim-tags i { background: rgba(122, 90, 0,
 .splash-note.splash-block { font: 900 22px/1.5 var(--sans); color: var(--paper); }
 .splash-block ~ .splash-help { border-top-color: var(--mot); }
 .splash-block ~ .splash-help p { font: 400 15px/1.7 var(--sans); color: var(--cream); }
+
+/* 梦殒春宵：白天的操作和公开猜测 */
+.snv-row { flex-wrap: wrap; gap: 8px; }
+.juggle-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.juggle-row select { min-width: 0; }
+
+/* 收音页：单独在浏览器里打开，字要大、对比要够 */
+.mic-page { box-sizing: border-box; width: min(560px, 100%); min-height: 100dvh; margin: 0 auto; padding: 56px 20px 40px; display: flex; flex-direction: column; gap: 16px; color: var(--paper); }
+.mic-eyebrow { margin: 0; font: 700 15px/1.4 var(--cond); letter-spacing: 3px; color: var(--paper); opacity: .8; }
+.mic-page h1 { margin: 0; font: 900 40px/1.2 var(--serif); }
+.mic-page h1.mic-on { color: #ff6b5e; }
+.mic-lead { margin: 0; font: 18px/1.6 var(--serif); }
+.mic-btn { min-height: 56px; border: 0; background: var(--paper); color: #111; font: 900 19px/1 var(--sans); cursor: pointer; }
+.mic-btn-off { background: transparent; color: var(--paper); box-shadow: inset 0 0 0 2px var(--paper); }
+.mic-btn:focus-visible { outline: 3px solid #ff6b5e; outline-offset: 2px; }
+.mic-error { margin: 0; color: #ff6b5e; font: 16px/1.5 var(--serif); }
+.mic-rules { margin: 8px 0 0; padding-left: 20px; font: 16px/1.7 var(--serif); }
+.mic-heard { margin-top: 8px; padding-top: 16px; border-top: 1px solid rgba(244, 244, 240, .35); }
+.mic-heard h2 { margin: 0 0 8px; font: 700 18px/1.4 var(--serif); }
+.mic-heard p { margin: 0 0 6px; font: 17px/1.6 var(--serif); }

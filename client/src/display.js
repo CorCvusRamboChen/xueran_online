@@ -1,15 +1,12 @@
-// 显示设置：字号（文字多的界面整体缩放）和主题（深色 / 浅色），存在本机。
-// 浅色主题只换"读字"的界面（右栏、操作面板、大厅设置、弹窗、菜单），地图、广场、过场这些画面不变。
-// 样式见 styles.css 末尾的「浅色主题」和 --ui-zoom。
+// 显示设置：字号（文字多的界面整体缩放），存在本机。样式见 styles.css 的 --ui-zoom。
 
 const KEY = 'botc.display';
-const DEFAULTS = { scale: 1, theme: 'dark' };
+const DEFAULTS = { scale: 1 };
 let d = { ...DEFAULTS };
 try { d = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') }; } catch { /* 隐私模式 */ }
-// 地址栏带 ?theme=light / ?theme=dark、?scale=1.2 时临时用这个（截图、检查对比度用；不存）
+// 地址栏带 ?scale=1.2 时临时用这个（截图用；不存）
 try {
   const q = new URLSearchParams(location.search);
-  if (q.get('theme')) d = { ...d, theme: q.get('theme') === 'light' ? 'light' : 'dark' };
   if (q.get('scale')) d = { ...d, scale: Number(q.get('scale')) || 1 };
 } catch { /* 没有 location */ }
 const listeners = new Set();
@@ -20,7 +17,6 @@ function apply() {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
   root.style.setProperty('--ui-zoom', String(d.scale));
-  root.classList.toggle('theme-light', d.theme === 'light');
 }
 apply();
 

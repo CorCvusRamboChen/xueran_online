@@ -8,6 +8,7 @@ import { TownGuide } from './world/TownGuide.jsx';
 import { DoorKick, DemonKill } from './KillScenes.jsx';
 import { LayoutEditor } from './world/LayoutEditor.jsx';
 import { TutorialIntro } from './TutorialIntro.jsx';
+import MicPage from './MicPage.jsx';
 import '@fontsource/noto-serif-sc/400.css';
 import '@fontsource/noto-serif-sc/600.css';
 import '@fontsource/noto-serif-sc/900.css';
@@ -17,7 +18,7 @@ import '@fontsource/libre-baskerville/400-italic.css';
 import '@fontsource/barlow-condensed/600.css';
 import '@fontsource/barlow-condensed/700.css';
 import './styles.css';
-import './display.js'; // 字号和深色 / 浅色主题：一打开就套上本机存的设置
+import './display.js'; // 字号：一打开就套上本机存的设置
 
 // 滚动条平时隐形：哪块区域正在滚，就给它加 .scrolling 让滚动条淡出来，停下一会儿再藏起来（样式见 styles.css）
 const scrollTimers = new WeakMap();
@@ -32,8 +33,10 @@ document.addEventListener('scroll', (e) => {
 // ?preview=cards：能力牌预览页（看 Codex 的插画用）；?preview=tiles：地块图预览；?preview=town：小镇底稿；
 // ?preview=intro&beat=4&t=3&acted=1：新手教程开场停在某一段的某一秒（beat 从 0 数）；不带 t 就正常播放
 // ?preview=doorkick：受害者被破门的过场（调 QTE 手感用，点一下页面才有声音）；?preview=demonkill：恶魔进屋杀人那段；?preview=layout：黯月初升房子摆放编辑器
+// ?mic=令牌：收音页（见 MicPage.jsx）
 const preview = new URLSearchParams(location.search).get('preview');
-const page = preview === 'cards' ? <><PaintFilters /><CardGallery /></> : preview === 'tiles' ? <TilesPreview /> : preview === 'town' ? <><PaintFilters /><TownGuide /></>
+const micToken = new URLSearchParams(location.search).get('mic');
+const page = micToken ? <MicPage token={micToken} /> : preview === 'cards' ? <><PaintFilters /><CardGallery /></> : preview === 'tiles' ? <TilesPreview /> : preview === 'town' ? <><PaintFilters /><TownGuide /></>
   : preview === 'doorkick' ? <div className="scene" style={{ position: 'relative', height: '100vh' }}><DoorKick key={Date.now()} /></div>
   : preview === 'layout' ? <LayoutEditor />
   : preview === 'intro' ? <IntroPreview />

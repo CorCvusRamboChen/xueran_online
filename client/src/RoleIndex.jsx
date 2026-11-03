@@ -3,7 +3,7 @@
 // 点一个就在下面展开它的技能，默认展开你自己的角色。打开「多选」可以同时展开好几个角色对着看（比如几个人报的角色）。
 // 你在小魔典里猜过某人是这个角色的，小块上会写几号。
 import { useEffect, useRef, useState } from 'react';
-import { ROLES, TEAM_NAME } from '../../src/engine/roles.js';
+import { ROLES, SCRIPTS, TEAM_NAME, rolesOf } from '../../src/engine/roles.js';
 import { ROLE_ART } from './art.js';
 import { ATTR } from './flavor.js';
 import { Glossed } from './terms.jsx';
@@ -16,8 +16,8 @@ const nightsOf = (r) => [r.firstNight > 0 && '首夜醒', r.otherNight > 0 && '�
 const MULTI_KEY = 'botc.rolesMulti';
 
 export function RoleIndex({ s }) {
-  const sc = s.script === 'bmr' ? 'bmr' : 'tb';
-  const ids = Object.keys(ROLES).filter((id) => (ROLES[id].script ?? 'tb') === sc);
+  const sc = SCRIPTS[s.script] ? s.script : 'tb';
+  const ids = rolesOf(sc);
   const mine = ids.includes(s.self?.role?.id) ? s.self.role.id : null;
   const marks = useMarks(s);
   const guessed = new Map(); // 角色 → 你猜是它的座位号

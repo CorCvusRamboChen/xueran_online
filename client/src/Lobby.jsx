@@ -5,7 +5,7 @@ import { CHARACTERS } from '../../src/shared/characters.js';
 import { Tag, Panel, Btn } from './ui.jsx';
 import { ClockTower, Tree, Lamp, House, MAP_COLORS as C, INK } from './art/TownArt.jsx';
 import { SCENE_ART, ROLE_ART } from './art.js';
-import { ROLES, TEAM_NAME, DISTRIBUTION, rolesOf } from '../../src/engine/roles.js';
+import { ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, rolesOf, inScript, playersOf, ragnarokWolves } from '../../src/engine/roles.js';
 import { ATTR } from './flavor.js';
 import { AbilityCard } from './AbilityCard.jsx';
 import { useEffect, useState } from 'react';
@@ -16,7 +16,7 @@ import { Glossed } from './terms.jsx';
 import { NIGHT_ORDER, STEP_NAMES } from '../../src/shared/nightOrder.js';
 import { TutorialIntro } from './TutorialIntro.jsx';
 import { VolumeButton } from './Volume.jsx';
-import { fromKook } from './connect.js';
+import { fromKook, inviteFriends } from './connect.js';
 
 // 标题画上的四栋房子（和游戏地图同一套画法）
 const hero = (id, name, x, y, w, h, side) => {
@@ -36,15 +36,17 @@ const DIST = {
   10: [7, 0, 2, 1], 11: [7, 1, 2, 1], 12: [7, 2, 2, 1], 13: [9, 0, 3, 1], 14: [9, 1, 3, 1], 15: [9, 2, 3, 1],
 };
 
-export function Lobby({ s, act, ask, onTutorial }) {
+export function Lobby({ s, act, ask, onTutorial, toast }) {
   const host = s.isHost;
   const st = s.settings;
   const joined = s.lobby.some((p) => p.id === s.me);
   const n = s.lobby.length;
-  const d = DIST[n];
+  const d = st.script === 'rag' && DIST[n] ? [n - ragnarokWolves(n), 0, 0, ragnarokWolves(n)] : DIST[n]; // 诸神黄昏：猎手（镇民）和狼人（恶魔）
+  const [lo, hi] = playersOf(st.script ?? 'tb'); // 小剧本只能 5–6 人
   const set = (patch) => act('settings', patch);
   const human = st.mode === 'human';
   const [intro, setIntro] = useState(false); // 新手教程的开场介绍
+  const [release, setRelease] = useState(false); // 让出房主：点两次才算
 
   const art = SCENE_ART['lobby-hero'];
   return (
@@ -74,18 +76,22 @@ export function Lobby({ s, act, ask, onTutorial }) {
         <section className="lobby-left">
           <div className="hero-title">
             <h1 className="title">血染钟楼</h1>
-            <Tag tone="dark">{st.script === 'bmr' ? '黯月初升 · BAD MOON RISING' : '暗流涌动 · TROUBLE BREWING'}</Tag>
+            <Tag tone="dark">{`${SCRIPTS[st.script]?.name ?? SCRIPTS.tb.name} · ${(SCRIPTS[st.script]?.en ?? SCRIPTS.tb.en).toUpperCase()}`}</Tag>
           </div>
           <nav className="menu">
             {!(human && host) && (joined
               ? <Btn kind="secondary" className="menu-item" onClick={() => act('leave')}>离开座位</Btn>
               : <Btn kind="primary" className="menu-item" onClick={() => act('join')}>加入游戏</Btn>)}
-            {host && <Btn kind={n >= 5 ? 'primary' : 'secondary'} className="menu-item" disabled={n < 5} onClick={() => act('start')}>开始游戏{n < 5 ? `（还差 ${5 - n} 人）` : ''}</Btn>}
+            {host && <Btn kind={n >= lo && n <= hi ? 'primary' : 'secondary'} className="menu-item" disabled={n < lo || n > hi} onClick={() => act('start')}>开始游戏{n < lo ? `（还差 ${lo - n} 人）` : n > hi ? `（这个剧本最多 ${hi} 人）` : ''}</Btn>}
             {host && <Btn className="menu-item" onClick={() => act('addBots', { count: 1 })}>加一个机器人玩家</Btn>}
+            {host && (release
+              ? <Btn kind="primary" className="menu-item" onClick={async () => { setRelease(false); await act('releaseHost'); }} onMouseLeave={() => setRelease(false)}>确定让出房主（交给在线的人）</Btn>
+              : <Btn className="menu-item" onClick={() => setRelease(true)}>让出房主</Btn>)}
             {!host && !s.hostOnline && <Btn className="menu-item" onClick={() => act('claimHost')}>房主不在，接管房主</Btn>}
-            {!host && s.hostOnline && <p className="menu-wait">等房主开始……</p>}
+            {!host && s.hostOnline && <p className="menu-wait">等房主{s.hostName ? `「${s.hostName}」` : ''}开始……</p>}
+            {!host && s.hostOnline && <Btn kind="secondary" className="menu-item" onClick={() => act('claimHost')}>房主没反应？接管房主</Btn>}
             {onTutorial && <Btn className="menu-item menu-tut" onClick={() => setIntro(true)}>新手教程（1 分钟动画 + 练习局）</Btn>}
-            <VolumeButton className="btn btn-secondary menu-item menu-vol" label="声音、字号和背景" />
+            <VolumeButton className="btn btn-secondary menu-item menu-vol" label="声音和字号" />
             {intro && createPortal(<TutorialIntro onStart={() => { setIntro(false); onTutorial(); }} onClose={() => setIntro(false)} />, document.body)}
           </nav>
           <ul className="lobby-tips">
@@ -98,9 +104,10 @@ export function Lobby({ s, act, ask, onTutorial }) {
 
         {/* 右：镇民、形象、房间设置 */}
         <section className="lobby-right">
-          <Panel title="镇民" className="glass" extra={<span className="muted">{n} / 15</span>}>
-            <DistBar n={n} d={d} />
-            {n ? (
+          <Panel title="镇民" className="glass" extra={<span className="muted">{n} / {hi}</span>}>
+            <DistBar n={n} d={d} lo={lo} hi={hi} />
+            {!n && <p className="muted">广场上还空无一人。</p>}
+            {(
               <div className="lobby-roster">
                 {s.lobby.map((p, i) => (
                   <div key={p.id} className={`lr-item ${p.id === s.me ? 'me' : ''}`}>
@@ -115,8 +122,14 @@ export function Lobby({ s, act, ask, onTutorial }) {
                     {host && p.id !== s.me && <button type="button" className="kick" onClick={() => act('kick', { target: p.id })} aria-label="请他离开">×</button>}
                   </div>
                 ))}
+                {/* 最后一格：虚线框里一个加号，点了邀请朋友（Discord 的邀请框 / 分享链接，见 connect.js） */}
+                {n < hi && (
+                  <div className="lr-item">
+                    <button type="button" className="lr-invite" onClick={async () => { const msg = await inviteFriends(); if (msg) toast?.(msg); }} aria-label="邀请朋友进来" title="邀请朋友进来">+</button>
+                  </div>
+                )}
               </div>
-            ) : <p className="muted">广场上还空无一人。</p>}
+            )}
             <Watchers s={s} hint={!joined ? '你现在在观战席。点「加入游戏」坐下；不加入就是观战，开局后能看广场和投票，看不到别人的身份。' : null} />
           </Panel>
 
@@ -124,24 +137,24 @@ export function Lobby({ s, act, ask, onTutorial }) {
           {/* 衣柜（3D 小人换装）先隐藏：<Wardrobe s={s} act={act} /> */}
 
           <Panel title="房间设置" className="glass" extra={!host ? <span className="muted">只有房主能改</span> : null}>
-            <div className="setting mode-row">
-              <span>剧本</span>
-              <div className="seg">
-                <button type="button" className={st.script !== 'bmr' ? 'on' : ''} disabled={!host} onClick={() => set({ script: 'tb' })}>暗流涌动</button>
-                <button type="button" className={st.script === 'bmr' ? 'on' : ''} disabled={!host} onClick={() => set({ script: 'bmr' })}>黯月初升</button>
-              </div>
-            </div>
-            <p className="muted setting-note">{st.script === 'bmr' ? '《黯月初升》：中等难度的"死亡盛宴"——恶魔一夜可能杀多人，好人有很多保命和复活手段。推荐 7 人及以上。' : '《暗流涌动》：入门剧本，信息多、规则直白，推荐第一次玩。'}</p>
+            <ScriptPicker value={st.script ?? 'tb'} disabled={!host} onPick={(id) => set({ script: id })} />
+            <p className="muted setting-note">{{ bmr: '《黯月初升》：中等难度的"死亡盛宴"——恶魔一夜可能杀多人，好人有很多保命和复活手段。推荐 7 人及以上。', snv: '《梦殒春宵》：困难，最疯狂的一本——信息很多但不一定可靠，角色和阵营都会中途改变，还有疯狂机制。',
+              ngj: '《无上愉悦》：官方 5–6 人小剧本，二十分钟一局，又短又吵。角色都来自前三个剧本；关键是弄清在场的是红唇女郎还是男爵。地图是冬夜集市的钟楼广场。',
+              rag: '《诸神黄昏》：娱乐模式，只有猎手和狼人（小恶魔）。狼人互相认识，每晚各刀一人；每个猎手白天能开一枪，打中狼人就死。狼人全死好人赢，狼人追平好人狼人赢。',
+              luf: '《窃窃私语》：官方 5–6 人小剧本。恶魔利维坦不杀人，但处决两个好人、或者撑到第五天结束，邪恶就赢；失忆者、食人族不知道自己的能力。地图是雾锁溪谷的驿站。' }[st.script] ?? '《暗流涌动》：入门剧本，信息多、规则直白，推荐第一次玩。'}</p>
+            {!host ? <p className="muted setting-note host-only-note">配置、说书人、计时和房规由房主决定，只有房主看得到。</p> : <>
             <div className="setting mode-row">
               <span>配置</span>
               <div className="seg">
                 {[['preset', '推荐预设'], ['ai', 'AI 配置'], ['random', '完全随机']].map(([id, label]) => (
-                  <button key={id} type="button" className={(st.setupMode ?? 'preset') === id ? 'on' : ''} disabled={!host} onClick={() => set({ setupMode: id })}>{label}</button>
+                  <button key={id} type="button" className={(st.setupMode ?? 'preset') === id ? 'on' : ''} onClick={() => set({ setupMode: id })}>{label}</button>
                 ))}
               </div>
             </div>
             <p className="muted setting-note">{(() => {
               const mode = st.setupMode ?? 'preset';
+              if (st.script === 'rag') return '诸神黄昏：按人数定狼人数量（5–6 人 1 只、7–9 人 2 只、10–12 人 3 只、13–15 人 4 只），其余全是猎手；三种配置在这里都一样。';
+              if (SCRIPTS[st.script]?.teensy) return '小剧本：按官方人数表随机发角色（三种配置在这里都一样）。男爵在已有一个外来者时只加一个，有气球驾驶员时可能多一个外来者。';
               if (mode === 'ai') return 'AI 配置：随机出几十套，按强弱打分挑中间的——强神对强神、弱神对弱神；还会照顾信息位和保护角色别扎堆。';
               if (mode === 'random') return '完全随机：按人数表纯随机抽角色，不调平衡（可能很偏）。';
               const list = presetsFor(st.script ?? 'tb', n);
@@ -150,41 +163,54 @@ export function Lobby({ s, act, ask, onTutorial }) {
                 ? `推荐预设：${n} 人有 ${list.length} 套推荐配置${off ? `（官方 ${off} 套，优先）` : ''}，大约 ${Math.round(PRESET_SHARE * 100)}% 的局从里面挑，其余用 AI 配置。`
                 : n ? `推荐预设：${n} 人还没有推荐配置，会用 AI 配置。` : '推荐预设：按坐下的人数从推荐配置里挑，这个人数没有的话用 AI 配置。';
             })()}</p>
-            {host && s.roleAssign && n > 0 && <RoleAssign s={s} act={act} script={st.script ?? 'tb'} />}
+            {s.roleAssign && n > 0 && <RoleAssign s={s} act={act} script={st.script ?? 'tb'} />}
             <div className="setting mode-row">
               <span>说书人</span>
               <div className="seg">
-                <button type="button" className={!human ? 'on' : ''} disabled={!host} onClick={() => set({ mode: 'auto' })}>AI 房主</button>
-                <button type="button" className={human ? 'on' : ''} disabled={!host} onClick={() => set({ mode: 'human' })}>真人说书</button>
+                <button type="button" className={!human ? 'on' : ''} onClick={() => set({ mode: 'auto' })}>AI 房主</button>
+                <button type="button" className={human ? 'on' : ''} onClick={() => set({ mode: 'human' })}>真人说书</button>
               </div>
             </div>
             <p className="muted setting-note">{human ? '房主看魔典、审核每条夜间信息；机器人负责发身份、叫人、跑流程。' : 'AI 房主全自动：发身份、夜里叫人、像真人说书人一样做判定、给提名和投票计时、用语音播报旁白，不需要人主持。'}</p>
-            <div className="setting-groups">
-              <div className="setting-group">
-                <h4>夜晚</h4>
-                <Toggle label="闭麦闭耳" on={st.nightDeafen} disabled={!host} onChange={(v) => set({ nightDeafen: v })} />
-                <Toggle label="发言时其他人闭麦" on={st.speechMute} disabled={!host} onChange={(v) => set({ speechMute: v })} />
-                <Select label="选人时限" value={st.chooseSeconds} disabled={!host} options={[30, 45, 60, 90, 120]} unit="秒" onChange={(v) => set({ chooseSeconds: v })} />
-                <Toggle label="随机排座位" on={st.shuffle} disabled={!host} onChange={(v) => set({ shuffle: v })} />
-                {st.script !== 'bmr' && <Toggle label="房规：7 人以下不发男爵" on={st.smallNoBaron ?? true} disabled={!host} onChange={(v) => set({ smallNoBaron: v })} />}
-                <Toggle label="房规：夜里死了仍拿信息（醉酒）" on={!!st.deadDrunk} disabled={!host} onChange={(v) => set({ deadDrunk: v })} />
-                {st.script === 'bmr' && <Toggle label="房规：疯子（以为是僵怖）死后照样醒" on={!!st.lunaticGhost} disabled={!host} onChange={(v) => set({ lunaticGhost: v })} />}
+            {/* 四组：左边开局和夜晚，右边白天和观战。「房规」是和官方规则不一样的地方，标个小标签 */}
+            <div className="setting-wrap"><div className="setting-groups">
+              <div className="setting-col">
+                <div className="setting-group">
+                  <h4>开局与身份</h4>
+                  <Toggle label="随机排座位" on={st.shuffle} onChange={(v) => set({ shuffle: v })} />
+                  {(st.script ?? 'tb') === 'tb' && <Toggle rule label="7 人以下不发男爵" on={st.smallNoBaron ?? true} onChange={(v) => set({ smallNoBaron: v })} />}
+                  <Toggle rule label="小局也互认、发伪装" on={st.smallEvilInfo} onChange={(v) => set({ smallEvilInfo: v })} />
+                  <Toggle rule label="爪牙共用恶魔的 3 个伪装" on={st.minionBluffs} onChange={(v) => set({ minionBluffs: v })} />
+                </div>
+                <div className="setting-group">
+                  <h4>夜晚</h4>
+                  <Toggle label="夜里闭麦闭耳" on={st.nightDeafen} onChange={(v) => set({ nightDeafen: v })} />
+                  <Select label="选人时限" value={st.chooseSeconds} options={[30, 45, 60, 90, 120]} unit="秒" onChange={(v) => set({ chooseSeconds: v })} />
+                  <Toggle rule label="夜里死了仍拿信息（醉酒）" on={!!st.deadDrunk} onChange={(v) => set({ deadDrunk: v })} />
+                  {st.script === 'bmr' && <Toggle rule label="疯子（以为是僵怖）死后照样醒" on={!!st.lunaticGhost} onChange={(v) => set({ lunaticGhost: v })} />}
+                  {['snv', 'luf'].includes(st.script) && s.hearAvailable && <Toggle label="语音判定疯狂（机器人留在广场转写被疯狂的人，开局前告诉大家）" on={!!st.hearMadness} onChange={(v) => set({ hearMadness: v })} />}
+                </div>
               </div>
-              <div className="setting-group">
-                <h4>白天</h4>
-                <Select label="自由活动" value={st.roamMinutes} disabled={!host} options={[2, 3, 5, 8, 10, 0]} unit="分钟" zero="不限时" onChange={(v) => set({ roamMinutes: v })} />
-                <Select label="提名环节" value={st.nominateMinutes} disabled={!host} options={[2, 3, 5, 8, 10]} unit="分钟" onChange={(v) => set({ nominateMinutes: v })} />
-                <Select label="提名理由" value={st.accuseSeconds} disabled={!host} options={[15, 30, 60, 90, 120]} unit="秒" onChange={(v) => set({ accuseSeconds: v })} />
-                <Select label="辩护时间" value={st.defendSeconds} disabled={!host} options={[30, 60, 90, 120, 180]} unit="秒" onChange={(v) => set({ defendSeconds: v })} />
-                <Toggle label="房规：提名者自动投一票" on={st.nominatorVotes} disabled={!host} onChange={(v) => set({ nominatorVotes: v })} />
-                <Toggle label="房规：小局也互认、发伪装" on={st.smallEvilInfo} disabled={!host} onChange={(v) => set({ smallEvilInfo: v })} />
-                <Toggle label="房规：爪牙共用恶魔的 3 个伪装" on={st.minionBluffs} disabled={!host} onChange={(v) => set({ minionBluffs: v })} />
-                <Toggle label="房规：投票时隐藏票型（投完公开）" on={st.hideVotes} disabled={!host} onChange={(v) => set({ hideVotes: v })} />
-                <Toggle label="观战者能看魔典（所有身份）" on={st.spectatorGrimoire} disabled={!host} onChange={(v) => set({ spectatorGrimoire: v })} />
-                <Toggle label="观战者在语音里闭麦" on={st.muteSpectators} disabled={!host} onChange={(v) => set({ muteSpectators: v })} />
-                <Select label="投票时钟每人" value={st.voteSeconds} disabled={!host} options={[1, 2, 3, 4, 5]} unit="秒" onChange={(v) => set({ voteSeconds: v })} />
+              <div className="setting-col">
+                <div className="setting-group">
+                  <h4>白天</h4>
+                  <Select label="自由活动" value={st.roamMinutes} options={[2, 3, 5, 8, 10, 0]} unit="分钟" zero="不限时" onChange={(v) => set({ roamMinutes: v })} />
+                  <Select label="提名环节" value={st.nominateMinutes} options={[2, 3, 5, 8, 10]} unit="分钟" onChange={(v) => set({ nominateMinutes: v })} />
+                  <Select label="提名理由" value={st.accuseSeconds} options={[15, 30, 60, 90, 120]} unit="秒" onChange={(v) => set({ accuseSeconds: v })} />
+                  <Select label="辩护时间" value={st.defendSeconds} options={[30, 60, 90, 120, 180]} unit="秒" onChange={(v) => set({ defendSeconds: v })} />
+                  <Select label="投票时钟每人" value={st.voteSeconds} options={[1, 2, 3, 4, 5]} unit="秒" onChange={(v) => set({ voteSeconds: v })} />
+                  <Toggle label="发言时其他人闭麦" on={st.speechMute} onChange={(v) => set({ speechMute: v })} />
+                  <Toggle rule label="提名者自动投一票" on={st.nominatorVotes} onChange={(v) => set({ nominatorVotes: v })} />
+                  <Toggle rule label="投票时隐藏票型（投完公开）" on={st.hideVotes} onChange={(v) => set({ hideVotes: v })} />
+                </div>
+                <div className="setting-group">
+                  <h4>观战</h4>
+                  <Toggle label="观战者能看魔典（所有身份）" on={st.spectatorGrimoire} onChange={(v) => set({ spectatorGrimoire: v })} />
+                  <Toggle label="观战者在语音里闭麦" on={st.muteSpectators} onChange={(v) => set({ muteSpectators: v })} />
+                </div>
               </div>
-            </div>
+            </div></div>
+            </>}
           </Panel>
         </section>
 
@@ -309,6 +335,24 @@ function RecordCard({ p, isMe }) {
         </section>
       )}
 
+      {(p.bestMate || p.worstMate) && (
+        <section className="rec-sec">
+          <h3>队友 <small>同一阵营打过 4 局以上的人</small></h3>
+          <div className="rec-mates">
+            {[['最好的队友', p.bestMate, 'good'], ['最坏的队友', p.worstMate, 'bad']].filter(([, m]) => m).map(([label, m, tone]) => (
+              <div key={label} className={`rec-mate ${tone}`}>
+                <Portrait p={{ id: m.id, name: m.name, avatar: m.avatar }} size={34} prefer="avatar" speak={false} frame="#6d6a62" />
+                <div>
+                  <small>{label}</small>
+                  <b>{m.name}</b>
+                  <span>一起 {m.games} 局，赢 {m.wins} 局 · {pct(m.wins, m.games)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="rec-sec">
         <h3>场上表现</h3>
         <div className="rec-tiles">
@@ -323,7 +367,7 @@ function RecordCard({ p, isMe }) {
 }
 
 /**
- * 战绩和往期对局（大厅最下面一整块）：这个服务器打完的所有局（服务器 statsFor / listGames）。
+ * 战绩和往期对局（大厅最下面一整块）：个人胜率合并所有服务器，排行榜列在这个服务器打过的人，往期对局只有这个服务器的（服务器 statsFor / listGames）。
  * 左边是一个人的战绩卡（默认是你，点右边表里的人看他的）；右边两页：排行榜（表头可以点着换排法）和往期对局
  * （选中的人参加过的局会标出他那局的角色和输赢）。
  */
@@ -355,11 +399,11 @@ function RecordAndHistory({ s, ask }) {
     <section className="lobby-roles glass pnl past-games rh">
       <header className="roles-head">
         <h2>战绩与往期对局</h2>
-        <p className="muted">{st?.games ? `这个服务器打完了 ${st.games} 局，善良赢 ${pct(st.goodWins, st.games)}，邪恶赢 ${pct(st.games - st.goodWins, st.games)}。` : ''}点表里的人看他的战绩，点往期的局看所有人的身份、票型和整局复盘。</p>
+        <p className="muted">{st?.games ? `这个服务器打完了 ${st.games} 局，善良赢 ${pct(st.goodWins, st.games)}，邪恶赢 ${pct(st.games - st.goodWins, st.games)}。` : ''}个人胜率合并了所有服务器。点表里的人看他的战绩，点往期的局看所有人的身份、票型和整局复盘。</p>
       </header>
       <div className="rh-grid">
         <div className="rh-left">
-          {shown ? <RecordCard p={shown} isMe={shown.id === s.me} /> : <p className="rec-none">你还没在这个服务器打完过一局。点右边表里的人，看看他们的战绩。</p>}
+          {shown ? <RecordCard p={shown} isMe={shown.id === s.me} /> : <p className="rec-none">你还没打完过一局。点右边表里的人，看看他们的战绩。</p>}
           {pick && pick !== s.me && me && <button type="button" className="rec-back" onClick={() => setPick(null)}>← 看我自己的</button>}
         </div>
         <div className="rh-right">
@@ -465,7 +509,7 @@ function PastGame({ game, onClose }) {
           {game.players.map((p) => (
             <div key={p.id} className={`pg-p team-${ROLES[p.role]?.team}`}>
               <Portrait p={p} size={36} prefer="avatar" frame={['minion', 'demon'].includes(ROLES[p.role]?.team) ? 'var(--phy)' : '#f4f4f0'} />
-              <span><b>{p.seat}号 {p.name}</b><small>{ROLES[p.role]?.name}{p.role === 'drunk' ? `（以为是${ROLES[p.shownRole]?.name}）` : ''}{p.alive ? '' : ' · 死亡'}</small></span>
+              <span><b>{p.seat}号 {p.name}</b><small>{ROLES[p.role]?.name}{p.role === 'drunk' ? `（以为是${ROLES[p.shownRole]?.name}）` : ''}{p.role === 'amnesiac' && p.gained ? `（能力是${ROLES[p.gained]?.name}）` : ''}{p.alive ? '' : ' · 死亡'}</small></span>
             </div>
           ))}
         </div>
@@ -514,8 +558,8 @@ export function NightOrder({ script }) {
 }
 
 export function RoleShowcase({ compact = false, script = 'tb' }) {
-  const sc = script === 'bmr' ? 'bmr' : 'tb';
-  const ids = Object.keys(ROLES).filter((id) => ROLES[id].script === sc);
+  const sc = SCRIPTS[script] ? script : 'tb';
+  const ids = rolesOf(sc);
   const [team, setTeam] = useState('all');
   const [open, setOpen] = useState(null);
   const shown = team === 'night' ? [] : TEAMS.filter((t) => team === 'all' || team === t);
@@ -523,7 +567,7 @@ export function RoleShowcase({ compact = false, script = 'tb' }) {
     <section className={compact ? 'roles-compact' : 'lobby-roles glass pnl'}>
       <header className="roles-head">
         <div>
-          <h2>{sc === 'bmr' ? '黯月初升' : '暗流涌动'} · 全部角色</h2>
+          <h2>{SCRIPTS[sc].name} · 全部角色</h2>
           <p className="muted">这个剧本一共 {ids.length} 个角色，每局按人数抽一部分。开局前先认识一下大家可能拿到什么。</p>
         </div>
         <div className="seg roles-tabs">
@@ -567,7 +611,7 @@ export function RoleShowcase({ compact = false, script = 'tb' }) {
 /** 房主指定每个人的角色（只有房主看得到）：不指定的座位开局时按人数表随机补齐。 */
 function RoleAssign({ s, act, script }) {
   const [open, setOpen] = useState(false);
-  const assign = Object.fromEntries(Object.entries(s.roleAssign).filter(([id, r]) => s.lobby.some((p) => p.id === id) && ROLES[r]?.script === script));
+  const assign = Object.fromEntries(Object.entries(s.roleAssign).filter(([id, r]) => s.lobby.some((p) => p.id === id) && !!ROLES[r] && inScript(r, script)));
   const k = Object.keys(assign).length;
   const n = s.lobby.length;
   const dist = DISTRIBUTION[n];
@@ -617,8 +661,44 @@ function RoleAssign({ s, act, script }) {
   );
 }
 
-function DistBar({ n, d }) {
-  if (!d) return <p className="muted dist-empty">{n < 5 ? `至少 5 人开局（现在 ${n} 人）` : '最多 15 人'}</p>;
+// 剧本选择：标准剧本和 5–6 人的小剧本分两组；每张卡写难度、人数和地图，左边一条剧本自己的颜色（和地图的气氛一致）
+const SCRIPT_CARDS = {
+  tb: { tag: '入门', map: '雪夜 · 钟楼广场', color: '#8fb4d0' },
+  bmr: { tag: '中等', map: '黄昏 · 黯月驿站', color: '#d07a3a' },
+  snv: { tag: '困难 · 疯狂', map: '初夏 · 紫罗兰花园', color: '#a98be0' },
+  ngj: { tag: '20 分钟一局', map: '冬夜集市 · 钟楼广场', color: '#e8b04a' },
+  luf: { tag: '利维坦 · 五天', map: '雾锁溪谷 · 黯月驿站', color: '#7fa8a2' },
+  rag: { tag: '全员猎手 vs 狼人', map: '雪夜 · 钟楼广场', color: '#c63d2a' },
+};
+
+function ScriptPicker({ value, disabled, onPick }) {
+  const groups = [['标准剧本', '5–15 人', ['tb', 'bmr', 'snv']], ['小剧本', '5–6 人', ['ngj', 'luf']], ['娱乐模式', '5–15 人', ['rag']]];
+  return (
+    <div className="script-pick">
+      <span className="script-pick-label">剧本</span>
+      {groups.map(([title, n, ids]) => (
+        <div key={title} className="script-group">
+          <div className="script-group-head"><b>{title}</b><span>{n}</span></div>
+          <div className={`script-cards n${ids.length}`}>
+            {ids.map((id) => {
+              const c = SCRIPT_CARDS[id];
+              return (
+                <button key={id} type="button" className={`script-card ${value === id ? 'on' : ''}`} style={{ '--sc': c.color }} disabled={disabled} aria-pressed={value === id} onClick={() => onPick(id)}>
+                  <b>{SCRIPTS[id].name}</b>
+                  <small>{c.tag}</small>
+                  <i>{c.map}</i>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DistBar({ n, d, lo = 5, hi = 15 }) {
+  if (!d || n > hi) return <p className="muted dist-empty">{n < lo ? `至少 ${lo} 人开局（现在 ${n} 人）` : `最多 ${hi} 人`}</p>;
   const parts = [['镇民', d[0], 'var(--int)'], ['外来者', d[1], 'var(--psy)'], ['爪牙', d[2], '#c9762e'], ['恶魔', d[3], 'var(--phy)']];
   return (
     <div className="dist">
@@ -628,10 +708,11 @@ function DistBar({ n, d }) {
   );
 }
 
-function Toggle({ label, on, disabled, onChange }) {
+/** 开关。rule：这是房规（和官方规则不一样），标签后面挂一个小「房规」。 */
+function Toggle({ label, on, disabled, onChange, rule = false }) {
   return (
     <label className="setting">
-      <span>{label}</span>
+      <span>{label}{rule && <em className="rule-tag" title="房规：和官方规则不一样的地方">房规</em>}</span>
       <button type="button" className={`switch ${on ? 'on' : ''}`} disabled={disabled} onClick={() => onChange(!on)} aria-pressed={on}><i /></button>
     </label>
   );

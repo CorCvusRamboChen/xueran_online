@@ -12,6 +12,19 @@ export const ATTR = {
 export const ROLE_TEAM = Object.fromEntries(Object.entries(ROLES).map(([id, r]) => [id, r.team]));
 
 export const FLAVOR = {
+  clockmaker: { skill: '逻辑', wake: '齿轮一格一格地咬合。你数得清每一步。', hear: '指针停在一个数字上。' },
+  dreamer: { skill: '内陆帝国', wake: '你还没完全睡着，别人的梦已经漏了进来。', hear: '梦里那张脸有两个名字。' },
+  snakecharmer: { skill: '镇定', wake: '笛声很轻。篮子里有东西动了一下。', hear: '蛇抬起头，看着你。' },
+  mathematician: { skill: '逻辑', wake: '账目对不上，差的数字很小，但确实差了。', hear: '你把这一天又算了一遍。' },
+  flowergirl: { skill: '感知', wake: '你在篮子里数花。有一朵今天开得不对。', hear: '花瓣告诉你今天有谁举过手。' },
+  towncrier: { skill: '修辞', wake: '你清了清嗓子，把今天的事又过了一遍。', hear: '你记得是谁先开的口。' },
+  oracle: { skill: '通灵', wake: '死人比活人诚实。你听他们说话。', hear: '他们之中有人低下了头。' },
+  savant: { skill: '学识', wake: '答案就在你脑子里，只是混着别的东西。', hear: '两句话都很有道理。' },
+  seamstress: { skill: '视觉', wake: '你把两块布摊开，看针脚走的是不是同一个方向。', hear: '线头露出来了。' },
+  philosopher: { skill: '概念化', wake: '人是什么？也许你可以换个答案。', hear: '你想通了一件事。' },
+  artist: { skill: '想象', wake: '画布上缺的那一笔，只有说书人知道。', hear: '颜料还没有干。' },
+  juggler: { skill: '镇定', wake: '球还在天上。你数着落下来了几个。', hear: '几个接住了，几个掉了。' },
+  sage: { skill: '学识', wake: '你早就知道会有这一天。', hear: '倒下之前，你看清了两张脸。' },
   washerwoman: { skill: '视觉', wake: '晾衣绳在风里晃。你记得每一件衣服属于谁。', hear: '一件衬衫上的污渍，说出了它主人的秘密。' },
   librarian: { skill: '学识', wake: '书架之间有灰尘落下。', hear: '借书卡上有两个名字，其中一个不该在这里。' },
   investigator: { skill: '逻辑', wake: '你翻开笔记本。两份证词对不上。', hear: '线索指向两个人，其中一个在说谎。' },
@@ -60,6 +73,19 @@ export const FLAVOR = {
   pukka: { skill: '电化学', wake: '毒在血里慢慢走。', hear: '上一个已经撑不住了。' },
   shabaloth: { skill: '半光', wake: '饿。两张嘴还不够。', hear: '有骨头卡在牙缝里。' },
   po: { skill: '镇静', wake: '忍一晚。明天吃个痛快。', hear: '你的胃口越攒越大。' },
+  // ── 梦殒春宵 ──
+  mutant: { skill: '战栗', wake: '镜子里那张脸不是你的。千万别说出来。', hear: '掌声停了。你还站在台上。' },
+  sweetheart: { skill: '共情', wake: '所有人都说你太好了。这正是麻烦所在。', hear: '有人为你哭得站不起来。' },
+  barber: { skill: '手眼协调', wake: '剃刀很稳。今晚换两张脸。', hear: '镜子里的人对视了一眼，谁也没认出谁。' },
+  klutz: { skill: '体能', wake: '你总是踩错地方，这次别踩错人。', hear: '你伸出手，又犹豫了。' },
+  eviltwin: { skill: '视觉', wake: '人群里有一张和你一样的脸。', hear: '他也看见你了。' },
+  witch: { skill: '暗示', wake: '指甲划过人偶的胸口。明天谁敢开口？', hear: '诅咒已经绑在他的名字上了。' },
+  cerenovus: { skill: '修辞', wake: '一句话就够。他明天会相信自己是别人。', hear: '那个念头已经种下去了。' },
+  pithag: { skill: '概念化', wake: '大锅滚了。把谁放进去，捞出来又是什么？', hear: '锅里浮上来一张新的脸。' },
+  fanggu: { skill: '残暴', wake: '外面来的人，闻起来最香。', hear: '獠牙陷了进去。' },
+  vigormortis: { skill: '疼痛阈值', wake: '死人还能替你干活。', hear: '尸体抽动了一下，站了起来。' },
+  nodashii: { skill: '电化学', wake: '毒从你身上慢慢渗向两边的人。', hear: '坐在你旁边的人脸色变了。' },
+  vortox: { skill: '半光', wake: '今晚谁也听不到一句真话。', hear: '真相在漩涡里转了一圈，再也没浮上来。' },
 };
 
 /** 某个"声音"（角色 id / storyteller / clock）显示成什么样。 */

@@ -6,7 +6,26 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const cnDay = (n) => ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][n] ?? String(n);
 
 const LINES = {
-  start: ({ n, script }) => (script === 'bmr' ? {
+  start: ({ n, script }) => (script === 'ngj' ? {
+    title: '冬夜集市',
+    text: pick([
+      `雪停了。钟楼广场挂满了灯笼，${n} 个人挤在热红酒的摊子前——今晚只玩一小会儿，对吧？`,
+      `烟花在钟楼上空炸开。${n} 个人笑着举杯。笑声里混着一个不该在这儿的声音。`,
+    ]),
+  } : script === 'luf' ? {
+    title: '雾锁驿站',
+    text: pick([
+      `雾从溪谷里漫上来，${n} 个人在驿站门口听见水底有东西在翻身。它不急，它有五天。`,
+      `月亮被雾吞掉了。${n} 个人压低声音说话——窃窃私语，谁也不知道谁在听。`,
+    ]),
+  } : script === 'snv' ? {
+    title: '鸦木布拉夫',
+    text: pick([
+      `初夏的傍晚，${n} 个人来到紫罗兰花园。马戏团的帐篷已经搭好，空气里全是花香——太香了。`,
+      `庆典开始了。${n} 个人举起酒杯，谁也没注意遗迹那边亮起的火光。`,
+      `${n} 个人走进鸦木布拉夫。这里每个人都很快乐。这正是不对劲的地方。`,
+    ]),
+  } : script === 'bmr' ? {
     title: '黯月驿站',
     text: pick([
       `${n} 个旅人在天黑前赶到了驿站。旅店的炉火很暖，林子里的狼嚎很近。`,
@@ -34,7 +53,7 @@ const LINES = {
     title: `第${cnDay(day)}天`,
     text: deaths.length
       ? pick([
-        `天亮了。昨晚，${deaths.join('、')}没能醒来。${script === 'bmr' ? '落叶上没有脚印。' : '雪地上没有脚印。'}`,
+        `天亮了。昨晚，${deaths.join('、')}没能醒来。${{ bmr: '落叶上没有脚印。', snv: '花丛里没有脚印。', luf: '雾里没有脚印。', ngj: '彩纸屑上没有脚印。' }[script] ?? '雪地上没有脚印。'}`,
         `清晨的钟声里少了一个人的呼吸。${deaths.join('、')}死了。`,
         `太阳照常升起，可${deaths.join('、')}再也看不到了。有人知道为什么。`,
       ])
@@ -112,7 +131,22 @@ const LINES = {
       ? `${a}举起枪，扣下扳机。${b}倒下了——那张人皮下面，是别的东西。`
       : pick([`${a}朝${b}开了一枪。什么都没有发生。`, `枪声在广场上回荡。${b}还站着。`]),
   }),
-  end: ({ team, reason, script }) => (script === 'bmr' ? {
+  end: ({ team, reason, script }) => (script === 'ngj' ? {
+    title: team === 'good' ? '善良获胜' : '邪恶获胜',
+    text: team === 'good'
+      ? pick([`${reason}。最后一发烟花升上天空，集市的灯一盏都没灭。`, `${reason}。热红酒还是温的，大家可以再来一局。`])
+      : pick([`${reason}。灯笼一盏接一盏熄灭，广场上只剩烟花的灰。`, `${reason}。集市散了，雪又开始下。`]),
+  } : script === 'luf' ? {
+    title: team === 'good' ? '善良获胜' : '邪恶获胜',
+    text: team === 'good'
+      ? pick([`${reason}。雾散了，溪水重新变得清澈。`, `${reason}。水底的东西沉了下去，再也没有浮上来。`])
+      : pick([`${reason}。溪水漫过了石桥，驿站沉进雾里。`, `${reason}。水面裂开，利维坦醒了。`]),
+  } : script === 'snv' ? {
+    title: team === 'good' ? '善良获胜' : '邪恶获胜',
+    text: team === 'good'
+      ? pick([`${reason}。庆典的灯火重新亮起来，花园里终于只剩花香。`, `${reason}。马戏团拔营走了，没有人回头。`])
+      : pick([`${reason}。紫罗兰在月光下合上了花瓣，庆典再也不会结束。`, `${reason}。遗迹里的火光越来越亮，小镇睡得很沉。`]),
+  } : script === 'bmr' ? {
     title: team === 'good' ? '善良获胜' : '邪恶获胜',
     text: team === 'good'
       ? pick([`${reason}。月亮落下去了，驿站的炉火还亮着。`, `${reason}。林子里的狼嚎停了。`])

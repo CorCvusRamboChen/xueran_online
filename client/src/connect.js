@@ -4,6 +4,7 @@ import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { setSpeaking, clearSpeaking } from './speaking.js';
 
 let sdkRef = null;
+let publicUrl = null;
 let speakingIn = null;
 const onSpeakStart = (e) => setSpeaking(e?.user_id, true);
 const onSpeakStop = (e) => setSpeaking(e?.user_id, false);
@@ -49,6 +50,37 @@ function kookTicket() {
 }
 export const fromKook = !inDiscord && !!kookTicket();
 
+/** 打开收音页。Discord 活动在沙盒里，要走 SDK（会弹一次确认），地址也要用正式域名；浏览器里直接开新标签页。 */
+export function openMic(token) {
+  const url = `${sdkRef ? publicUrl : location.origin}/?mic=${encodeURIComponent(token)}`;
+  if (sdkRef) return sdkRef.commands.openExternalLink({ url }).catch((e) => report('打开收音页', e?.message ?? e));
+  window.open(url, '_blank', 'noopener');
+}
+
+/**
+ * 邀请朋友进来。Discord 里先开原生的邀请框（把人拉进这个语音频道、一起开这个活动）；
+ * 私信 / 群聊里没有服务器，或者没有创建邀请的权限时，改开分享链接的框（发给谁都行）。
+ * KOOK 里进入链接每人一张、要自己领，只能提示怎么领；浏览器（测试）里复制链接。返回要给用户看的提示，没有就是 null。
+ */
+export async function inviteFriends() {
+  if (sdkRef) {
+    if (sdkRef.guildId) {
+      try { await sdkRef.commands.openInviteDialog(); return null; } catch (e) { report('邀请对话框', e?.message ?? e); }
+    }
+    try {
+      const r = await sdkRef.commands.shareLink({ message: '来血染钟楼一起玩！进来就能坐下。' });
+      return r?.didCopyLink ? '邀请链接已复制' : r?.didSendMessage ? '邀请已发出' : null;
+    } catch (e) {
+      report('分享链接', e?.message ?? e);
+      return '打不开邀请框：让朋友进同一个语音频道，从语音频道的「活动」里打开就行。';
+    }
+  }
+  if (fromKook) return '在 KOOK 文字频道发「/血染」，朋友点卡片上的按钮领自己的进入链接（语音在 KOOK 里聊）。';
+  const url = new URL(location.href);
+  for (const k of ['id', 'name', 'devRole']) url.searchParams.delete(k); // 测试模式：别把自己的身份一起发出去
+  try { await navigator.clipboard.writeText(url.href); return '进入链接已复制，发给朋友就行'; } catch { return `把这个链接发给朋友：${url.href}`; }
+}
+
 /** 把进入时卡住/出错的情况报给服务器日志（方便排查"卡在进入界面"）。 */
 export function report(stage, error) {
   try {
@@ -87,6 +119,7 @@ export async function login(onStep = () => {}) {
   try {
     onStep('正在连上服务器……');
     cfg = await getJson('/api/config', undefined, '读取配置');
+    publicUrl = cfg.publicUrl;
     if (inDiscord) {
       if (!cfg.clientId) throw new Error('服务器没配置 DISCORD_CLIENT_ID');
       stage = '连接 Discord';

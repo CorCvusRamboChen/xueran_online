@@ -13,6 +13,8 @@ description: 《染·钟楼谜团》（血染钟楼 / Blood on the Clocktower）
 |---|---|
 | 暗流涌动的角色怎么结算、夜晚顺序、推荐配置 | `references/trouble-brewing.md` |
 | 黯月初升的角色怎么结算、夜晚顺序、推荐配置、跨角色交互 | `references/bad-moon-rising.md` |
+| 梦殒春宵的角色怎么结算、夜晚顺序、疯狂、本项目的改写 | `references/sects-and-violets.md` |
+| 两个官方小剧本（无上愉悦、窃窃私语）的配置、新角色（气球驾驶员、失忆者、渔夫、食人族、寡妇、哥布林、利维坦）、本项目的改写 | `references/teensy.md` |
 | 通用流程（提名/投票/处决/胜负）、术语、隐性规则、相克、说书人理念 | `references/rules-and-storytelling.md` |
 
 ## 说书人必须守住的规则（最常判错的）
@@ -58,7 +60,7 @@ description: 《染·钟楼谜团》（血染钟楼 / Blood on the Clocktower）
 
 ## 在 botc-bot 里的位置
 
-- 角色定义：`src/engine/roles.js`（`ROLES`、`DISTRIBUTION`、各阵营列表）
+- 角色定义：`src/engine/roles.js`（`ROLES`、`DISTRIBUTION`、各阵营列表）；黯月初升的结算在 `src/engine/bmr.js`，梦殒春宵在 `src/engine/snv.js`（测试 `test/snv.test.js`、`test/snv-room.test.js`）
 - 结算：`src/engine/game.js`（夜晚 `startNight` / `resolveNight`，白天提名投票 `nominate` / `recordVote` / `endDay`）
 - AI 说书人的判断（假信息、误登记、平衡）：`src/engine/storyteller.js`
 - 房间流程、计时、语音、视图：`src/server/room.js`

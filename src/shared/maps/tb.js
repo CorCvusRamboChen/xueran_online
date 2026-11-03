@@ -5,7 +5,6 @@ export default {
   place: '钟楼镇 · 位于暗流涌动区',
   w: 1800, h: 1400,
   gather: { x: 900, y: 640, r: 150 },
-  open: [4, 6],
   weather: 'snow',
   // 雾（加立体感，见 World.js 的 buildFog）：雪夜海港的冷雾，比黯月初升淡，免得和暴风雪抢
   fog: { color: 0xbfc9d2, ground: 0.22, haze: 0.26, mist: 0.07 },

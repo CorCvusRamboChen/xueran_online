@@ -167,7 +167,7 @@ export function SkillCheck({ check, onClose }) {
 }
 
 /** 语音播报、脚步音效、音乐的开关和音量（存在本机）。onFixVoice：对局中显示"语音归位"（卡在房间里出不来时点）。 */
-export function SoundToggles({ onFixVoice = null }) {
+export function SoundToggles({ onFixVoice = null, onSheet = null }) {
   const [tts, setT] = useState(ttsEnabled());
   const [sfx, setS] = useState(sfxEnabled());
   const [music, setM] = useState(musicEnabled());
@@ -181,6 +181,7 @@ export function SoundToggles({ onFixVoice = null }) {
       <button type="button" className={music ? 'on' : ''} onClick={() => setMusic(!music)} title="背景音乐和风雪声">{music ? '音乐 开' : '音乐 关'}</button>
       <VolumeButton />
       {onFixVoice && <button type="button" onClick={onFixVoice} title="语音卡在别的房间、回不到广场，或者一直被闭着麦时点这里">语音归位</button>}
+      {onSheet && <button type="button" onClick={onSheet} title="所有角色的技能">技能表</button>}
     </div>
   );
 }

@@ -1,9 +1,12 @@
 // 小魔典（自己的标记和笔记）：右键头像 / 镇民面板里给人打标签（镇民 / 外来者 / 爪牙 / 恶魔）、猜他的角色、写笔记，
 // 也能给自己记（比如自己打算冒充谁），还能在两个玩家之间连线（信任、怀疑、同伙、对跳、信息指向），广场上画出来。
-// 只存在自己这台设备上（localStorage），别人看不到。每局一份（按服务器给的局编号），下一局自动清空。
+// 存在自己这台设备上（localStorage），别的玩家看不到。每局一份（按服务器给的局编号），下一局自动清空。
+// 标签、猜的角色、连线还会悄悄发给服务器存档（笔记和给自己的标记不发），用来线下看大家在想什么，见 src/server/beliefs.js。
 import { useEffect, useState } from 'react';
-import { ROLES } from '../../src/engine/roles.js';
+import { createPortal } from 'react-dom';
+import { ROLES, SCRIPTS, rolesOf } from '../../src/engine/roles.js';
 import { ATTR } from './flavor.js';
+import { getDisplay } from './display.js';
 
 /** 标签 = 你觉得他是哪一类角色，颜色和游戏里四类角色的主题色一致（镇民蓝、外来者紫、爪牙黄、恶魔红）。 */
 export const TAGS = {
@@ -27,21 +30,44 @@ const TEAM_LABEL = { townsfolk: '镇民', outsider: '外来者', minion: '爪牙
 
 let key = null;
 let data = {};
+let gameId = null;
+let me = null;
+let sink = null; // App 给的发送函数
+let sendTimer = null;
+const SEND_DELAY = 4000;
 const subs = new Set();
 
-function load(k) {
+/** 不打断操作：停手几秒后发一份全量，服务器只记变化。 */
+function sendSoon() {
+  clearTimeout(sendTimer);
+  sendTimer = setTimeout(() => {
+    if (!sink || !gameId) return;
+    const { _links, ...people } = data;
+    const tags = {};
+    for (const [id, m] of Object.entries(people)) if (id !== me && (m?.tag || m?.role)) tags[id] = { tag: m.tag ?? null, role: m.role ?? null };
+    sink({ gameId, tags, links: _links ?? [] });
+  }, SEND_DELAY);
+}
+
+export function setMarksSink(fn) { sink = fn; }
+
+function load(k, s) {
+  gameId = s.gameId ?? null;
+  me = s.me ?? null;
   if (k === key) return;
   key = k;
   try { data = JSON.parse(localStorage.getItem(k) ?? '{}') ?? {}; } catch { data = {}; }
+  if (Object.keys(data).length) sendSoon(); // 断线重进：把离线时记的补上
 }
 function save() {
   try { localStorage.setItem(key, JSON.stringify(data)); } catch { /* 隐私模式：只在这次打开里有效 */ }
   for (const f of subs) f();
+  sendSoon();
 }
 
 /** 这一局的标记：{ 玩家 id: { tag, role, note }, _links: [{ a, b, kind }] }。 */
 export function useMarks(s) {
-  load(`botc.marks.${s.key}.${s.gameId ?? s.players.map((p) => p.id).join(',')}`);
+  load(`botc.marks.${s.key}.${s.gameId ?? s.players.map((p) => p.id).join(',')}`, s);
   const [, bump] = useState(0);
   useEffect(() => {
     const f = () => bump((x) => x + 1);
@@ -97,8 +123,8 @@ export function removeLink(i) {
 
 /** 这个剧本的角色，按镇民 / 外来者 / 爪牙 / 恶魔分组。 */
 function rolesOfScript(script) {
-  const sc = script === 'bmr' ? 'bmr' : 'tb';
-  return TEAM_ORDER.map((t) => [t, Object.keys(ROLES).filter((id) => (ROLES[id].script ?? 'tb') === sc && ROLES[id].team === t)]);
+  const sc = SCRIPTS[script] ? script : 'tb';
+  return TEAM_ORDER.map((t) => [t, rolesOf(sc, t)]);
 }
 
 /** 角色颜色（按阵营）：镇民蓝、外来者紫、爪牙黄、恶魔红。 */
@@ -163,12 +189,15 @@ export function MarkMenu({ s, player, mark, at, onClose }) {
     window.addEventListener('keydown', esc);
     return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('keydown', esc); };
   }, [onClose]);
-  const W = 300;
-  const x = Math.max(8, Math.min(at.x, window.innerWidth - W - 8));
-  const y = Math.max(8, Math.min(at.y - 150, window.innerHeight - 470));
+  // 字号缩放（--ui-zoom）连定位坐标一起放大：下面先按屏幕像素算好，写进样式时除回去
+  const z = getDisplay().scale;
+  const W = Math.min(300, (window.innerWidth - 16) / z);
+  const x = Math.max(8, Math.min(at.x, window.innerWidth - W * z - 8));
+  const y = Math.max(8, Math.min(at.y - 150, window.innerHeight - 470 * z));
   // 高度按菜单下面还剩多少地方算，放不下就在菜单里面滚（原来按整屏算，下半截跑到屏幕外、滑不到）
-  return (
-    <div className="mark-menu" style={{ left: x, top: y, width: W, maxHeight: window.innerHeight - y - 8 }} onContextMenu={(e) => e.preventDefault()}>
+  // 挂到 body 上：放在镇民面板里会吃到面板的缩放
+  return createPortal(
+    <div className="mark-menu" style={{ left: x / z, top: y / z, width: W, maxHeight: (window.innerHeight - y - 8) / z }} onContextMenu={(e) => e.preventDefault()}>
       <div className="mm-title">{player.seat}号 {player.id === s.me ? '你自己' : player.name}</div>
       <div className="mm-tags">
         {Object.entries(TAGS).map(([id, t]) => (
@@ -187,7 +216,8 @@ export function MarkMenu({ s, player, mark, at, onClose }) {
         <button type="button" onClick={() => { setMark(player.id, { tag: null, role: null }); onClose(); }}>清除标记</button>
         <button type="button" onClick={onClose}>好</button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

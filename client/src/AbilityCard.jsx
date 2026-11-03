@@ -1,6 +1,6 @@
 // 能力牌：主体是能力本身（不画人，人物有单独的头像牌）。
 // 版面：上半插画铺满（极乐迪斯科技能卡）+ 行动时机（血染夜晚顺序）+ 白底名字条 + 能力说明 + 提醒标记（血染原作的 reminder token）。
-import { ROLES, TEAM_NAME, isEvilRole } from '../../src/engine/roles.js';
+import { ROLES, TEAM_NAME, isEvilRole, inScript } from '../../src/engine/roles.js';
 import { ATTR, FLAVOR } from './flavor.js';
 import { ROLE_ART } from './art.js';
 import { Glossed, Term, GLOSSARY } from './terms.jsx';
@@ -164,7 +164,7 @@ function PlaceholderArt({ id, team }) {
 export function CardGallery() {
   // ?preview=cards&script=bmr：只看一个剧本
   const script = new URLSearchParams(location.search).get('script');
-  const ids = Object.keys(ROLES).filter((id) => !script || ROLES[id].script === script);
+  const ids = Object.keys(ROLES).filter((id) => !ROLES[id].virtual && (!script || inScript(id, script))); // 失忆者专用的能力不是角色
   return (
     <div className="gallery">
       <h1 className="title" style={{ fontSize: 28 }}>能力牌预览</h1>

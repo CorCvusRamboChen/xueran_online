@@ -1,5 +1,5 @@
-// 血染钟楼的规则引擎（暗流涌动 + 黯月初升）。纯逻辑，不碰 Discord，方便测试。
-// 暗流涌动的规则写在这个文件里；黯月初升的在 bmr.js（script === 'bmr' 时各个方法转过去）。
+// 血染钟楼的规则引擎（暗流涌动 + 黯月初升 + 梦殒春宵）。纯逻辑，不碰 Discord，方便测试。
+// 暗流涌动的规则写在这个文件里；黯月初升的在 bmr.js，梦殒春宵的在 snv.js（script 对应时各个方法转过去）。
 //
 // 用法（一晚）：
 //   const prompts = game.startNight();      // 谁需要选人
@@ -10,10 +10,11 @@
 // 白天：nominate → voteOrder / recordVote → endDay
 
 import {
-  ROLES, TOWNSFOLK, OUTSIDERS, MINIONS, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole,
+  ROLES, TOWNSFOLK, OUTSIDERS, MINIONS, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, SCRIPTS, engineOf, ragnarokWolves,
 } from './roles.js';
 import { Storyteller } from './storyteller.js';
 import { BMR_METHODS } from './bmr.js';
+import { SNV_METHODS } from './snv.js';
 
 export function makeRng(seed = Date.now()) {
   let a = seed >>> 0;
@@ -91,6 +92,13 @@ export function balancedTB(n, rng, { noBaron = false, tries = 40 } = {}) {
 /** 房规"夜里死了仍拿信息"：这些角色当晚被杀后照样得到当晚的信息，但按醉酒处理（真假由说书人定）。 */
 export const DEAD_INFO_TB = new Set(['empath', 'fortuneteller', 'undertaker']);
 
+/** 诸神黄昏：几只狼人（小恶魔），其余全是猎手。 */
+export function rollRagnarok(n, rng) {
+  if (n < MIN_PLAYERS || n > MAX_PLAYERS) throw new Error(`人数需在 ${MIN_PLAYERS}–${MAX_PLAYERS} 之间`);
+  const w = ragnarokWolves(n);
+  return shuffle([...Array(w).fill('imp'), ...Array(n - w).fill('slayer')], rng);
+}
+
 /** 按人数随机出一套角色（已处理男爵 +2 外来者）。noBaron：这局不发男爵（房规：小局不要男爵）。 */
 export function rollRoles(n, rng, { noBaron = false } = {}) {
   if (n < MIN_PLAYERS || n > MAX_PLAYERS) throw new Error(`人数需在 ${MIN_PLAYERS}–${MAX_PLAYERS} 之间`);
@@ -106,11 +114,12 @@ export class Game {
    * @param {{rng?:()=>number, roles?:string[], misregister?:number}} opts
    *   misregister：陌客/间谍"错误登记"的固定概率（测试用）；不给就由说书人按局势判定
    */
-  constructor(players, { rng = Math.random, roles, misregister = null, evilInfo = null, script = 'tb', drunkAs = null, noBaron = false, deadDrunk = false, lunaticGhost = false } = {}) {
+  constructor(players, { rng = Math.random, roles, misregister = null, evilInfo = null, script = 'tb', drunkAs = null, noBaron = false, deadDrunk = false, lunaticGhost = false, newbies = [] } = {}) {
     this.rng = rng;
-    this.script = script === 'bmr' ? 'bmr' : 'tb';
+    this.newbies = newbies; // 红鲱鱼在下面就要定，要先有
+    this.script = SCRIPTS[script] ? script : 'tb';
     // 官方规则：7 人及以上第一夜恶魔和爪牙互认、恶魔拿 3 个伪装；6 人及以下都不给（房规可打开）
-    this.evilInfo = evilInfo ?? players.length >= 7;
+    this.evilInfo = SCRIPTS[this.script]?.ragnarok ? true : evilInfo ?? players.length >= 7; // 诸神黄昏：狼人总是互相认识
     this.evilKnown = null;     // 第一夜互认的结果：id → [{id, team}]
     this.bluffsShared = false; // 恶魔有没有把伪装告诉爪牙
     this.id = Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36); // 这一局的编号（客户端按它分开存标记）
@@ -122,8 +131,9 @@ export class Game {
     this.st = new Storyteller(this, rng);
     this.nightDeaths = [];
     if (this.script === 'bmr') this.setupBMR(players, roles, rng);
+    else if (this.engine === 'snv') this.setupSNV(players, roles, rng);
     else {
-      const assigned = roles ?? balancedTB(players.length, rng, { noBaron });
+      const assigned = roles ?? (SCRIPTS[this.script].ragnarok ? rollRagnarok(players.length, rng) : balancedTB(players.length, rng, { noBaron }));
       if (assigned.length !== players.length) throw new Error('角色数量与玩家数量不符');
 
       this.players = players.map((p, i) => ({
@@ -164,6 +174,12 @@ export class Game {
     this.resetDay();
   }
 
+  /** 用哪套规则：'tb' | 'bmr' | 'snv'（两个小剧本用梦殒春宵那套）。 */
+  get engine() { return engineOf(this.script); }
+
+  /** 记一条结构化的信息（世界枚举用，见 worlds.js）。不进存档，只分析用，不影响判定；目前只有暗流涌动记。 */
+  fact(f) { (this.facts ??= []).push({ night: this.night, ...f }); }
+
   /** 记一条复盘。kind：setup 开局 / choice 夜里选择 / info 私密信息 / death 死亡 / nominate 提名 / vote 投票 / slay 开枪 / st 说书人判定 / end 终局 */
   record(kind, text, extra = {}) {
     this.timeline.push({ when: this.st.when(), kind, text, ...extra });
@@ -172,12 +188,13 @@ export class Game {
   tag(id) {
     const p = this.get(id);
     if (!p) return '?';
-    const r = p.role === 'drunk' ? `酒鬼·以为是${ROLES[p.shownRole].name}` : p.role === 'lunatic' ? `疯子·以为是${ROLES[p.shownRole].name}` : ROLES[p.role].name;
+    const r = p.role === 'drunk' ? `酒鬼·以为是${ROLES[p.shownRole].name}` : p.role === 'lunatic' ? `疯子·以为是${ROLES[p.shownRole].name}` : p.role === 'amnesiac' && p.gained ? `失忆者·能力是${ROLES[p.gained].name}` : ROLES[p.role].name;
     return `${this.name(id)}（${r}）`;
   }
   roleText(p) {
     if (p.role === 'drunk') return `酒鬼（以为自己是${ROLES[p.shownRole].name}）`;
     if (p.role === 'lunatic') return `疯子（以为自己是${ROLES[p.shownRole].name}）`;
+    if (p.role === 'amnesiac' && p.gained) return `失忆者（能力其实是${ROLES[p.gained].name}）`;
     return ROLES[p.role].name;
   }
 
@@ -188,7 +205,9 @@ export class Game {
       'poisonTarget', 'monkTarget', 'butlerMaster', 'virginUsed', 'slayerUsed', 'lastExecuted', 'choices', 'nightDeaths', 'log',
       'block', 'blockVotes', 'blockTied', 'executedToday', 'shooters', 'firstDemon', 'evilInfo', 'evilKnown', 'bluffsShared', 'id',
       'script', 'fx', 'used', 'lastPick', 'pukkaVictim', 'poCharged', 'shabaLast', 'grandchild', 'gossipPending', 'gossipSaid',
-      'moonchildPick', 'pendingMoonchild', 'diedToday', 'outsiderDiedToday', 'mastermindDay', 'demonExecuted', 'nightRevived', 'newbies', 'deadDrunk', 'lunaticGhost', 'evilMessages', 'midNight', 'lunaticFake', 'goonHit', 'pendingGoonNews', 'blocked', 'lunaticPicks'];
+      'moonchildPick', 'pendingMoonchild', 'diedToday', 'outsiderDiedToday', 'mastermindDay', 'demonExecuted', 'nightRevived', 'newbies', 'deadDrunk', 'lunaticGhost', 'evilMessages', 'midNight', 'lunaticFake', 'goonHit', 'pendingGoonNews', 'blocked', 'lunaticPicks',
+      'firstDone', 'twin', 'fangUsed', 'vigKept', 'abnormal', 'demonVoted', 'minionNominated', 'dayVoters', 'jugglerDay', 'juggled', 'juggleLog', 'madness', 'savantDay', 'declared', 'claims', 'records', 'sageHit', 'barberDue', 'pendingKlutz', 'klutzQueue', 'klutzNow', 'madNight', 'curseFail', 'pitNight',
+      'balloon', 'leviGood', 'goblinMark', 'amnesiacDay', 'amnesiacKnown', 'woke', 'pardonDay'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -213,6 +232,7 @@ export class Game {
     g.bluffsShared ??= false;
     g.id ??= `old-${g.players.map((p) => p.seat + p.id.slice(-3)).join('')}`;
     g.script ??= 'tb';
+    if (g.engine === 'snv') { g.claims ??= {}; g.balloon ??= {}; g.leviGood ??= []; g.amnesiacDay ??= {}; g.amnesiacKnown ??= {}; g.woke ??= []; }
     if (g.script === 'bmr') { g.wokeTonight = new Set(); g.goonHit = false; g.blocked = null; g.nightRevived ??= []; }
     return g;
   }
@@ -248,11 +268,16 @@ export class Game {
 
   isPoisoned(p) {
     if (this.script === 'bmr') return this.fx.some((f) => f.kind === 'poison' && f.target === p.id && this.fxLive(f));
+    if (this.engine === 'snv') return this.snvPoisoned(p);
     const poisoner = this.byRole('poisoner');
     return this.poisonTarget === p.id && poisoner?.alive;
   }
   /** 能力失效：酒鬼或中毒。 */
-  broken(p) { return this.script === 'bmr' ? this.bmrBroken(p) : p.role === 'drunk' || this.isPoisoned(p); }
+  broken(p) {
+    if (this.script === 'bmr') return this.bmrBroken(p);
+    if (this.engine === 'snv') return this.snvBroken(p);
+    return p.role === 'drunk' || this.isPoisoned(p);
+  }
 
   /** 坐在 p 两侧最近的存活玩家。 */
   aliveNeighbours(p) {
@@ -289,6 +314,7 @@ export class Game {
   startNight() {
     this.phase = 'night';
     this.night += 1;
+    if (this.script === 'tb') this.fact({ kind: 'night', alive: this.alive().map((p) => p.id) });
     this.choices = {};
     this.nightDeaths = [];
     this.demonKills = [];
@@ -300,6 +326,11 @@ export class Game {
       if (this.night === 1) this.evilMessages = this.evilInfoBMR();
       return this.nightPrompts();
     }
+    if (this.engine === 'snv') {
+      this.startNightSNV();
+      if (this.night === 1) this.evilMessages = this.evilInfoSNV();
+      return this.nightPrompts();
+    }
     // 第一夜一开始就告诉恶魔和爪牙彼此是谁（投毒者选人之前就知道恶魔）；房间马上发出去
     if (this.night === 1 && this.evilInfo) this.evilMessages = this.evilInfoMessages();
     return this.nightPrompts();
@@ -309,6 +340,15 @@ export class Game {
   evilInfoMessages() {
     const messages = [];
     const say = (p, text) => messages.push({ playerId: p.id, text });
+    if (SCRIPTS[this.script].ragnarok) { // 诸神黄昏：狼人互相认识，没有爪牙也没有伪装
+      const wolves = this.players.filter((p) => p.role === 'imp');
+      this.evilKnown = this.knownMap();
+      for (const w of wolves) {
+        const mates = wolves.filter((x) => x.id !== w.id).map((x) => `**${this.name(x.id)}**`);
+        say(w, mates.length ? `你的狼人同伴：${mates.join('、')}。每晚你们各自选一个人杀死。` : '你是唯一的狼人。每晚选一个人杀死。');
+      }
+      return messages;
+    }
     const demon = this.demon();
     const minions = this.players.filter((p) => ROLES[p.role].team === 'minion');
     this.evilKnown = this.knownMap();
@@ -324,6 +364,7 @@ export class Game {
   /** 今晚需要选人的玩家。酒鬼按他以为的角色醒来。 */
   nightPrompts() {
     if (this.script === 'bmr') return this.nightPromptsBMR();
+    if (this.engine === 'snv') return this.nightPromptsSNV();
     const first = this.night === 1;
     return this.nightOrder()
       .filter((p) => ROLES[p.shownRole].choose)
@@ -344,6 +385,7 @@ export class Game {
 
   submitChoice(playerId, targets, extra = {}) {
     if (this.script === 'bmr') return this.submitChoiceBMR(playerId, targets, extra);
+    if (this.engine === 'snv') return this.submitChoiceSNV(playerId, targets, extra);
     const prompt = this.nightPrompts().find((x) => x.playerId === playerId);
     if (!prompt) throw new Error('你今晚不需要选择');
     // 暗流涌动夜里要选人的能力都是"你要选择"（官方），不能空过；小恶魔想空刀就选一名已经死了的玩家
@@ -357,6 +399,7 @@ export class Game {
   /** 随机替没选的人选（超时或机器人玩家）。 */
   autoChoose(playerId) {
     if (this.script === 'bmr') return this.autoChooseBMR(playerId);
+    if (this.engine === 'snv') return this.autoChooseSNV(playerId);
     const prompt = this.nightPrompts().find((x) => x.playerId === playerId);
     if (!prompt) return;
     let opts = prompt.options;
@@ -379,6 +422,7 @@ export class Game {
    */
   resolveNight() {
     if (this.script === 'bmr') return this.resolveNightBMR();
+    if (this.engine === 'snv') return this.resolveNightSNV();
     const messages = [];
     const say = (p, text) => messages.push({ playerId: p.id, text });
     const first = this.night === 1;
@@ -415,6 +459,7 @@ export class Game {
           const [a, b] = choice.map((id) => this.get(id));
           let yes = [a, b].some((q) => this.regDemon(q, '占卜师查验') || q.id === this.redHerring);
           if (broken && lies()) yes = this.st.fakeFortune(p, a, b, yes);
+          this.fact({ kind: 'ft', by: p.id, a: a.id, b: b.id, yes });
           say(p, `${this.name(a.id)} 与 ${this.name(b.id)} 之中${yes ? '**有**' : '**没有**'}恶魔。`);
           break;
         }
@@ -422,6 +467,7 @@ export class Game {
           if (this.lastExecuted == null) break;
           const ex = this.get(this.lastExecuted);
           const r = broken && lies() ? this.st.falseRole(p, ex) : this.regRole(ex, '送葬者查看');
+          this.fact({ kind: 'role', by: p.id, target: ex.id, role: r });
           say(p, `今天被处决的 ${this.name(ex.id)} 是 **${ROLES[r].name}**。`);
           break;
         }
@@ -455,6 +501,7 @@ export class Game {
     const t = this.get(targetId);
     if (!rk || !t) throw new Error('无效的守鸦人选择');
     const r = this.lies(rk) ? this.st.falseRole(rk, t) : this.regRole(t, '守鸦人查看');
+    this.fact({ kind: 'role', by: rk.id, target: t.id, role: r });
     return { playerId: rk.id, text: `${this.name(t.id)} 的角色是 **${ROLES[r].name}**。` };
   }
 
@@ -476,6 +523,7 @@ export class Game {
   kill(p, cause, messages = []) {
     if (!p.alive) return;
     if (this.script === 'bmr') { this.bmrDie(p, cause, messages); return; }
+    if (this.engine === 'snv') { this.snvDie(p, cause, messages); return; }
     const aliveBefore = this.aliveCount();
     p.alive = false;
     if (this.phase === 'night') this.nightDeaths.push(p.id);
@@ -483,6 +531,7 @@ export class Game {
     this.log.push(`${this.name(p.id)} 死亡（${cause}）`);
     const why = { demon: '被恶魔杀死', starpass: '恶魔自杀（传位）', execution: '被处决', slayer: '被猎手射杀', storyteller: '说书人判定死亡' }[cause] ?? cause;
     this.record('death', `${this.tag(p.id)} ${why}`);
+    if (cause === 'execution') this.fact({ kind: 'executed', target: p.id });
     if (ROLES[p.role].team !== 'demon') return;
 
     const minions = this.alive().filter((q) => ROLES[q.role].team === 'minion');
@@ -510,7 +559,7 @@ export class Game {
     let target; let role;
     if (lies) {
       const fake = this.st.falsePair(p, team);
-      if (!fake) return { outsider: '场上**没有**外来者。', minion: '场上**没有**爪牙。' }[team] ?? '没有可以告诉你的信息。';
+      if (!fake) { this.fact({ kind: 'none', by: p.id, team }); return { outsider: '场上**没有**外来者。', minion: '场上**没有**爪牙。' }[team] ?? '没有可以告诉你的信息。'; }
       ({ target, role } = fake);
     } else {
       const cands = others.filter((q) => {
@@ -521,11 +570,12 @@ export class Game {
         return ROLES[q.role].team === 'minion' || (q.role === 'recluse' && this.misreg(q, by));
       });
       if (!cands.length && team === 'townsfolk' && p.role === p.shownRole && TOWNSFOLK.includes(p.role)) cands.push(p);
-      if (!cands.length) return { outsider: '场上**没有**外来者。', minion: '场上**没有**爪牙。' }[team] ?? '没有可以告诉你的信息。';
-      target = pick(cands, this.rng);
-      role = ROLES[target.role].team === team ? target.role : pick(pool, this.rng);
+      if (!cands.length) { this.fact({ kind: 'none', by: p.id, team }); return { outsider: '场上**没有**外来者。', minion: '场上**没有**爪牙。' }[team] ?? '没有可以告诉你的信息。'; }
+      target = this.st.choose('pairTarget', cands, { who: p.id, team });
+      role = ROLES[target.role].team === team ? target.role : this.st.choose('pairRole', pool, { who: p.id });
     }
-    const decoy = pick(others.filter((q) => q.id !== target.id), this.rng);
+    const decoy = this.st.choose('pairDecoy', others.filter((q) => q.id !== target.id), { who: p.id, team });
+    this.fact({ kind: 'pair', by: p.id, team, a: target.id, b: decoy.id, role });
     const pair = shuffle([target, decoy], this.rng).map((q) => `**${this.name(q.id)}**`);
     return `${pair[0]} 与 ${pair[1]} 之中，有一人是 **${ROLES[role].name}**。`;
   }
@@ -536,18 +586,24 @@ export class Game {
     const evil = this.players.map((q) => (lies ? isEvilRole(q.role) : this.regEvil(q, '厨师检测')));
     let pairs = 0;
     for (let i = 0; i < n; i++) if (evil[i] && evil[(i + 1) % n]) pairs++;
-    return lies ? this.st.fakeChef(p, pairs) : pairs;
+    const value = lies ? this.st.fakeChef(p, pairs) : pairs;
+    this.fact({ kind: 'chef', by: p.id, value, truth: pairs });
+    return value;
   }
 
   empathInfo(p, lies) {
-    const truth = this.aliveNeighbours(p).filter((q) => (lies ? isEvilRole(q.role) : this.regEvil(q, '共情者检测'))).length;
-    return lies ? this.st.fakeEmpath(p, truth) : truth;
+    const around = this.aliveNeighbours(p);
+    const truth = around.filter((q) => (lies ? isEvilRole(q.role) : this.regEvil(q, '共情者检测'))).length;
+    const value = lies ? this.st.fakeEmpath(p, truth) : truth;
+    this.fact({ kind: 'empath', by: p.id, around: around.map((q) => q.id), value, truth });
+    return value;
   }
 
   dawn() {
     if (!this.winner) this.phase = 'day';
     this.day += 1;
     if (this.script === 'bmr') this.dawnBMR();
+    if (this.engine === 'snv') this.dawnSNV();
     this.resetDay();
     this.checkWinner();
     return { deaths: [...this.nightDeaths] };
@@ -567,6 +623,7 @@ export class Game {
   nominate(nominatorId, nomineeId) {
     if (this.phase !== 'day') throw new Error('只能在白天提名');
     if (this.executedToday) throw new Error('今天已经处决过了');
+    if (this.pardonDay === this.day) throw new Error('今天特赦过了，不再处决');
     const a = this.get(nominatorId); const b = this.get(nomineeId);
     if (!a || !b) throw new Error('提名者或被提名者不在游戏中');
     if (!this.visAlive(a)) throw new Error('死亡玩家不能提名');
@@ -577,6 +634,7 @@ export class Game {
     this.suspicion[b.id] = (this.suspicion[b.id] ?? 0) + 1;
     this.log.push(`第${this.day}天 ${this.name(a.id)} 提名 ${this.name(b.id)}`);
     this.record('nominate', `${this.tag(a.id)} 提名了 ${this.tag(b.id)}`);
+    if (this.engine === 'snv') return { virgin: false, cursed: this.nominateSNV(a) };
 
     if (b.role === 'virgin' && b.alive && !this.virginUsed) {
       this.virginUsed = true;
@@ -610,6 +668,7 @@ export class Game {
     // 管家没跟着主人投的违规票也照算（官方：说书人不替管家把关，不算的话大家就知道谁是管家了）
     const voters = yesIds.filter((id) => this.canVote(id));
     for (const id of voters) { const p = this.get(id); if (!this.visAlive(p)) p.ghostVote = false; }
+    if (this.engine === 'snv') this.voteSNV(voters);
     const count = voters.length;
     this.suspicion[nomineeId] = (this.suspicion[nomineeId] ?? 0) + count;
     const threshold = this.threshold();
@@ -627,6 +686,7 @@ export class Game {
 
   execute(p) {
     if (this.script === 'bmr') return this.executeBMR(p);
+    if (this.engine === 'snv') return this.executeSNV(p);
     this.executedToday = true;
     if (p.alive) this.lastExecuted = p.id; // 送葬者看的是"今天死于处决"的人：处决一个已经死了的人不算
     this.log.push(`${this.name(p.id)} 被处决`);
@@ -642,6 +702,7 @@ export class Game {
   /** 黄昏：处决台上的人，然后检查镇长胜利。 */
   endDay() {
     if (this.script === 'bmr') return this.endDayBMR();
+    if (this.engine === 'snv') return this.endDaySNV();
     let executed = null;
     if (!this.executedToday && this.block) {
       executed = this.block;
@@ -659,12 +720,13 @@ export class Game {
     if (this.phase !== 'day') throw new Error('只能在白天开枪');
     const s = this.get(shooterId); const t = this.get(targetId);
     if (!s || !t) throw new Error('玩家不在游戏中');
+    if (this.engine === 'snv') return this.slaySNV(s, t);
     // 官方规则里谁都可以声称自己是猎手开枪（诈身份用），这里限制每人每局只能声称一次，免得反复乱点
     this.shooters ??= [];
     if (this.shooters.includes(s.id)) throw new Error('你这局已经开过枪了');
     this.shooters.push(s.id);
     let hit = false;
-    if (s.role === 'slayer' && s.alive && !this.slayerUsed) { // 死了的猎手没有能力（照样可以假装开枪）
+    if (s.role === 'slayer' && s.alive && (!this.slayerUsed || SCRIPTS[this.script].ragnarok)) { // 死了的猎手没有能力（照样可以假装开枪）；诸神黄昏人人都是猎手，各开各的
       this.slayerUsed = true;
       if (!this.broken(s) && t.alive && this.regDemon(t, '猎手开枪')) hit = true;
     }
@@ -685,8 +747,10 @@ export class Game {
 
   checkWinner() {
     if (this.script === 'bmr') return this.checkWinnerBMR();
+    if (this.engine === 'snv') return this.checkWinnerSNV();
     if (this.winner) return this.winner;
-    if (!this.demon()) this.setWinner('good', '恶魔已经死亡');
+    if (!this.demon()) this.setWinner('good', SCRIPTS[this.script].ragnarok ? '狼人全部死亡' : '恶魔已经死亡');
+    else if (SCRIPTS[this.script].ragnarok && this.alive().filter((p) => p.role === 'imp').length * 2 >= this.aliveCount()) this.setWinner('evil', '存活的狼人追平了好人');
     else if (this.aliveCount() <= 2) this.setWinner('evil', '只剩两名存活玩家，恶魔获胜');
     return this.winner;
   }
@@ -704,6 +768,7 @@ export class Game {
   setRole(id, role) {
     const p = this.get(id);
     if (!p || !ROLES[role]) throw new Error('无效的玩家或角色');
+    if (this.engine === 'snv') { this.changeRole(p, role); p.evil = isEvilRole(role); this.afterChange(null); this.checkWinner(); return; }
     p.role = role;
     p.shownRole = role;
     if (this.script === 'bmr') p.evil = isEvilRole(role); // 黯月初升阵营单独记（莽夫会变），换角色要跟着换
@@ -727,6 +792,15 @@ export class Game {
         if (p.id === this.pukkaVictim) tags.push('普卡的毒');
         if (this.used[p.id]) tags.push('能力已用');
       }
+      if (this.engine === 'snv') {
+        if (p.role === 'lunatic') tags.push(`以为自己是${ROLES[p.shownRole].name}`);
+        if (p.gained) tags.push(p.role === 'amnesiac' ? `能力其实是${ROLES[p.gained].name}` : `获得了${ROLES[p.gained].name}的能力`);
+        if (this.broken(p) && !this.isPoisoned(p)) tags.push('醉酒');
+        if (this.kept(p)) tags.push('保留能力');
+        if (this.madness[p.id]) tags.push(`疯狂：${ROLES[this.madness[p.id].role].name}`);
+        if (this.twin?.b === p.id) tags.push('对立双子');
+        if (this.fx.some((f) => f.kind === 'curse' && f.target === p.id)) tags.push('被诅咒');
+      }
       const evil = this.evilOf(p) ? '【邪】' : '【善】';
       return `${evil}${p.seat}号 ${p.name} — ${ROLES[p.role].name}${tags.length ? `（${tags.join('、')}）` : ''}`; // 客户端按这个格式排成表（util.jsx 的 GrimoireLines）
     }).join('\n');
@@ -735,3 +809,4 @@ export class Game {
 
 // 黯月初升的方法（script === 'bmr' 时上面各处转过去调用）
 Object.assign(Game.prototype, BMR_METHODS);
+Object.assign(Game.prototype, SNV_METHODS);

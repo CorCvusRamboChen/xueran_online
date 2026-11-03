@@ -1,8 +1,8 @@
 // 小地图位置的「技能速查表」：本剧本所有角色的技能，按阵营列在一张小卡片上，像桌游的提示卡。
-// 小地图左边的「技能表」按钮切过来，卡片标题栏上的「地图」切回去。
+// 小地图左边的「技能表」按钮切过来（没有小地图的场景，按钮在音效那一排），卡片标题栏上的「收起」切回去。
 // 每个角色只写一句话简述（roleShort.js），点一行才展开技能全文；「展开 / 缩小」换大小（双击标题栏也行）；按住标题栏能拖到任何地方。位置、大小、开没开着都存在本机。
 import { useEffect, useRef, useState } from 'react';
-import { ROLES, TEAM_NAME } from '../../src/engine/roles.js';
+import { ROLES, SCRIPTS, TEAM_NAME, rolesOf } from '../../src/engine/roles.js';
 import { ATTR } from './flavor.js';
 import { TEAMS } from './Lobby.jsx';
 import { ROLE_SHORT } from './roleShort.js';
@@ -11,15 +11,25 @@ const KEY = 'botc.cheatsheet';
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) ?? '{}') ?? {}; } catch { return {}; } };
 const save = (o) => { try { localStorage.setItem(KEY, JSON.stringify({ ...load(), ...o })); } catch { /* 隐私模式 */ } };
 
-/** 小地图那里显示地图还是技能表。 */
+// 开着没开着：地图、广场、夜里的小屋共用一个，换场景时不用重新打开
+let sheetOn = null;
+const sheetSubs = new Set();
+
+/** 技能表开着吗。地图上它占小地图的位置，别的场景在画面右上角。 */
 export function useSheetMode() {
-  const [on, setOn] = useState(() => !!load().on);
-  return [on, (v) => { setOn(v); save({ on: v }); }];
+  sheetOn ??= !!load().on;
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const f = () => bump((x) => x + 1);
+    sheetSubs.add(f);
+    return () => sheetSubs.delete(f);
+  }, []);
+  return [sheetOn, (v) => { sheetOn = v; save({ on: v }); for (const f of sheetSubs) f(); }];
 }
 
 export function CheatSheet({ s, onClose }) {
-  const sc = s.script === 'bmr' ? 'bmr' : 'tb';
-  const ids = Object.keys(ROLES).filter((id) => (ROLES[id].script ?? 'tb') === sc);
+  const sc = SCRIPTS[s.script] ? s.script : 'tb';
+  const ids = rolesOf(sc);
   const mine = s.self?.role?.id;
   const [big, setBig] = useState(() => !!load().big);
   const [pos, setPos] = useState(() => load().pos ?? null); // null = 停在小地图的位置
@@ -57,10 +67,10 @@ export function CheatSheet({ s, onClose }) {
     <div ref={ref} className={`cs ${big ? 'big' : ''} ${pos ? 'moved' : ''}`} style={pos ? { left: pos.x, top: pos.y } : undefined} role="dialog" aria-label="技能速查表">
       <header className="cs-head" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={toggleBig} title="按住拖动；双击放大 / 缩小">
         <b>技能速查</b>
-        <span className="cs-sc">{sc === 'bmr' ? '黯月初升' : '暗流涌动'}</span>
+        <span className="cs-sc">{SCRIPTS[sc].name}</span>
         {pos && <button type="button" onClick={home} title="放回小地图的位置">归位</button>}
         <button type="button" onClick={toggleBig}>{big ? '缩小' : '展开'}</button>
-        <button type="button" onClick={onClose} title="换回小地图">地图</button>
+        <button type="button" onClick={onClose} title="收起技能表">收起</button>
       </header>
       <div className="cs-body">
         {TEAMS.map((t) => (

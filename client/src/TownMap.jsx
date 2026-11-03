@@ -6,7 +6,6 @@ import { getMap, positionAt, pathLength, SPEED } from '../../src/shared/map.js';
 import { Portrait, serverNow } from './util.jsx';
 import { useMarks, MarkMenu, MarkBadge, TAGS } from './marks.jsx';
 import { CheatSheet, useSheetMode } from './CheatSheet.jsx';
-import town4 from './assets/maps/town-4.json';
 import town6 from './assets/maps/town-6.json';
 
 /** 地图下方一排：正在私聊的房子（锁门的排在前面），点一下走过去。 */
@@ -19,7 +18,7 @@ function RoomStrip({ s, onGo }) {
       {busy.map((h) => (
         <button key={h.id} type="button" className={`room-chip ${h.locked ? 'locked' : ''} ${s.roam.myHouse === h.id ? 'mine' : ''}`} onClick={() => onGo(h)}>
           <span className="rc-name">{h.name}</span>
-          <span className="rc-faces">{h.members.map((id) => g(id) && <Portrait key={id} p={g(id)} size={20} prefer="avatar" frame="#f4f4f0" />)}</span>
+          <span className="rc-faces">{h.members.map((id) => g(id) && <span key={id} className="rc-face" title={`${g(id).seat}号 ${g(id).name}`}><Portrait p={g(id)} size={20} prefer="avatar" frame="#f4f4f0" /><i>{g(id).seat}</i></span>)}</span>
           {h.locked && <span className="rc-lock">锁门私聊</span>}
         </button>
       ))}
@@ -27,10 +26,10 @@ function RoomStrip({ s, onGo }) {
   );
 }
 
-/** 左下角：所有人（死了的变灰）。点头像镜头就转到他身上（再点自己回来）；右键给他打自己的标记。 */
-function AliveStrip({ s, watching, onWatch }) {
+/** 左下角：所有人（死了的变灰）。点头像镜头就转到他身上（再点自己回来）；右键给他打自己的标记。夜里的小屋也用它，那时没有地图，点了没反应。 */
+export function AliveStrip({ s, watching = null, onWatch = null }) {
   const alive = s.players.filter((p) => p.alive);
-  const houseOf = (id) => s.roam.houses.find((h) => h.members.includes(id));
+  const houseOf = (id) => s.roam?.houses.find((h) => h.members.includes(id));
   const marks = useMarks(s);
   const allies = Object.fromEntries((s.self?.allies ?? []).map((a) => [a.id, a.team]));
   const [menu, setMenu] = useState(null); // { id, x, y }
@@ -45,7 +44,7 @@ function AliveStrip({ s, watching, onWatch }) {
           return (
             <button key={p.id} type="button" title={`${p.seat}号 ${p.name}${h ? ` · 在${h.name}${h.locked ? '（锁门）' : ''}` : ''}（右键做标记）`}
               className={['as-face', watching === p.id && 'on', p.id === s.me && 'me', !p.alive && 'dead', h && 'inside', h?.locked && 'locked'].filter(Boolean).join(' ')}
-              onClick={() => onWatch(p.id)}
+              onClick={() => onWatch?.(p.id)}
               onContextMenu={(e) => { e.preventDefault(); setMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}>
               <Portrait p={p} size={44} prefer="avatar" speak={false} frame={p.id === s.me ? 'var(--mot)' : allies[p.id] ? 'var(--phy)' : TAGS[marks[p.id]?.tag]?.color ?? '#f4f4f0'} />
               <i>{p.seat}</i>
@@ -67,6 +66,7 @@ function MiniBase({ town }) {
     <>
       <rect width={town.w} height={town.h} fill={town.minimap?.ground ?? '#e7e6e0'} />
       {wt?.below != null && <rect y={wt.below} width={town.w} height={town.h - wt.below} fill="#6f8086" />}
+      {town.zones?.map((z) => <polygon key={z.id} points={line(z.poly)} fill={z.mini} />)}
       {town.roads.map((l, i) => <polyline key={i} points={line(l.pts)} stroke={town.minimap?.road ?? '#bdbab1'} strokeWidth={l.half * 2} fill="none" strokeLinecap="round" strokeLinejoin="round" />)}
       {wt?.band && <polyline points={line(wt.band.pts)} stroke="#6f8086" strokeWidth={wt.band.half * 2} fill="none" strokeLinejoin="round" />}
       {town.walkways.map((b) => (b.deck
@@ -86,7 +86,7 @@ function MiniBase({ town }) {
 export function KillDash({ s, target, onArrive, vanish = false }) {
   const town = getMap(s.script);
   const me = s.players.find((p) => p.id === s.me);
-  const houses = useMemo(() => town.housesFor(s.players.length).map((h) => ({ ...h, members: [], locked: false, knocks: [] })), [town, s.players.length]);
+  const houses = useMemo(() => town.housesFor().map((h) => ({ ...h, members: [], locked: false, knocks: [] })), [town]);
   const [m] = useState(() => {
     const from = town.homeStep(s.homes[s.me]) ?? town.gather;
     const to = town.homeStep(s.homes[target]) ?? town.gather;
@@ -117,6 +117,7 @@ export function TownMap({ s, onMove, night = false }) {
   const drag = useRef(null);
   const [ready, setReady] = useState(false);
   const [watching, setWatching] = useState(null);
+  const [zone, setZone] = useState(null);
   const watch = (id) => {
     if (!world.current) return;
     if (id === s.me || id === watching) world.current.follow();
@@ -127,9 +128,8 @@ export function TownMap({ s, onMove, night = false }) {
   const data = { players: s.players, roam: r, me: s.me };
   if (world.current) world.current.data = data;
   const town = getMap(r.map);
-  const big = r.houses.length > town.open[0];
-  // 暗流涌动的地面是 Tiled 地图（人少 / 人多两张）；别的地图按地图数据直接画
-  const tiled = town.id === 'tb' ? (big ? town6 : town4) : null;
+  // 暗流涌动的地面是 Tiled 地图；别的地图按地图数据直接画
+  const tiled = (town.art ?? town.id) === 'tb' ? town6 : null;
 
   useEffect(() => {
     let dead = false;
@@ -139,6 +139,7 @@ export function TownMap({ s, onMove, night = false }) {
       if (dead) { wd.destroy(); return; }
       wd.data = data;
       wd.onWatch = setWatching;
+      wd.onZone = setZone;
       wd.onFrame = ({ walkers, houses }) => {
         for (const [id, p] of Object.entries(walkers)) {
           const el = tags.current.get(id);
@@ -162,7 +163,7 @@ export function TownMap({ s, onMove, night = false }) {
       } catch { /* 隐私模式 */ }
     });
     return () => { dead = true; made?.destroy(); world.current = null; };
-  }, [big, town.id]);
+  }, [town.id]);
 
   // 键盘：WASD / 方向键，按住连续走，可以两个键斜着走。方向按屏幕算（W 就是往屏幕上方走）。
   const live = useRef({ s, onMove });
@@ -253,7 +254,7 @@ export function TownMap({ s, onMove, night = false }) {
       <div className="map-fog" aria-hidden="true" />
       <div className="map-place">
         <small>{night ? '夜里 · 没有人看见你' : town.place}</small>
-        <b>{night ? '破门' : r.houses.find((h) => h.id === r.myHouse)?.name ?? '血染钟楼特别行政区'}</b>
+        <b>{night ? '破门' : r.houses.find((h) => h.id === r.myHouse)?.name ?? zone?.name ?? '血染钟楼特别行政区'}</b>
       </div>
       <div className="map-cross" aria-hidden="true"><i /><i /><i /><i /></div>
 

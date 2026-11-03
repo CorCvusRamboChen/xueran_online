@@ -5,8 +5,8 @@ import { getMap, MAPS, doorPoint, pathLength, houseAt, distToLine, inRect, posit
 for (const town of Object.values(MAPS)) {
   test(`地图 ${town.name}：每间房子从集合点都走得到，回来不超过 8 秒；房门两两隔开`, () => {
     for (const n of [5, 12]) {
-      const houses = town.housesFor(n);
-      assert.equal(houses.length, n > 8 ? town.open[1] : town.open[0]);
+      const houses = town.housesFor();
+      assert.equal(houses.length, town.houses.length, '不管多少人，房子全开');
       for (let i = 0; i < n; i++) {
         const seat = town.seatSpot(i, n);
         assert.ok(!town.blockedAt(houses, seat.x, seat.y), `座位 ${i} 站得住`);
@@ -30,7 +30,7 @@ for (const town of Object.values(MAPS)) {
   });
 
   test(`地图 ${town.name}：能站的地方全部连通（没有走不到的死角）`, () => {
-    const houses = town.housesFor(12);
+    const houses = town.housesFor();
     const g = town.gridFor(houses);
     const start = town.cellOf(town.seatSpot(0, 12)); // 集合点正中可能是钟楼，从座位出发
     const seen = new Uint8Array(g.length);
@@ -61,7 +61,7 @@ for (const town of Object.values(MAPS)) {
     // 集合点是一整块铺地，盖在路上面；广场正中的钟楼 / 绞刑架不算
     const inPlaza = (c) => Math.hypot(c.x - town.gather.x, c.y - town.gather.y) < town.gather.r;
     // 暗流涌动的街道是整片铺的、建筑贴街而建（手绘图已定），只查"不穿过"；新地图要求路离墙至少 8
-    const gap = town.id === 'tb' ? -2 : 8;
+    const gap = (town.art ?? town.id) === 'tb' ? -2 : 8;
     for (const r of town.roads) {
       const name = r.name ?? r.kind;
       for (const b of rects) {
@@ -115,13 +115,13 @@ function inPoly(poly, x, y) {
   }
   return r;
 }
-const TOP = { trees: 95, beacon: 180, well: 50, gallows: 100, tower: 260 };
-for (const town of Object.values(MAPS).filter((t) => t.id !== 'tb')) {
+const TOP = { trees: 95, beacon: 180, ruin: 180, fountain: 232, well: 50, gallows: 100, tower: 260 };
+for (const town of Object.values(MAPS).filter((t) => (t.art ?? t.id) !== 'tb')) { // 暗流涌动的老布局（和它的变体）早于这些规则
   test(`地图 ${town.name}：能进的房子在画面上不被树、地标、别的建筑挡住（门口一点都不能挡）`, () => {
     const box = (x, y, w, h) => ({ x0: x, y0: y, x1: x + w, y1: y + h });
     const occ = [
       ...town.circles.map((c) => ({ name: c.name ?? c.id, poly: hexOf(c.x - c.r * 0.8, c.y - c.r * 0.8, c.r * 1.6, c.r * 1.6, TOP[c.kind] ?? 60), box: box(c.x - c.r * 0.8, c.y - c.r * 0.8, c.r * 1.6, c.r * 1.6) })),
-      ...[...town.obstacles, ...town.allHouses().filter((h) => h.height)].map((o) => ({ id: o.id, name: o.name ?? o.id, poly: hexOf(o.x, o.y, o.w, o.h, o.height + Math.min(o.w, o.h) * 0.38), box: box(o.x, o.y, o.w, o.h) })),
+      ...[...town.obstacles, ...town.allHouses().filter((h) => h.height)].map((o) => ({ id: o.id, name: o.name ?? o.id, poly: hexOf(o.x, o.y, o.w, o.h, o.height + Math.min(o.w, o.h) * (o.shape === 'tent' ? 0.8 : 0.38)), box: box(o.x, o.y, o.w, o.h) })),
     ];
     const inFront = (o, x, y) => !(o.box.x1 <= x || o.box.y1 <= y);
     const problems = [];
@@ -145,11 +145,11 @@ for (const town of Object.values(MAPS).filter((t) => t.id !== 'tb')) {
         const [a, b] = [marks[i], marks[j]];
         const ba = (c) => { const [sx, sy] = P(c.x, c.y); return { l: sx - c.r * 1.2, r: sx + c.r * 1.2, t: sy - (TOP[c.kind] ?? 60), b: sy + c.r * 0.6 }; };
         const A = ba(a); const B = ba(b);
-        if (A.l < B.r && B.l < A.r && A.t < B.b && B.t < A.b) problems.push(`${a.name} 和 ${b.name} 在画面上叠在一起`);
+        if (A.l < B.r && B.l < A.r && A.t < B.b && B.t < A.b) problems.push(`${a.name ?? a.id} 和 ${b.name ?? b.id} 在画面上叠在一起`);
       }
     }
     // 建筑之间至少隔 40，不然屋檐在画面上会穿插、挤在一起
-    const all = [...town.allHouses(), ...town.obstacles];
+    const all = [...town.allHouses(), ...town.obstacles].filter((o) => !o.low); // 矮断墙本来就要和别的东西连上
     for (let i = 0; i < all.length; i++) {
       for (let j = i + 1; j < all.length; j++) {
         const a = all[i]; const b = all[j];
@@ -163,7 +163,7 @@ for (const town of Object.values(MAPS).filter((t) => t.id !== 'tb')) {
 
 test('黯月初升：溪水走不过去，只能从石桥或吊板桥过', () => {
   const town = getMap('bmr');
-  const houses = town.housesFor(12);
+  const houses = town.housesFor();
   // 溪上一点（不在桥上）站不住；桥上站得住（坐标按底稿写，地图整体放大过 artScale 倍）
   const k = town.artScale ?? 1;
   assert.ok(town.blockedAt(houses, 820 * k, 900 * k));
@@ -182,6 +182,65 @@ test('黯月初升：溪水走不过去，只能从石桥或吊板桥过', () =>
   assert.ok(pts.every((p) => town.waterDist(p.x, p.y) >= 0 || onBridge(p)), '路线不踩水');
 });
 
+test('梦殒春宵：四个分区铺满全图，房子都在自己的分区里，每个区都有能进的房子', () => {
+  const town = getMap('snv');
+  assert.equal(town.zones.length, 4);
+  for (let x = 5; x < town.w; x += 40) for (let y = 5; y < town.h; y += 40) assert.ok(town.zoneAt(x, y), `(${x}, ${y}) 不属于任何分区`);
+  const expected = { tavern: 'street', studio: 'street', greenhouse: 'street', clockshop: 'street', bigtop: 'camp', sideshow: 'camp', crypt: 'ruin' };
+  for (const h of town.allHouses()) assert.equal(town.zoneAt(h.x + h.w / 2, h.y + h.h / 2).id, expected[h.id], h.name);
+  assert.equal(town.zoneAt(town.gather.x, town.gather.y).id, 'garden');
+  // 老帐篷在外圈；遗迹一带没有开花的窗台，只有枯树和枯掉的花圃
+  assert.equal(town.zoneAt(1180, 1520).id, 'ruin');
+  assert.ok(town.obstacles.filter((o) => town.zoneAt(o.x + o.w / 2, o.y + o.h / 2).id === 'ruin').every((o) => !o.flowers));
+  for (const b of town.flowerbeds) assert.equal(!!b.dead, town.zoneAt(b.x, b.y).id === 'ruin', `花圃 (${b.x}, ${b.y})`);
+});
+
+test('梦殒春宵：遗迹地窖是全图最远的房间，从北边去要穿过断石门', () => {
+  const town = getMap('snv');
+  const houses = town.housesFor();
+  const from = town.seatSpot(3, 8);
+  const toRoom = (h) => town.route(houses, from, { x: h.x + h.w / 2, y: h.y + h.h / 2 });
+  const crypt = houses.find((h) => h.id === 'crypt');
+  for (const h of houses) if (h !== crypt) assert.ok(pathLength(toRoom(h)) < pathLength(toRoom(crypt)), `${h.name} 比地窖还远`);
+  const gate = town.arches.find((a) => a.stone);
+  const path = toRoom(crypt);
+  const pts = [];
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1]; const b = path[i]; const n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 8);
+    for (let k = 0; k <= n; k++) pts.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+  }
+  assert.ok(pts.some((p) => Math.hypot(p.x - gate.x, p.y - gate.y) < gate.half), '去地窖的路线没有穿过断石门');
+});
+
+test('梦殒春宵：路牌的板子指向对的分区', () => {
+  const town = getMap('snv');
+  const zoneOf = { '#e0b458': 'street', '#b03a48': 'camp', '#7c7a68': 'ruin', '#9a72cc': 'garden' };
+  const centers = { street: [1500, 500], camp: [300, 900], ruin: [1620, 1400], garden: [1000, 820] };
+  for (const s of town.circles.filter((c) => c.kind === 'sign')) {
+    const sx = (p) => p[0] - p[1];
+    assert.ok(sx(centers[zoneOf[s.boards[0]]]) > s.x - s.y, `(${s.x}, ${s.y}) 朝右的板`);
+    assert.ok(sx(centers[zoneOf[s.boards[1]]]) < s.x - s.y, `(${s.x}, ${s.y}) 朝左的板`);
+  }
+});
+
+test('梦殒春宵：拱门都走得过去，老帐篷在镇子外圈，遗迹在东南郊', () => {
+  const town = getMap('snv');
+  const houses = town.housesFor();
+  for (const a of town.arches) assert.ok(!town.blockedAt(houses, a.x, a.y), `拱门 (${a.x}, ${a.y}) 走不过去`);
+  const { x, y } = town.gather;
+  const far = (o) => Math.hypot(o.x + o.w / 2 - x, o.y + o.h / 2 - y);
+  const tents = [...town.obstacles, ...town.allHouses()].filter((o) => o.shape === 'tent');
+  assert.ok(tents.length >= 5 && tents.every((o) => far(o) > 650), '帐篷要围在镇子外圈');
+  const hall = town.obstacles.find((o) => o.shape === 'ruin');
+  assert.ok(hall.x > x && hall.y > y && far(hall) > 650, '遗迹在郊外');
+  assert.ok(town.allHouses().find((h) => h.id === 'crypt').x > x, '地窖挨着遗迹');
+  // 底稿要把整张地图框进去，不然边上的房子画不全
+  const P = (px, py) => [px - py, (px + py) / 2];
+  for (const [sx, sy] of [P(0, town.h), P(town.w, 0), P(town.w, town.h)]) {
+    assert.ok(sx >= town.guide.x && sx <= town.guide.x + town.guide.w && sy <= town.guide.y + town.guide.h, '底稿框不住地图');
+  }
+});
+
 test('剧本 → 地图：暗流涌动用钟楼广场，黯月初升用黯月驿站，不认识的剧本退回暗流涌动', () => {
   assert.equal(getMap('tb').id, 'tb');
   assert.equal(getMap('bmr').id, 'bmr');
@@ -192,7 +251,7 @@ test('暗流涌动：普通建筑能给 15 个人每人分一个家，家门口�
   const town = getMap('tb');
   const homes = town.homes();
   assert.ok(homes.length >= 15, `只有 ${homes.length} 个家`);
-  const houses = town.housesFor(15);
+  const houses = town.housesFor();
   const from = town.seatSpot(0, 15);
   for (const h of homes) {
     const step = town.homeStep(h.id);
@@ -208,7 +267,7 @@ for (const town of Object.values(MAPS)) {
     let seed = 7;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
     for (const n of [7, 10]) {
-      const houses = town.housesFor(n);
+      const houses = town.housesFor();
       for (let k = 0; k < 400; k++) {
         const from = town.seatSpot(k % n, n);
         const to = { x: 20 + rnd() * (town.w - 40), y: 20 + rnd() * (town.h - 40) };
@@ -223,3 +282,10 @@ for (const town of Object.values(MAPS)) {
     }
   });
 }
+
+// 前端的小地图和画面直接读这些字段，少一个整页就白屏（测试里跑服务器发现不了）
+test('每张地图都有前端要读的字段', () => {
+  for (const town of Object.values(MAPS)) {
+    for (const k of ['walkways', 'circles', 'roads', 'houses', 'obstacles']) assert.ok(Array.isArray(town[k]), `${town.name} 缺 ${k}`);
+  }
+});

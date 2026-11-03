@@ -186,15 +186,21 @@ export function setLake(level) {
 
 // ───────────── 状态 → 声音 ─────────────
 let state = { stage: 'lobby', indoors: false, wind: false };
+let windScale = 1; // 风声按地图分区调：夏天的花园里没有暴风雪
+export function setWind(k) {
+  if (k === windScale) return;
+  windScale = k;
+  apply();
+}
 function apply() {
   if (wind) {
     const ctx = audio(); const t = ctx.currentTime;
-    const vol = state.wind && musicOn ? (state.indoors ? WIND_VOL * 0.35 : WIND_VOL) : 0;
+    const vol = state.wind && musicOn ? (state.indoors ? WIND_VOL * 0.35 : WIND_VOL) * windScale : 0;
     wind.gain.gain.setTargetAtTime(vol, t, 0.6);
     // 室内：像隔着墙，高频全被吃掉
     wind.filter.frequency.setTargetAtTime(state.indoors ? 420 : 16000, t, 0.35);
     // 屋里另有一层"窗缝里漏进来的风"
-    wind.inside.gain.setTargetAtTime(state.wind && musicOn && state.indoors ? WIND_VOL * 0.7 : 0, t, 0.6);
+    wind.inside.gain.setTargetAtTime(state.wind && musicOn && state.indoors ? WIND_VOL * 0.7 * windScale : 0, t, 0.6);
   }
   if (lake) lake.gain.gain.setTargetAtTime(musicOn && state.wind && !state.indoors ? lakeLevel * 0.35 : 0, audio().currentTime, 0.8);
   playMusic(musicOn ? musicFor(state.stage) : null);

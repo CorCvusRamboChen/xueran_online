@@ -116,6 +116,18 @@ export const SETUPS = {
     { name: "血月升起9人板子", roles: ["zombuul", "godfather", "lunatic", "grandmother", "professor", "sailor", "innkeeper", "gambler", "minstrel"],
       note: "进阶向：僵怖+教父，教父让外来者减为一名（疯子），六名镇民偏保护与信息", source: "https://www.gamersky.com/handbook/202208/1506132.shtml" },
   ],
+  snv: [
+    { name: '最直白的一套', official: true, roles: ['clockmaker', 'oracle', 'seamstress', 'artist', 'juggler', 'klutz', 'witch', 'nodashii'],
+      note: '信息好算好懂。说书人记住谁被诅咒、谁被诺-达鲺毒着就够了。' },
+    { name: '角色大挪移', official: true, roles: ['snakecharmer', 'dreamer', 'flowergirl', 'savant', 'barber', 'klutz', 'pithag', 'fanggu'],
+      note: '舞蛇人、方古让恶魔换人，麻脸巫婆和理发师改角色；呆瓜要在一片混乱里挑出好人。' },
+    { name: '真假双子', official: true, roles: ['towncrier', 'seamstress', 'philosopher', 'artist', 'juggler', 'sage', 'eviltwin', 'vigormortis'],
+      note: '围绕双子的真假；亡骨魔可以杀掉双子留住能力。别只顾双子忘了找恶魔。' },
+    { name: '谨慎推理', official: true, roles: ['clockmaker', 'mathematician', 'towncrier', 'savant', 'artist', 'sweetheart', 'witch', 'nodashii'],
+      note: '诺-达鲺有很多下毒目标；博学者、数学家够聪明就能看出谁中毒。适合善思的玩家。' },
+    { name: '狂野之夜', official: true, roles: ['clockmaker', 'philosopher', 'flowergirl', 'mathematician', 'sage', 'mutant', 'cerenovus', 'vortox'],
+      note: '涡流让关键信息全错，洗脑师和畸形秀演员带来疯狂。开局前先讲清楚疯狂怎么判。' },
+  ],
 };
 
 /** 这个人数的推荐配置。 */

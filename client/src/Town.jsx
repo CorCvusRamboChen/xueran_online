@@ -10,7 +10,8 @@ import { SCENE_ART } from './art.js';
 
 // 手绘广场（白天 / 夜里两张同构图，夜里淡入）；没有就用线稿。
 // 每个剧本一张：square-day-<剧本>.webp（暗流涌动不带后缀）；还没画的剧本先用暗流涌动的
-const sceneFor = (name, script) => SCENE_ART[script && script !== 'tb' ? `${name}-${script}` : name] ?? SCENE_ART[name];
+// 小剧本借用前两张图：没有自己的广场画就用借用的那张（getMap(剧本).art）
+const sceneFor = (name, script) => [script, getMap(script).art].filter((k) => k && k !== 'tb').map((k) => SCENE_ART[`${name}-${k}`]).find(Boolean) ?? SCENE_ART[name];
 
 export function Town({ s, picked = [], pickable = null, onTap, children }) {
   const ref = useRef(null);

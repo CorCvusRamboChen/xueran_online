@@ -57,6 +57,7 @@ export function loadAll() {
 
 // ───────────── 往期对局 ─────────────
 // 每局结束写一份 data/games/<服务器 id>/<结束时间>_<频道>.json：所有人的身份、整局复盘时间线、票型、胜负。不会自动删。
+// decisions（说书人决策日志）、beliefs（玩家标记的变化）、meets（谁和谁进了同一间屋）、records（开局时的战绩）是给线下分析的，文件里有，getGame 不往外给。
 const GAMES = path.resolve('data/games');
 const safe = (x) => String(x).replace(/[^\w.-]/g, '_');
 
@@ -70,8 +71,9 @@ export function archiveGame(room) {
     const id = `${endedAt}_${safe(room.key.split(':')[1] ?? 'x')}`;
     const data = {
       id, endedAt, key: room.key, winner: g.winner, reason: g.winReason, days: g.day,
-      players: g.players.map((p) => ({ id: p.id, seat: p.seat, name: p.name, avatar: room.users.get(p.id)?.avatar ?? null, role: p.role, shownRole: p.shownRole, alive: p.alive })),
+      players: g.players.map((p) => ({ id: p.id, seat: p.seat, name: p.name, avatar: room.users.get(p.id)?.avatar ?? null, role: p.role, evil: g.evilOf?.(p) ?? undefined, shownRole: p.shownRole, alive: p.alive, ...(p.role === 'amnesiac' && p.gained ? { gained: p.gained } : {}) })),
       timeline: g.timeline, votes: room.voteHistory ?? [],
+      decisions: g.st.decisions, beliefs: room.beliefs?.gameId === g.id ? room.beliefs.log : [], meets: room.meets ?? [], records: g.records ?? null,
     };
     fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify(data));
   } catch (e) {
@@ -93,41 +95,73 @@ export function listGames(guildId, limit = 20) {
 }
 
 export function getGame(guildId, id) {
-  try { return JSON.parse(fs.readFileSync(path.join(GAMES, safe(guildId), `${safe(id)}.json`), 'utf8')); } catch { return null; }
+  try {
+    const { decisions, beliefs, meets, records, ...open } = JSON.parse(fs.readFileSync(path.join(GAMES, safe(guildId), `${safe(id)}.json`), 'utf8'));
+    return open;
+  } catch { return null; }
 }
 
-const statsCache = new Map(); // guildId → { sig, stats }：存档没变就不重算
+let statsCache = null; // { sig, players, guilds }：存档没变就不重算
 const RECENT = 10;
+const MATE_MIN = 4; // 同队少于这么多局不算（局数太少的胜率没意义；用户 2026-11-04 定 4 局）
 
 /**
- * 战绩：这个服务器所有打完的局，按真人玩家汇总（机器人不算）。
+ * 战绩：所有服务器打完的局，按真人玩家汇总（机器人不算）：同一个账号在哪个服务器打的都算他的，按结束时间排。
+ * 跨服只合并个人数字；games / goodWins 是这个服务器的；players 只列在这个服务器打过的人和 uid 本人，
+ * 别的服务器的陌生人不会出现在排行榜上。KOOK 的账号 id 和 Discord 不同，两边不合并。
  * 阵营按终局时的角色算（莽夫这种中途换阵营的按最后的算）；赢 = 自己阵营赢了，死活不论。
  * 每人：总胜负、好人 / 坏人、镇民 / 外来者 / 爪牙 / 恶魔各自的胜负、每个角色的胜负、活到终局几次、
  * 最近 10 局、当前连胜 / 最长连胜；
  * 场上表现：提名 [次数, 提到邪恶, 送上处决台]、被提名 [次数, 被送上台]、被处决几次、夜里被杀几次、
  * 当好人时举手 [次数, 举在邪恶身上]。死因从时间线的"N号 名字（角色） 被处决 / 被恶魔杀死"里按座位号认。
+ * 队友：和谁同一阵营打过几局、赢了几局（mates）；战绩卡上的「最好的队友 / 最坏的队友」是同队至少 MATE_MIN 局里胜率最高 / 最低的人。
  */
-export function statsFor(guildId) {
-  const dir = path.join(GAMES, safe(guildId));
-  let names = [];
-  try { names = fs.readdirSync(dir).filter((n) => n.endsWith('.json')).sort(); } catch { return { games: 0, goodWins: 0, players: [] }; }
-  const sig = `${names.length}:${names.at(-1) ?? ''}`;
-  const hit = statsCache.get(guildId);
-  if (hit?.sig === sig) return hit.stats;
+export function statsFor(guildId, uid = null) {
+  const { players, guilds } = allStats();
+  const here = guilds.get(safe(guildId)) ?? { games: 0, goodWins: 0, ids: new Set() };
+  return { games: here.games, goodWins: here.goodWins, players: players.filter((p) => here.ids.has(p.id) || p.id === uid) };
+}
+
+const parsed = new Map(); // 读过的存档：不会再变，每局结束只读新的那一份
+
+/** 战绩用得到的字段。决策日志和标记很占地方，这里不留。 */
+function readForStats(file) {
+  try {
+    const d = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!d?.winner || !Array.isArray(d.players)) return null;
+    return { winner: d.winner, endedAt: d.endedAt, players: d.players.filter(Boolean), timeline: (d.timeline ?? []).filter((e) => e?.kind === 'death'), votes: d.votes ?? [] };
+  } catch { return null; }
+}
+
+function allStats() {
+  const files = []; // [文件名, 服务器目录]
+  let dirs = [];
+  try { dirs = fs.readdirSync(GAMES); } catch { /* 还没打完过一局 */ }
+  for (const g of dirs) {
+    try { for (const n of fs.readdirSync(path.join(GAMES, g))) if (n.endsWith('.json')) files.push([n, g]); } catch { /* 不是目录 */ }
+  }
+  files.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  const sig = `${files.length}:${files.at(-1)?.[0] ?? ''}`;
+  if (statsCache?.sig === sig) return statsCache;
   const by = new Map();
-  let games = 0; let goodWins = 0;
+  const guilds = new Map(); // 服务器目录 → { games, goodWins, ids }
   const blank = (p) => ({
     id: p.id, name: p.name, avatar: p.avatar ?? null, games: 0, wins: 0, good: [0, 0], evil: [0, 0],
     teams: { townsfolk: [0, 0], outsider: [0, 0], minion: [0, 0], demon: [0, 0] }, roles: {}, alive: 0,
     recent: [], streak: 0, bestStreak: 0, noms: [0, 0, 0], nominated: [0, 0], executed: 0, nightKilled: 0, votes: [0, 0], last: 0,
+    mates: {}, // 队友 id → [同队局数, 赢的局数]
   });
-  for (const n of names) { // 文件名以结束时间开头：按时间先后
-    let d;
-    try { d = JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8')); } catch { continue; }
-    if (!d?.winner || !Array.isArray(d.players)) continue;
-    games++;
-    if (d.winner === 'good') goodWins++;
-    const evilOf = new Map(d.players.filter((p) => ROLES[p.role]).map((p) => [p.id, ['minion', 'demon'].includes(ROLES[p.role].team)]));
+  for (const [n, g] of files) { // 文件名以结束时间开头：按时间先后
+    const key = `${g}/${n}`;
+    if (!parsed.has(key)) parsed.set(key, readForStats(path.join(GAMES, g, n)));
+    const d = parsed.get(key);
+    if (!d) continue;
+    if (!guilds.has(g)) guilds.set(g, { games: 0, goodWins: 0, ids: new Set() });
+    const here = guilds.get(g);
+    here.games++;
+    if (d.winner === 'good') here.goodWins++;
+    // 梦殒春宵有"善良的恶魔""邪恶的镇民"，阵营要看存下来的；旧存档没有这个字段才按角色猜
+    const evilOf = new Map(d.players.filter((p) => ROLES[p.role]).map((p) => [p.id, p.evil ?? ['minion', 'demon'].includes(ROLES[p.role].team)]));
     // 死因：座位号 → [被处决几次, 夜里被杀几次]（复活过的人可能死两次）
     const deaths = new Map();
     for (const e of d.timeline ?? []) {
@@ -140,6 +174,7 @@ export function statsFor(guildId) {
     }
     for (const p of d.players) {
       if (!p.id || /^bot-/.test(p.id) || !ROLES[p.role]) continue;
+      here.ids.add(p.id);
       const team = ROLES[p.role].team;
       const evil = evilOf.get(p.id);
       const won = (d.winner === 'evil') === evil;
@@ -157,6 +192,10 @@ export function statsFor(guildId) {
       s.bestStreak = Math.max(s.bestStreak, s.streak);
       const died = deaths.get(p.seat);
       if (died) { s.executed += died[0]; s.nightKilled += died[1]; }
+      for (const q of d.players) { // 同一阵营的真人队友
+        if (!q.id || q.id === p.id || /^bot-/.test(q.id) || !ROLES[q.role] || evilOf.get(q.id) !== evil) continue;
+        add(s.mates[q.id] ??= [0, 0]);
+      }
       for (const v of d.votes ?? []) {
         const onBlock = v.outcome === 'block' || v.outcome === 'tie';
         if (v.nominator === p.id) { s.noms[0]++; if (evilOf.get(v.nominee)) s.noms[1]++; if (onBlock) s.noms[2]++; }
@@ -166,8 +205,17 @@ export function statsFor(guildId) {
       by.set(p.id, s);
     }
   }
+  // 最好 / 最坏的队友：同队够局数的人里胜率最高 / 最低（一样就看同队局数多的）。只给名字头像，不给整张队友表
+  for (const s of by.values()) {
+    const list = Object.entries(s.mates).filter(([id, [g]]) => g >= MATE_MIN && by.has(id))
+      .map(([id, [g, w]]) => ({ id, name: by.get(id).name, avatar: by.get(id).avatar, games: g, wins: w, rate: w / g }));
+    const best = [...list].sort((a, b) => b.rate - a.rate || b.games - a.games)[0] ?? null;
+    const worst = [...list].sort((a, b) => a.rate - b.rate || b.games - a.games)[0] ?? null;
+    s.bestMate = best && { ...best, rate: undefined };
+    s.worstMate = worst && worst.id !== best?.id ? { ...worst, rate: undefined } : null; // 只有一个够局数的队友：只显示最好的
+    delete s.mates;
+  }
   const players = [...by.values()].sort((a, b) => b.wins - a.wins || b.games - a.games);
-  const stats = { games, goodWins, players };
-  statsCache.set(guildId, { sig, stats });
-  return stats;
+  statsCache = { sig, players, guilds };
+  return statsCache;
 }
