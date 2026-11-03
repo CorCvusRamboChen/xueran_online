@@ -745,6 +745,131 @@ export class Storyteller {
     return text;
   }
 
+  // ───────────── 通用引擎里的暗流涌动角色、七步成诗的新角色 ─────────────
+
+  /**
+   * 洗衣妇（townsfolk）/ 图书管理员（outsider）：两人之一是某个角色。真的照登记算（间谍可能登记成镇民、外来者）；
+   * lie 时指一个不是这一类的人，角色从剧本里挑（同一个人每晚一样）；失效的图书管理员有时被告知「没有外来者」。
+   */
+  teamPairSNV(p, kind, lie) {
+    const g = this.g;
+    const others = g.players.filter((q) => q.id !== p.id);
+    const by = ROLES[g.abilityOf(p)]?.name ?? '检测';
+    const pool = rolesOf(g.script, kind);
+    let target; let role;
+    if (lie) {
+      if (kind === 'outsider' && others.some((q) => ROLES[q.role].team === 'outsider') && this.roll('librarianNone', {}, { who: p.id })) {
+        g.flag(p, '图书管理员被告知没有外来者（其实有）');
+        return null;
+      }
+      const wrong = others.filter((q) => ROLES[q.role].team !== kind);
+      target = this.choose('pairTarget', wrong.length ? wrong : others, { who: p.id, lie });
+      const w = this.snvWorld(p, lie);
+      const key = `${kind}-${p.id}`;
+      role = (w.pairRole ??= {})[key] ?? this.choose('pairRole', pool.filter((r) => r !== target.role), { who: p.id });
+      w.pairRole[key] = role;
+      g.flag(p, `${by}看到了假的${kind === 'outsider' ? '外来者' : '镇民'} ${g.name(target.id)}`);
+    } else {
+      const real = others.filter((q) => (kind === 'townsfolk' ? g.seenTownsfolk(q, by) : ROLES[q.role].team === 'outsider' || (q.role === 'spy' && g.misregSNV(q, by))));
+      if (!real.length) return null;
+      target = this.choose('pairTarget', real, { who: p.id });
+      role = ROLES[target.role].team === kind ? target.role : this.choose('pairRole', pool, { who: p.id });
+    }
+    const decoy = this.choose('pairDecoy', others.filter((q) => q.id !== target.id), { who: p.id });
+    return { pair: shuffled([target, decoy], this.rng), role };
+  }
+
+  /** 送葬者/守鸦人失效：按假世界说一个角色（假恶魔说成恶魔，假爪牙说成爪牙，其余说成善良角色），不说真的。 */
+  falseRoleSNV(p, target, w) {
+    const g = this.g;
+    const kind = w?.demon === target.id ? ['demon'] : w?.evil.has(target.id) ? ['minion'] : ['townsfolk', 'outsider'];
+    const pool = rolesOf(g.script).filter((r) => kind.includes(ROLES[r].team) && r !== target.role);
+    const r = this.choose('falseRole', pool.length ? pool : rolesOf(g.script).filter((x) => x !== target.role), { who: p.id, about: target.id, truth: target.role });
+    g.flag(p, `看到了错误的角色（真实是${ROLES[target.role].name}）`);
+    return r;
+  }
+
+  /** 贵族的三个人：恰好一个邪恶。lie 时按假世界（一个假邪恶两个假好人）。前期多指活人。 */
+  nobleTrio(p, lie) {
+    const g = this.g;
+    const others = g.players.filter((q) => q.id !== p.id);
+    const live = (list) => { const a = list.filter((q) => q.alive); return a.length ? a : list; };
+    let evil; let good;
+    if (lie) {
+      const w = this.snvWorld(p, lie, (x) => others.some((q) => x.evil.has(q.id) && !g.evilOf(q)));
+      evil = others.filter((q) => w.evil.has(q.id));
+      good = others.filter((q) => !w.evil.has(q.id));
+      g.flag(p, '贵族得到了假的三个人');
+    } else {
+      const seen = new Map(others.map((q) => [q.id, g.seenEvil(q, '贵族')]));
+      evil = others.filter((q) => seen.get(q.id));
+      good = others.filter((q) => !seen.get(q.id));
+    }
+    if (!evil.length || good.length < 2) return null;
+    const e = this.choose('nobleEvil', live(evil), { who: p.id, lie: !!lie });
+    const gs = shuffled(live(good), this.rng).slice(0, 2);
+    if (gs.length < 2) gs.push(...shuffled(good.filter((q) => !gs.includes(q)), this.rng).slice(0, 2 - gs.length));
+    this.decide('nobleGood', { who: p.id, options: good.map(idOf), chosen: gs.map(idOf) });
+    return shuffled([e, ...gs], this.rng);
+  }
+
+  /** 修行者：最近的邪恶玩家在顺时针（+1）还是逆时针（-1）。一样近时说书人定（往落后的一方偏：善良落后就指对的那一边……两边都对，随机）。 */
+  shugenjaSide(p, lie) {
+    const g = this.g; const n = g.players.length;
+    const isEvil = lie ? ((w) => (q) => w.evil.has(q.id))(this.snvWorld(p, lie)) : (q) => g.seenEvil(q, '修行者');
+    const dist = (dir) => { for (let k = 1; k < n; k++) { const q = g.players[(p.seat - 1 + dir * k + n * k) % n]; if (q.id !== p.id && isEvil(q)) return k; } return Infinity; };
+    const cw = dist(1); const ccw = dist(-1);
+    const side = cw === ccw ? this.choose('shugenjaTie', [1, -1], { who: p.id }) : cw < ccw ? 1 : -1;
+    if (lie) g.flag(p, '修行者按假世界得到了方向');
+    return side;
+  }
+
+  /** 农夫夜里死了，谁接班：存活的善良玩家（新手稍微优先：多一个有能力的人）。 */
+  farmerHeir(farmer) {
+    const g = this.g;
+    const good = g.players.filter((q) => q.alive && q.id !== farmer.id && !g.evilOf(q));
+    if (!good.length) return null;
+    const who = this.draw('farmerHeir', good, () => ({}));
+    this.note(`农夫 ${g.name(farmer.id)} 夜里死了，${g.name(who.id)} 变成农夫`);
+    return who;
+  }
+
+  /**
+   * 鹰身女妖的疯狂没做到：杀不杀、杀谁。"可能"死亡：多半杀疯狂的那个；善良领先时偶尔两个都杀。
+   * 会直接定胜负的不杀（和疯狂处决一样，别让这种判定决定一局）。返回要死的人（活人）。
+   */
+  harpyVictims(mad, second) {
+    const g = this.g;
+    const live = [mad, second].filter((q) => q?.alive);
+    if (!live.length) return [];
+    if (live.some((q) => this.decidesGame(q)) && g.aliveCount() <= 4) { this.note(`${g.name(mad.id)} 没有疯狂地证明，但现在杀人可能直接定胜负：放过`); return []; }
+    if (!this.roll('harpyKill', { evil: g.evilOf(mad) }, { who: mad.id })) { this.note(`${g.name(mad.id)} 没有疯狂地证明 ${g.name(second.id)} 是邪恶的：这次放过`); return []; }
+    const both = live.length === 2 && this.roll('harpyBoth', { balance: this.balance() }, { who: mad.id });
+    const out = both ? live : [live.includes(mad) ? mad : live[0]];
+    this.note(`${g.name(mad.id)} 没有疯狂地证明 ${g.name(second.id)} 是邪恶的：${out.map((q) => g.name(q.id)).join('、')} 死亡`);
+    return out;
+  }
+
+  /**
+   * 炸弹人引爆：留下包括恶魔在内的三名存活玩家（官方：说书人一个一个挑谁死）。另外两个往落后的一方偏：
+   * 善良落后多留善良（三人里两善一恶，倒数时善良指恶魔就赢），邪恶落后多留邪恶。
+   */
+  boomSurvivors() {
+    const g = this.g;
+    const alive = g.alive();
+    if (alive.length <= 3) return alive;
+    const demons = alive.filter((q) => ROLES[q.role].team === 'demon');
+    const keep = demons.slice(0, 3);
+    const b = this.balance();
+    let pool = alive.filter((q) => !keep.includes(q));
+    while (keep.length < 3 && pool.length) {
+      const x = this.draw('boomSurvivor', pool, (q) => ({ pressure: g.evilOf(q) ? b : -b }), { b });
+      keep.push(x); pool = pool.filter((q) => q !== x);
+    }
+    this.note(`炸弹人引爆：留下 ${keep.map((q) => g.name(q.id)).join('、')}`, b);
+    return keep;
+  }
+
   /** 失效的侍女：给一个错的数字。 */
   fakeChambermaid(p, truth) {
     const opts = [0, 1, 2].filter((n) => n !== truth);

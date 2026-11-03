@@ -207,7 +207,8 @@ export class Game {
       'script', 'fx', 'used', 'lastPick', 'pukkaVictim', 'poCharged', 'shabaLast', 'grandchild', 'gossipPending', 'gossipSaid',
       'moonchildPick', 'pendingMoonchild', 'diedToday', 'outsiderDiedToday', 'mastermindDay', 'demonExecuted', 'nightRevived', 'newbies', 'deadDrunk', 'lunaticGhost', 'evilMessages', 'midNight', 'lunaticFake', 'goonHit', 'pendingGoonNews', 'blocked', 'lunaticPicks',
       'firstDone', 'twin', 'fangUsed', 'vigKept', 'abnormal', 'demonVoted', 'minionNominated', 'dayVoters', 'jugglerDay', 'juggled', 'juggleLog', 'madness', 'savantDay', 'declared', 'claims', 'records', 'sageHit', 'barberDue', 'pendingKlutz', 'klutzQueue', 'klutzNow', 'madNight', 'curseFail', 'pitNight',
-      'balloon', 'leviGood', 'goblinMark', 'amnesiacDay', 'amnesiacKnown', 'woke', 'pardonDay'];
+      'balloon', 'leviGood', 'goblinMark', 'amnesiacDay', 'amnesiacKnown', 'woke', 'pardonDay',
+      'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -232,7 +233,7 @@ export class Game {
     g.bluffsShared ??= false;
     g.id ??= `old-${g.players.map((p) => p.seat + p.id.slice(-3)).join('')}`;
     g.script ??= 'tb';
-    if (g.engine === 'snv') { g.claims ??= {}; g.balloon ??= {}; g.leviGood ??= []; g.amnesiacDay ??= {}; g.amnesiacKnown ??= {}; g.woke ??= []; }
+    if (g.engine === 'snv') { g.claims ??= {}; g.balloon ??= {}; g.leviGood ??= []; g.amnesiacDay ??= {}; g.amnesiacKnown ??= {}; g.woke ??= []; g.farmerDue ??= []; g.damselTried ??= {}; }
     if (g.script === 'bmr') { g.wokeTonight = new Set(); g.goonHit = false; g.blocked = null; g.nightRevived ??= []; }
     return g;
   }
@@ -497,6 +498,14 @@ export class Game {
   }
 
   resolveRavenkeeper(targetId) {
+    if (this.engine === 'snv') {
+      const rk = this.get(this.rkDue); const t = this.get(targetId);
+      if (!rk || !t) throw new Error('无效的守鸦人选择');
+      this.rkDue = null;
+      const lie = this.lieMode(rk);
+      const r = lie ? this.st.falseRoleSNV(rk, t, this.st.snvWorld(rk, lie)) : this.seenRole(t, '守鸦人查看');
+      return { playerId: rk.id, text: `${this.name(t.id)} 的角色是 **${ROLES[r].name}**。` };
+    }
     const rk = this.players.find((p) => p.shownRole === 'ravenkeeper' && this.nightDeaths.includes(p.id));
     const t = this.get(targetId);
     if (!rk || !t) throw new Error('无效的守鸦人选择');
@@ -634,7 +643,11 @@ export class Game {
     this.suspicion[b.id] = (this.suspicion[b.id] ?? 0) + 1;
     this.log.push(`第${this.day}天 ${this.name(a.id)} 提名 ${this.name(b.id)}`);
     this.record('nominate', `${this.tag(a.id)} 提名了 ${this.tag(b.id)}`);
-    if (this.engine === 'snv') return { virgin: false, cursed: this.nominateSNV(a) };
+    if (this.engine === 'snv') {
+      const cursed = this.nominateSNV(a);
+      const executed = cursed || this.winner ? null : this.virginSNV(a, b);
+      return executed ? { virgin: true, executed, cursed } : { virgin: false, cursed };
+    }
 
     if (b.role === 'virgin' && b.alive && !this.virginUsed) {
       this.virginUsed = true;
@@ -800,6 +813,11 @@ export class Game {
         if (this.madness[p.id]) tags.push(`疯狂：${ROLES[this.madness[p.id].role].name}`);
         if (this.twin?.b === p.id) tags.push('对立双子');
         if (this.fx.some((f) => f.kind === 'curse' && f.target === p.id)) tags.push('被诅咒');
+        if (this.harpyMad?.id === p.id) tags.push(`鹰身女妖：要疯狂地证明 ${this.harpyMad.target ? this.name(this.harpyMad.target) : '?'} 是邪恶的`);
+        if (this.harpyMad?.target === p.id) tags.push('鹰身女妖的第二名');
+        if (p.id === this.pukkaVictim) tags.push('普卡的毒');
+        if (this.extraAbility(p)) tags.push(`科学怪人给的能力：${ROLES[this.extraAbility(p)].name}`);
+        if (p.seat7) tags.push('7 号空座（说书人代管）');
       }
       const evil = this.evilOf(p) ? '【邪】' : '【善】';
       return `${evil}${p.seat}号 ${p.name} — ${ROLES[p.role].name}${tags.length ? `（${tags.join('、')}）` : ''}`; // 客户端按这个格式排成表（util.jsx 的 GrimoireLines）

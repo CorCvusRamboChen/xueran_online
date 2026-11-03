@@ -1733,3 +1733,13 @@ span.lr-newbie { cursor: default; }
 .mic-heard { margin-top: 8px; padding-top: 16px; border-top: 1px solid rgba(244, 244, 240, .35); }
 .mic-heard h2 { margin: 0 0 8px; font: 700 18px/1.4 var(--serif); }
 .mic-heard p { margin: 0 0 6px; font: 17px/1.6 var(--serif); }
+
+/* 炸弹人倒数：三个还活着的人，点一个指着他 */
+.boom-picks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+.boom-pick { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border: 1px solid var(--line, rgba(255,255,255,.2)); background: transparent; color: inherit; border-radius: 8px; cursor: pointer; font: inherit; }
+.boom-pick b { font-size: 1.1em; }
+.boom-pick.on { border-color: var(--phy); background: color-mix(in srgb, var(--phy) 22%, transparent); }
+/* 七步成诗：大厅里说明 7 号空座 */
+.seat7-note { margin: 6px 0 0; font-size: .9em; }
+.lr-empty .lr-chair { width: 52px; height: 62px; display: grid; place-items: center; border: 2px dashed rgba(143, 159, 214, .7); background: rgba(143, 159, 214, .12); font-size: 26px; }
+.lr-empty .lr-name { color: #b9c0e8; }

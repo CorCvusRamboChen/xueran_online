@@ -41,7 +41,8 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
   const st = s.settings;
   const joined = s.lobby.some((p) => p.id === s.me);
   const n = s.lobby.length;
-  const d = st.script === 'rag' && DIST[n] ? [n - ragnarokWolves(n), 0, 0, ragnarokWolves(n)] : DIST[n]; // 诸神黄昏：猎手（镇民）和狼人（恶魔）
+  const seat7 = !!SCRIPTS[st.script]?.seat7 && n >= 6; // 七步成诗：开局时插进 7 号空座，人数表按多一人算
+  const d = st.script === 'rag' && DIST[n] ? [n - ragnarokWolves(n), 0, 0, ragnarokWolves(n)] : DIST[n + (seat7 ? 1 : 0)]; // 诸神黄昏：猎手（镇民）和狼人（恶魔）
   const [lo, hi] = playersOf(st.script ?? 'tb'); // 小剧本只能 5–6 人
   const set = (patch) => act('settings', patch);
   const human = st.mode === 'human';
@@ -106,13 +107,16 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
         <section className="lobby-right">
           <Panel title="镇民" className="glass" extra={<span className="muted">{n} / {hi}</span>}>
             <DistBar n={n} d={d} lo={lo} hi={hi} />
+            {SCRIPTS[st.script]?.seat7 && <p className="muted seat7-note">🪑 灯神规则：<b>7 号座位留空</b>，照样发角色，由说书人替它做决定，每局还会替它发言一次。{seat7 ? `开局后共 ${n + 1} 个座位。` : ''}</p>}
             {!n && <p className="muted">广场上还空无一人。</p>}
             {(
               <div className="lobby-roster">
-                {s.lobby.map((p, i) => (
+                {s.lobby.flatMap((p, i) => [
+                  // 七步成诗：开局时 7 号座位插一张空椅子，后面的人往后挪一位，这里先画出来
+                  ...(seat7 && i === 6 ? [<div key="seat7" className="lr-item lr-empty" title="7 号座位留空：照样发角色，由说书人替它做决定"><span className="lr-chair" aria-hidden="true">🪑</span><span className="lr-seat">7</span><span className="lr-name">空座</span></div>] : []),
                   <div key={p.id} className={`lr-item ${p.id === s.me ? 'me' : ''}`}>
                     <Portrait p={p} size={52} frame={p.id === s.me ? 'var(--mot)' : '#f4f4f0'} />
-                    <span className="lr-seat">{i + 1}</span>
+                    <span className="lr-seat">{seat7 && i >= 6 ? i + 2 : i + 1}</span>
                     <span className="lr-name">{p.id === s.me ? '你' : p.name}</span>
                     {/* 新手标记：大家都看得到；房主点一下切换（机器人不用标） */}
                     {(host && !p.id.startsWith('bot-')) ? (
@@ -120,8 +124,9 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                         title="标成新手：发身份时尽量避开难角色，机器人和 AI 说书人也会照顾一下">{s.newbies?.includes(p.id) ? '新手' : '+新手'}</button>
                     ) : s.newbies?.includes(p.id) && <span className="lr-newbie on">新手</span>}
                     {host && p.id !== s.me && <button type="button" className="kick" onClick={() => act('kick', { target: p.id })} aria-label="请他离开">×</button>}
-                  </div>
-                ))}
+                  </div>,
+                ])}
+                {seat7 && n === 6 && <div className="lr-item lr-empty" title="7 号座位留空：照样发角色，由说书人替它做决定"><span className="lr-chair" aria-hidden="true">🪑</span><span className="lr-seat">7</span><span className="lr-name">空座</span></div>}
                 {/* 最后一格：虚线框里一个加号，点了邀请朋友（Discord 的邀请框 / 分享链接，见 connect.js） */}
                 {n < hi && (
                   <div className="lr-item">
@@ -141,7 +146,8 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
             <p className="muted setting-note">{{ bmr: '《黯月初升》：中等难度的"死亡盛宴"——恶魔一夜可能杀多人，好人有很多保命和复活手段。推荐 7 人及以上。', snv: '《梦殒春宵》：困难，最疯狂的一本——信息很多但不一定可靠，角色和阵营都会中途改变，还有疯狂机制。',
               ngj: '《无上愉悦》：官方 5–6 人小剧本，二十分钟一局，又短又吵。角色都来自前三个剧本；关键是弄清在场的是红唇女郎还是男爵。地图是冬夜集市的钟楼广场。',
               rag: '《诸神黄昏》：娱乐模式，只有猎手和狼人（小恶魔）。狼人互相认识，每晚各刀一人；每个猎手白天能开一枪，打中狼人就死。狼人全死好人赢，狼人追平好人狼人赢。',
-              luf: '《窃窃私语》：官方 5–6 人小剧本。恶魔利维坦不杀人，但处决两个好人、或者撑到第五天结束，邪恶就赢；失忆者、食人族不知道自己的能力。地图是雾锁溪谷的驿站。' }[st.script] ?? '《暗流涌动》：入门剧本，信息多、规则直白，推荐第一次玩。'}</p>
+              luf: '《窃窃私语》：官方 5–6 人小剧本。恶魔利维坦不杀人，但处决两个好人、或者撑到第五天结束，邪恶就赢；失忆者、食人族不知道自己的能力。地图是雾锁溪谷的驿站。',
+              bs7: '《七步成诗》：2025 剧本世界杯冠军（作者 TrashWarlock）。7 号座位没有人坐，照样有角色，由 AI 说书人替它选人，每局替它发言一次——它可能是好人，也可能是恶魔。有贵族、村夫、魔术师、落难少女、炸弹人等新角色。地图是月下诗会的驿站。' }[st.script] ?? '《暗流涌动》：入门剧本，信息多、规则直白，推荐第一次玩。'}</p>
             {!host ? <p className="muted setting-note host-only-note">配置、说书人、计时和房规由房主决定，只有房主看得到。</p> : <>
             <div className="setting mode-row">
               <span>配置</span>
@@ -669,10 +675,11 @@ const SCRIPT_CARDS = {
   ngj: { tag: '20 分钟一局', map: '冬夜集市 · 钟楼广场', color: '#e8b04a' },
   luf: { tag: '利维坦 · 五天', map: '雾锁溪谷 · 黯月驿站', color: '#7fa8a2' },
   rag: { tag: '全员猎手 vs 狼人', map: '雪夜 · 钟楼广场', color: '#c63d2a' },
+  bs7: { tag: '2025 世界杯冠军 · 7 号空座', map: '月下诗会 · 黯月驿站', color: '#8f9fd6' },
 };
 
 function ScriptPicker({ value, disabled, onPick }) {
-  const groups = [['标准剧本', '5–15 人', ['tb', 'bmr', 'snv']], ['小剧本', '5–6 人', ['ngj', 'luf']], ['娱乐模式', '5–15 人', ['rag']]];
+  const groups = [['标准剧本', '5–15 人', ['tb', 'bmr', 'snv']], ['比赛剧本', '6–14 人 + 空座', ['bs7']], ['小剧本', '5–6 人', ['ngj', 'luf']], ['娱乐模式', '5–15 人', ['rag']]];
   return (
     <div className="script-pick">
       <span className="script-pick-label">剧本</span>

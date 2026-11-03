@@ -31,11 +31,11 @@ function BoardBar({ n, script }) {
   if (!d) return null;
   const parts = [['镇民', d[0], 'var(--int)'], ['外来者', d[1], 'var(--psy)'], ['爪牙', d[2], '#c9762e'], ['恶魔', d[3], 'var(--phy)']];
   return (
-    <div className="board-bar" title={{ bmr: '教父在场时：外来者 +1 或 −1（说书人决定）', snv: '方古在场时外来者 +1；亡骨魔在场时外来者 −1', ngj: '男爵在场时外来者加到两个（这个剧本只有两个外来者）', luf: '气球驾驶员在场时，说书人可以多放一个外来者', rag: '镇民全是猎手，恶魔全是小恶魔（狼人）' }[script] ?? '男爵在场时：外来者 +2、镇民 −2'}>
+    <div className="board-bar" title={{ bmr: '教父在场时：外来者 +1 或 −1（说书人决定）', snv: '方古在场时外来者 +1；亡骨魔在场时外来者 −1', ngj: '男爵在场时外来者加到两个（这个剧本只有两个外来者）', luf: '气球驾驶员在场时，说书人可以多放一个外来者', rag: '镇民全是猎手，恶魔全是小恶魔（狼人）', bs7: '男爵 +2、亡骨魔 −1、气球驾驶员 +0~1 外来者；村夫可以有 1–3 个。7 号空座也算一个座位' }[script] ?? '男爵在场时：外来者 +2、镇民 −2'}>
       <span className="bb-script">{SCRIPTS[script]?.name ?? SCRIPTS.tb.name}</span>
       <span className="bb-n">{n} 人局</span>
       {parts.map(([k, v, c]) => <span key={k} className="bb-item"><b style={{ color: c }}>{v}</b>{k}</span>)}
-      <span className="bb-note">{{ bmr: '教父在场 外来者±1', snv: '方古 +1 · 亡骨魔 −1', ngj: '男爵在场 外来者补到 2', luf: '气球驾驶员 外来者+0~1', rag: '猎手 vs 狼人' }[script] ?? '男爵在场 外来者+2'}</span>
+      <span className="bb-note">{{ bmr: '教父在场 外来者±1', snv: '方古 +1 · 亡骨魔 −1', ngj: '男爵在场 外来者补到 2', luf: '气球驾驶员 外来者+0~1', rag: '猎手 vs 狼人', bs7: '7 号空座 · 男爵+2 · 亡骨魔−1' }[script] ?? '男爵在场 外来者+2'}</span>
     </div>
   );
 }
@@ -556,7 +556,7 @@ const STATEMENTS = [
 function GossipButton({ s, act }) {
   const [open, setOpen] = useState(false);
   const me = s.self;
-  if (s.script !== 'bmr' || s.phase !== 'day' || !me?.alive || me.gossipDone) return null;
+  if (!inScript('gossip', s.script) || s.phase !== 'day' || !me?.alive || me.gossipDone) return null;
   // 表单开成屏幕中间的弹窗（以前塞在右上角的操作面板里展开，面板高度不够，大半被挡住，看起来像没弹出来）
   return (
     <div className="btn-row gossip-row">
@@ -604,14 +604,18 @@ function SnvButtons({ s, act }) {
       {me.canPardon && <Btn kind="primary" onClick={() => setOpen('pardon')} title="每局一次：台上的人走下来，今天不再处决任何人">特赦</Btn>}
       {me.canDeclare && <Btn kind={me.madness && !me.madness.claimed ? 'primary' : 'secondary'} onClick={() => setOpen('declare')} title="公开说自己是某个角色，全场都看得到">公开声明</Btn>}
       {me.canJuggle && <Btn kind={me.role?.id === 'juggler' ? 'primary' : 'secondary'} onClick={() => setOpen('juggle')} title="公开猜最多五次玩家的角色；只有真杂耍艺人当晚会得知猜对几个">公开猜测</Btn>}
+      {me.harpy && !me.harpy.claimed && <Btn kind="primary" onClick={() => setOpen('harpy')} title={`鹰身女妖要你疯狂地证明 ${me.harpy.name} 是邪恶的`}>公开指认</Btn>}
+      {me.canDamsel && <Btn kind="secondary" onClick={() => setOpen('damsel')} title="爪牙合计有一次机会：公开猜谁是落难少女，猜中了邪恶获胜。谁都可以这么说">猜落难少女</Btn>}
       {open && createPortal(
         <div className="sheet-bg gossip-bg" onClick={close} role="presentation">
-          <div className="gossip-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={{ declare: '公开声明', juggle: '公开猜测', artist: '提问', fisherman: '请教说书人', amnesiac: '猜我的能力', pardon: '特赦' }[open]}>
+          <div className="gossip-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={{ declare: '公开声明', juggle: '公开猜测', artist: '提问', fisherman: '请教说书人', amnesiac: '猜我的能力', pardon: '特赦', harpy: '公开指认', damsel: '猜落难少女' }[open]}>
             {open === 'declare' && <DeclareForm s={s} act={act} onClose={close} />}
             {open === 'juggle' && <JuggleForm s={s} act={act} onClose={close} />}
             {open === 'artist' && <ArtistForm act={act} onClose={close} />}
             {open === 'amnesiac' && <AmnesiacForm act={act} onClose={close} />}
             {open === 'pardon' && <Confirm title="公开特赦" text="每局只能用一次。全场都会看到：台上的人走下处决台，今天不再处决任何人。" ok="特赦" onOk={() => act('pardon')} onClose={close} />}
+            {open === 'harpy' && <Confirm title="公开指认" text={`全场都会看到你说「${me.harpy.name} 是邪恶的」。这就算你疯狂地证明过了；今天不说的话，黄昏时你们之中可能有人死亡。`} ok="公开说" onOk={() => act('harpyClaim')} onClose={close} />}
+            {open === 'damsel' && <DamselForm s={s} act={act} onClose={close} />}
             {open === 'fisherman' && <Confirm title="请教说书人" text="每局只能请教一次。说书人会私下给你一条建议，告诉你该去做什么（不一定是一条事实）。现在就用吗？" ok="现在请教" onOk={() => act('fisherman')} onClose={close} />}
           </div>
         </div>, document.body)}
@@ -620,6 +624,23 @@ function SnvButtons({ s, act }) {
 }
 
 const scriptRoles = (script) => rolesOf(script);
+
+/** 公开猜谁是落难少女：每人每局一次。只有爪牙的第一次猜测算数（爪牙合计一次），猜中邪恶获胜。 */
+function DamselForm({ s, act, onClose }) {
+  const [target, setTarget] = useState('');
+  const send = async () => { if (await act('damsel', { target })) onClose(); };
+  return (
+    <div className="gossip-form">
+      <h3>猜落难少女</h3>
+      <p className="muted">全场都会看到你猜的是谁。只有爪牙猜才算数，爪牙合计只有一次机会：猜中了邪恶获胜，猜错了爪牙就再没有机会。每人每局只能猜一次。</p>
+      <select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="猜谁是落难少女">
+        <option value="">选一名玩家</option>
+        {s.players.filter((p) => p.id !== s.me).map((p) => <option key={p.id} value={p.id}>{p.seat}号 {p.name}</option>)}
+      </select>
+      <div className="btn-row"><Btn kind="primary" disabled={!target} onClick={send}>公开猜</Btn><Btn onClick={onClose}>取消</Btn></div>
+    </div>
+  );
+}
 
 function DeclareForm({ s, act, onClose }) {
   const [role, setRole] = useState('');
@@ -956,6 +977,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
     );
   }
 
+  if (s.boom) return <><BoomPanel s={s} act={act} g={g} />{roomCard}</>;
   if (s.pendingNom) return <><NomStage s={s} act={act} g={g} name={name} face={face} />{me?.canGoblin && <GoblinClaim act={act} />}{roomCard}</>;
 
   const meP = g(s.me);
@@ -990,6 +1012,27 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
 }
 
 /** 提名环节剩余时间。 */
+/** 炸弹人引爆后的倒数：每个人（死人也算）指一名还活着的人，被最多人指着的死亡；平票没人死。可以改。 */
+function BoomPanel({ s, act, g }) {
+  const secs = useCountdown(s.boom.until);
+  return (
+    <Panel title="💣 炸弹人引爆了" tone="phy" extra={secs != null ? <span className="nom-clock">{secs}</span> : null}>
+      <p className="lead">只剩三个人。倒数结束时，被最多人指着的那个死亡；平票就没有人死。</p>
+      <div className="boom-picks">
+        {s.boom.alive.map((id) => {
+          const p = g(id);
+          return (
+            <button key={id} type="button" className={`boom-pick ${s.boom.mine === id ? 'on' : ''}`} aria-pressed={s.boom.mine === id} onClick={() => act('boomPoint', { target: id })}>
+              <b>{p?.seat}号</b><span>{p?.name}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="muted">{s.boom.mine ? `你指着 ${g(s.boom.mine)?.seat}号（倒数结束前可以改）。` : '点一个人，用手指指着他。'}已经有 {s.boom.count} 人指了。</p>
+    </Panel>
+  );
+}
+
 function NomClock({ until }) {
   const secs = useCountdown(until);
   if (secs == null) return null;

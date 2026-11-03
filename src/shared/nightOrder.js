@@ -1,7 +1,7 @@
 // 三个剧本的夜晚顺序（照官方的夜晚顺序表）：前端「角色」页的夜间顺序说明用，黯月初升和梦殒春宵的结算顺序（engine/bmr.js、engine/snv.js）也读这里。
 // 每一步：[角色 id 或步骤 id, 这一步做什么]。不是角色的步骤（爪牙信息、恶魔信息）在 STEP_NAMES 里起名字。
 
-export const STEP_NAMES = { minioninfo: '爪牙信息', demoninfo: '恶魔信息' };
+export const STEP_NAMES = { minioninfo: '爪牙信息', demoninfo: '恶魔信息', seat7: '7 号空座' };
 
 export const NIGHT_ORDER = {
   tb: {
@@ -165,14 +165,57 @@ NIGHT_ORDER.rag = {
   why: ['猎手没有夜里的能力；白天每人可以开一枪，打中狼人，狼人就死。', '狼人全死好人赢；存活的狼人追平好人，狼人赢。'],
 };
 
+// 七步成诗（2025 剧本世界杯冠军）：按官方剧本页的夜晚顺序
+NIGHT_ORDER.bs7 = {
+  first: [
+    ['seat7', '7 号座位没有人坐：轮到它的角色时，由说书人替它选'],
+    ['boffin', '恶魔和科学怪人得知恶魔拿到了哪个不在场的善良角色的能力'],
+    ['minioninfo', '7 人及以上：爪牙互认、得知恶魔；有魔术师时爪牙会看到两个「恶魔」'],
+    ['demoninfo', '7 人及以上：恶魔得知爪牙（魔术师也混在里面）和 3 个伪装'],
+    ['harpy', '选两人：明天第一人要疯狂地证明第二人是邪恶的'],
+    ['pukka', '选一人中毒'],
+    ['damsel', '爪牙得知落难少女在场（人少也告诉）'],
+    ['librarian', '得知两人之一是某个外来者（或场上没有外来者）'],
+    ['dreamer', '选一人，得知一善一恶两个角色，其中一个是他的'],
+    ['seamstress', '每局一次：选两人，得知是不是同一阵营'],
+    ['noble', '得知三人，其中恰好一人是邪恶的'],
+    ['balloonist', '得知一名玩家'],
+    ['shugenja', '得知最近的邪恶玩家在顺时针还是逆时针'],
+    ['villageidiot', '每个村夫各选一人，得知他的阵营'],
+  ],
+  other: [
+    ['innkeeper', '选两人：今晚不会死，其中一人醉酒到明天黄昏'],
+    ['harpy', '选两人：明天第一人要疯狂地证明第二人是邪恶的'],
+    ['scarletwoman', '恶魔今天死了：她在这时成为新的恶魔'],
+    ['imp', '选一人杀死；选自己就是自杀传位'],
+    ['pukka', '选一人中毒；上一个被毒的人死亡并恢复健康'],
+    ['vigormortis', '选一人杀死；杀死的爪牙保留能力'],
+    ['farmer', '农夫今晚死了：一名存活的善良玩家醒来，变成农夫'],
+    ['dreamer', '选一人，得知一善一恶两个角色'],
+    ['oracle', '得知死人里有几个邪恶'],
+    ['seamstress', '每局一次：选两人，得知是不是同一阵营'],
+    ['balloonist', '得知一名玩家，和上一晚得知的人角色类型不同'],
+    ['villageidiot', '每个村夫各选一人，得知他的阵营'],
+  ],
+  why: [
+    '灯神规则：7 号座位不由玩家入座，仍然发角色；它每晚的选择、白天唯一一次发言（公开或私下，可以说谎、可以提名），都由说书人替它决定。',
+    '旅店老板最先：他保护的人当晚谁也杀不死。恶魔之后才是信息，数到的死人才准。',
+    '鹰身女妖的疯狂到她下一次选人为止；没疯狂证明的话，说书人可以白天杀死其中一人或两人。',
+  ],
+};
+
 /**
  * 小剧本的结算步骤（engine/snv.js 用）：这套引擎认得的所有角色按官方总表排好；不在场的步骤自动跳过。
  * 失忆者、食人族拿到的能力也按这张表的位置醒。
  */
 export const MIX_STEPS = {
-  first: ['philosopher', 'widow', 'snakecharmer', 'eviltwin', 'witch', 'cerenovus', 'investigator', 'empath', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress', 'balloonist', 'chambermaid', 'mathematician'],
-  other: ['philosopher', 'pithag', 'snakecharmer', 'witch', 'cerenovus', 'imp', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'barber', 'sweetheart', 'sage', 'clockmaker',
-    'empath', 'dreamer', 'amn_detect', 'amn_echo', 'flowergirl', 'towncrier', 'oracle', 'seamstress', 'juggler', 'balloonist', 'chambermaid', 'mathematician'],
+  first: ['philosopher', 'sailor', 'courtier', 'poisoner', 'widow', 'godfatherInfo', 'devilsadvocate', 'snakecharmer', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'pukka', 'grandmother',
+    'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress', 'noble', 'balloonist', 'shugenja', 'villageidiot',
+    'butler', 'chambermaid', 'mathematician', 'spy'],
+  other: ['philosopher', 'sailor', 'innkeeper', 'courtier', 'gambler', 'poisoner', 'monk', 'devilsadvocate', 'exorcist', 'pithag', 'snakecharmer', 'witch', 'cerenovus', 'harpy',
+    'zombuul', 'imp', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'pukka', 'shabaloth', 'po', 'assassin', 'godfather',
+    'barber', 'sweetheart', 'sage', 'farmer', 'professor', 'gossip', 'tinker', 'moonchild', 'ravenkeeper', 'clockmaker', 'empath', 'fortuneteller', 'undertaker', 'dreamer', 'amn_detect', 'amn_echo', 'flowergirl', 'towncrier', 'oracle', 'seamstress',
+    'juggler', 'balloonist', 'villageidiot', 'butler', 'chambermaid', 'mathematician', 'spy'],
 };
 
 /** 黯月初升的结算步骤（engine/bmr.js 用）：去掉不是角色的信息步骤；教父首夜那一步是"得知外来者"。 */

@@ -44,7 +44,7 @@ export function Portrait({ p, size, frame = 'var(--cream)', prefer = 'art', spea
   const srcs = (prefer === 'avatar' ? [p.avatar, art] : [art, p.avatar]).filter(Boolean);
   const [failed, setFailed] = useState(0);
   useEffect(() => { setFailed(0); }, [p.char, p.avatar]);
-  const initial = ch ? [...ch.name][0] : p.fake ? p.name.replace(/D/g, '') || '机' : [...(p.name ?? '?')][0];
+  const initial = p.seat7 ? '🪑' : ch ? [...ch.name][0] : p.fake ? p.name.replace(/D/g, '') || '机' : [...(p.name ?? '?')][0]; // 七步成诗的 7 号空座：一把空椅子
   const src = srcs[failed];
   // Discord 头像本来就是正方形：用正方形框完整显示；画好的人物肖像是竖的 5:6
   const square = !!src && src === p.avatar;

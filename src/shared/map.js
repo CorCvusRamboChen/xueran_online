@@ -6,6 +6,7 @@ import BMR from './maps/bmr.js';
 import SNV from './maps/snv.js';
 import NGJ from './maps/ngj.js';
 import LUF from './maps/luf.js';
+import BS7 from './maps/bs7.js';
 
 export const SPEED = 240; // 每秒走多少单位
 export const CELL = 20;   // 寻路网格每格 20 单位
@@ -321,7 +322,7 @@ export class TownMap {
 const round = (p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 });
 
 // 两个小剧本用前两张图的变体（同一套手绘图和布局，换色调、天气和点缀；art 记着用哪套手绘图）
-export const MAPS = { tb: new TownMap(TB), bmr: new TownMap(BMR), snv: new TownMap(SNV), ngj: new TownMap(NGJ), luf: new TownMap(LUF) };
+export const MAPS = { tb: new TownMap(TB), bmr: new TownMap(BMR), snv: new TownMap(SNV), ngj: new TownMap(NGJ), luf: new TownMap(LUF), bs7: new TownMap(BS7) };
 /** 剧本 → 地图（没有专属地图的剧本用暗流涌动的）。 */
 export const getMap = (script) => MAPS[script] ?? MAPS.tb;
 

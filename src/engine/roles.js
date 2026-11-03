@@ -223,6 +223,31 @@ const LUF = {
     ability: '你不杀人。所有人都知道利维坦在场。如果有超过一名善良玩家被处决，邪恶获胜；第五个白天结束时，邪恶获胜。' },
 };
 
+// ───────────────────────── 七步成诗（2025 剧本世界杯冠军）里新出现的角色 ─────────────────────────
+// 来自实验性角色和其他版本。能力文字照官方百科用自己的话写，口径见 references/seat7.md；顺序看 shared/nightOrder.js。
+const BS7 = {
+  noble: { name: '贵族', en: 'Noble', team: 'townsfolk', firstNight: 1, otherNight: 0,
+    ability: '在你的首个夜晚，你会得知三名玩家：其中有且只有一名是邪恶的。' },
+  shugenja: { name: '修行者', en: 'Shugenja', team: 'townsfolk', firstNight: 1, otherNight: 0,
+    ability: '在你的首个夜晚，你会得知离你最近的邪恶玩家在你的顺时针还是逆时针方向（两边一样近时由说书人决定）。' },
+  villageidiot: { name: '村夫', en: 'Village Idiot', team: 'townsfolk', firstNight: 1, otherNight: 1,
+    choose: { count: 1 },
+    ability: '每个夜晚，选择一名玩家：你会得知他的阵营。[+0~2 村夫；有多名村夫时其中一名醉酒]' },
+  farmer: { name: '农夫', en: 'Farmer', team: 'townsfolk', firstNight: 0, otherNight: 0,
+    ability: '如果你在夜晚死亡，一名存活的善良玩家会变成农夫。' },
+  magician: { name: '魔术师', en: 'Magician', team: 'townsfolk', firstNight: 0, otherNight: 0,
+    ability: '恶魔会以为你是爪牙，爪牙会以为你是恶魔。' },
+  damsel: { name: '落难少女', en: 'Damsel', team: 'outsider', firstNight: 0, otherNight: 0,
+    ability: '所有爪牙都知道落难少女在场。每局一次，爪牙可以公开猜谁是落难少女：猜中了，你的阵营落败。' },
+  harpy: { name: '鹰身女妖', en: 'Harpy', team: 'minion', firstNight: 1, otherNight: 1,
+    choose: { count: 2 },
+    ability: '每个夜晚，选择两名玩家：明天第一名玩家要「疯狂」地证明第二名玩家是邪恶的，否则他们之中可能有人死亡。' },
+  boomdandy: { name: '炸弹人', en: 'Boomdandy', team: 'minion', firstNight: 0, otherNight: 0,
+    ability: '如果你被处决，除三名玩家以外的所有人死亡。倒数十声后，被最多玩家指着的人死亡。' },
+  boffin: { name: '科学怪人', en: 'Boffin', team: 'minion', firstNight: 0, otherNight: 0,
+    ability: '恶魔拥有一个不在场的善良角色的能力（即使恶魔醉酒或中毒）。你和恶魔都知道是哪个能力。' },
+};
+
 // ───────────────────────── 失忆者专用的原创能力 ─────────────────────────
 // 官方：失忆者的能力可以是现有能力、类似的能力或原创能力。这几个是在现有能力上改的变种，只会作为失忆者的隐藏能力出现，
 // 不属于任何剧本（script: 'amnesiac'，rolesOf / inScript 都不会列出来）。结算在 engine/snv.js。
@@ -244,6 +269,7 @@ for (const [id, r] of Object.entries(ROLES)) r.script = 'tb';
 for (const [id, r] of Object.entries(BMR)) { r.script = 'bmr'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(SNV)) { r.script = 'snv'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(LUF)) { r.script = 'luf'; ROLES[id] = r; }
+for (const [id, r] of Object.entries(BS7)) { r.script = 'bs7'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(AMNESIAC_ONLY)) { r.script = 'amnesiac'; r.virtual = true; ROLES[id] = r; }
 
 /**
@@ -259,6 +285,11 @@ export const SCRIPTS = {
     roles: ['clockmaker', 'investigator', 'empath', 'chambermaid', 'artist', 'sage', 'drunk', 'klutz', 'scarletwoman', 'baron', 'imp'] },
   luf: { id: 'luf', name: '窃窃私语', en: 'Laissez un Faire', engine: 'snv', teensy: true, players: [5, 6],
     roles: ['balloonist', 'savant', 'amnesiac', 'fisherman', 'artist', 'cannibal', 'mutant', 'lunatic', 'widow', 'goblin', 'leviathan'] },
+  // 2025 剧本世界杯冠军（作者 TrashWarlock）。灯神规则：7 号座位没有人坐，由说书人替它做决定，每局可以替它发言一次（seat7）。
+  // players 是真人（含机器人）的人数，开局时再插进 7 号空座；旅行者没有做。
+  bs7: { id: 'bs7', name: '七步成诗', en: 'The Ballad of Seat 7', engine: 'snv', seat7: true, players: [6, 14],
+    roles: ['noble', 'librarian', 'shugenja', 'balloonist', 'villageidiot', 'dreamer', 'oracle', 'innkeeper', 'seamstress', 'fisherman', 'farmer', 'virgin', 'magician',
+      'drunk', 'recluse', 'saint', 'damsel', 'harpy', 'boomdandy', 'scarletwoman', 'boffin', 'baron', 'pukka', 'imp', 'vigormortis'] },
   // 娱乐模式（用户 2026-11-04 要的「只有猎人和狼人的板子」）：好人全是猎手，坏人全是小恶魔（狼人），见 game.js 的 rollRagnarok
   rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'tb', ragnarok: true, roles: ['slayer', 'imp'] },
 };

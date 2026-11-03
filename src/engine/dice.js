@@ -31,6 +31,11 @@ export const DICE = {
   balloonSame: { base: 0.7 },                       // 失效的气球驾驶员看到同类型的人（信息链断了才看得出是假的）
   fishStrong: { base: 0.3, balance: -2 },           // 渔夫的建议直指恶魔：善良落后时多给
   goblinClaim: { base: 0.6 },                       // 机器人哥布林被提名时声明身份
+  librarianNone: { base: 0.25 },                    // 失效的图书管理员被告知「没有外来者」（其实有）
+  harpyKill: { base: 0.6, evil: -1.5, newbie: -1.5, rookie: ROOKIE }, // 鹰身女妖的疯狂没做到：杀人（"可能"死亡，别靠这个让邪恶自己送分）
+  harpyBoth: { base: 0.25, balance: 1.5 },          // 两个都杀：善良领先时更常
+  seat7Speak: { base: 0.35, nominated: 1.5, late: 1.2 }, // 7 号座位今天用掉唯一一次发言：被提名时、局势到后半段时更想说
+  seat7Lie: { base: 0.5 },                          // 善良的 7 号座位也可以说谎：这里只给邪恶用，善良都说真话
   mutant: { base: 0.85, newbie: -2.1, rookie: ROOKIE, veteran: VETERAN, offline: OFFLINE, voice: -0.7 }, // voice：转写可能听错，比公开声明轻
   madness: {
     base: 0.75, evil: -1.5, newbie: -1.5, rookie: ROOKIE, veteran: VETERAN, offline: OFFLINE,
@@ -53,6 +58,8 @@ export const DRAW = {
   innkeeperDrunk: { newbie: -2, hits: -0.5 },
   starpassHeir: { heat: -2 },                 // 被怀疑最少的最值得接任
   vigSide: { pressure: 1.5 },                 // 善良领先毒拿信息的，邪恶领先毒不拿信息的
+  farmerHeir: { newbie: 0.5 },                // 新手接农夫：多一个有能力的活人，不受罪
+  boomSurvivor: { pressure: 1.5 },            // 炸弹人引爆后留谁：往落后的一方偏（善良落后多留善良）
 };
 
 const logit = (p) => Math.log(p / (1 - p));
