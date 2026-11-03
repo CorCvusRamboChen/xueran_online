@@ -13,6 +13,8 @@ import { narration } from './narration.js';
 import { ttsUrl } from './tts.js';
 import { judgeStatement, judgeMadness, judgeBreak, looksBroken, judgeAvailable, judgeAmnesiac, adviseFisherman, looksInjected, speakSeat7 } from './judge.js';
 import { noteMarks, readTown } from './beliefs.js';
+import { Werewolf } from '../engine/werewolf.js';
+import { WW_ROOM } from './werewolfRoom.js';
 
 // 受害者那段破门过场多长（毫秒）：踹门 → 踹开 → "你死了"，播完再天亮
 const VICTIM_SCENE_MS = 6500;
@@ -67,6 +69,7 @@ export const DEFAULT_SETTINGS = {
   nominateMinutes: 3,    // 集合后开放提名多久（自动说书）
   accuseSeconds: 60,     // 提名者陈述（房主开局前可调）
   defendSeconds: 60,     // 被提名者辩护（房主开局前可调）
+  speechSeconds: 90,     // 狼人杀：白天每人发言多久（遗言最多 60 秒）
   nominatorVotes: true,  // 房规：提名的人自动算一票（票数从 1 开始）
   speechMute: true,      // 陈述/辩护时只有发言的人能说话，其他人服务器闭麦
   smallEvilInfo: false,  // 房规：6 人及以下也让恶魔和爪牙互认、恶魔拿伪装（官方不给）
@@ -140,6 +143,8 @@ export class Room {
     this.idleTimer = null;
     this.ownedChannels = new Set(); // 这局开过的语音频道（语音校正用）
     this.voiceTouched = new Map();
+    this.wwKey = null;          // 狼人杀：已经排好计时的阶段编号（见 werewolfRoom.js）
+    this.wwEnding = false;
   }
 
   // ───────────── 工具 ─────────────
@@ -172,6 +177,7 @@ export class Room {
   }
   /** AI 房主的一句旁白（极乐迪斯科式）。客户端会读出来；有 title 的弹出过场标题卡。 */
   narrate(event, vars) {
+    if (this.game?.werewolf) return; // 狼人杀有自己的法官台词（wwSay），不念血染的旁白
     const n = narration(event, { script: this.game?.script, ...vars });
     if (!n) return;
     this.log.push({ id: ++this.logSeq, kind: 'story', text: n.text, title: n.title ?? null, audio: ttsUrl(n.text), at: Date.now() });
@@ -198,6 +204,8 @@ export class Room {
     // 走路很频繁，只推送位置，不推完整状态
     if (type === 'move') return this.move(uid, p.x, p.y);
     if (type === 'marks') return this.recordMarks(uid, p); // 没有状态要推给别人
+    if (this.game?.werewolf && !this.wwAllowed(type)) throw new UserError('狼人杀里没有这个操作');
+    if (this.game?.werewolf && type.startsWith('ww')) { this.wwAct(uid, type, p); this.changed(); return null; }
     if (type === 'fullLog') return { log: this.log.slice(Math.max(0, this.log.findLastIndex((l) => l.kind === 'start'))) }; // 打开「记录」时取一次这局的全部
     switch (type) {
       case 'join': this.join(uid); break;
@@ -387,6 +395,7 @@ export class Room {
     if (p.nominateMinutes != null) s.nominateMinutes = clamp(p.nominateMinutes, 1, 15);
     if (p.accuseSeconds != null) s.accuseSeconds = clamp(p.accuseSeconds, 10, 300);
     if (p.defendSeconds != null) s.defendSeconds = clamp(p.defendSeconds, 10, 300);
+    if (p.speechSeconds != null) s.speechSeconds = clamp(p.speechSeconds, 15, 300);
   }
 
   /** 挑人物形象（同一个人物只能一个人用）；id 为 null 表示改回 Discord 头像。 */
@@ -438,6 +447,7 @@ export class Room {
     const script = this.tutorial ? 'tb' : this.settings.script ?? 'tb';
     const [lo, hi] = playersOf(script);
     if (seats.length < lo || seats.length > hi) throw new UserError(`《${SCRIPTS[script].name}》要 ${lo}–${hi} 名玩家（现在 ${seats.length} 人）`);
+    if (SCRIPTS[script].werewolf) return this.wwStart(seats); // 狼人杀：另一套流程（werewolfRoom.js）
     // 七步成诗的灯神规则：7 号座位没有人坐，照样发角色，由说书人替它做决定
     if (SCRIPTS[script].seat7) seats.splice(6, 0, { id: SEAT7, name: '7号空座', avatar: null, fake: true });
     const teensy = !!SCRIPTS[script].teensy;
@@ -649,6 +659,7 @@ export class Room {
   /** 这个人现在该看到的倒计时：夜里只有轮到自己选（而且不是在等疯子）才看得到自己的截止时间；说书人看全局的。 */
   deadlineFor(uid) {
     const g = this.game;
+    if (g?.werewolf) return this.wwDeadlineFor(uid);
     if (!g || g.phase !== 'night' || uid === this.stId) return this.deadline;
     if (this.resolving) return this.rkPending === uid || this.revivePending === uid ? this.deadline : null;
     const pr = g.nightPrompts().find((x) => x.playerId === uid);
@@ -2152,7 +2163,8 @@ export class Room {
     const g = this.game;
     this.clearNoms();
     // 先公布结果：语音收尾（关房间、解开闭麦）要等合作机器人，慢的时候大家会一直卡在最后一刻
-    this.announce(`${g.winner === 'good' ? '善良阵营获胜！' : '邪恶阵营获胜！'} ${g.winReason}`, 'end');
+    const won = g.werewolf ? { good: '好人阵营获胜！', evil: '狼人阵营获胜！' } : { good: '善良阵营获胜！', evil: '邪恶阵营获胜！' };
+    this.announce(`${won[g.winner]} ${g.winReason}`, 'end');
     if (!this.tutorial) this.onEnded?.(this); // 永久存档这一局
     this.narrate('end', { team: g.winner, reason: g.winReason });
     this.changed();
@@ -2227,6 +2239,7 @@ export class Room {
     const keep = [
       ...(this.speechMuted?.has(uid) ? ['speech'] : []),
       ...(this.watchMuted?.includes(uid) ? ['watch'] : []),
+      ...(this.wwMuted?.includes(uid) ? ['dead'] : []), // 狼人杀：死人闭麦
       ...(this.game.phase === 'night' && this.settings.nightDeafen && !this.paused && this.game.get(uid) ? ['asleep'] : []),
     ];
     await this.safeVoice((v) => v.releaseMine?.(uid, keep));
@@ -2316,6 +2329,7 @@ export class Room {
     this.announce('大家都离开了，对局暂停，语音里的闭麦闭耳已经放开。有人回来会自动接着打。', 'clock');
     await this.syncGame();
     if (this.watchMuted?.length) { const ids = this.watchMuted; this.watchMuted = []; await this.safeVoice((v) => v.setMuted?.(ids, false, 'watch')); }
+    await this.wwReleaseMute();
     await this.speakOnly(null);
     if (this.square) await this.safeVoice((v) => v.setAsleep(this.realIds(), false, this.square));
     this.changed();
@@ -2357,6 +2371,7 @@ export class Room {
     this.timers.clear();
     await this.syncGame(false);
     if (this.watchMuted?.length) { const ids = this.watchMuted; this.watchMuted = []; await this.safeVoice((v) => v.setMuted?.(ids, false, 'watch')); }
+    await this.wwReleaseMute();
     await this.speakOnly(null);
     await this.endRoam();
     await this.closeAllRooms();
@@ -2405,7 +2420,7 @@ export class Room {
     this.lobby = s.lobby ?? [];
     this.roleAssign = s.roleAssign ?? {};
     this.newbies = s.newbies ?? [];
-    this.game = s.game ? Game.fromJSON(s.game) : null;
+    this.game = s.game ? (s.game.werewolf ? Werewolf.fromJSON(s.game) : Game.fromJSON(s.game)) : null;
     this.wireGame();
     Object.assign(this, {
       artistAsks: s.artistAsks ?? [], ended: s.ended, square: s.square, log: s.log ?? [], logSeq: s.logSeq ?? 0, epoch: s.logEpoch ?? this.epoch, stLog: s.stLog ?? [],
@@ -2437,6 +2452,7 @@ export class Room {
   resume(why = '服务器刚刚重启过，对局已经恢复，接着玩。') {
     const g = this.game;
     if (!g || this.ended || this.paused) return;
+    if (g.werewolf) { this.wwResume(why); return; }
     const left = (until, min = 5000) => Math.max(min, (until ?? 0) - Date.now());
     this.announce(why, 'clock');
     this.watchVoice();
@@ -2533,6 +2549,7 @@ export class Room {
         .map((id) => { const u = this.users.get(id); return { id, name: u?.name ?? '?', avatar: u?.avatar ?? null }; }),
     };
     if (!g) return { ...view, phase: 'lobby' };
+    if (g.werewolf) return this.wwView(uid, view);
 
     const spectator = !isST && !g.get(uid);
     const showRoles = isST || this.ended || (spectator && this.settings.spectatorGrimoire);
@@ -2703,3 +2720,6 @@ export class Room {
     };
   }
 }
+
+// 狼人杀（娱乐模式）的房间流程
+Object.assign(Room.prototype, WW_ROOM);

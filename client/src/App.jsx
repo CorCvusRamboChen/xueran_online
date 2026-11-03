@@ -19,6 +19,7 @@ import { setAmbience } from './ambience.js';
 import { useMarks, TAGS, LINKS, linksOf, addLink, removeLink, MarkMenu, MarkBadge, LinkLines, useLinkKind, LinkKinds, setMarksSink } from './marks.jsx';
 import { Tutorial, tutEvent } from './Tutorial.jsx';
 import { Watchers } from './Lobby.jsx';
+import { WerewolfGame } from './Werewolf.jsx';
 import { RoleIndex } from './RoleIndex.jsx';
 import { Replay, KeyInfo } from './replay.jsx';
 import { savedOutfit } from './Wardrobe.jsx';
@@ -209,10 +210,10 @@ export default function App() {
       {updated && status.kind === 'online' && (
         <button type="button" className="update-bar" onClick={() => location.reload()}>游戏更新了 · 点这里刷新（进度不会丢）</button>
       )}
-      {s.phase === 'lobby' ? <Lobby s={s} act={act} ask={ask} toast={showToast} onTutorial={() => api.current.tutorial(true)} /> : <Game s={s} act={act} ask={ask} />}
+      {s.phase === 'lobby' ? <Lobby s={s} act={act} ask={ask} toast={showToast} onTutorial={() => api.current.tutorial(true)} /> : s.ww ? <WerewolfGame s={s} act={act} ask={ask} /> : <Game s={s} act={act} ask={ask} />}
       {s.tutorial && <Tutorial s={s} onExit={() => api.current.tutorial(false)} />}
       {toast && <div className="toast">{toast}</div>}
-      <TitleCard card={card} onClose={closeCard} players={s?.players} />
+      <TitleCard card={card} onClose={closeCard} players={s?.players} kicker={s?.ww ? '法官' : undefined} />
     </div>
   );
 }
@@ -843,7 +844,7 @@ function MoonchildPanel({ s, act, fake }) {
   );
 }
 
-function Picker({ s, options, picked, onTap }) {
+export function Picker({ s, options, picked, onTap }) {
   return (
     <div className="picker">
       {options.map((id) => {
@@ -1335,7 +1336,7 @@ function CardBack() {
 }
 
 /** 身份页最上面：夜里（和白天）私下得到的所有信息，最新的在最上面。 */
-function InfoBox({ me }) {
+export function InfoBox({ me }) {
   useEffect(() => { if (!me.inbox.length) return undefined; const t = setTimeout(() => tutEvent('journal'), 2500); return () => clearTimeout(t); }, [me.inbox.length]);
   return (
     <section className="info-box">
@@ -1370,7 +1371,7 @@ const KIND_VOICE = {
 // 记录默认只显示关键信息（死亡、提名投票、公开声明、开枪、私聊、天亮的死讯……）；旁白和操作提示收起来，想看可以打开
 const isKey = (l) => l.key ?? ['death', 'vote', 'start', 'end', 'whisper'].includes(l.kind); // 旧存档没有 key 标记：按类型猜
 
-function History({ log: recent, players = [], ask, epoch }) {
+export function History({ log: recent, players = [], ask, epoch }) {
   const [all, setAll] = useState(false);
   // 状态推送只带最后 40 条，更早的打开时向服务器要一次；开着的时候又过了 40 条，再要一次补上空档
   const [older, setOlder] = useState([]);
@@ -1418,7 +1419,7 @@ function History({ log: recent, players = [], ask, epoch }) {
  * 镇民面板（小魔典）：大家按座位围成一圈。左键依次点两个人连一条线（先选上面的连线类型；再点一次起点取消），
  * 右键（手机长按）一个人打标签、猜角色、写笔记。只存在自己设备上，别人看不到。说书人点人还是打开这个人的详情。
  */
-function Roster({ s, onTap }) {
+export function Roster({ s, onTap }) {
   const marks = useMarks(s);
   const ref = useRef(null);
   const [w, setW] = useState(340);
