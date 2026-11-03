@@ -293,7 +293,7 @@ export function TownMap({ s, onMove, night = false }) {
       {!night && <RoomStrip s={s} onGo={(h) => { onMove(h.x + h.w / 2, h.y + h.h / 2); world.current?.follow(); }} />}
       {!night && <AliveStrip s={s} watching={watching} onWatch={watch} />}
 
-      {sheet ? <CheatSheet s={s} onClose={() => setSheet(false)} /> : <button type="button" className="mm-sheet-btn" onClick={() => setSheet(true)} title="把小地图换成技能速查表：所有角色的技能">技能表</button>}
+      {s.script === 'avalon' ? null /* 阿瓦隆没有血染角色，不放技能表 */ : sheet ? <CheatSheet s={s} onClose={() => setSheet(false)} /> : <button type="button" className="mm-sheet-btn" onClick={() => setSheet(true)} title="把小地图换成技能速查表：所有角色的技能">技能表</button>}
       <svg className={`minimap ${sheet ? 'hidden' : ''}`} viewBox={`0 0 ${town.w} ${town.h}`} onPointerDown={miniTap} aria-label="小地图">
         <MiniBase town={town} />
         {r.houses.map((h) => <rect key={h.id} x={h.x} y={h.y} width={h.w} height={h.h} fill={h.locked ? '#c9a24a' : '#4f6764'} stroke="#111" strokeWidth="8" />)}

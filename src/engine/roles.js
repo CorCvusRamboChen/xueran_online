@@ -261,10 +261,12 @@ export const SCRIPTS = {
     roles: ['balloonist', 'savant', 'amnesiac', 'fisherman', 'artist', 'cannibal', 'mutant', 'lunatic', 'widow', 'goblin', 'leviathan'] },
   // 娱乐模式（用户 2026-11-04 要的「只有猎人和狼人的板子」）：好人全是猎手，坏人全是小恶魔（狼人），见 game.js 的 rollRagnarok
   rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'tb', ragnarok: true, roles: ['slayer', 'imp'] },
+  // 娱乐模式（用户 2026-11-04 要的）：不是血染，是《抵抗组织：阿瓦隆》原版规则。没有血染角色，规则和角色都在 engine/avalon.js
+  avalon: { id: 'avalon', name: '阿瓦隆', en: 'Avalon', engine: 'avalon', avalon: true, players: [5, 10], roles: [] },
 };
 /** 诸神黄昏几只狼人（小恶魔）：其余全是猎手。 */
 export const ragnarokWolves = (n) => (n <= 6 ? 1 : n <= 9 ? 2 : n <= 12 ? 3 : 4);
-/** 剧本用的规则引擎：'tb' | 'bmr' | 'snv'。 */
+/** 剧本用的规则引擎：'tb' | 'bmr' | 'snv' | 'avalon'。 */
 export const engineOf = (script) => SCRIPTS[script]?.engine ?? 'tb';
 /** 这个角色在不在这个剧本里。 */
 export const inScript = (id, script) => (SCRIPTS[script ?? 'tb']?.roles ? SCRIPTS[script].roles.includes(id) : (ROLES[id]?.script ?? 'tb') === (script ?? 'tb'));

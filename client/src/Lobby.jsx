@@ -6,6 +6,7 @@ import { Tag, Panel, Btn } from './ui.jsx';
 import { ClockTower, Tree, Lamp, House, MAP_COLORS as C, INK } from './art/TownArt.jsx';
 import { SCENE_ART, ROLE_ART } from './art.js';
 import { ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, rolesOf, inScript, playersOf, ragnarokWolves } from '../../src/engine/roles.js';
+import { AvalonDist, AvalonSettings, AvalonShowcase } from './Avalon.jsx';
 import { ATTR } from './flavor.js';
 import { AbilityCard } from './AbilityCard.jsx';
 import { useEffect, useState } from 'react';
@@ -105,7 +106,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
         {/* 右：镇民、形象、房间设置 */}
         <section className="lobby-right">
           <Panel title="镇民" className="glass" extra={<span className="muted">{n} / {hi}</span>}>
-            <DistBar n={n} d={d} lo={lo} hi={hi} />
+            {st.script === 'avalon' ? <AvalonDist n={n} /> : <DistBar n={n} d={d} lo={lo} hi={hi} />}
             {!n && <p className="muted">广场上还空无一人。</p>}
             {(
               <div className="lobby-roster">
@@ -141,8 +142,10 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
             <p className="muted setting-note">{{ bmr: '《黯月初升》：中等难度的"死亡盛宴"——恶魔一夜可能杀多人，好人有很多保命和复活手段。推荐 7 人及以上。', snv: '《梦殒春宵》：困难，最疯狂的一本——信息很多但不一定可靠，角色和阵营都会中途改变，还有疯狂机制。',
               ngj: '《无上愉悦》：官方 5–6 人小剧本，二十分钟一局，又短又吵。角色都来自前三个剧本；关键是弄清在场的是红唇女郎还是男爵。地图是冬夜集市的钟楼广场。',
               rag: '《诸神黄昏》：娱乐模式，只有猎手和狼人（小恶魔）。狼人互相认识，每晚各刀一人；每个猎手白天能开一枪，打中狼人就死。狼人全死好人赢，狼人追平好人狼人赢。',
+              avalon: '《阿瓦隆》：娱乐模式，不是血染——照《抵抗组织：阿瓦隆》原版规则。没有夜里杀人、没有处决：队长组队，所有人公开投票，队员秘密出任务票。好人完成三次任务后，刺客还有一次认出梅林的机会。5–10 人。',
               luf: '《窃窃私语》：官方 5–6 人小剧本。恶魔利维坦不杀人，但处决两个好人、或者撑到第五天结束，邪恶就赢；失忆者、食人族不知道自己的能力。地图是雾锁溪谷的驿站。' }[st.script] ?? '《暗流涌动》：入门剧本，信息多、规则直白，推荐第一次玩。'}</p>
-            {!host ? <p className="muted setting-note host-only-note">配置、说书人、计时和房规由房主决定，只有房主看得到。</p> : <>
+            {!host ? <p className="muted setting-note host-only-note">配置、说书人、计时和房规由房主决定，只有房主看得到。</p>
+              : st.script === 'avalon' ? <AvalonSettings st={st} set={set} n={n} Toggle={Toggle} Select={Select} /> : <>
             <div className="setting mode-row">
               <span>配置</span>
               <div className="seg">
@@ -215,7 +218,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
         </section>
 
         <RecordAndHistory s={s} ask={ask} />
-        <RoleShowcase script={st.script} />
+        {st.script === 'avalon' ? <AvalonShowcase /> : <RoleShowcase script={st.script} />}
       </div>
     </div>
   );
@@ -669,10 +672,11 @@ const SCRIPT_CARDS = {
   ngj: { tag: '20 分钟一局', map: '冬夜集市 · 钟楼广场', color: '#e8b04a' },
   luf: { tag: '利维坦 · 五天', map: '雾锁溪谷 · 黯月驿站', color: '#7fa8a2' },
   rag: { tag: '全员猎手 vs 狼人', map: '雪夜 · 钟楼广场', color: '#c63d2a' },
+  avalon: { tag: '组队 · 投票 · 任务', map: '5–10 人 · 不杀人', color: '#c9a227' },
 };
 
 function ScriptPicker({ value, disabled, onPick }) {
-  const groups = [['标准剧本', '5–15 人', ['tb', 'bmr', 'snv']], ['小剧本', '5–6 人', ['ngj', 'luf']], ['娱乐模式', '5–15 人', ['rag']]];
+  const groups = [['标准剧本', '5–15 人', ['tb', 'bmr', 'snv']], ['小剧本', '5–6 人', ['ngj', 'luf']], ['娱乐模式', '5–15 人', ['rag', 'avalon']]];
   return (
     <div className="script-pick">
       <span className="script-pick-label">剧本</span>

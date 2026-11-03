@@ -1,0 +1,327 @@
+// 娱乐模式阿瓦隆：规则（engine/avalon.js）和房间流程（server/avalon.js）。
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { Avalon, avalonRoles, AVALON_TEAMS, QUEST_SIZES, failsNeeded, isGood } from '../src/engine/avalon.js';
+import { Room } from '../src/server/room.js';
+
+const ids = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, name: `玩家${i + 1}` }));
+const make = (roles, opts = {}) => new Avalon(ids(roles.length), { roles, leader: 0, ...opts });
+const seesOf = (g, id) => g.knowledge(id).map((k) => k.id).sort();
+
+test('阵营人数和任务人数照官方表', () => {
+  for (let n = 5; n <= 10; n++) {
+    const roles = avalonRoles(n);
+    assert.equal(roles.length, n);
+    assert.deepEqual([roles.filter(isGood).length, roles.filter((r) => !isGood(r)).length], AVALON_TEAMS[n]);
+  }
+  assert.deepEqual(AVALON_TEAMS, { 5: [3, 2], 6: [4, 2], 7: [4, 3], 8: [5, 3], 9: [6, 3], 10: [6, 4] });
+  assert.deepEqual(QUEST_SIZES[5], [2, 3, 2, 3, 3]);
+  assert.deepEqual(QUEST_SIZES[6], [2, 3, 4, 3, 4]);
+  assert.deepEqual(QUEST_SIZES[7], [2, 3, 3, 4, 4]);
+  for (const n of [8, 9, 10]) assert.deepEqual(QUEST_SIZES[n], [3, 4, 4, 5, 5]);
+  assert.equal(failsNeeded(6, 4), 1);
+  assert.equal(failsNeeded(7, 4), 2);
+  assert.equal(failsNeeded(7, 3), 1);
+});
+
+test('默认配置：5 人梅林、派西维尔、忠臣 / 莫甘娜、刺客；7 人起放莫德雷德；奥伯伦要开了才有', () => {
+  assert.deepEqual(avalonRoles(5).sort(), ['assassin', 'loyal', 'merlin', 'morgana', 'percival']);
+  assert.deepEqual(avalonRoles(7).filter((r) => !isGood(r)).sort(), ['assassin', 'mordred', 'morgana']);
+  assert.deepEqual(avalonRoles(10).filter((r) => !isGood(r)).sort(), ['assassin', 'minion', 'mordred', 'morgana']);
+  assert.deepEqual(avalonRoles(10, { oberon: true }).filter((r) => !isGood(r)).sort(), ['assassin', 'mordred', 'morgana', 'oberon']);
+  assert.deepEqual(avalonRoles(5, { percival: false, morgana: false, mordred: false }).sort(), ['assassin', 'loyal', 'loyal', 'merlin', 'minion']);
+  assert.deepEqual(avalonRoles(5, { percival: false, morgana: false }).filter((r) => !isGood(r)).sort(), ['assassin', 'mordred'], '坏人有空位就放开着的角色');
+});
+
+test('信息：梅林看不到莫德雷德、看得到奥伯伦；坏人互认但不认识奥伯伦；派西维尔看到梅林和莫甘娜', () => {
+  //            p1        p2          p3       p4       p5          p6         p7        p8        p9          p10
+  const g = make(['merlin', 'percival', 'loyal', 'loyal', 'loyal', 'loyal', 'assassin', 'morgana', 'mordred', 'oberon']);
+  assert.deepEqual(seesOf(g, 'p1'), ['p10', 'p7', 'p8'], '梅林：刺客、莫甘娜、奥伯伦，没有莫德雷德');
+  assert.deepEqual(seesOf(g, 'p2'), ['p1', 'p8'], '派西维尔：梅林和莫甘娜');
+  assert.ok(g.knowledge('p2').every((k) => k.as === 'merlin'), '派西维尔分不清谁是谁');
+  assert.deepEqual(seesOf(g, 'p7'), ['p8', 'p9'], '刺客认识莫甘娜和莫德雷德，不认识奥伯伦');
+  assert.deepEqual(seesOf(g, 'p9'), ['p7', 'p8'], '莫德雷德认识同伴');
+  assert.deepEqual(seesOf(g, 'p10'), [], '奥伯伦谁都不认识');
+  assert.deepEqual(seesOf(g, 'p3'), [], '忠臣什么都不知道');
+});
+
+test('身份确认：所有人看完才开始第一轮', () => {
+  const g = make(['merlin', 'loyal', 'loyal', 'assassin', 'morgana']);
+  assert.equal(g.phase, 'night');
+  for (const id of ['p1', 'p2', 'p3', 'p4']) assert.equal(g.setReady(id), false);
+  assert.equal(g.setReady('p5'), true);
+  g.begin();
+  assert.equal(g.stage, 'propose');
+  assert.equal(g.phase, 'day');
+});
+
+const started = (roles, opts) => { const g = make(roles, opts); g.begin(); return g; };
+const voteAll = (g, yes) => { for (const p of g.players) g.vote(p.id, typeof yes === 'function' ? yes(p.id) : yes); return g.tally(); };
+
+test('组队：只有队长能提名、人数要对；过半赞成才通过，平票不通过', () => {
+  const g = started(['merlin', 'percival', 'loyal', 'loyal', 'assassin', 'morgana']);
+  assert.throws(() => g.propose('p2', ['p1', 'p2']), /只有队长/);
+  assert.throws(() => g.propose('p1', ['p1', 'p2', 'p3']), /要选 2 个人/);
+  g.propose('p1', ['p3', 'p1']);
+  assert.deepEqual(g.team, ['p1', 'p3'], '按座位排');
+  const yes = new Set(['p1', 'p2', 'p3']); // 6 人里 3 票赞成：平票，不过半
+  const rec = voteAll(g, (id) => yes.has(id));
+  assert.equal(rec.approved, false);
+  assert.equal(g.stage, 'propose');
+  assert.equal(g.leaderId(), 'p2', '队长交给下一个座位');
+  assert.equal(g.attempt, 2);
+  g.propose('p2', ['p2', 'p3']);
+  yes.add('p4');
+  assert.equal(voteAll(g, (id) => yes.has(id)).approved, true);
+  assert.equal(g.stage, 'quest');
+});
+
+test('同一轮连续 5 次组队被否决：坏人直接获胜', () => {
+  const g = started(['merlin', 'percival', 'loyal', 'assassin', 'morgana']);
+  for (let k = 1; k <= 5; k++) {
+    assert.equal(g.attempt, k);
+    g.propose(g.leaderId(), [g.leaderId(), g.players.find((p) => p.id !== g.leaderId()).id]);
+    voteAll(g, false);
+  }
+  assert.equal(g.winner, 'evil');
+  assert.match(g.winReason, /5 次/);
+  assert.equal(g.stage, 'ended');
+});
+
+test('任务票：好人不能出失败；只记失败票张数；一张失败就失败', () => {
+  const g = started(['merlin', 'percival', 'loyal', 'assassin', 'morgana']);
+  g.propose('p1', ['p1', 'p4']);
+  voteAll(g, true);
+  assert.throws(() => g.play('p1', false), /好人只能出「成功」/);
+  assert.throws(() => g.play('p2', true), /不在这次任务的队伍里/);
+  g.play('p1', true);
+  assert.throws(() => g.reveal(), /还有人没出/);
+  assert.equal(g.play('p4', false), true);
+  const out = g.reveal();
+  assert.deepEqual(out, { round: 1, result: 'fail', fails: 1 });
+  assert.equal(g.quests[0].result, 'fail');
+  assert.deepEqual(g.quests[0].team, ['p1', 'p4']);
+  assert.equal(g.round, 2);
+  assert.equal(g.leaderId(), 'p2', '下一轮队长是下一个座位');
+});
+
+/** 跑一轮任务：队长带上 team，全体赞成，fails 个坏人出失败。 */
+function quest(g, team, failers = []) {
+  g.propose(g.leaderId(), team);
+  voteAll(g, true);
+  for (const id of g.team) g.play(id, !failers.includes(id));
+  return g.reveal();
+}
+
+test('7 人及以上第 4 轮要 2 张失败票才失败', () => {
+  const g = started(['merlin', 'percival', 'loyal', 'loyal', 'assassin', 'morgana', 'mordred']);
+  quest(g, ['p1', 'p2'], []);           // 第 1 轮 2 人 成功
+  quest(g, ['p1', 'p2', 'p5'], ['p5']); // 第 2 轮 3 人 失败
+  quest(g, ['p1', 'p2', 'p6'], ['p6']); // 第 3 轮 3 人 失败
+  assert.equal(g.round, 4);
+  assert.equal(g.quest().need, 2);
+  const out = quest(g, ['p1', 'p2', 'p3', 'p5'], ['p5']); // 只有 1 张失败：仍然成功
+  assert.equal(out.result, 'success');
+  assert.equal(out.fails, 1);
+  const g2 = started(['merlin', 'percival', 'loyal', 'loyal', 'assassin', 'morgana', 'mordred']);
+  quest(g2, ['p1', 'p2'], []);
+  quest(g2, ['p1', 'p2', 'p5'], ['p5']);
+  quest(g2, ['p1', 'p2', 'p3'], []);
+  assert.equal(quest(g2, ['p1', 'p5', 'p6', 'p7'], ['p5', 'p6']).result, 'fail', '2 张失败票才失败');
+});
+
+test('6 人第 4 轮一张失败就失败', () => {
+  const g = started(['merlin', 'percival', 'loyal', 'loyal', 'assassin', 'morgana']);
+  quest(g, ['p1', 'p2'], []);
+  quest(g, ['p1', 'p2', 'p5'], ['p5']);
+  quest(g, ['p1', 'p2', 'p3', 'p4'], []);
+  assert.equal(quest(g, ['p1', 'p2', 'p5'], ['p5']).result, 'fail');
+});
+
+test('三次任务失败：坏人获胜，不进刺杀', () => {
+  const g = started(['merlin', 'percival', 'loyal', 'assassin', 'morgana']);
+  quest(g, ['p1', 'p4'], ['p4']);
+  quest(g, ['p1', 'p2', 'p4'], ['p4']);
+  quest(g, ['p1', 'p5'], ['p5']);
+  assert.equal(g.winner, 'evil');
+  assert.match(g.winReason, /三次任务失败/);
+});
+
+test('三次任务成功进入刺杀：刺客指对梅林坏人赢，指错好人赢', () => {
+  const run = () => {
+    const g = started(['merlin', 'percival', 'loyal', 'assassin', 'morgana']);
+    quest(g, ['p1', 'p2'], []);
+    quest(g, ['p1', 'p2', 'p3'], []);
+    quest(g, ['p2', 'p3'], []);
+    assert.equal(g.stage, 'assassin');
+    assert.equal(g.winner, null);
+    assert.equal(g.assassinId(), 'p4');
+    return g;
+  };
+  const g = run();
+  assert.throws(() => g.assassinate('p5', 'p1'), /只有刺客/);
+  assert.throws(() => g.assassinate('p4', 'p4'), /其他玩家/);
+  g.suggestTarget('p5', 'p2'); // 莫甘娜给刺客出主意
+  assert.deepEqual(g.suggest, { p5: 'p2' });
+  assert.throws(() => g.suggestTarget('p3', 'p1'), /同伴/);
+  assert.deepEqual(g.assassinate('p4', 'p2'), { merlin: false });
+  assert.equal(g.winner, 'good');
+  const g2 = run();
+  assert.deepEqual(g2.assassinate('p4', 'p1'), { merlin: true });
+  assert.equal(g2.winner, 'evil');
+});
+
+test('湖中仙女：第 2、3、4 轮后用，看阵营只有自己知道，不能查拿过的人', () => {
+  const g = started(['merlin', 'percival', 'loyal', 'loyal', 'assassin', 'morgana', 'mordred'], { options: { lady: true } });
+  assert.equal(g.lady.holder, 'p7', '第一任队长右手边（上一个座位）');
+  quest(g, ['p1', 'p2'], []);
+  assert.equal(g.stage, 'propose', '第 1 轮后不用');
+  quest(g, ['p1', 'p2', 'p5'], ['p5']);
+  assert.equal(g.stage, 'lady');
+  assert.ok(!g.ladyOptions().includes('p7'));
+  assert.deepEqual(g.useLady('p7', 'p1'), { good: true });
+  assert.equal(g.lady.holder, 'p1');
+  assert.deepEqual(g.ladySeen.p7, [{ id: 'p1', good: true, round: 2 }]);
+  assert.equal(g.stage, 'propose');
+  assert.equal(g.round, 3);
+  quest(g, ['p1', 'p2', 'p3'], []);
+  assert.equal(g.stage, 'lady');
+  assert.throws(() => g.useLady('p1', 'p7'), /不能查看/, '拿过湖中仙女的人不能查');
+  assert.deepEqual(g.useLady('p1', 'p6'), { good: false });
+});
+
+test('存档读档：规则状态原样回来', () => {
+  const g = started(['merlin', 'percival', 'loyal', 'assassin', 'morgana']);
+  quest(g, ['p1', 'p4'], ['p4']);
+  g.propose(g.leaderId(), ['p1', 'p2', 'p3']);
+  g.vote('p1', true);
+  const back = Avalon.fromJSON(JSON.parse(JSON.stringify(g)));
+  assert.equal(back.avalon, true);
+  assert.equal(back.stage, 'vote');
+  assert.equal(back.round, 2);
+  assert.deepEqual(back.votes, { p1: true });
+  assert.deepEqual(back.knowledge('p1'), g.knowledge('p1'));
+  assert.equal(back.quests[0].result, 'fail');
+});
+
+// ───────────── 房间 ─────────────
+function mockVoice() {
+  let n = 0;
+  return {
+    async findSquare() { return 'square'; }, async setAsleep() {}, async openRoom() { return `room${++n}`; },
+    async closeRoom() {}, async addToRoom() {}, async removeFromRoom() {}, async moveAll() {}, async setMuted() {},
+  };
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const until = async (cond, ms = 8000) => { const end = Date.now() + ms; while (!cond() && Date.now() < end) await sleep(5); };
+
+async function avalonRoom(bots, settings = {}) {
+  const room = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { pauseMs: 5, shuffle: false, script: 'avalon', avalonRoamMinutes: 0, ...settings } });
+  room.av.limits = { reveal: 0.05, propose: 0.05, vote: 0.05, quest: 0.05, lady: 0.05, assassin: 0.05 };
+  room.av.pauseMs = 5;
+  room.av.speed = 0.002;
+  room.users.set('u1', { id: 'u1', name: '阿一', avatar: null });
+  await room.act('u1', 'join');
+  await room.act('u1', 'addBots', { count: bots });
+  return room;
+}
+
+test('房间：阿瓦隆只能 5–10 人；加机器人加到 10 个为止', async () => {
+  const room = await avalonRoom(20);
+  assert.equal(room.lobby.length, 10);
+  room.lobby.push({ id: 'bot-99', name: 'x', fake: true });
+  await assert.rejects(room.act('u1', 'start'), /5–10 名玩家/);
+  await room.teardown();
+});
+
+test('房间：机器人能跑完整局（真人超时由系统代选），视图不漏别人的身份', async () => {
+  for (const n of [5, 7, 10]) {
+    const room = await avalonRoom(n - 1, { avalonLady: n >= 7 });
+    await room.act('u1', 'start');
+    const g = room.game;
+    assert.ok(g.avalon);
+    assert.equal(room.viewFor('u1').phase, 'night');
+    const v = room.viewFor('u1');
+    assert.equal(v.script, 'avalon');
+    assert.ok(v.self.role.name);
+    assert.ok(v.players.every((p) => p.role === undefined), '开局后看不到别人的身份');
+    await until(() => room.ended, 15000);
+    assert.ok(room.ended, `${n} 人局没跑完：停在 ${g.stage}`);
+    assert.ok(['good', 'evil'].includes(g.winner));
+    const end = room.viewFor('u1');
+    assert.equal(end.phase, 'ended');
+    assert.ok(end.players.every((p) => p.roleName), '终局公开所有身份');
+    assert.ok(g.proposals.length >= 1);
+    await room.teardown();
+  }
+});
+
+test('房间：真人当队长、投票、出任务票都走 act', async () => {
+  const room = await avalonRoom(4);
+  room.av.limits = { reveal: 30, propose: 30, vote: 30, quest: 30, lady: 30, assassin: 30 };
+  await room.act('u1', 'start');
+  const g = room.game;
+  g.leader = g.players.findIndex((p) => p.id === 'u1'); // 让真人当第一任队长
+  await assert.rejects(room.act('u1', 'avalon', { kind: 'propose', team: ['u1', 'bot-1'] }), /不是组队的时候/, '身份确认时还不能组队');
+  await room.act('u1', 'avalon', { kind: 'ready' });
+  assert.equal(g.stage, 'propose');
+  await assert.rejects(room.act('bot-1', 'avalon', { kind: 'propose', team: ['u1', 'bot-1'] }), /只有队长/);
+  await assert.rejects(room.act('u1', 'avalon', { kind: 'propose', team: ['u1'] }), /要选 2 个人/);
+  await room.act('u1', 'avalon', { kind: 'propose', team: ['u1', 'bot-1'] });
+  assert.equal(g.stage, 'vote');
+  await room.act('u1', 'avalon', { kind: 'vote', yes: true });
+  assert.equal(room.viewFor('u1').self.myVote, true);
+  assert.equal(room.viewFor('bot-1').self.myVote, null, '开票前看不到别人投的什么');
+  assert.ok(room.viewFor('bot-1').avalon.voted.includes('u1'), '看得到谁已经投了');
+  await until(() => g.stage !== 'vote');
+  const rec = g.proposals.at(-1);
+  assert.equal(rec.votes.u1, true, '开票后公开每个人的票');
+  if (rec.approved) {
+    assert.equal(g.stage, 'quest');
+    if (!isGood(g.roleOf('u1'))) assert.ok(room.viewFor('u1').self.canFail);
+    else await assert.rejects(room.act('u1', 'avalon', { kind: 'quest', success: false }), /好人只能出/);
+    await room.act('u1', 'avalon', { kind: 'quest', success: true });
+    await until(() => g.quests[0].result);
+    assert.ok(g.quests[0].result);
+    assert.equal(room.viewFor('u1').avalon.quests[0].fails, g.quests[0].fails);
+  }
+  await room.teardown();
+});
+
+test('房间：每轮先自由活动，集合后队长组队', async () => {
+  const room = await avalonRoom(4, { avalonRoamMinutes: 1 });
+  room.av.limits = { reveal: 0.05, propose: 30, vote: 30, quest: 30, lady: 30, assassin: 30 }; // 集合后停在组队 / 投票，好看清
+  await room.act('u1', 'start');
+  const g = room.game;
+  await until(() => !!room.roam);
+  assert.ok(room.roam, '第 1 轮开始自由活动');
+  assert.equal(g.stage, 'propose');
+  assert.ok(room.viewFor('u1').avalon.talking);
+  await assert.rejects(room.act(g.leaderId(), 'avalon', { kind: 'propose', team: [] }), /先集合/);
+  await room.act('u1', 'roamVote', { yes: true }); // 只有一个真人：他同意就集合
+  assert.equal(room.roam, null);
+  await until(() => !!room.deadline, 3000);
+  assert.ok(room.deadline, '集合后开始组队计时');
+  assert.equal(g.round, 1);
+  await room.teardown();
+});
+
+test('房间：存档读档后接着跑完', async () => {
+  const room = await avalonRoom(5);
+  room.av.limits = { reveal: 0.05, propose: 0.05, vote: 30, quest: 0.05, lady: 0.05, assassin: 0.05 };
+  await room.act('u1', 'start');
+  await until(() => room.game.stage === 'vote');
+  const snap = JSON.parse(JSON.stringify(room.snapshot()));
+  await room.teardown();
+  const back = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: mockVoice() }).restore(snap);
+  back.av.limits = { reveal: 0.05, propose: 0.05, vote: 0.05, quest: 0.05, lady: 0.05, assassin: 0.05 };
+  back.av.pauseMs = 5;
+  back.av.speed = 0.002;
+  assert.ok(back.game.avalon);
+  assert.equal(back.game.stage, 'vote');
+  back.resume();
+  await back.act('u1', 'avalon', { kind: 'vote', yes: false }); // 真人接着投（机器人读档后自己会投）
+  await until(() => back.ended, 15000);
+  assert.ok(back.ended);
+  await back.teardown();
+});

@@ -176,8 +176,8 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
             </div>
             <div className="token-name">{p.id === s.me ? '你' : p.name}</div>
             {p.roleName && <div className="token-role" style={{ background: p.evil ? 'var(--phy)' : 'var(--int)' }}>{p.roleName}</div>}
-            {!p.roleName && (p.nominated || p.nominator) && (
-              <div className="token-tags">{[p.nominator && '已提名', p.nominated && '被提名'].filter(Boolean).join(' · ')}</div>
+            {!p.roleName && (p.tags?.length > 0 || p.nominated || p.nominator) && (
+              <div className="token-tags">{(p.tags ?? [p.nominator && '已提名', p.nominated && '被提名']).filter(Boolean).join(' · ')}</div>
             )}
           </button>
         );
