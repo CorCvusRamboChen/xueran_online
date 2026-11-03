@@ -293,6 +293,10 @@ export const SCRIPTS = {
   bs7: { id: 'bs7', name: '七步成诗', en: 'The Ballad of Seat 7', engine: 'snv', seat7: true, players: [6, 14],
     roles: ['noble', 'librarian', 'shugenja', 'balloonist', 'villageidiot', 'dreamer', 'oracle', 'innkeeper', 'seamstress', 'fisherman', 'farmer', 'virgin', 'magician',
       'drunk', 'recluse', 'saint', 'damsel', 'harpy', 'boomdandy', 'scarletwoman', 'boffin', 'baron', 'pukka', 'imp', 'vigormortis'] },
+  // 最有名的自定义剧本之一（作者 Emily，v11.1），只用三个基础剧本和实验性角色；中文名是本项目起的（官方没有译名）
+  cat: { id: 'cat', name: '冒名钓鱼', en: 'Catfishing', engine: 'snv',
+    roles: ['investigator', 'chef', 'grandmother', 'balloonist', 'dreamer', 'fortuneteller', 'snakecharmer', 'gambler', 'savant', 'philosopher', 'ravenkeeper', 'amnesiac', 'cannibal',
+      'drunk', 'recluse', 'sweetheart', 'mutant', 'lunatic', 'godfather', 'cerenovus', 'pithag', 'widow', 'imp', 'vigormortis', 'fanggu'] },
   // 娱乐模式（用户 2026-11-04 要的「只有猎人和狼人的板子」）：好人全是猎手，坏人全是小恶魔（狼人），见 game.js 的 rollRagnarok
   rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'tb', ragnarok: true, roles: ['slayer', 'imp'] },
   // 娱乐模式：经典网杀「预女猎守」，不是血染。规则和人数表在 werewolf.js / werewolf-roles.js，房间流程在 server/werewolfRoom.js

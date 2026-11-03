@@ -82,7 +82,7 @@ export function rollTeensy(script, n, rng, { exclude = null } = {}) {
   const demon = pickOne(L.dem.filter(ok), rng);
   if (minions.includes('baron')) { const add = Math.max(0, Math.min(2, out.length - o)); t -= add; o += add; }
   let towns = sample(L.tf.filter(ok), t, rng);
-  if (towns.includes('balloonist') && o < out.length && rng() < 0.5) {
+  if (towns.includes('balloonist') && towns.length > 1 && o < out.length && rng() < 0.5) { // 只剩气球驾驶员一个镇民时没人可换
     const drop = pickOne(towns.filter((r) => r !== 'balloonist'), rng);
     towns = towns.filter((r) => r !== drop); o += 1;
   }
@@ -106,7 +106,7 @@ export function rollMixed(script, n, rng, { exclude = null } = {}) {
   [t, o] = demonShift(demon, t, o);
   if (o > out.length) { t += o - out.length; o = out.length; }
   let towns = sample(L.tf.filter(ok), t, rng);
-  if (towns.includes('balloonist') && o < out.length && rng() < 0.5) {
+  if (towns.includes('balloonist') && towns.length > 1 && o < out.length && rng() < 0.5) { // 只剩气球驾驶员一个镇民时没人可换
     const drop = pickOne(towns.filter((r) => r !== 'balloonist'), rng);
     towns = towns.filter((r) => r !== drop); o += 1;
   }
@@ -670,8 +670,11 @@ ${this.grimoire()}
     }
     if (lunatic) {
       const fake = sample(this.players.filter((q) => q.id !== lunatic.id), minions.length, this.rng);
+      const fakeBluffs = pickBluffsSNV(new Set(this.players.map((q) => q.role)), this.rng, this.script);
       say(lunatic, `你的爪牙：${fake.map((x) => `**${this.name(x.id)}**`).join('、')}。
-不在场的角色（可用来伪装）：${pickBluffsSNV(new Set(this.players.map((q) => q.role)), this.rng, this.script).map((r) => ROLES[r].name).join('、')}。`);
+不在场的角色（可用来伪装）：${fakeBluffs.map((r) => ROLES[r].name).join('、')}。`);
+      // 界面上和真恶魔一样：座位圈上的爪牙红框、3 张伪装卡（room.js 的 self 视图读这个）
+      this.lunaticFake = { id: lunatic.id, allies: fake.map((x) => x.id), bluffs: fakeBluffs, shared: false };
     }
     for (const m of minions) {
       const mates = minions.filter((x) => x.id !== m.id).map((x) => this.name(x.id));
@@ -683,7 +686,8 @@ ${this.grimoire()}
 
   /** 一个人按某个能力行动时的选人要求。 */
   promptFor(p, role) {
-    const spec = role === 'barber' ? { count: 2, optional: true } : role === 'po' ? { count: this.poCharged ? 3 : 1, optional: !this.poCharged } : ROLES[role].choose;
+    const charged = p.role === 'lunatic' ? !!this.used[`po-${p.id}`] : this.poCharged; // 疯子以为自己是珀：他自己的「上次没选」
+    const spec = role === 'barber' ? { count: 2, optional: true } : role === 'po' ? { count: charged ? 3 : 1, optional: !charged } : ROLES[role].choose;
     if (!spec) return null;
     const last = this.lastPick?.[p.id];
     const options = this.players.filter((q) => {
@@ -703,7 +707,8 @@ ${this.grimoire()}
     const first = this.night === 1;
     const out = [];
     for (const p of this.players.filter((q) => this.active(q))) {
-      const role = this.abilityOf(p);
+      // 疯子以为自己是恶魔：按那个恶魔的样子醒来选人（没有效果，恶魔会知道他选了谁）
+      const role = p.role === 'lunatic' && ROLES[p.shownRole]?.team === 'demon' ? p.shownRole : this.abilityOf(p);
       const spec = ROLES[role].choose;
       if (!spec) continue;
       if (first ? !ROLES[role].firstNight : !ROLES[role].otherNight) continue;
@@ -716,6 +721,9 @@ ${this.grimoire()}
       if (p.apparentDead && role !== 'zombuul') continue;
       out.push(this.promptFor(p, role));
     }
+    // 真恶魔要等疯子先选完（恶魔得知疯子选了谁再行动）
+    const lun = out.find((x) => this.get(x.playerId)?.role === 'lunatic');
+    if (lun && !this.choices[lun.playerId]) for (const x of out) if (x !== lun && team(this.get(x.playerId)) === 'demon') x.waiting = true;
     return out;
   },
 
@@ -732,12 +740,23 @@ ${this.grimoire()}
       if (pr.pickRole && !pr.roleOptions.includes(extra.role)) throw new Error('还要选一个角色');
     }
     this.choices[playerId] = skip ? { targets: [], role: null } : { targets, role: pr.pickRole ? extra.role : null };
-    return [];
+    return this.lunaticNews(playerId);
+  },
+
+  /** 疯子选完了：告诉恶魔（官方：恶魔知道疯子每晚选了谁）。机器人替他选的在结算时补告诉。 */
+  lunaticNews(playerId) {
+    const p = this.get(playerId);
+    if (p?.role !== 'lunatic' || !this.choices[playerId]) return [];
+    const ts = this.choices[playerId].targets ?? [];
+    if (p.shownRole === 'po') this.used[`po-${p.id}`] = ts.length === 0;
+    this.lunaticTold = this.night;
+    const demon = this.demonsAlive()[0];
+    return demon ? [{ playerId: demon.id, text: `疯子 ${this.name(p.id)} 今晚${ts.length ? `选了：${ts.map((t) => this.name(t)).join('、')}` : '没有选人'}。` }] : [];
   },
 
   autoChooseSNV(playerId) {
     const pr = this.nightPromptsSNV().find((x) => x.playerId === playerId);
-    if (!pr) return;
+    if (!pr || pr.waiting) return;
     const p = this.get(playerId);
     const skip = () => { this.choices[playerId] = { targets: [], role: null }; };
     if (pr.optional && this.rng() < 0.5) return skip();
@@ -795,6 +814,11 @@ ${this.grimoire()}
     // 能力本身给的信息：记下他今晚因自己的能力醒过（侍女用）；不知道自己能力的人只听到裸的结果
     const tell = (p, text, bare) => { if (!this.woke.includes(p.id)) this.woke.push(p.id); say(p, this.hidden(p) ? `说书人叫醒了你：${bare}` : text); };
     const pause = () => ({ messages: this.flushed ?? [], ravenkeeper: null, pause: this.midNight.who });
+    if (!mid) for (const l of this.players.filter((q) => q.role === 'lunatic' && this.choices[q.id])) {
+      if (this.lunaticTold !== this.night) messages.push(...this.lunaticNews(l.id));
+      if (!this.woke.includes(l.id)) this.woke.push(l.id);
+      this.record('choice', `疯子 ${this.tag(l.id)} 以为自己在行动，选了 ${(this.choices[l.id].targets ?? []).map((id) => this.name(id)).join('、') || '没有人'}（没有效果）`);
+    }
     if (mid?.rest?.length && this.midCheck(steps, mid.step - 1, mid.rest, messages)) return pause();
 
     for (let i = mid?.step ?? 0; i < steps.length; i++) {

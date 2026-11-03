@@ -208,7 +208,7 @@ export class Game {
       'moonchildPick', 'pendingMoonchild', 'diedToday', 'outsiderDiedToday', 'mastermindDay', 'demonExecuted', 'nightRevived', 'newbies', 'deadDrunk', 'lunaticGhost', 'evilMessages', 'midNight', 'lunaticFake', 'goonHit', 'pendingGoonNews', 'blocked', 'lunaticPicks',
       'firstDone', 'twin', 'fangUsed', 'vigKept', 'abnormal', 'demonVoted', 'minionNominated', 'dayVoters', 'jugglerDay', 'juggled', 'juggleLog', 'madness', 'savantDay', 'declared', 'claims', 'records', 'sageHit', 'barberDue', 'pendingKlutz', 'klutzQueue', 'klutzNow', 'madNight', 'curseFail', 'pitNight',
       'balloon', 'leviGood', 'goblinMark', 'amnesiacDay', 'amnesiacKnown', 'woke', 'pardonDay',
-      'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7'];
+      'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7', 'lunaticTold'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];

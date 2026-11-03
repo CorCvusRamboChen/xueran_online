@@ -152,6 +152,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
               rag: '《诸神黄昏》：娱乐模式，只有猎手和狼人（小恶魔）。狼人互相认识，每晚各刀一人；每个猎手白天能开一枪，打中狼人就死。狼人全死好人赢，狼人追平好人狼人赢。',
               avalon: '《阿瓦隆》：娱乐模式，不是血染——照《抵抗组织：阿瓦隆》原版规则。没有夜里杀人、没有处决：队长组队，所有人公开投票，队员秘密出任务票。好人完成三次任务后，刺客还有一次认出梅林的机会。5–10 人。',
               luf: '《窃窃私语》：官方 5–6 人小剧本。恶魔利维坦不杀人，但处决两个好人、或者撑到第五天结束，邪恶就赢；失忆者、食人族不知道自己的能力。地图是雾锁溪谷的驿站。',
+              cat: '《冒名钓鱼》（Catfishing，作者 Emily）：最有名的自定义剧本之一，角色全来自三个基础剧本和实验性角色。谁都可能顶着别人的身份：舞蛇人会和恶魔换身，哲学家拿别人的能力，疯子以为自己是恶魔，失忆者不知道自己的能力。人多更好玩。地图是雾夜的钟楼港口。',
               bs7: '《七步成诗》：2025 剧本世界杯冠军（作者 TrashWarlock）。7 号座位没有人坐，照样有角色，由 AI 说书人替它选人，每局替它发言一次——它可能是好人，也可能是恶魔。有贵族、村夫、魔术师、落难少女、炸弹人等新角色。地图是月下诗会的驿站。' }[st.script] ?? '《暗流涌动》：入门剧本，信息多、规则直白，推荐第一次玩。'}</p>
             {!host ? <p className="muted setting-note host-only-note">配置、说书人、计时和房规由房主决定，只有房主看得到。</p>
               : st.script === 'avalon' ? <AvalonSettings st={st} set={set} n={n} Toggle={Toggle} Select={Select} /> : ww ? (
@@ -224,7 +225,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                   <Select label="选人时限" value={st.chooseSeconds} options={[30, 45, 60, 90, 120]} unit="秒" onChange={(v) => set({ chooseSeconds: v })} />
                   <Toggle rule label="夜里死了仍拿信息（醉酒）" on={!!st.deadDrunk} onChange={(v) => set({ deadDrunk: v })} />
                   {st.script === 'bmr' && <Toggle rule label="疯子（以为是僵怖）死后照样醒" on={!!st.lunaticGhost} onChange={(v) => set({ lunaticGhost: v })} />}
-                  {['snv', 'luf'].includes(st.script) && s.hearAvailable && <Toggle label="语音判定疯狂（机器人留在广场转写被疯狂的人，开局前告诉大家）" on={!!st.hearMadness} onChange={(v) => set({ hearMadness: v })} />}
+                  {['snv', 'luf', 'cat'].includes(st.script) && s.hearAvailable && <Toggle label="语音判定疯狂（机器人留在广场转写被疯狂的人，开局前告诉大家）" on={!!st.hearMadness} onChange={(v) => set({ hearMadness: v })} />}
                 </div>
               </div>
               <div className="setting-col">
@@ -706,12 +707,13 @@ const SCRIPT_CARDS = {
   luf: { tag: '利维坦 · 五天', map: '雾锁溪谷 · 黯月驿站', color: '#7fa8a2' },
   rag: { tag: '全员猎手 vs 狼人', map: '雪夜 · 钟楼广场', color: '#c63d2a' },
   bs7: { tag: '2025 世界杯冠军 · 7 号空座', map: '月下诗会 · 黯月驿站', color: '#8f9fd6' },
+  cat: { tag: '最有名的自定义剧本 · 困难', map: '雾夜港口 · 钟楼广场', color: '#6fa3a8' },
   ww: { tag: '预女猎守 · 6–15 人', map: '经典网杀 · 不是血染', color: '#6f8f4e' },
   avalon: { tag: '组队 · 投票 · 任务', map: '5–10 人 · 不杀人', color: '#c9a227' },
 };
 
 function ScriptPicker({ value, disabled, onPick }) {
-  const groups = [['标准剧本', '5–15 人', ['tb', 'bmr', 'snv']], ['比赛剧本', '6–14 人 + 空座', ['bs7']], ['小剧本', '5–6 人', ['ngj', 'luf']], ['娱乐模式', '5–15 人', ['rag', 'ww', 'avalon']]];
+  const groups = [['标准剧本', '5–15 人', ['tb', 'bmr', 'snv']], ['比赛和社区剧本', '5–15 人', ['bs7', 'cat']], ['小剧本', '5–6 人', ['ngj', 'luf']], ['娱乐模式', '5–15 人', ['rag', 'ww', 'avalon']]];
   return (
     <div className="script-pick">
       <span className="script-pick-label">剧本</span>

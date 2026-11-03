@@ -550,7 +550,7 @@ export class Room {
   assignHomes() {
     const g = this.game;
     const town = this.town;
-    const pool = ['tb', 'ngj', 'rag'].includes(g.script) ? shuffle([...town.homes()], Math.random) : [];
+    const pool = ['tb', 'ngj', 'rag', 'cat'].includes(g.script) ? shuffle([...town.homes()], Math.random) : [];
     this.homes = pool.length >= g.players.length ? Object.fromEntries(g.players.map((p, i) => [p.id, pool[i].id])) : null;
   }
 
@@ -802,7 +802,7 @@ export class Room {
 
   /** 这局有没有破门过场（暗流涌动、每人有家）。 */
   hasKillScene() {
-    return !!this.homes && ['tb', 'ngj', 'rag'].includes(this.game?.script);
+    return !!this.homes && ['tb', 'ngj', 'rag', 'cat'].includes(this.game?.script);
   }
 
   afterNight() {

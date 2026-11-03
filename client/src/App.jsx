@@ -33,11 +33,11 @@ function BoardBar({ n, script }) {
   if (!d) return null;
   const parts = [['镇民', d[0], 'var(--int)'], ['外来者', d[1], 'var(--psy)'], ['爪牙', d[2], '#c9762e'], ['恶魔', d[3], 'var(--phy)']];
   return (
-    <div className="board-bar" title={{ bmr: '教父在场时：外来者 +1 或 −1（说书人决定）', snv: '方古在场时外来者 +1；亡骨魔在场时外来者 −1', ngj: '男爵在场时外来者加到两个（这个剧本只有两个外来者）', luf: '气球驾驶员在场时，说书人可以多放一个外来者', rag: '镇民全是猎手，恶魔全是小恶魔（狼人）', bs7: '男爵 +2、亡骨魔 −1、气球驾驶员 +0~1 外来者；村夫可以有 1–3 个。7 号空座也算一个座位' }[script] ?? '男爵在场时：外来者 +2、镇民 −2'}>
+    <div className="board-bar" title={{ bmr: '教父在场时：外来者 +1 或 −1（说书人决定）', snv: '方古在场时外来者 +1；亡骨魔在场时外来者 −1', ngj: '男爵在场时外来者加到两个（这个剧本只有两个外来者）', luf: '气球驾驶员在场时，说书人可以多放一个外来者', rag: '镇民全是猎手，恶魔全是小恶魔（狼人）', bs7: '男爵 +2、亡骨魔 −1、气球驾驶员 +0~1 外来者；村夫可以有 1–3 个。7 号空座也算一个座位', cat: '教父在场外来者 ±1，方古 +1，亡骨魔 −1，气球驾驶员 +0~1' }[script] ?? '男爵在场时：外来者 +2、镇民 −2'}>
       <span className="bb-script">{SCRIPTS[script]?.name ?? SCRIPTS.tb.name}</span>
       <span className="bb-n">{n} 人局</span>
       {parts.map(([k, v, c]) => <span key={k} className="bb-item"><b style={{ color: c }}>{v}</b>{k}</span>)}
-      <span className="bb-note">{{ bmr: '教父在场 外来者±1', snv: '方古 +1 · 亡骨魔 −1', ngj: '男爵在场 外来者补到 2', luf: '气球驾驶员 外来者+0~1', rag: '猎手 vs 狼人', bs7: '7 号空座 · 男爵+2 · 亡骨魔−1' }[script] ?? '男爵在场 外来者+2'}</span>
+      <span className="bb-note">{{ bmr: '教父在场 外来者±1', snv: '方古 +1 · 亡骨魔 −1', ngj: '男爵在场 外来者补到 2', luf: '气球驾驶员 外来者+0~1', rag: '猎手 vs 狼人', bs7: '7 号空座 · 男爵+2 · 亡骨魔−1', cat: '教父±1 · 方古+1 · 亡骨魔−1' }[script] ?? '男爵在场 外来者+2'}</span>
     </div>
   );
 }
