@@ -112,3 +112,25 @@ test('房间：冒名钓鱼 10 人局（2 真人 + 8 机器人）能打完，有
   assert.ok(g.winner, `分出了胜负（第 ${days} 天）`);
   await room.teardown();
 });
+
+// ───────────── 规则审查（2026-11-04）的回归测试 ─────────────
+test('哲学家第二夜选了厨师：当晚就拿到厨师的信息（首夜能力中途拿到也给一次）', () => {
+  const g = mk(['philosopher', 'investigator', 'empath', 'dreamer', 'savant', 'widow', 'imp'].map((r) => (r === 'empath' ? 'balloonist' : r)));
+  g.startNight(); g.submitChoice('p1', [], {}); for (const pr of g.nightPrompts()) if (!g.choices[pr.playerId]) g.autoChoose(pr.playerId); g.resolveNight(); g.dawn(); g.endDay();
+  g.startNight(); g.submitChoice('p1', [], { role: 'chef' }); g.submitChoice('p7', ['p3']);
+  for (const pr of g.nightPrompts()) if (!g.choices[pr.playerId]) g.autoChoose(pr.playerId);
+  const r = g.resolveNight();
+  assert.match(r.messages.filter((m) => m.playerId === 'p1').map((m) => m.text).join('\n'), /相邻的邪恶玩家/);
+});
+
+test('酒鬼不会以为自己是失忆者或食人族；食人族吃了酒鬼是醉的', () => {
+  for (let seed = 1; seed < 80; seed++) {
+    const g = new Game(players(7), { roles: ['drunk', 'investigator', 'chef', 'dreamer', 'savant', 'widow', 'imp'], rng: makeRng(seed), script: 'cat' });
+    assert.ok(!['amnesiac', 'cannibal'].includes(g.get('p1').shownRole));
+  }
+  const g = mk(['drunk', 'cannibal', 'chef', 'dreamer', 'savant', 'widow', 'imp']);
+  g.startNight(); for (const pr of g.nightPrompts()) g.autoChoose(pr.playerId); g.resolveNight(); g.dawn();
+  g.block = 'p1'; g.endDay();
+  assert.equal(g.get('p2').gained, g.get('p1').shownRole);
+  assert.ok(g.broken(g.get('p2')));
+});

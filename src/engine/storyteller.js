@@ -376,7 +376,7 @@ export class Storyteller {
   /** 沙巴洛斯反刍：偶尔（每局一两次）把上一夜吃掉的人吐回来，通常是善良玩家；邪恶领先时更常发生。 */
   /** 醉酒中毒的教父首夜：给一份假的"在场外来者"名单（随机换一两个，有时说没有）。 */
   fakeOutsidersBMR(p, truthNames) { // eslint-disable-line no-unused-vars
-    const all = Object.keys(ROLES).filter((r) => ROLES[r].script === 'bmr' && ROLES[r].team === 'outsider');
+    const all = rolesOf(this.g.script ?? 'bmr', 'outsider'); // 只从这个剧本的外来者里编，报出剧本外的角色等于露馅
     const n = Math.max(0, Math.min(all.length, truthNames.length + (this.rng() < 0.5 ? 1 : -1)));
     const said = [...all].sort(() => this.rng() - 0.5).slice(0, n);
     this.decide('fakeOutsiders', { who: p.id, options: all, chosen: said, truth: truthNames });
@@ -396,7 +396,8 @@ export class Storyteller {
   /** 造谣者的声明为真：选一个能死的人。善良领先时多杀善良，邪恶领先时偶尔杀邪恶。 */
   gossipVictim() {
     const g = this.g;
-    const can = g.alive().filter((q) => !q.apparentDead && !g.protection(q, "gossip") && !(q.role === "fool" && !g.used[q.id]));
+    const shared = g.engine === 'snv'; // 通用引擎的免死和弄臣记法不一样
+    const can = g.alive().filter((q) => !q.apparentDead && !(shared ? g.safeFrom(q, 'gossip') || g.bmrProtection(q, 'gossip') : g.protection(q, "gossip")) && !(q.role === "fool" && !g.used[shared ? `fool-${q.id}` : q.id]));
     if (!can.length) return null;
     const b = this.balance();
     // 新手照顾：说书人自己挑谁死的时候，能不挑新手就不挑
@@ -697,10 +698,10 @@ export class Storyteller {
       w.pairRole[p.id] = role;
       g.flag(p, `调查员看到了假的爪牙 ${g.name(target.id)}`);
     } else {
-      const real = others.filter((q) => ROLES[q.role].team === 'minion');
+      const real = others.filter((q) => (q.role === 'spy' ? !g.misregSNV(q, '调查员') : ROLES[q.role].team === 'minion' || (q.role === 'recluse' && g.misregSNV(q, '调查员'))));
       if (!real.length) return null;
       target = this.choose('pairTarget', real, { who: p.id });
-      role = target.role;
+      role = ROLES[target.role].team === 'minion' ? target.role : this.choose('pairRole', minionRoles, { who: p.id });
     }
     const decoy = this.choose('pairDecoy', others.filter((q) => q.id !== target.id), { who: p.id });
     return { pair: shuffled([target, decoy], this.rng), role };

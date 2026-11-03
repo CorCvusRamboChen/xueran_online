@@ -169,3 +169,42 @@ test('侍臣：选一个在场的角色，他醉三天三夜', () => {
   assert.ok(g.broken(g.get('p6')));
   assert.ok(g.used.p1);
 });
+
+// ───────────── 规则审查（2026-11-04）找出来的问题，修完的回归测试 ─────────────
+test('猎手打中僵怖：第一次是假死，游戏继续', () => {
+  const g = mk(['slayer', 'empath', 'monk', 'soldier', 'chef', 'godfather', 'zombuul']);
+  night(g); day(g);
+  assert.equal(g.slay('p1', 'p7').hit, true);
+  assert.ok(g.get('p7').alive && g.get('p7').apparentDead);
+  assert.equal(g.winner, null);
+});
+
+test('普卡毒不到士兵', () => {
+  const g = mk(['soldier', 'empath', 'monk', 'chef', 'gambler', 'godfather', 'pukka']);
+  night(g, { p7: ['p1'] }); day(g); dusk(g);
+  assert.ok(!g.broken(g.get('p1')), '士兵没中毒');
+  night(g, { p7: ['p2'], p3: ['p4'], p5: { targets: ['p7'], role: 'po' } });
+  assert.ok(g.get('p1').alive);
+});
+
+test('处决一个已经死了的人：送葬者没有信息', () => {
+  SCRIPTS.mixtest.roles.push('undertaker');
+  const g = mk(['undertaker', 'empath', 'monk', 'chef', 'sailor', 'godfather', 'imp']);
+  night(g); day(g); dusk(g);
+  night(g, { p7: ['p4'], p3: ['p2'], p5: ['p5'] });
+  day(g); const r = dusk(g, 'p4');
+  assert.notEqual(r.result, 'died');
+  const n = night(g, { p7: ['p2'], p3: ['p5'], p5: ['p5'] });
+  assert.equal(text(n.messages, 'p1'), '');
+});
+
+test('恶魔被处决、红唇女郎接任：之后新恶魔死了不触发主谋', () => {
+  SCRIPTS.mixtest.roles.push('slayer');
+  const g = mk(['slayer', 'empath', 'monk', 'chef', 'sailor', 'scarletwoman', 'mastermind', 'imp']);
+  night(g); day(g); dusk(g, 'p8');
+  assert.equal(g.get('p6').role, 'imp');
+  assert.equal(g.mastermindDay, null);
+  night(g, { p6: ['p2'], p3: ['p4'], p5: ['p5'] }); day(g);
+  g.slay('p1', 'p6');
+  assert.equal(g.winner, 'good');
+});

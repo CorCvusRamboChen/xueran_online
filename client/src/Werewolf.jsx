@@ -34,11 +34,12 @@ export function WwSetupTable({ n }) {
   const rows = Object.entries(WW_SETUPS);
   return (
     <table className="ww-table">
+      <caption className="muted">9 人、12 人是标准板子，其余人数是按比例推的（非标准）。这一版没有警长和狼人自爆。</caption>
       <thead><tr><th>人数</th><th>狼人</th><th>神职</th><th>平民</th></tr></thead>
       <tbody>
         {rows.map(([k, x]) => (
           <tr key={k} className={Number(k) === n ? 'on' : ''}>
-            <td>{k}</td><td>{x.wolves}</td><td>{x.gods.map((r) => ROLES[r].name).join('、')}</td><td>{x.villagers}</td>
+            <td>{k}{['9', '12'].includes(k) ? '' : '（非标准）'}</td><td>{x.wolves}</td><td>{x.gods.map((r) => ROLES[r].name).join('、')}</td><td>{x.villagers}</td>
           </tr>
         ))}
       </tbody>

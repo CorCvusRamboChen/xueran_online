@@ -3,7 +3,7 @@
 import { Game, shuffle, balancedTB, setupScoreTB, rollRoles, rollRagnarok } from '../engine/game.js';
 import { balancedBMR, setupScore, rollBMR } from '../engine/bmr.js';
 import { balancedSNV, setupScoreSNV, rollSNV, rollTeensy, rollMixed, balancedMixed, MAX_DECLARES, AMNESIAC_DAY } from '../engine/snv.js';
-import { ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, engineOf, inScript, playersOf, ragnarokWolves } from '../engine/roles.js';
+import { ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, engineOf, inScript, rolesOf, playersOf, ragnarokWolves } from '../engine/roles.js';
 import { getMap, houseAt, houseCenter, doorPoint, pathLength, positionAt, SPEED } from '../shared/map.js';
 import { CHARACTERS, CHARACTER_IDS } from '../shared/characters.js';
 import { cleanOutfit } from '../shared/outfit.js';
@@ -1457,7 +1457,10 @@ export class Room {
     this.deadline = g.boom.until;
     this.changed();
     for (const q of g.players.filter((x) => this.isFake(x.id))) {
-      this.later(3000 + Math.random() * 12_000, () => { if (g.boom) { try { g.boomPoint(q.id, left[Math.floor(Math.random() * left.length)]); this.changed(); } catch { /* 已经结束 */ } } });
+      // 7 号空座的选择由说书人定：指一个和它不同阵营的人（没有就随便指别人）；其余机器人随便指
+      const foes = left.filter((id) => id !== q.id && g.evilOf(g.get(id)) !== g.evilOf(q));
+      const pool = q.id === SEAT7 ? (foes.length ? foes : left.filter((id) => id !== q.id)) : left;
+      this.later(3000 + Math.random() * 12_000, () => { if (g.boom && pool.length) { try { g.boomPoint(q.id, pool[Math.floor(Math.random() * pool.length)]); this.changed(); } catch { /* 已经结束 */ } } });
     }
     await new Promise((res) => this.later(BOOM_MS, res));
     this.deadline = null;
@@ -1471,21 +1474,23 @@ export class Room {
     const g = this.game;
     const s = (g.seat7 ??= {});
     if (s.spoke || s.rolled === g.day || this.stId) return;
+    if (g.harpyMad?.id === SEAT7 && g.harpyMad.night === g.night && !g.harpyMad.claimed) { s.rolled = g.day; this.later(2000, () => this.seat7Speak({ harpy: true })); return; } // 被鹰身女妖弄疯：用掉唯一一次发言去指认
     s.rolled = g.day;
     this.later(3000 + Math.random() * 6000, () => this.seat7Speak());
   }
 
   /** 7 号空座唯一一次发言（灯神规则）：公开说一段话。被提名时可以拿来辩护。 */
-  async seat7Speak({ nominated = false } = {}) {
+  async seat7Speak({ nominated = false, harpy = false } = {}) {
     const g = this.game;
     const p = g?.get(SEAT7);
     const s = (g.seat7 ??= {});
     if (!p || s.spoke || g.phase !== 'day' || this.stId) return;
     const lastChance = g.aliveCount() <= 4;
     const late = g.aliveCount() <= Math.ceil(g.players.length / 2);
-    if (!lastChance && !g.st.roll('seat7Speak', { nominated, late }, { who: SEAT7 })) return;
+    if (!harpy && !lastChance && !g.st.roll('seat7Speak', { nominated, late }, { who: SEAT7 })) return;
     s.spoke = g.day;
-    const text = await this.seat7Text(p, { nominated });
+    let text;
+    if (harpy) { const { target } = g.harpyClaim(SEAT7); text = `${g.name(target)} 是邪恶的，我很确定。`; } else text = await this.seat7Text(p, { nominated });
     if (this.game !== g) return;
     this.announce(`🪑 **7 号空座**（说书人替它发言，每局只有这一次）：「${text}」`, 'vote');
     g.record('st', `7 号空座用掉了唯一一次发言${nominated ? '（被提名时辩护）' : ''}：${text}`);
@@ -1504,7 +1509,7 @@ export class Room {
     const ctx = [
       `7 号座位：${evil ? '邪恶' : '善良'}阵营，它以为自己的角色是${shown}。${nominated ? '它现在正被提名，这段话是它的辩护。' : ''}`,
       notes.length ? `它夜里得到的信息：\n${notes.join('\n')}` : '它夜里没有得到信息。',
-      evil ? `它的同伴：${mates.join('、') || '不知道'}；可用的伪装：${(g.bluffs ?? []).map((r) => ROLES[r].name).join('、')}` : '',
+      evil ? `它的同伴：${mates.join('、') || '不知道'}${ROLES[p.role].team === 'demon' || g.bluffsShared ? `；可用的伪装：${(g.bluffs ?? []).map((r) => ROLES[r].name).join('、')}` : ''}` : '',
       `存活：${g.alive().map((q) => g.name(q.id)).join('、')}`,
       claims.length ? `公开声明：${claims.join('；')}` : '',
       `白天公开发生的事：\n${pub.slice(-30).join('\n') || '还没有'}`,
@@ -1519,7 +1524,8 @@ export class Room {
       const last = notes.at(-1)?.replace(/^第 \d+ 夜：得知：/, '') ?? '';
       return `我是${shown}。${last ? `我得到的信息：${last}` : '我还没有得到信息。'}${nominated ? '处决我对善良没有好处。' : ''}`;
     }
-    const bluff = (g.bluffs ?? []).map((r) => ROLES[r].name)[0] ?? '镇民';
+    const knowsBluffs = ROLES[p.role].team === 'demon' || g.bluffsShared; // 爪牙不知道恶魔的伪装：自己挑一个剧本里不显眼的善良角色
+    const bluff = knowsBluffs && g.bluffs?.length ? ROLES[g.bluffs[0]].name : ROLES[rolesOf(g.script).filter((r) => ['townsfolk', 'outsider'].includes(ROLES[r].team) && !g.players.some((q) => q.role === r))[0] ?? 'drunk'].name;
     const good = others.filter((q) => !g.evilOf(q));
     const blame = good.length ? pick(good) : null;
     return `我是${bluff}。${blame ? `我很怀疑 ${g.name(blame.id)}，大家看看他的说法。` : ''}${nominated ? '别处决我。' : ''}`;
@@ -2695,7 +2701,7 @@ export class Room {
     // 食人族不知道自己拿到了什么能力：白天的几个"拜访说书人"他都可以试试，不是他的能力就什么也不发生
     // 失忆者不知道自己的能力：猜到「完美」之前不给白天的按钮
     const knows = p.role !== 'amnesiac' || !!g.amnesiacKnown?.[uid];
-    const tryAs = (r) => ((ab === r && knows) || (p.role === 'cannibal' && inScript(r, g.script)));
+    const tryAs = (r) => ((ab === r && knows) || g.extraAbility(p) === r || (p.role === 'cannibal' && inScript(r, g.script))); // 科学怪人给恶魔的白天能力也有按钮
     return {
       gained: p.gained && !g.hidden(p) ? { id: p.gained, name: ROLES[p.gained].name, ability: ROLES[p.gained].ability } : null,
       klutz: (day || !!g.klutzNow) && g.pendingKlutz === uid, // 夜里死的要等天亮才选，不然死讯提前暴露（夜里被处决的已经公开了）
@@ -2706,7 +2712,7 @@ export class Room {
       canArtist: day && p.alive && tryAs('artist') && !g.used?.[uid] && !this.triedToday(uid, 'artist'),
       canFisherman: day && p.alive && tryAs('fisherman') && !g.used?.[`fish-${uid}`] && !this.triedToday(uid, 'fisherman'),
       canAmnesiac: day && p.alive && p.role === 'amnesiac' && g.amnesiacDay?.[uid] !== g.day,
-      canSlay: day && p.alive && ['slayer', 'amn_gun', 'amn_judge'].includes(ab) && knows && !g.shooters?.includes(uid),
+      canSlay: day && p.alive && ((['slayer', 'amn_gun', 'amn_judge'].includes(ab) && knows) || g.extraAbility(p) === 'slayer') && !g.shooters?.includes(uid),
       canPardon: day && p.alive && ab === 'amn_pardon' && knows && !g.used?.[`pardon-${uid}`] && !!g.block && !this.vote && !this.pendingNom,
       // 被提名、还没开始投票：可以公开声明自己是哥布林（谁都可以这么说）
       canGoblin: day && inScript('goblin', g.script) && this.pendingNom?.nominee === uid && !this.vote && g.claims?.[uid] !== 'goblin',

@@ -5,7 +5,7 @@ import { CHARACTERS } from '../../src/shared/characters.js';
 import { Tag, Panel, Btn } from './ui.jsx';
 import { ClockTower, Tree, Lamp, House, MAP_COLORS as C, INK } from './art/TownArt.jsx';
 import { SCENE_ART, ROLE_ART } from './art.js';
-import { ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, rolesOf, inScript, playersOf, ragnarokWolves } from '../../src/engine/roles.js';
+import { ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, rolesOf, inScript, engineOf, playersOf, ragnarokWolves } from '../../src/engine/roles.js';
 import { AvalonDist, AvalonSettings, AvalonShowcase } from './Avalon.jsx';
 import { ATTR } from './flavor.js';
 import { AbilityCard } from './AbilityCard.jsx';
@@ -223,7 +223,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                   <h4>夜晚</h4>
                   <Toggle label="夜里闭麦闭耳" on={st.nightDeafen} onChange={(v) => set({ nightDeafen: v })} />
                   <Select label="选人时限" value={st.chooseSeconds} options={[30, 45, 60, 90, 120]} unit="秒" onChange={(v) => set({ chooseSeconds: v })} />
-                  <Toggle rule label="夜里死了仍拿信息（醉酒）" on={!!st.deadDrunk} onChange={(v) => set({ deadDrunk: v })} />
+                  {['tb', 'bmr'].includes(engineOf(st.script)) && <Toggle rule label="夜里死了仍拿信息（醉酒）" on={!!st.deadDrunk} onChange={(v) => set({ deadDrunk: v })} />}
                   {st.script === 'bmr' && <Toggle rule label="疯子（以为是僵怖）死后照样醒" on={!!st.lunaticGhost} onChange={(v) => set({ lunaticGhost: v })} />}
                   {['snv', 'luf', 'cat'].includes(st.script) && s.hearAvailable && <Toggle label="语音判定疯狂（机器人留在广场转写被疯狂的人，开局前告诉大家）" on={!!st.hearMadness} onChange={(v) => set({ hearMadness: v })} />}
                 </div>

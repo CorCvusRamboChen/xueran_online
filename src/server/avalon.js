@@ -276,8 +276,9 @@ export class AvalonTable {
       }
       case 'vote': {
         const miss = g.missingVotes();
-        r.announce(`${miss.map((id) => g.name(id)).join('、')} 没投票，替他随机投了。`, 'clock');
-        for (const id of miss) g.vote(id, Math.random() < 0.5);
+        // 超时按赞成算：随机的话，第 5 次组队时掉线的好人有一半机会直接把胜利送给坏人
+        r.announce(`${miss.map((id) => g.name(id)).join('、')} 没投票，按赞成算。`, 'clock');
+        for (const id of miss) g.vote(id, true);
         this.tally();
         break;
       }

@@ -281,3 +281,22 @@ test('房间：7 号座位是空座，照样发角色；不提名不投票，用
   assert.ok(room.log.some((e) => /7 号空座/.test(e.text ?? e)), '公告里有 7 号空座的发言');
   await room.teardown();
 });
+
+// ───────────── 规则审查（2026-11-04）的回归测试 ─────────────
+test('落难少女死了：被爪牙猜中也不算；死了的爪牙也能猜', () => {
+  const g = mk(['damsel', 'noble', 'librarian', 'virgin', 'saint', 'harpy', 'imp']);
+  night(g, { p6: ['p2', 'p3'] }); toDay(g);
+  g.block = 'p1'; g.endDay();
+  assert.equal(g.get('p1').alive, false);
+  night(g, { p6: ['p2', 'p3'], p7: ['p2'] }); toDay(g);
+  g.damselGuess('p6', 'p1');
+  assert.equal(g.winner, null);
+});
+
+test('科学怪人给恶魔的能力：恶魔醉了照样有效', () => {
+  const g = mk(['noble', 'librarian', 'virgin', 'saint', 'damsel', 'boffin', 'imp']);
+  g.boffin = 'soldier';
+  g.addFx('drunk', 'p7', null, 'never', '测试');
+  assert.ok(g.abilityOn(g.get('p7'), 'soldier'));
+  assert.equal(g.lieMode(g.get('p7')), null);
+});

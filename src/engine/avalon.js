@@ -59,7 +59,8 @@ export function avalonRoles(n, options = {}) {
   const [good, evil] = AVALON_TEAMS[n];
   // 没有梅林就没有刺客；派西维尔和莫甘娜都是围着梅林转的，也一起不放
   const g = o.merlin ? ['merlin', ...(o.percival ? ['percival'] : [])] : [];
-  const e = [...(o.merlin ? ['assassin'] : []), ...['morgana', 'mordred', 'oberon'].filter((r) => o[r] && (o.merlin || r !== 'morgana'))].slice(0, evil);
+  // 没有梅林时莫德雷德（只对梅林隐身）也没有意义，和莫甘娜一样不放；奥伯伦照样可以放
+  const e = [...(o.merlin ? ['assassin'] : []), ...['morgana', 'mordred', 'oberon'].filter((r) => o[r] && (o.merlin || r === 'oberon'))].slice(0, evil);
   while (g.length < good) g.push('loyal');
   while (e.length < evil) e.push('minion');
   return [...g, ...e];

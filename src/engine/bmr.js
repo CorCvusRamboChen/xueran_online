@@ -9,7 +9,7 @@
 // · 阵营 p.evil（莽夫会变）；僵怖首次死亡后 p.apparentDead = true（活着但被当作死亡）。
 // · 白天的标记：diedToday（僵怖）、outsiderDiedToday（教父）、gossipPending（造谣者）、moonchildPick（月之子）。
 
-import { ROLES, isEvilRole, rolesOf, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS } from './roles.js';
+import { ROLES, SCRIPTS, isEvilRole, rolesOf, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS } from './roles.js';
 import { BMR_STEPS } from '../shared/nightOrder.js';
 
 const team = (p) => ROLES[p.role].team;
@@ -663,12 +663,12 @@ export const BMR_METHODS = {
     if (this.gossipSaid[uid]) throw new Error('你今天已经发表过声明了');
     const t = st.target ? this.get(st.target) : null;
     const known = { role: () => t && ROLES[st.role] && t.role === st.role, evil: () => t && this.evilOf(t), good: () => t && !this.evilOf(t),
-      demon: () => t && DEMON_ROLES.has(t.role), inplay: () => this.players.some((q) => q.role === st.role), notinplay: () => ROLES[st.role] && !this.players.some((q) => q.role === st.role) }[st.kind];
+      demon: () => t && team(t) === 'demon', inplay: () => this.players.some((q) => q.role === st.role), notinplay: () => ROLES[st.role] && !this.players.some((q) => q.role === st.role) }[st.kind];
     if (!known || (['role', 'evil', 'good', 'demon'].includes(st.kind) && !t) || (['role', 'inplay', 'notinplay'].includes(st.kind) && !ROLES[st.role])) throw new Error('声明不完整');
     this.gossipSaid[uid] = true;
     const text = this.statementText(st);
     const truth = !!known();
-    if (p.role === 'gossip') {
+    if (p.role === 'gossip' || this.has?.(p, 'gossip')) { // 通用引擎里也认哲学家、科学怪人给的
       if (truth) this.gossipPending = true;
       this.record('st', `造谣者 ${this.tag(uid)} 声明"${text}"——${truth ? '为真，今晚会有人死亡' : '为假'}`);
     } else this.record('st', `${this.tag(uid)} 声称"${text}"（不是造谣者，没有效果）`);
@@ -687,7 +687,7 @@ export const BMR_METHODS = {
     if (!text) throw new Error('声明不能是空的');
     if ([...text].length > 120) throw new Error('声明太长了（最多 120 字）');
     this.gossipSaid[uid] = true;
-    const isGossip = p.role === 'gossip';
+    const isGossip = p.role === 'gossip' || !!this.has?.(p, 'gossip');
     this.record('st', isGossip ? `造谣者 ${this.tag(uid)} 自由声明"${text}"——交给 AI 判定` : `${this.tag(uid)} 声称"${text}"（不是造谣者，没有效果）`);
     return { text, isGossip };
   },
@@ -703,7 +703,7 @@ export const BMR_METHODS = {
     const TEAM = { townsfolk: '镇民', outsider: '外来者', minion: '爪牙', demon: '恶魔' };
     const ppl = this.players.map((q) => `${q.seat}号 ${q.name}：${ROLES[q.role].name}（${TEAM[ROLES[q.role].team]}${q.role === 'lunatic' ? `，以为自己是${ROLES[q.shownRole]?.name ?? '恶魔'}` : ''}），${this.evilOf(q) ? '邪恶' : '善良'}阵营，${q.alive ? (q.apparentDead ? '看起来已死但其实还活着' : '存活') : '已死亡'}`);
     const tl = this.timeline.map((e) => `[${e.when}] ${e.text}`);
-    return [`剧本：黯月初升。现在是第 ${this.day} 天白天，共 ${this.players.length} 名玩家。`, '玩家：', ...ppl, '', '复盘时间线（到现在为止）：', ...tl].join('\n');
+    return [`剧本：${SCRIPTS[this.script]?.name ?? '黯月初升'}。现在是第 ${this.day} 天白天，共 ${this.players.length} 名玩家。`, '玩家：', ...ppl, '', '复盘时间线（到现在为止）：', ...tl].join('\n');
   },
 
   statementText(st) {

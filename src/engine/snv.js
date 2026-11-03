@@ -173,7 +173,7 @@ export const SNV_METHODS = {
     // 酒鬼以为自己是一个不在场的镇民；疯子以为自己是这个剧本的恶魔；失忆者的能力说书人定（他自己不知道）
     const L = listsOf(this.script);
     for (const p of this.players) {
-      if (p.role === 'drunk') p.shownRole = pickOne(L.tf.filter((r) => !inPlay.has(r)), rng);
+      if (p.role === 'drunk') p.shownRole = pickOne(L.tf.filter((r) => !inPlay.has(r) && !['amnesiac', 'cannibal'].includes(r)), rng); // 以为自己是失忆者/食人族的酒鬼永远不醒，等于露馅
       if (p.role === 'lunatic') p.shownRole = pickOne(L.dem, rng);
       if (p.role === 'amnesiac') { const free = AMNESIAC_POOL.filter((r) => !inPlay.has(r)); p.gained = pickOne(free.length ? free : AMNESIAC_POOL, rng); }
     }
@@ -258,6 +258,8 @@ export const SNV_METHODS = {
   },
   /** 有没有这个能力（自己的，或者科学怪人给的）。 */
   has(p, ability) { return this.abilityOf(p) === ability || this.extraAbility(p) === ability; },
+  /** 这个能力现在起不起作用：科学怪人给的只看科学怪人（extraAbility 里已经查过），自己的看醉酒中毒。 */
+  abilityOn(p, ability) { return this.extraAbility(p) === ability || !this.snvBroken(p); },
   /** 拿着某个能力、还用得了的人。 */
   holders(ability) { return this.players.filter((q) => this.has(q, ability) && this.active(q)); },
 
@@ -333,6 +335,7 @@ export const SNV_METHODS = {
   },
   /** 这个人的信息要不要改：'must' 涡流（镇民必须拿错的），'fake' 醉酒中毒（说书人给错的），null 给真的。 */
   lieMode(p) {
+    if (team(p) === 'demon' && this.extraAbility(p)) return null; // 科学怪人给的能力：恶魔醉酒中毒也照样有（恶魔自己的能力不拿信息）
     if (this.isTownsfolk(p) && this.vortoxOn()) return 'must';
     return this.snvBroken(p) ? 'fake' : null;
   },
@@ -381,8 +384,18 @@ export const SNV_METHODS = {
     this.changeRole(a, rb); this.changeRole(b, ra);
     a.gained = gb; a.gainedFake = fb; b.gained = ga; b.gainedFake = fa;
   },
-  /** 角色变了以后：双子要不要重新配对、哲学家醉的人要不要换。say 为 null 时不发信息（开局）。 */
-  afterChange(say) { this.twinSync(say); this.philSync(); },
+  /** 角色变了以后：双子要不要重新配对、哲学家醉的人要不要换、新恶魔知不知道疯子。say 为 null 时不发信息（开局）。 */
+  afterChange(say) {
+    this.twinSync(say); this.philSync();
+    if (say) for (const d of this.demonsAlive()) this.tellLunatic(d, say);
+  },
+  /** 疯子在场：恶魔知道他是谁（中途换上的新恶魔也要告诉，每个恶魔说一次）。 */
+  tellLunatic(d, say) {
+    const l = this.players.find((q) => q.role === 'lunatic' && q.id !== d.id);
+    if (!l || (this.lunaticTellTo ??= []).includes(d.id)) return;
+    this.lunaticTellTo.push(d.id);
+    say(d, `**${this.name(l.id)}** 是疯子：他以为自己是${ROLES[l.shownRole]?.name ?? '恶魔'}。每晚他选了谁，你都会知道。`);
+  },
 
   twinSync(say) {
     const a = this.players.find((q) => q.role === 'eviltwin' && this.active(q));
@@ -450,7 +463,8 @@ export const SNV_METHODS = {
     if (this.phase !== 'night') { this.diedToday = true; if (team(p) === 'outsider') this.outsiderDiedToday = true; }
     p.apparentDead = false;
     if (team(p) === 'demon' && cause === 'execution') this.demonExecuted = true;
-    if (ab === 'moonchild') this.pendingMoonchild = p.id; // 失效的月之子也要选（他不知道），选中善良也不会死
+    if (ab === 'moonchild') this.pendingMoonchild = p.id;
+    if (p.role === 'pukka') this.pukkaVictim = null; // 普卡死亡：「中毒」标记移除，接任的新普卡不会毒死旧普卡毒的人 // 失效的月之子也要选（他不知道），选中善良也不会死
     if (cause === 'demon' && p.id === this.grandchild) { // 孙子被恶魔杀死，祖母随之而去
       const gm = this.holders('grandmother').find((q) => q.alive && !this.snvBroken(q));
       if (gm) this.snvKill(gm, 'grandmother', messages);
@@ -474,6 +488,8 @@ export const SNV_METHODS = {
     if (!heir) return;
     this.changeRole(heir, d.role);
     heir.evil = true;
+    this.tellLunatic(heir, (q, text) => messages.push({ playerId: q.id, text }));
+    this.demonExecuted = false; // 有人接任：主谋的额外一天只看「恶魔死于处决导致没有恶魔」
     this.log.push(`${this.name(heir.id)} 成为了${ROLES[d.role].name}`);
     this.record('death', `${this.name(heir.id)} 接任，成为新的${ROLES[d.role].name}`);
     messages.push({ playerId: heir.id, text: `恶魔死去了——**你现在是${ROLES[d.role].name}**。${ROLES[d.role].choose ? '从下一个夜晚开始，每晚选择一名玩家杀死。' : ''}` });
@@ -488,10 +504,14 @@ export const SNV_METHODS = {
     if (!evil) this.fx = this.fx.filter((f) => f.why !== '食人族');
     for (const c of this.players.filter((q) => q.role === 'cannibal' && q.id !== p.id)) {
       const said = this.claims?.[p.id];
-      const fake = said && inScript(said, this.script) && ['townsfolk', 'outsider'].includes(ROLES[said].team) && said !== 'cannibal' ? said : null;
+      const goodRole = (r) => r && inScript(r, this.script) && ['townsfolk', 'outsider'].includes(ROLES[r].team) && !['cannibal', 'drunk'].includes(r);
+      // 没声明过的邪恶：说书人假装他拿到了一个不在场的善良能力（官方建议），不然他从此不醒等于告诉他吃了邪恶
+      const spare = goodOf(this.script).filter((r) => goodRole(r) && !this.players.some((q) => q.role === r));
+      const fake = goodRole(said) ? said : evil && spare.length ? this.st.choose('cannibalFake', spare, { who: c.id }) : null;
       c.gained = evil ? fake : ab === 'cannibal' ? null : ab;
       c.gainedFake = false;
       if (evil) this.addFx('poison', c.id, null, 'never', '食人族');
+      else if (p.role === 'drunk') this.addFx('drunk', c.id, null, 'never', '食人族'); // 吃了酒鬼：拿到的是酒鬼以为的能力，但醉着（到下一个被处决的人）
       this.record('st', `食人族 ${this.tag(c.id)} ${evil ? `吃了邪恶的 ${this.name(p.id)}：中毒${fake ? `，以为拿到了${ROLES[fake].name}的能力` : ''}` : c.gained ? `拿到了 ${ROLES[c.gained].name} 的能力` : '没有拿到能力'}`);
     }
   },
@@ -502,11 +522,11 @@ export const SNV_METHODS = {
     const safe = this.safeFrom(t, 'demon');
     if (safe) { this.record('st', `恶魔对 ${this.tag(t.id)} 下手，但${safe}：没有死`); return; } // 被僧侣保护的小恶魔自刀也无事发生（官方）
     if (d.role === 'imp' && t.id === d.id) { this.snvDie(d, 'starpass', messages); return; }
-    if (this.has(t, 'soldier') && !this.snvBroken(t)) { this.record('st', `恶魔对士兵 ${this.tag(t.id)} 下手：没有死`); return; }
-    if (this.has(t, 'mayor') && !this.snvBroken(t) && team(t) !== 'demon') {
-      const others = this.alive().filter((q) => q.id !== t.id && q.id !== d.id && !this.safeFrom(q, 'demon') && !(this.has(q, 'soldier') && !this.snvBroken(q)));
+    if (this.has(t, 'soldier') && this.abilityOn(t, 'soldier')) { this.record('st', `恶魔对士兵 ${this.tag(t.id)} 下手：没有死`); return; }
+    if (this.has(t, 'mayor') && this.abilityOn(t, 'mayor') && team(t) !== 'demon') {
+      const others = this.alive().filter((q) => q.id !== t.id && q.id !== d.id && !this.safeFrom(q, 'demon') && !this.bmrProtection(q, 'demon') && !(this.has(q, 'soldier') && this.abilityOn(q, 'soldier')));
       const victim = this.st.mayorBounce(t, others);
-      if (victim) { this.snvDie(victim, 'demon', messages); return; }
+      if (victim) { this.snvKill(victim, 'demon', messages); return; }
     }
     if (d.role === 'fanggu' && team(t) === 'outsider' && !this.fangUsed && t.id !== d.id) {
       this.fangUsed = true;
@@ -635,7 +655,7 @@ export const SNV_METHODS = {
     const minions = this.players.filter((p) => team(p) === 'minion');
     // 疯子：恶魔知道他是谁（这是疯子能力的一部分，人少没有恶魔信息时也告诉）
     const lunatic = this.players.find((p) => p.role === 'lunatic');
-    if (lunatic && demon) say(demon, `**${this.name(lunatic.id)}** 是疯子：他以为自己是${ROLES[lunatic.shownRole].name}。`);
+    if (lunatic && demon) this.tellLunatic(demon, say);
     // 寡妇首夜看魔典（先看，再选人）
     for (const w of this.players.filter((p) => this.abilityOf(p) === 'widow' && p.alive && !this.used[p.id])) say(w, `魔典（和说书人看到的一样）：
 ${this.grimoire()}
@@ -825,7 +845,7 @@ ${this.grimoire()}
       const step = steps[i];
       let changed = [];
       // 莽夫：这一步有人用自己的能力选中了他（先算，选他的人当晚就醉）
-      if (this.players.some((q) => q.role === 'goon')) for (const p of this.holders(step)) for (const t of this.choiceOfSNV(p)?.targets ?? []) this.goonSNV(p, t, { assassin: step === 'assassin' });
+      if (this.players.some((q) => q.role === 'goon')) for (const p of this.holders(step)) if (p.id !== this.blocked) for (const t of this.choiceOfSNV(p)?.targets ?? []) this.goonSNV(p, t, { assassin: step === 'assassin' });
       switch (step) {
         case 'philosopher': for (const p of this.holders('philosopher')) {
           const c = this.choiceOfSNV(p); if (!c?.role) continue;
@@ -846,10 +866,12 @@ ${this.grimoire()}
           const wasDemon = team(t) === 'demon';
           const old = this.demonsAlive().filter((q) => q.id !== t.id);
           this.changeRole(t, c.role);
+          if (c.role === 'drunk') t.shownRole = pickOne(goodOf(this.script).filter((r) => ROLES[r].team === 'townsfolk' && !this.players.some((q) => q.role === r || q.shownRole === r) && !['amnesiac', 'cannibal'].includes(r)), this.rng) ?? 'drunk';
+          if (c.role === 'lunatic') t.shownRole = pickOne(rolesOf(this.script, 'demon'), this.rng) ?? 'lunatic';
           if (ROLES[c.role].team === 'demon') {
             this.pitNight = this.st.pitPlan(t, wasDemon, old);
           }
-          say(t, `你变成了 **${ROLES[c.role].name}**。你的阵营没有变，你仍然是**${this.evilOf(t) ? '邪恶' : '善良'}**的。`);
+          say(t, `你变成了 **${ROLES[t.shownRole].name}**。你的阵营没有变，你仍然是**${this.evilOf(t) ? '邪恶' : '善良'}**的。`); // 变成酒鬼、疯子的人只知道他以为的角色
           this.afterChange(say);
           changed.push(t.id);
         } break;
@@ -993,7 +1015,11 @@ ${this.grimoire()}
           const m = mc && this.get(mc.by);
           if (m && !broken(m) && mc.good) this.snvKill(this.get(mc.target), 'moonchild', messages);
         } break;
-        case 'grandmother': for (const p of this.holders('grandmother')) this.grandmotherSNV(p, tell); break;
+        case 'grandmother': for (const p of this.holders('grandmother')) {
+          if (this.firstDone[`grandmother-${p.id}`]) continue;
+          this.firstDone[`grandmother-${p.id}`] = true;
+          this.grandmotherSNV(p, tell);
+        } break;
         case 'poisoner': for (const p of this.holders('poisoner')) {
           const t = this.choiceOfSNV(p)?.targets[0]; if (!t) continue;
           if (broken(p)) { this.flag(p, '投毒者失效，没有人中毒'); continue; }
@@ -1026,17 +1052,21 @@ ${this.grimoire()}
             const prev = this.pukkaVictim ? this.get(this.pukkaVictim) : null;
             const t = this.blocked === d.id ? null : this.choiceOfSNV(d)?.targets[0];
             if (broken(d)) { if (t || prev) this.flag(d, '普卡失效：没有下毒，上一个中毒的人也没有死'); continue; } // 链条冻结
-            if (t) this.addFx('poison', t.id, d.id, 'never', '普卡');
+            const immune = t && (this.safeFrom(t, 'demon')?.includes('僧侣') || (this.has(t, 'soldier') && this.abilityOn(t, 'soldier')));
+            if (immune) this.record('st', `普卡选了 ${this.tag(t.id)}，但恶魔的能力对他无效：没有中毒`);
+            else if (t) this.addFx('poison', t.id, d.id, 'never', '普卡');
             // 选完之后，上一个中毒者死亡并恢复健康（死的那一刻还中着毒）；被保护就只恢复健康
             if (prev) {
               if (this.pitNight?.suppress) this.record('st', '今晚的死亡由说书人决定：普卡的毒没有毒死人');
               else this.demonHit(d, prev, messages);
               if (prev.id !== t?.id) this.fx = this.fx.filter((x) => !(x.kind === 'poison' && x.source === d.id && x.target === prev.id));
             }
-            this.pukkaVictim = t?.id ?? null;
+            this.pukkaVictim = immune ? null : t?.id ?? null;
             if (this.midNight) return pause();
           } break;
         case 'washerwoman': case 'librarian': for (const p of this.holders(step)) {
+          if (this.firstDone[`${step}-${p.id}`]) continue; // 首夜能力：中途拿到的人（哲学家、食人族、失忆者、麻脸巫婆）当晚拿一次
+          this.firstDone[`${step}-${p.id}`] = true;
           const kind = step === 'washerwoman' ? 'townsfolk' : 'outsider';
           const r = this.st.teamPairSNV(p, kind, this.lieMode(p));
           if (!r) { tell(p, kind === 'outsider' ? '场上**没有**外来者。' : '没有可以告诉你的信息。', '你得知：**没有**。'); continue; }
@@ -1044,6 +1074,8 @@ ${this.grimoire()}
           tell(p, `${a} 与 ${b} 之中，有一人是 **${ROLES[r.role].name}**。`, `你看到了两名玩家 ${a}、${b} 和一个角色 **${ROLES[r.role].name}**。`);
         } break;
         case 'chef': for (const p of this.holders('chef')) {
+          if (this.firstDone[`chef-${p.id}`]) continue;
+          this.firstDone[`chef-${p.id}`] = true;
           const n = this.players.length;
           const evil = this.players.map((q) => this.seenEvil(q, '厨师'));
           let pairs = 0;
@@ -1104,6 +1136,8 @@ ${this.grimoire()}
         } break;
         case 'ravenkeeper': break; // 天亮前由房间层叫醒他选人（结算完返回 ravenkeeper）
         case 'investigator': for (const p of this.holders('investigator')) {
+          if (this.firstDone[`investigator-${p.id}`]) continue;
+          this.firstDone[`investigator-${p.id}`] = true;
           const r = this.st.minionPair(p, this.lieMode(p));
           if (!r) { tell(p, '场上**没有**爪牙。', '你得知：**没有**。'); continue; }
           const [a, b] = r.pair.map((q) => `**${this.name(q.id)}**`);
@@ -1136,7 +1170,7 @@ ${this.grimoire()}
         case 'chambermaid': for (const p of this.holders('chambermaid')) {
           const ts = this.choiceOfSNV(p)?.targets ?? []; if (ts.length !== 2) continue;
           // 今晚因自己的能力醒过：选过人的、已经拿过信息的，加上排在她后面一定会醒的数学家（官方相克）
-          const woke = new Set([...this.woke, ...Object.keys(this.choices).filter((id) => this.active(this.get(id))), ...this.holders('mathematician').map((q) => q.id)]);
+          const woke = new Set([...this.woke, ...Object.keys(this.choices).filter((id) => id !== this.blocked), ...this.holders('mathematician').map((q) => q.id), ...this.holders('spy').map((q) => q.id)]);
           const n = this.infoNumber(p, ts.filter((t) => woke.has(t.id)).length, { min: 0, max: 2 });
           tell(p, `${ts.map((t) => this.name(t.id)).join(' 与 ')} 之中，今晚有 **${n}** 人因自己的能力被唤醒。`, `你得知了一个数字：**${n}**。`);
         } break;
@@ -1203,7 +1237,7 @@ ${this.grimoire()}
           tell(p, `今天白天${yes ? '**有**' : '**没有**'}爪牙发起过提名。`, `你得知：**${yes ? '是' : '否'}**。`);
         } break;
         case 'oracle': for (const p of this.holders('oracle')) {
-          const dead = this.players.filter((q) => !q.alive);
+          const dead = this.players.filter((q) => !this.visAlive(q)); // 被当作死亡的僵怖算死人
           const n = this.infoNumber(p, dead.filter((q) => this.seenEvil(q, '神谕者')).length, { min: 0, max: dead.length }, (w) => dead.filter((q) => w.evil.has(q.id)).length);
           tell(p, `死亡的玩家里有 **${n}** 名邪恶。`, `你得知了一个数字：**${n}**。`);
         } break;
@@ -1304,7 +1338,7 @@ ${this.grimoire()}
     const cursed = this.fx.some((f) => f.kind === 'curse' && f.target === a.id && this.snvFxLive(f));
     if (!cursed || this.aliveCount() <= 3) return false;
     this.fx = this.fx.filter((f) => !(f.kind === 'curse' && f.target === a.id));
-    this.snvDie(a, 'witch', this.dayMessages());
+    this.snvKill(a, 'witch', this.dayMessages());
     this.checkWinner();
     return true;
   },
@@ -1389,7 +1423,7 @@ ${this.grimoire()}
   savantAsk(uid) {
     if (this.phase !== 'day') throw new Error('只能在白天问');
     const p = this.get(uid);
-    if (!p || !p.alive || this.abilityOf(p) !== 'savant') throw new Error('只有博学者可以这样问');
+    if (!p || !p.alive || !this.has(p, 'savant')) throw new Error('只有博学者可以这样问');
     if (this.savantDay[uid] === this.day) throw new Error('你今天已经问过了');
     this.savantDay[uid] = this.day;
     const lie = this.lieMode(p);
@@ -1450,11 +1484,11 @@ ${this.grimoire()}
     if (kind && s.alive && !this.used[`slay-${s.id}`]) {
       this.used[`slay-${s.id}`] = true;
       const target = kind === 'anyone' || (kind === 'evil' ? this.evilOf(t) : this.seenDemon(t, '猎手开枪'));
-      if (this.snvBroken(s)) { if (target) this.flag(s, '枪失效了，打中也没有效果'); } else if (t.alive && target) hit = true;
+      if (!this.abilityOn(s, this.extraAbility(s) === 'slayer' ? 'slayer' : this.abilityOf(s))) { if (target) this.flag(s, '枪失效了，打中也没有效果'); } else if (t.alive && target) hit = true;
     }
     this.log.push(`${this.name(s.id)} 对 ${this.name(t.id)} 开枪 → ${hit ? '命中' : '无事发生'}`);
     this.record('slay', `${this.tag(s.id)} 向 ${this.tag(t.id)} 开枪 → ${hit ? '命中' : '无事发生'}`);
-    if (hit) { this.snvDie(t, 'slayer', this.dayMessages()); this.checkWinner(); }
+    if (hit) { this.snvKill(t, 'slayer', this.dayMessages()); this.checkWinner(); } // 打中僵怖是第一次「假死」
     return { hit };
   },
 
@@ -1478,7 +1512,7 @@ ${this.grimoire()}
   fishermanAsk(uid) {
     if (this.phase !== 'day') throw new Error('只能在白天请教');
     const p = this.get(uid);
-    if (!p || !p.alive || this.abilityOf(p) !== 'fisherman') throw new Error('只有渔夫可以这样问');
+    if (!p || !p.alive || !this.has(p, 'fisherman')) throw new Error('只有渔夫可以这样问');
     if (this.used[`fish-${uid}`]) throw new Error('你已经问过了');
     this.used[`fish-${uid}`] = true;
     const lie = this.lieMode(p);
@@ -1525,10 +1559,12 @@ ${this.grimoire()}
     if (levi) { this.leviGood.push(p.id); this.record('st', `利维坦在场：第 ${this.leviGood.length} 名善良玩家被处决`); }
     const gob = this.goblinMark?.id === p.id && this.goblinMark.day === this.day;
     const saint = this.has(p, 'saint') && p.alive && !this.snvBroken(p);
-    const boom = this.has(p, 'boomdandy') && p.alive && !this.snvBroken(p);
+    const boom = this.has(p, 'boomdandy') && this.active(p) && !this.snvBroken(p); // 官方：被处决但没死也会爆
     const res = this.snvKill(p, 'execution', this.dayMessages());
+    // 送葬者看的是「今天死于处决」的人：处决死人、处决了没死都不算（原来的暗流涌动引擎也是这样）
+    if (this.phase !== 'night') { if (res === 'died' || res === 'fake') this.lastExecuted = p.id; else if (this.lastExecuted === p.id) this.lastExecuted = null; }
     if (res === 'died' && saint) this.setWinner(this.evilOf(p) ? 'good' : 'evil', `圣徒 ${this.name(p.id)} 被处决`);
-    if (res === 'died' && boom && !this.winner) this.boomStart(p);
+    if (boom && !this.winner) this.boomStart(p);
     if (res === 'died' && team(p) === 'minion') { // 吟游诗人：爪牙死于处决，除他以外所有人醉酒到明天黄昏
       const min = this.holders('minstrel').find((q) => q.alive && !this.snvBroken(q));
       if (min) { for (const q of this.players) if (q.id !== min.id) this.fx.push({ kind: 'drunk', target: q.id, source: min.id, until: this.day + 1, why: '吟游诗人' }); this.record('st', '爪牙死于处决：除吟游诗人外所有人醉酒，直到明天黄昏'); }
@@ -1546,7 +1582,6 @@ ${this.grimoire()}
 
   executeSNV(p) {
     this.executedToday = true;
-    this.lastExecuted = p.id;
     this.log.push(`${this.name(p.id)} 被处决`);
     return this.afterExecution(p);
   },
@@ -1582,7 +1617,7 @@ ${this.grimoire()}
     if (!this.active(by) || this.snvBroken(by)) return [];
     h.claimed = true; // 判过了
     const dead = this.st.harpyVictims(this.get(h.id), this.get(h.target));
-    for (const q of dead) this.snvDie(q, 'harpy', this.dayMessages());
+    for (const q of dead) this.snvKill(q, 'harpy', this.dayMessages());
     if (dead.length) this.checkWinner();
     return dead.map((q) => q.id);
   },
@@ -1608,9 +1643,9 @@ ${this.grimoire()}
     if (!p || !t) throw new Error('玩家不在游戏中');
     if (this.damselTried[uid]) throw new Error('你已经猜过了');
     this.damselTried[uid] = true;
-    const real = team(p) === 'minion' && this.active(p) && !this.damselGuessed;
+    const real = team(p) === 'minion' && !this.damselGuessed; // 能力是落难少女的，死了的爪牙也能猜
     if (real) this.damselGuessed = true;
-    const hit = real && t.role === 'damsel';
+    const hit = real && t.role === 'damsel' && t.alive; // 落难少女死了就没有能力，猜中也不算
     this.record('st', `${this.tag(uid)} 公开猜 ${this.tag(targetId)} 是落难少女${real ? (hit ? '：猜中了' : '：猜错了，爪牙再没有机会') : '（不是爪牙或已经猜过，没有效果）'}`);
     if (hit) {
       if (this.snvBroken(t)) this.flag(t, '落难少女被猜中，但她失效了');
@@ -1623,8 +1658,8 @@ ${this.grimoire()}
   boomStart(p) {
     const keep = new Set(this.st.boomSurvivors().map((q) => q.id));
     this.record('death', `炸弹人 ${this.tag(p.id)} 引爆了炸弹`);
-    for (const q of this.alive().filter((x) => !keep.has(x.id))) this.snvDie(q, 'boomdandy', this.dayMessages());
-    this.boom = { day: this.day, alive: [...keep], points: {} };
+    for (const q of this.alive().filter((x) => !keep.has(x.id))) this.snvKill(q, 'boomdandy', this.dayMessages());
+    this.boom = { day: this.day, alive: this.alive().map((q) => q.id), points: {} }; // 有人被保住（水手、茶艺师、弄臣……）就不止三个
     this.checkWinner();
   },
   /** 倒数时指人：每名玩家（死人也行）指一名存活的玩家，可以改。 */
@@ -1645,7 +1680,7 @@ ${this.grimoire()}
     const who = Object.keys(count).filter((id) => count[id] === top);
     this.record('vote', `炸弹人倒数：${Object.entries(b.points).map(([a, t]) => `${this.name(a)}→${this.name(t)}`).join('，') || '没有人指'}`);
     if (!top || who.length !== 1) { this.record('st', '炸弹人倒数平票：没有人死亡'); return null; }
-    this.snvDie(this.get(who[0]), 'boomdandy', this.dayMessages());
+    this.snvKill(this.get(who[0]), 'boomdandy', this.dayMessages());
     this.checkWinner();
     return who[0];
   },
