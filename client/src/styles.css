@@ -1733,3 +1733,25 @@ span.lr-newbie { cursor: default; }
 .mic-heard { margin-top: 8px; padding-top: 16px; border-top: 1px solid rgba(244, 244, 240, .35); }
 .mic-heard h2 { margin: 0 0 8px; font: 700 18px/1.4 var(--serif); }
 .mic-heard p { margin: 0 0 6px; font: 17px/1.6 var(--serif); }
+
+/* ───────── 狼人杀（娱乐模式，Werewolf.jsx） ───────── */
+.ww-art { display: grid; place-items: center; background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--attr) 55%, #000) 0, #0b0d0d 72%); }
+.ww-glyph { font: 900 96px/1 var(--serif); color: var(--paper); opacity: .9; text-shadow: 0 4px 24px #000; }
+.ww-back { display: grid; place-items: center; aspect-ratio: 18 / 20; background: #0d0f0f; font: 900 80px/1 var(--serif); color: #3a3f3f; }
+.ww-roles { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.ww-roles .acard-art { aspect-ratio: 18 / 9; }
+.ww-roles .ww-glyph { font-size: 56px; }
+.ww-table { width: 100%; border-collapse: collapse; margin: 6px 0 12px; font: 13px/1.6 var(--sans); }
+.ww-table th, .ww-table td { border-bottom: 1px solid var(--line); padding: 3px 8px; text-align: left; }
+.ww-table th { color: var(--muted); font-weight: 900; }
+.ww-table tr.on td { background: rgba(198, 61, 42, .18); color: var(--paper); font-weight: 900; }
+.ww-showcase h3 { margin: 14px 0 4px; }
+.ww-faces { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.ww-face { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.ww-face figcaption { background: #111; color: var(--paper); font: 900 12px/1.6 var(--sans); padding: 0 6px; }
+.ww-spoke { opacity: .45; }
+.ww-now { color: var(--paper); font-weight: 900; text-decoration: underline; }
+.ww-checks, .ww-votes { list-style: none; margin: 4px 0; padding: 0; }
+.ww-checks li { padding: 2px 0; font: 14px/1.6 var(--sans); }
+.ww-votes li { border-bottom: 1px solid var(--line); padding: 6px 0; }
+.ww-votes header { display: flex; gap: 8px; align-items: baseline; margin-bottom: 2px; }

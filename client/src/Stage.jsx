@@ -60,7 +60,7 @@ const BANNER = new Set(['公开声明', '开枪']);
 // 整屏的卡刚出来这一会儿不响应点击（防止上一下点地图的连击把它点掉）
 const CLICK_GUARD_MS = 1500;
 
-export function TitleCard({ card, onClose, players = [] }) {
+export function TitleCard({ card, onClose, players = [], kicker = '说书人' }) { // kicker：狼人杀里写「法官」
   const shownAt = useRef(0);
   useEffect(() => {
     if (!card) return undefined;
@@ -75,7 +75,7 @@ export function TitleCard({ card, onClose, players = [] }) {
     return (
       <div className={`tc-banner tc-${tone}`} key={card.key} role="status" aria-live="assertive">
         <button type="button" className="tc-banner-x" onClick={onClose} aria-label="关掉">×</button>
-        <span className="tc-kicker">说书人 · 当众</span>
+        <span className="tc-kicker">{kicker} · 当众</span>
         <h2 className="tc-title">{card.title}</h2>
         <p className="tc-line"><Typewriter text={card.text} speed={40} /></p>
       </div>
@@ -86,7 +86,7 @@ export function TitleCard({ card, onClose, players = [] }) {
     <div className={`titlecard tc-${tone}`} key={card.key} onClick={tryClose} role="presentation">
       <div className="tc-inner">
         {card.title === '处决' && <Gallows p={players.find((q) => card.text.includes(`${q.seat}号 ${q.name}`))} />}
-        <span className="tc-kicker">说书人</span>
+        <span className="tc-kicker">{kicker}</span>
         <h2 className="tc-title">{card.title}</h2>
         <p className="tc-line"><Typewriter text={card.text} /></p>
       </div>

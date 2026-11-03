@@ -1,3 +1,5 @@
+import { WW_ROLES, WW_PLAYERS } from './werewolf-roles.js';
+
 // 三个剧本的全部角色：暗流涌动（Trouble Brewing，script: 'tb'）、黯月初升（Bad Moon Rising，script: 'bmr'）和梦殒春宵（Sects & Violets，script: 'snv'）。
 // firstNight / otherNight 是夜晚行动顺序（0 = 这一晚不醒；各剧本各自排序），
 // choose 描述该角色夜里要选什么：count 几名玩家、alive 只能选活人、notSelf 不能选自己、notLast 不能和上一夜相同、
@@ -245,6 +247,7 @@ for (const [id, r] of Object.entries(BMR)) { r.script = 'bmr'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(SNV)) { r.script = 'snv'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(LUF)) { r.script = 'luf'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(AMNESIAC_ONLY)) { r.script = 'amnesiac'; r.virtual = true; ROLES[id] = r; }
+for (const [id, r] of Object.entries(WW_ROLES)) { r.script = 'ww'; r.virtual = true; ROLES[id] = r; } // 狼人杀的角色：不是血染的角色，说书人的角色列表里不列
 
 /**
  * 剧本。engine：用哪套规则引擎（两个小剧本借梦殒春宵那套：它的醉酒中毒、换角色、阵营单独记都是通用的）；
@@ -261,10 +264,12 @@ export const SCRIPTS = {
     roles: ['balloonist', 'savant', 'amnesiac', 'fisherman', 'artist', 'cannibal', 'mutant', 'lunatic', 'widow', 'goblin', 'leviathan'] },
   // 娱乐模式（用户 2026-11-04 要的「只有猎人和狼人的板子」）：好人全是猎手，坏人全是小恶魔（狼人），见 game.js 的 rollRagnarok
   rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'tb', ragnarok: true, roles: ['slayer', 'imp'] },
+  // 娱乐模式：经典网杀「预女猎守」，不是血染。规则和人数表在 werewolf.js / werewolf-roles.js，房间流程在 server/werewolfRoom.js
+  ww: { id: 'ww', name: '狼人杀', en: 'Werewolf', engine: 'ww', werewolf: true, players: WW_PLAYERS, roles: Object.keys(WW_ROLES) },
 };
 /** 诸神黄昏几只狼人（小恶魔）：其余全是猎手。 */
 export const ragnarokWolves = (n) => (n <= 6 ? 1 : n <= 9 ? 2 : n <= 12 ? 3 : 4);
-/** 剧本用的规则引擎：'tb' | 'bmr' | 'snv'。 */
+/** 剧本用的规则引擎：'tb' | 'bmr' | 'snv' | 'ww'（狼人杀）。 */
 export const engineOf = (script) => SCRIPTS[script]?.engine ?? 'tb';
 /** 这个角色在不在这个剧本里。 */
 export const inScript = (id, script) => (SCRIPTS[script ?? 'tb']?.roles ? SCRIPTS[script].roles.includes(id) : (ROLES[id]?.script ?? 'tb') === (script ?? 'tb'));

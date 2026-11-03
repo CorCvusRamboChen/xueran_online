@@ -14,6 +14,7 @@ import { Replay, VoteHistory } from './replay.jsx';
 import { SETUPS, presetsFor, PRESET_SHARE } from '../../src/shared/setups.js';
 import { Glossed } from './terms.jsx';
 import { NIGHT_ORDER, STEP_NAMES } from '../../src/shared/nightOrder.js';
+import { WwShowcase, wwDist } from './Werewolf.jsx';
 import { TutorialIntro } from './TutorialIntro.jsx';
 import { VolumeButton } from './Volume.jsx';
 import { fromKook, inviteFriends } from './connect.js';
@@ -42,6 +43,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
   const joined = s.lobby.some((p) => p.id === s.me);
   const n = s.lobby.length;
   const d = st.script === 'rag' && DIST[n] ? [n - ragnarokWolves(n), 0, 0, ragnarokWolves(n)] : DIST[n]; // 诸神黄昏：猎手（镇民）和狼人（恶魔）
+  const ww = st.script === 'ww'; // 狼人杀：不是血染，配置、房规都不一样
   const [lo, hi] = playersOf(st.script ?? 'tb'); // 小剧本只能 5–6 人
   const set = (patch) => act('settings', patch);
   const human = st.mode === 'human';
@@ -105,7 +107,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
         {/* 右：镇民、形象、房间设置 */}
         <section className="lobby-right">
           <Panel title="镇民" className="glass" extra={<span className="muted">{n} / {hi}</span>}>
-            <DistBar n={n} d={d} lo={lo} hi={hi} />
+            <DistBar n={n} d={d} lo={lo} hi={hi} parts={ww ? wwDist(n) : null} />
             {!n && <p className="muted">广场上还空无一人。</p>}
             {(
               <div className="lobby-roster">
@@ -140,9 +142,34 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
             <ScriptPicker value={st.script ?? 'tb'} disabled={!host} onPick={(id) => set({ script: id })} />
             <p className="muted setting-note">{{ bmr: '《黯月初升》：中等难度的"死亡盛宴"——恶魔一夜可能杀多人，好人有很多保命和复活手段。推荐 7 人及以上。', snv: '《梦殒春宵》：困难，最疯狂的一本——信息很多但不一定可靠，角色和阵营都会中途改变，还有疯狂机制。',
               ngj: '《无上愉悦》：官方 5–6 人小剧本，二十分钟一局，又短又吵。角色都来自前三个剧本；关键是弄清在场的是红唇女郎还是男爵。地图是冬夜集市的钟楼广场。',
+              ww: '《狼人杀》：娱乐模式，不是血染——经典网杀「预女猎守」。狼人每晚刀人，守卫、女巫、预言家各显神通；白天轮流发言、同时投票放逐，平票 PK。屠边：狼人全死好人赢，神职或平民全死狼人赢。',
               rag: '《诸神黄昏》：娱乐模式，只有猎手和狼人（小恶魔）。狼人互相认识，每晚各刀一人；每个猎手白天能开一枪，打中狼人就死。狼人全死好人赢，狼人追平好人狼人赢。',
               luf: '《窃窃私语》：官方 5–6 人小剧本。恶魔利维坦不杀人，但处决两个好人、或者撑到第五天结束，邪恶就赢；失忆者、食人族不知道自己的能力。地图是雾锁溪谷的驿站。' }[st.script] ?? '《暗流涌动》：入门剧本，信息多、规则直白，推荐第一次玩。'}</p>
-            {!host ? <p className="muted setting-note host-only-note">配置、说书人、计时和房规由房主决定，只有房主看得到。</p> : <>
+            {!host ? <p className="muted setting-note host-only-note">配置、说书人、计时和房规由房主决定，只有房主看得到。</p> : ww ? (
+              <div className="setting-wrap"><div className="setting-groups">
+                <div className="setting-col">
+                  <div className="setting-group">
+                    <h4>开局与夜晚</h4>
+                    <p className="muted setting-note">按人数表发身份（下面「狼人杀 · 预女猎守」里有表），法官全自动。</p>
+                    <Toggle label="随机排座位" on={st.shuffle} onChange={(v) => set({ shuffle: v })} />
+                    <Toggle label="夜里闭麦闭耳" on={st.nightDeafen} onChange={(v) => set({ nightDeafen: v })} />
+                    <Select label="夜里行动 / 投票时限" value={st.chooseSeconds} options={[30, 45, 60, 90, 120]} unit="秒" onChange={(v) => set({ chooseSeconds: v })} />
+                  </div>
+                </div>
+                <div className="setting-col">
+                  <div className="setting-group">
+                    <h4>白天</h4>
+                    <Select label="每人发言" value={st.speechSeconds ?? 90} options={[30, 60, 90, 120, 180]} unit="秒" onChange={(v) => set({ speechSeconds: v })} />
+                    <Toggle label="发言时其他人闭麦" on={st.speechMute} onChange={(v) => set({ speechMute: v })} />
+                  </div>
+                  <div className="setting-group">
+                    <h4>观战</h4>
+                    <Toggle label="观战者能看所有身份" on={st.spectatorGrimoire} onChange={(v) => set({ spectatorGrimoire: v })} />
+                    <Toggle label="观战者在语音里闭麦" on={st.muteSpectators} onChange={(v) => set({ muteSpectators: v })} />
+                  </div>
+                </div>
+              </div></div>
+            ) : <>
             <div className="setting mode-row">
               <span>配置</span>
               <div className="seg">
@@ -215,7 +242,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
         </section>
 
         <RecordAndHistory s={s} ask={ask} />
-        <RoleShowcase script={st.script} />
+        {ww ? <WwShowcase n={n} /> : <RoleShowcase script={st.script} />}
       </div>
     </div>
   );
@@ -669,10 +696,11 @@ const SCRIPT_CARDS = {
   ngj: { tag: '20 分钟一局', map: '冬夜集市 · 钟楼广场', color: '#e8b04a' },
   luf: { tag: '利维坦 · 五天', map: '雾锁溪谷 · 黯月驿站', color: '#7fa8a2' },
   rag: { tag: '全员猎手 vs 狼人', map: '雪夜 · 钟楼广场', color: '#c63d2a' },
+  ww: { tag: '预女猎守 · 6–15 人', map: '经典网杀 · 不是血染', color: '#6f8f4e' },
 };
 
 function ScriptPicker({ value, disabled, onPick }) {
-  const groups = [['标准剧本', '5–15 人', ['tb', 'bmr', 'snv']], ['小剧本', '5–6 人', ['ngj', 'luf']], ['娱乐模式', '5–15 人', ['rag']]];
+  const groups = [['标准剧本', '5–15 人', ['tb', 'bmr', 'snv']], ['小剧本', '5–6 人', ['ngj', 'luf']], ['娱乐模式', '5–15 人', ['rag', 'ww']]];
   return (
     <div className="script-pick">
       <span className="script-pick-label">剧本</span>
@@ -697,9 +725,9 @@ function ScriptPicker({ value, disabled, onPick }) {
   );
 }
 
-function DistBar({ n, d, lo = 5, hi = 15 }) {
-  if (!d || n > hi) return <p className="muted dist-empty">{n < lo ? `至少 ${lo} 人开局（现在 ${n} 人）` : `最多 ${hi} 人`}</p>;
-  const parts = [['镇民', d[0], 'var(--int)'], ['外来者', d[1], 'var(--psy)'], ['爪牙', d[2], '#c9762e'], ['恶魔', d[3], 'var(--phy)']];
+function DistBar({ n, d, lo = 5, hi = 15, parts: own = null }) {
+  if ((!d && !own) || n < lo || n > hi) return <p className="muted dist-empty">{n < lo ? `至少 ${lo} 人开局（现在 ${n} 人）` : `最多 ${hi} 人`}</p>;
+  const parts = own ?? [['镇民', d[0], 'var(--int)'], ['外来者', d[1], 'var(--psy)'], ['爪牙', d[2], '#c9762e'], ['恶魔', d[3], 'var(--phy)']]; // own：别的分法（狼人杀的狼人 / 神职 / 平民）
   return (
     <div className="dist">
       <div className="dist-bar">{parts.map(([k, v, c]) => v > 0 && <i key={k} style={{ flex: v, background: c }} />)}</div>
