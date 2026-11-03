@@ -297,10 +297,12 @@ export const SCRIPTS = {
   rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'tb', ragnarok: true, roles: ['slayer', 'imp'] },
   // 娱乐模式：经典网杀「预女猎守」，不是血染。规则和人数表在 werewolf.js / werewolf-roles.js，房间流程在 server/werewolfRoom.js
   ww: { id: 'ww', name: '狼人杀', en: 'Werewolf', engine: 'ww', werewolf: true, players: WW_PLAYERS, roles: Object.keys(WW_ROLES) },
+  // 娱乐模式（用户 2026-11-04 要的）：不是血染，是《抵抗组织：阿瓦隆》原版规则。没有血染角色，规则和角色都在 engine/avalon.js
+  avalon: { id: 'avalon', name: '阿瓦隆', en: 'Avalon', engine: 'avalon', avalon: true, players: [5, 10], roles: [] },
 };
 /** 诸神黄昏几只狼人（小恶魔）：其余全是猎手。 */
 export const ragnarokWolves = (n) => (n <= 6 ? 1 : n <= 9 ? 2 : n <= 12 ? 3 : 4);
-/** 剧本用的规则引擎：'tb' | 'bmr' | 'snv' | 'ww'（狼人杀）。 */
+/** 剧本用的规则引擎：'tb' | 'bmr' | 'snv' | 'ww'（狼人杀）| 'avalon'。 */
 export const engineOf = (script) => SCRIPTS[script]?.engine ?? 'tb';
 /** 这个角色在不在这个剧本里。 */
 export const inScript = (id, script) => (SCRIPTS[script ?? 'tb']?.roles ? SCRIPTS[script].roles.includes(id) : (ROLES[id]?.script ?? 'tb') === (script ?? 'tb'));

@@ -15,6 +15,8 @@ import { judgeStatement, judgeMadness, judgeBreak, looksBroken, judgeAvailable, 
 import { noteMarks, readTown } from './beliefs.js';
 import { Werewolf } from '../engine/werewolf.js';
 import { WW_ROOM } from './werewolfRoom.js';
+import { Avalon } from '../engine/avalon.js';
+import { AvalonTable, AVALON_SETTINGS } from './avalon.js';
 
 // 受害者那段破门过场多长（毫秒）：踹门 → 踹开 → "你死了"，播完再天亮
 const VICTIM_SCENE_MS = 6500;
@@ -81,6 +83,7 @@ export const DEFAULT_SETTINGS = {
   spectatorGrimoire: false, // 观战的人能看魔典（所有人身份）——会漏信息，默认关
   muteSpectators: true,     // 开局后观战的人在语音里被服务器闭麦（免得漏信息）；离开或终局自动解除
   settingsVersion: 2,       // 2：闭麦闭耳、隐藏票型改成默认关（老房间读档时改一次，之后房主怎么设就怎么样）
+  ...AVALON_SETTINGS,       // 娱乐模式阿瓦隆的设置，见 server/avalon.js
 };
 
 /** 一间房子的空状态：谁在里面、锁没锁、谁在敲门、谁被放行、对应的语音频道。 */
@@ -155,6 +158,7 @@ export class Room {
   isFake(id) { return id.startsWith('bot-'); }
   realIds() { return this.game ? this.game.players.map((p) => p.id).filter((id) => !this.isFake(id)) : []; }
   changed() { this.onChange(this); }
+  get av() { return (this.avalonTable ??= new AvalonTable(this)); } // 阿瓦隆的流程（只在 script 是 avalon 时用）
 
   later(ms, fn) {
     const t = setTimeout(async () => {
@@ -228,6 +232,7 @@ export class Room {
       case 'kick': this.requireHost(uid); if (!this.game) { this.lobby = this.lobby.filter((x) => x.id !== p.target); this.newbies = this.newbies.filter((x) => x !== p.target); } break;
       case 'markNewbie': this.requireHost(uid); this.markNewbie(p.player, !!p.on); break;
       case 'start': this.requireHost(uid); await this.start(); break;
+      case 'avalon': await this.av.act(uid, p); break;
       case 'choose': if (p.targets != null && !Array.isArray(p.targets)) throw new UserError('选择格式不对'); this.choose(uid, p.night, p.targets ?? [], p.role ?? null); break;
       case 'gossip': this.gossip(uid, p.statement ?? {}); break;
       case 'moonchild': this.moonchild(uid, p.target); break;
@@ -381,6 +386,7 @@ export class Room {
     if (typeof p.deadDrunk === 'boolean') s.deadDrunk = p.deadDrunk;
     if (typeof p.lunaticGhost === 'boolean') s.lunaticGhost = p.lunaticGhost;
     if (typeof p.hearMadness === 'boolean') s.hearMadness = p.hearMadness;
+    this.av.updateSettings(p);
     if (SCRIPTS[p.script]) { if (s.script !== p.script) s.preset = null; s.script = p.script; }
     if (['preset', 'ai', 'random'].includes(p.setupMode)) s.setupMode = p.setupMode;
     if ('preset' in p) s.preset = p.preset == null ? null : Math.max(0, Math.min((SETUPS[s.script]?.length ?? 1) - 1, Number(p.preset) || 0));
@@ -447,6 +453,7 @@ export class Room {
     const script = this.tutorial ? 'tb' : this.settings.script ?? 'tb';
     const [lo, hi] = playersOf(script);
     if (seats.length < lo || seats.length > hi) throw new UserError(`《${SCRIPTS[script].name}》要 ${lo}–${hi} 名玩家（现在 ${seats.length} 人）`);
+    if (SCRIPTS[script].avalon) return this.av.start(seats); // 阿瓦隆：完全是另一套流程
     if (SCRIPTS[script].werewolf) return this.wwStart(seats); // 狼人杀：另一套流程（werewolfRoom.js）
     // 七步成诗的灯神规则：7 号座位没有人坐，照样发角色，由说书人替它做决定
     if (SCRIPTS[script].seat7) seats.splice(6, 0, { id: SEAT7, name: '7号空座', avatar: null, fake: true });
@@ -2051,10 +2058,11 @@ export class Room {
       if (st.channelId) await this.safeVoice((v) => v.closeRoom(st.channelId, this.square));
     }));
     if (reason !== null) {
-      this.announce(`集合！${reason ? `（${reason}）` : ''}大家回到广场，现在可以提名了。`, 'day');
+      this.announce(`集合！${reason ? `（${reason}）` : ''}大家回到广场，${this.game?.avalon ? '队长准备组队。' : '现在可以提名了。'}`, 'day');
       this.narrate('gather');
-      // 自动说书：回到广场后开放提名
-      if (!this.stId) this.later(this.settings.pauseMs / 2, () => this.openNominations());
+      // 自动说书：回到广场后开放提名（阿瓦隆：轮到队长组队）
+      if (this.game?.avalon) this.later(this.settings.pauseMs / 2, () => this.av.afterTalk());
+      else if (!this.stId) this.later(this.settings.pauseMs / 2, () => this.openNominations());
     }
   }
 
@@ -2420,7 +2428,7 @@ export class Room {
     this.lobby = s.lobby ?? [];
     this.roleAssign = s.roleAssign ?? {};
     this.newbies = s.newbies ?? [];
-    this.game = s.game ? (s.game.werewolf ? Werewolf.fromJSON(s.game) : Game.fromJSON(s.game)) : null;
+    this.game = s.game ? (s.game.werewolf ? Werewolf.fromJSON(s.game) : s.game.avalon ? Avalon.fromJSON(s.game) : Game.fromJSON(s.game)) : null;
     this.wireGame();
     Object.assign(this, {
       artistAsks: s.artistAsks ?? [], ended: s.ended, square: s.square, log: s.log ?? [], logSeq: s.logSeq ?? 0, epoch: s.logEpoch ?? this.epoch, stLog: s.stLog ?? [],
@@ -2459,6 +2467,7 @@ export class Room {
     this.syncWatchMute(); // 观战的人重新闭上（重启时都被解开了）
     for (const r of this.rooms.values()) if (r.until) r.timer = this.later(left(r.until), () => this.closeRoom(r.channelId, '时间到'));
     // 令牌和文字都不存档：重启后重新打开、发新的。全员离线后回来不算重启，已经收到的话不能清掉
+    if (g.avalon) return this.av.resume();
     if (!this.hearing && !this.mic) this.openHearing().then(() => { if (this.game === g && g.phase === 'day') this.hearToday(); });
     if (g.phase === 'night') {
       const night = g.night;
@@ -2550,6 +2559,7 @@ export class Room {
     };
     if (!g) return { ...view, phase: 'lobby' };
     if (g.werewolf) return this.wwView(uid, view);
+    if (g.avalon) return this.av.view(uid, view);
 
     const spectator = !isST && !g.get(uid);
     const showRoles = isST || this.ended || (spectator && this.settings.spectatorGrimoire);
