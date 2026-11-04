@@ -24,9 +24,12 @@ export const WW_RULES = [
   '同一人被守卫守护又被女巫救，反而会死（奶穿）。',
   '天亮只公布谁出局，不公布死因。首夜死者、被放逐的人、被猎人带走的人有遗言；第二夜起夜里死的人没有。',
   '猎人出局时可以开枪带走一人；被女巫毒死不能开枪。每次有人出局都会留同样长的「发动技能」时间，不会从等多久看出谁是猎人。',
-  '白天从昨晚死者的下一位开始顺时针发言，平安夜随机挑一个人开始。然后所有存活玩家同时投票（不能投自己，可以弃票）。',
+  '警长：第一天首夜死者说完遗言后上警。想当的人上警、依次发言（可以退水，退了也不能投票），没上警的人投票选，平票 PK，再平没有警长；没人上警或所有人都上警也没有警长。',
+  '警长的放逐票算 1.5 票；白天由警长决定从他哪一侧开始发言，警长最后发言（归票）。警长出局时可以把警徽移交给一名存活玩家，也可以撕掉（超时算撕掉）。',
+  '没有警长时，从昨晚死者的下一位开始顺时针发言，平安夜随机挑一个人开始。然后所有存活玩家同时投票（不能投自己，可以弃票）。',
   '票数最多的人被放逐；平票的人 PK 发言，其余人在他们里面再投一次，再平就无人出局。',
-  '屠边：狼人全部出局好人胜；所有神职或所有平民出局狼人胜。同时发生算好人胜。出局的人不能说话、不能投票（语音里会被闭麦，说遗言时除外）。',
+  '狼人自爆：上警阶段和白天发言阶段，狼人随时可以自爆——立刻出局、有遗言，当天剩下的发言和投票跳过，直接入夜。上警阶段自爆吞警徽：第一次推迟到第二天重新上警，第二次警徽流失。',
+  '屠边：狼人全部出局好人胜；所有神职或所有平民出局狼人胜。两边同时达成算狼人胜（狼刀在先）。出局的人不能说话、不能投票（语音里会被闭麦，说遗言时除外）。',
 ];
 
 /** 人数配置表（大厅显示）。 */
@@ -34,7 +37,7 @@ export function WwSetupTable({ n }) {
   const rows = Object.entries(WW_SETUPS);
   return (
     <table className="ww-table">
-      <caption className="muted">9 人、12 人是标准板子，其余人数是按比例推的（非标准）。这一版没有警长和狼人自爆。</caption>
+      <caption className="muted">9 人、12 人是标准板子，其余人数是按比例推的（非标准）。都有警长和狼人自爆。</caption>
       <thead><tr><th>人数</th><th>狼人</th><th>神职</th><th>平民</th></tr></thead>
       <tbody>
         {rows.map(([k, x]) => (
@@ -176,15 +179,17 @@ function WwCenter({ s, name, g }) {
       {label && <small>{label}</small>}
     </figure>
   );
-  if (ww.speaker) return <div className="center-box">{face(ww.speaker, ww.stage === 'words' ? '遗言' : ww.stage === 'pk' ? 'PK 发言' : '发言中')}</div>;
+  if (ww.speaker) return <div className="center-box">{face(ww.speaker, { words: '遗言', pk: 'PK 发言', campaign: '警上发言', campaignPk: '警上 PK' }[ww.stage] ?? '发言中')}</div>;
   if (ww.voting) {
     return (
       <div className="center-box">
-        <div className="vc-title">{ww.voting.pk ? 'PK 投票' : '放逐投票'}<span>已投 {ww.voting.done.length} / {ww.voting.voters.length}</span></div>
-        {ww.voting.pk && <div className="ww-faces">{ww.voting.candidates.map((id) => face(id))}</div>}
+        <div className="vc-title">{ww.voting.election ? (ww.voting.pk ? '警上 PK 投票' : '警下投票选警长') : ww.voting.pk ? 'PK 投票' : '放逐投票'}<span>已投 {ww.voting.done.length} / {ww.voting.voters.length}</span></div>
+        {(ww.voting.pk || ww.voting.election) && <div className="ww-faces">{ww.voting.candidates.map((id) => face(id))}</div>}
       </div>
     );
   }
+  if (ww.stage === 'signup') return <div className="center-box"><div className="vc-title">{ww.election?.postponed ? '重新上警' : '竞选警长'}<span>已表态 {ww.election?.decided ?? 0} / {s.players.filter((p) => p.alive).length}</span></div></div>;
+  if (ww.stage === 'order' || ww.stage === 'badge') return <div className="center-box">{face(ww.sheriff, ww.stage === 'order' ? '警长定发言顺序' : '警长移交警徽')}</div>;
   if (ww.dying) return <div className="center-box"><div className="ww-faces">{ww.dying.map((id) => face(id, '出局'))}</div><small>等待出局的人发动技能</small></div>;
   const last = ww.votes.at(-1);
   if (last && last.day === s.day && last.exiled) return <div className="center-box">{face(last.exiled, '被放逐')}</div>;
@@ -291,16 +296,64 @@ function WwActions({ s, act, me, prompt, name, g, picked, setPicked, poison, set
       );
     case 'speak':
       return (
-        <Panel title={prompt.stage === 'words' ? '遗言' : prompt.stage === 'pk' ? 'PK 发言' : '轮到你发言'} tone="mot">
+        <Panel title={{ words: '遗言', pk: 'PK 发言', campaign: '警上发言', campaignPk: '警上 PK 发言' }[prompt.stage] ?? '轮到你发言'} tone="mot">
           <p className="lead">{prompt.stage === 'words' ? '你出局了，留下最后几句话。' : '现在只有你能说话（其他人在语音里被闭麦）。'}</p>
-          <div className="btn-row"><Btn kind="primary" onClick={() => send('wwDone')}>说完了</Btn></div>
+          {s.self?.sheriff && prompt.stage === 'speech' && <p className="muted">你是警长，最后一个发言：可以归票。</p>}
+          <div className="btn-row">
+            <Btn kind="primary" onClick={() => send('wwDone')}>说完了</Btn>
+            {prompt.canWithdraw && <Btn kind="ghost" onClick={() => send('wwWithdraw')}>退水</Btn>}
+          </div>
+          {ww.canBoom && <BoomButton act={act} election={!!ww.election} />}
+        </Panel>
+      );
+    case 'signup':
+      return (
+        <Panel title={ww.election?.postponed ? '重新上警' : '竞选警长'} tone="mot" className="choose-pnl">
+          <p className="lead">要不要上警？上警的人依次发言，没上警的人投票选警长。警长的放逐票算 1.5 票，白天由他定发言顺序、最后发言。</p>
+          <p className="muted">上了警就不能投票（中途退水也一样）。</p>
+          {prompt.mine !== undefined && <p className="lead">你选了：<b>{prompt.mine ? '上警' : '不上警'}</b>（还能改）</p>}
+          <div className="btn-row">
+            <Btn kind={prompt.mine === true ? 'primary' : 'secondary'} onClick={() => send('wwSignup', { yes: true })}>上警</Btn>
+            <Btn kind={prompt.mine === false ? 'primary' : 'ghost'} onClick={() => send('wwSignup', { yes: false })}>不上警</Btn>
+          </div>
+          {ww.canBoom && <BoomButton act={act} election={!!ww.election} />}
+        </Panel>
+      );
+    case 'withdraw':
+      return (
+        <Panel title="你在警上" tone="mot">
+          <p className="lead">{ww.speaker ? `${name(ww.speaker)} 正在发言。` : ''}不想竞选了可以退水（退了也不能投票）。</p>
+          <div className="btn-row"><Btn kind="ghost" onClick={() => send('wwWithdraw')}>退水</Btn></div>
+          {ww.canBoom && <BoomButton act={act} election={!!ww.election} />}
+        </Panel>
+      );
+    case 'order':
+      return (
+        <Panel title="警长定发言顺序" tone="mot" className="choose-pnl">
+          <p className="lead">今天从哪一边开始发言？你最后发言（归票）。</p>
+          <div className="btn-row">
+            <Btn kind="primary" onClick={() => send('wwOrder', { dir: 'up' })}>从 {name(prompt.up)} 开始（座位号递增）</Btn>
+            <Btn kind="primary" onClick={() => send('wwOrder', { dir: 'down' })}>从 {name(prompt.down)} 开始（座位号递减）</Btn>
+          </div>
+        </Panel>
+      );
+    case 'badge':
+      return (
+        <Panel title="移交警徽" tone="mot" className="choose-pnl">
+          <p className="lead">你是警长，你出局了。把警徽交给一名存活的玩家，或者撕掉（这局就没有警长了）。</p>
+          {pick()}
+          <div className="btn-row">
+            <Btn kind="primary" disabled={!picked} onClick={() => send('wwBadge', { target: picked })}>移交警徽</Btn>
+            <Btn kind="ghost" onClick={() => send('wwBadge', { target: null })}>撕掉警徽</Btn>
+          </div>
         </Panel>
       );
     case 'vote':
       return (
-        <Panel title={prompt.pk ? 'PK 投票' : '放逐投票'} tone="phy" className="choose-pnl">
+        <Panel title={prompt.election ? (prompt.pk ? '警上 PK 投票' : '投票选警长') : prompt.pk ? 'PK 投票' : '放逐投票'} tone="phy" className="choose-pnl">
           {prompt.mine !== undefined ? <p className="lead">你投了 <b>{prompt.mine ? name(prompt.mine) : '弃票'}</b>。等其他人投完一起公布。</p>
-            : <p className="lead">{prompt.pk ? '在 PK 的人里投一个出局。' : '投一个人出局，票数最多的被放逐。'}所有人同时投，投完一起公布。</p>}
+            : <p className="lead">{prompt.election ? '在警上的人里投一个当警长（一人一票）。' : prompt.pk ? '在 PK 的人里投一个出局。' : '投一个人出局，票数最多的被放逐。'}所有人同时投，投完一起公布。</p>}
+          {!prompt.election && s.self?.sheriff && <p className="muted">你是警长：你这一票算 1.5 票。</p>}
           {prompt.mine === undefined && (
             <>
               {pick()}
@@ -315,6 +368,14 @@ function WwActions({ s, act, me, prompt, name, g, picked, setPicked, poison, set
     default: break;
   }
 
+  if (ww.canBoom) {
+    return (
+      <Panel title={ww.stageName} tone="light">
+        {ww.speaker && <p className="lead">{name(ww.speaker)} 正在发言。</p>}
+        <BoomButton act={act} election={!!ww.election} />
+      </Panel>
+    );
+  }
   if (s.phase === 'night') {
     return (
       <Panel title="夜晚" tone="dark">
@@ -331,6 +392,8 @@ function WwActions({ s, act, me, prompt, name, g, picked, setPicked, poison, set
       {ww.voting && <p className="lead">已投 {ww.voting.done.length} / {ww.voting.voters.length}{me && !ww.voting.voters.includes(s.me) ? (me.alive ? '（你在 PK 台上，不能投）' : '（你已出局，不能投）') : ''}</p>}
       {ww.dying && <p className="lead">{ww.dying.map(name).join('、')} 出局，等待发动技能……</p>}
       {stage === 'dusk' && <p className="lead">今天的放逐结束，马上入夜。</p>}
+      {ww.election?.runners && <p className="muted">还在竞选：{ww.election.runners.map((id) => `${g(id)?.seat}号`).join('、') || '没有人'}{ww.election.ran.length > ww.election.runners.length ? `（退水：${ww.election.ran.filter((id) => !ww.election.runners.includes(id)).map((id) => `${g(id)?.seat}号`).join('、')}）` : ''}</p>}
+      {ww.sheriff && <p className="muted">警长：{name(ww.sheriff)}</p>}
       {me && !me.alive && <p className="muted">你已经出局：不能发言、不能投票。</p>}
       {s.isHost && ww.speaker && ww.speaker !== s.me && <div className="link-row"><button type="button" onClick={() => act('wwSkip')}>跳过他（掉线 / 挂机）</button></div>}
     </Panel>
@@ -378,8 +441,9 @@ function WwVotes({ votes, name }) {
         const abstain = Object.entries(v.ballots).filter(([, t]) => !t).map(([id]) => id);
         return (
           <li key={i}>
-            <header><span className="stamp-time">第{cnNum(v.day)}天{v.pk ? ' · PK' : ''}</span>
-              <b>{v.exiled ? `${name(v.exiled)} 被放逐` : v.why === 'pk' ? '平票，进入 PK' : '无人出局'}</b></header>
+            <header><span className="stamp-time">第{cnNum(v.day)}天{v.election ? ' · 警长' : ''}{v.pk ? ' · PK' : ''}</span>
+              <b>{v.election ? (v.elected ? `${name(v.elected)} 当选警长` : v.pkList ? '平票，警上 PK' : '没有选出警长') : v.exiled ? `${name(v.exiled)} 被放逐` : v.why === 'pk' ? '平票，进入 PK' : '无人出局'}</b></header>
+            {v.sheriff && <Line text={`警长 ${name(v.sheriff)} 的票算 1.5 票`} />}
             {rows.map(([t, c]) => <Line key={t} text={`${name(t)} ${c} 票 ← ${Object.entries(v.ballots).filter(([, x]) => x === t).map(([id]) => name(id)).join('、')}`} />)}
             {abstain.length > 0 && <Line text={`弃票：${abstain.map(name).join('、')}`} />}
           </li>
@@ -401,5 +465,18 @@ function WwHost({ s, act }) {
         {s.phase !== 'ended' && <Btn kind={sure === 'release' ? 'primary' : 'secondary'} onClick={() => twice('release', () => act('releaseHost'))}>{sure === 'release' ? '确定让出房主' : '让出房主'}</Btn>}
       </div>
     </section>
+  );
+}
+
+/** 狼人自爆：点两次才生效。 */
+function BoomButton({ act, election = false }) {
+  const [sure, setSure] = useState(false);
+  return (
+    <div className="ww-boom">
+      <Btn kind={sure ? 'primary' : 'secondary'} onClick={() => (sure ? act('wwBoom') : setSure(true))} onMouseLeave={() => setSure(false)}>
+        {sure ? '确定自爆（立刻出局，今天直接入夜）' : '自爆'}
+      </Btn>
+      <small className="muted">只有你看得到这个按钮。{election ? '上警阶段自爆会吞掉警徽（第一次推迟到明天竞选，第二次警徽流失）。' : '自爆后有遗言。'}</small>
+    </div>
   );
 }

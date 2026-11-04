@@ -173,6 +173,9 @@ test('狼人杀：猎人被刀可以开枪，被毒不能；被带走的人有�
   g.doneSpeaking('p4');
   assert.equal(g.speaker, 'p5', '被带走的人也有遗言');
   g.doneSpeaking('p5');
+  assert.equal(g.stage, 'signup', '首夜死者遗言之后上警');
+  g.timeout(); // 没人上警
+  assert.equal(g.sheriff, null);
   assert.equal(g.stage, 'speech');
   assert.ok(!g.speakers.includes('p4') && !g.speakers.includes('p5'));
   assert.equal(g.speakers[0], 'p6', '从死者的下一位开始发言');
@@ -269,7 +272,7 @@ test('狼人杀：放逐投票同时投；平票 PK，PK 台上的人不能投�
   assert.equal(t.get('p8').alive, false);
 });
 
-test('狼人杀：屠边——狼全死好人胜；神全死或民全死狼人胜；同时发生算好人', () => {
+test('狼人杀：屠边——狼全死好人胜；神全死或民全死狼人胜；同时达成算狼人胜（狼刀在先）', () => {
   // 屠民：三个平民
   const a = mk();
   night(a, { knife: 'p8' });
@@ -298,10 +301,16 @@ test('狼人杀：屠边——狼全死好人胜；神全死或民全死狼人�
   assert.equal(c.winner, 'good');
   assert.match(c.winReason, /狼人全部出局/);
 
-  // 同时：狼刀死最后一个平民、女巫毒死最后一只狼 → 好人
+  // 同时：狼刀死最后一个平民、女巫毒死最后一只狼 → 狼人胜（狼刀在先）
   const d = mk(['ww_seer', 'ww_witch', 'ww_wolf', 'ww_villager', 'ww_hunter', 'ww_guard']);
   night(d, { knife: 'p4', poison: 'p3' });
-  assert.equal(d.winner, 'good');
+  assert.equal(d.winner, 'evil');
+  assert.match(d.winReason, /平民全部出局.*狼刀在先/);
+  // 同时：狼刀死最后一个神、女巫（不是最后一个神时）毒死最后一只狼 → 狼人胜
+  const d2 = mk(['ww_witch', 'ww_wolf', 'ww_villager', 'ww_villager', 'ww_villager', 'ww_villager']);
+  night(d2, { knife: 'p1', poison: 'p2' });
+  assert.equal(d2.winner, 'evil');
+  assert.match(d2.winReason, /神职全部出局/);
 
   // 猎人开枪带走最后一只狼
   const e = mk(['ww_seer', 'ww_witch', 'ww_wolf', 'ww_villager', 'ww_villager', 'ww_hunter']);
@@ -321,6 +330,315 @@ test('狼人杀：存档读回后接着打', () => {
   toVote(back);
   assert.equal(back.stage, 'vote');
   assert.deepEqual(back.evilKnown.p5.map((a) => a.id), ['p6', 'p7']);
+});
+
+// ───────────── 警长 ─────────────
+/** 首夜过完、走到上警。 */
+function toSignup(g, opts = {}) {
+  night(g, opts);
+  for (let k = 0; k < 20 && g.stage !== 'signup'; k++) g.timeout();
+  assert.equal(g.stage, 'signup');
+}
+/** 上警：ids 上，其余不上。 */
+function signup(g, ids) {
+  for (const p of g.alive()) g.signup(p.id, ids.includes(p.id));
+}
+
+test('狼人杀警长：首夜死者遗言之后上警；警上发言、警下投票，当选后放逐票算 1.5 票', () => {
+  const g = mk();
+  night(g, { knife: 'p8' });
+  assert.equal(g.stage, 'hunter');
+  g.timeout();
+  assert.equal(g.stage, 'words', '先说遗言');
+  assert.throws(() => g.signup('p1', true), /不是上警时间/);
+  g.timeout();
+  assert.equal(g.stage, 'signup', '遗言之后上警');
+  assert.throws(() => g.signup('p8', true), /出局的人不能上警/);
+  signup(g, ['p1', 'p3', 'p5']);
+  g.settleSignup();
+  assert.equal(g.stage, 'campaign');
+  assert.deepEqual([...g.speakers].sort(), ['p1', 'p3', 'p5']);
+  for (let k = 0; k < 3; k++) g.doneSpeaking(g.speaker);
+  assert.equal(g.stage, 'elect');
+  assert.deepEqual(g.voters.sort(), ['p10', 'p2', 'p4', 'p6', 'p7', 'p9'], '只有没上警的活人投');
+  assert.throws(() => g.castVote('p1', 'p3'), /上过警的人不能投票/);
+  assert.throws(() => g.castVote('p2', 'p4'), /只能投还在竞选的人/);
+  for (const id of ['p2', 'p4', 'p6']) g.castVote(id, 'p3');
+  for (const id of ['p7', 'p9']) g.castVote(id, 'p1');
+  g.castVote('p10', null);
+  g.settleVote();
+  assert.equal(g.sheriff, 'p3');
+  // 警长定发言方向，警长最后
+  assert.equal(g.stage, 'order');
+  assert.throws(() => g.chooseOrder('p1', 'up'), /只有警长/);
+  g.chooseOrder('p3', 'down');
+  assert.equal(g.stage, 'speech');
+  assert.deepEqual(g.speakers, ['p2', 'p1', 'p10', 'p9', 'p7', 'p6', 'p5', 'p4', 'p3'], '从警长座位号小的一侧开始，警长最后（8 号已死）');
+  // 放逐投票：警长 1.5 票
+  for (let k = 0; k < 9; k++) g.doneSpeaking(g.speaker);
+  assert.equal(g.stage, 'vote');
+  g.castVote('p3', 'p5'); g.castVote('p1', 'p5');          // 2.5 票
+  g.castVote('p2', 'p6'); g.castVote('p4', 'p6');          // 2 票
+  for (const id of ['p5', 'p6', 'p7', 'p9', 'p10']) g.castVote(id, null);
+  const r = g.settleVote();
+  assert.equal(r.exiled, 'p5');
+  assert.equal(g.voteHistory.at(-1).tally.p5, 2.5);
+  assert.equal(g.voteHistory.at(-1).sheriff, 'p3');
+
+  // 同样 2 对 2，没有警长就是平票
+  const h = mk();
+  night(h, {});
+  toVote(h);
+  assert.equal(h.sheriff, null);
+  h.castVote('p3', 'p5'); h.castVote('p1', 'p5'); h.castVote('p2', 'p6'); h.castVote('p4', 'p6');
+  for (const id of ['p5', 'p6', 'p7', 'p8', 'p9', 'p10']) h.castVote(id, null);
+  assert.equal(h.settleVote().why, 'pk');
+});
+
+test('狼人杀警长：没人上警、全员上警都没有警长；只有一人上警直接当选', () => {
+  const a = mk();
+  toSignup(a);
+  signup(a, []);
+  a.settleSignup();
+  assert.equal(a.sheriff, null);
+  assert.equal(a.stage, 'speech', '没有警长：跳过定方向');
+
+  const b = mk();
+  toSignup(b);
+  signup(b, b.alive().map((p) => p.id));
+  b.settleSignup();
+  assert.equal(b.sheriff, null, '所有人都上警，没人能投票');
+  assert.match(b.drain().map((m) => m.text).join(), /所有人都上警/);
+
+  const c = mk();
+  toSignup(c);
+  signup(c, ['p4']);
+  c.settleSignup();
+  assert.equal(c.sheriff, 'p4');
+  assert.equal(c.stage, 'order');
+
+  // 没表态的算不上警
+  const d = mk();
+  toSignup(d);
+  d.signup('p1', true); d.signup('p2', true);
+  d.timeout();
+  assert.deepEqual(d.ran, ['p1', 'p2']);
+  assert.equal(d.stage, 'campaign');
+});
+
+test('狼人杀警长：退水——退了不能投票，退到一人直接当选，一个不剩没有警长', () => {
+  const g = mk();
+  toSignup(g);
+  signup(g, ['p1', 'p2', 'p3']);
+  g.settleSignup();
+  assert.throws(() => g.withdraw('p4'), /不能退水/);
+  const first = g.speaker;
+  g.withdraw(first);
+  assert.ok(!g.runners.includes(first));
+  assert.notEqual(g.speaker, first, '正在说的人退水：换下一个');
+  assert.ok(!g.speakers.slice(g.spoke).includes(first));
+  const [x, y] = g.runners;
+  g.withdraw(x);
+  assert.equal(g.sheriff, y, '只剩一人直接当选');
+  assert.equal(g.stage, 'order');
+
+  const h = mk();
+  toSignup(h);
+  signup(h, ['p1', 'p2']);
+  h.settleSignup();
+  h.doneSpeaking(h.speaker); h.doneSpeaking(h.speaker);
+  assert.equal(h.stage, 'elect');
+  assert.ok(!h.voters.includes('p1') && !h.voters.includes('p2'));
+
+  const k = mk();
+  toSignup(k);
+  signup(k, ['p1', 'p2']);
+  k.settleSignup();
+  k.withdraw('p1');
+  assert.equal(k.sheriff, 'p2');
+  const m = mk();
+  toSignup(m);
+  signup(m, ['p1', 'p2', 'p3']);
+  m.settleSignup();
+  m.doneSpeaking(m.speaker); m.doneSpeaking(m.speaker); m.doneSpeaking(m.speaker);
+  for (const id of m.voters) m.castVote(id, id === 'p4' || id === 'p5' ? 'p1' : id === 'p6' || id === 'p7' ? 'p2' : null);
+  m.settleVote();
+  assert.equal(m.stage, 'campaignPk', '平票进警上 PK');
+  assert.deepEqual(m.electTie, ['p1', 'p2']);
+  m.withdraw('p1');
+  assert.equal(m.sheriff, 'p2', 'PK 里一个退水，另一个当选');
+});
+
+test('狼人杀警长：警下平票 PK，再平警徽流失；全部弃票也流失', () => {
+  const g = mk();
+  toSignup(g);
+  signup(g, ['p1', 'p2']);
+  g.settleSignup();
+  g.timeout(); g.timeout();
+  assert.equal(g.stage, 'elect');
+  const vote = () => { for (const [i, id] of g.voters.entries()) g.castVote(id, i % 2 ? 'p1' : 'p2'); g.settleVote(); };
+  vote();
+  assert.equal(g.stage, 'campaignPk');
+  g.timeout(); g.timeout();
+  assert.equal(g.stage, 'electPk');
+  vote();
+  assert.equal(g.sheriff, null, '再平：警徽流失');
+  assert.equal(g.election.due, null);
+  assert.equal(g.stage, 'speech');
+
+  const h = mk();
+  toSignup(h);
+  signup(h, ['p1', 'p2']);
+  h.settleSignup();
+  h.timeout(); h.timeout();
+  for (const id of h.voters) h.castVote(id, null);
+  h.settleVote();
+  assert.equal(h.sheriff, null);
+  assert.equal(h.stage, 'speech');
+});
+
+test('狼人杀警长：警长出局先发动技能再移交警徽再遗言；可以移交也可以撕；超时撕掉', () => {
+  // 警长是猎人，被放逐：开枪 → 移交 → 遗言
+  const g = mk();
+  toSignup(g);
+  signup(g, ['p4']);
+  g.settleSignup();
+  assert.equal(g.sheriff, 'p4');
+  g.chooseOrder('p4', 'up');
+  for (let k = 0; k < 20 && g.stage !== 'vote'; k++) g.timeout();
+  for (const p of g.alive()) g.castVote(p.id, p.id === 'p4' ? 'p5' : 'p4');
+  g.settleVote();
+  assert.equal(g.stage, 'hunter');
+  g.hunterShoot('p4', 'p5');
+  assert.equal(g.stage, 'badge');
+  assert.deepEqual(g.actors(), ['p4']);
+  assert.throws(() => g.passBadge('p4', 'p5'), /存活的其他玩家/);
+  g.passBadge('p4', 'p9');
+  assert.equal(g.sheriff, 'p9');
+  assert.equal(g.stage, 'words');
+  assert.equal(g.speaker, 'p4', '被放逐的警长先说遗言');
+  g.timeout();
+  assert.equal(g.speaker, 'p5', '被带走的人也有遗言');
+
+  // 夜里被刀的警长：天亮移交；撕掉
+  const h = mk();
+  toSignup(h);
+  signup(h, ['p9']);
+  h.settleSignup();
+  for (let k = 0; k < 30 && h.stage !== 'dusk'; k++) h.timeout();
+  night(h, { knife: 'p9' });
+  assert.equal(h.stage, 'hunter');
+  h.timeout();
+  assert.equal(h.stage, 'badge');
+  h.passBadge('p9', null);
+  assert.equal(h.sheriff, null);
+  assert.equal(h.stage, 'speech', '第二夜死的人没遗言；没警长了，不用定方向');
+
+  // 超时 = 撕掉
+  const k = mk();
+  toSignup(k);
+  signup(k, ['p9']);
+  k.settleSignup();
+  for (let i = 0; i < 30 && k.stage !== 'dusk'; i++) k.timeout();
+  night(k, { knife: 'p9' });
+  k.timeout(); k.timeout();
+  assert.equal(k.sheriff, null);
+  // 新警长定方向
+  const m = mk();
+  toSignup(m);
+  signup(m, ['p9']);
+  m.settleSignup();
+  for (let i = 0; i < 30 && m.stage !== 'dusk'; i++) m.timeout();
+  night(m, { knife: 'p9' });
+  m.timeout();
+  m.passBadge('p9', 'p2');
+  assert.equal(m.stage, 'order', '新警长定发言方向');
+  assert.deepEqual(m.actors(), ['p2']);
+});
+
+// ───────────── 自爆 ─────────────
+test('狼人杀自爆：发言阶段自爆立刻出局、有遗言，跳过当天剩下的发言和投票直接入夜', () => {
+  const g = mk();
+  toSignup(g);
+  g.timeout(); // 没人上警
+  assert.equal(g.stage, 'speech');
+  assert.throws(() => g.boom('p1'), /只有存活的狼人/);
+  g.boom('p6');
+  assert.equal(g.get('p6').alive, false);
+  assert.equal(g.get('p6').cause, 'boom');
+  assert.equal(g.stage, 'words');
+  assert.equal(g.speaker, 'p6', '自爆有遗言');
+  assert.throws(() => g.boom('p5'), /现在不能自爆/, '遗言时不能自爆');
+  g.doneSpeaking('p6');
+  assert.equal(g.stage, 'dusk', '跳过投票直接入夜');
+  assert.ok(!g.voteHistory.length);
+
+  // 投票时不能自爆；PK 发言时可以
+  const h = mk();
+  night(h, {});
+  toVote(h);
+  assert.throws(() => h.boom('p5'), /现在不能自爆/);
+  for (const p of h.alive()) h.castVote(p.id, p.id === 'p8' ? 'p9' : p.id === 'p9' ? 'p8' : ['p1', 'p3', 'p5', 'p7'].includes(p.id) ? 'p8' : 'p9');
+  h.settleVote();
+  assert.equal(h.stage, 'pk');
+  h.boom('p5');
+  h.timeout();
+  assert.equal(h.stage, 'dusk');
+  assert.equal(h.get('p8').alive, true, 'PK 的人都没出局');
+
+  // 自爆的是最后一只狼：好人直接赢
+  const k = mk(['ww_seer', 'ww_witch', 'ww_wolf', 'ww_villager', 'ww_villager', 'ww_hunter']);
+  toSignup(k);
+  k.timeout();
+  k.boom('p3');
+  assert.equal(k.winner, 'good');
+});
+
+test('狼人杀自爆：上警阶段自爆吞警徽——第一次竞选推迟到第二天，第二次警徽流失', () => {
+  const g = mk();
+  toSignup(g);
+  signup(g, ['p1', 'p5']);
+  g.settleSignup();
+  assert.equal(g.stage, 'campaign');
+  g.boom('p5');
+  assert.equal(g.sheriff, null);
+  assert.deepEqual(g.election, { due: 2, postponed: true });
+  assert.equal(g.stage, 'words');
+  g.timeout();
+  assert.equal(g.stage, 'dusk', '当天剩下的全部跳过');
+  // 第二天：死讯处理完重新上警
+  night(g, { knife: 'p9' });
+  assert.equal(g.stage, 'hunter');
+  g.timeout();
+  assert.equal(g.stage, 'signup', '第二天重新上警');
+  signup(g, ['p2', 'p6']);
+  g.settleSignup();
+  g.boom('p6');
+  assert.equal(g.election.due, null, '第二次吞警徽：警徽流失');
+  g.timeout();
+  night(g, {});
+  for (let k = 0; k < 20 && !['vote', 'ended'].includes(g.stage); k++) {
+    assert.notEqual(g.stage, 'signup', '不再上警');
+    g.timeout();
+  }
+
+  // 上警的时候（还没开始发言）自爆也算
+  const h = mk();
+  toSignup(h);
+  h.boom('p7');
+  assert.equal(h.election.due, 2);
+
+  // 警长自爆：照样可以移交警徽
+  const k = mk();
+  toSignup(k);
+  signup(k, ['p5']);
+  k.settleSignup();
+  k.chooseOrder('p5', 'up');
+  k.boom('p5');
+  assert.equal(k.stage, 'badge');
+  k.passBadge('p5', 'p6');
+  assert.equal(k.sheriff, 'p6');
+  assert.equal(k.stage, 'words');
 });
 
 // ───────────── 房间：机器人跑完整局 ─────────────
@@ -350,14 +668,17 @@ test('狼人杀：大厅能选，房间里机器人跑完一局', async (t) => {
     assert.ok(room.log.some((l) => /游戏开始！《狼人杀》/.test(l.text)));
     await assert.rejects(room.act('u1', 'nominate', { target: 'bot-1' }), /狼人杀里没有这个操作/);
     // 真人座位：轮到就随便做点什么（有时候不动，等超时）
-    for (let k = 0; k < 6000 && !room.ended; k++) {
+    const until = Date.now() + 60_000;
+    while (!room.ended && Date.now() < until) {
       const pr = room.wwPrompt('u1');
       const v = room.viewFor('u1');
       assert.equal(v.script, 'ww');
       if (pr && Math.random() < 0.7) {
         const t = pr.options?.[0] ?? null;
-        const type = { guard: 'wwGuard', wolf: 'wwWolf', seer: 'wwSeer', hunter: 'wwShoot', vote: 'wwVote', speak: 'wwDone' }[pr.kind];
+        const type = { guard: 'wwGuard', wolf: 'wwWolf', seer: 'wwSeer', hunter: 'wwShoot', vote: 'wwVote', speak: 'wwDone', badge: 'wwBadge', withdraw: 'wwWithdraw' }[pr.kind];
         if (type) await room.act('u1', type, { target: t }).catch(() => {});
+        if (pr.kind === 'signup' && pr.mine === undefined) await room.act('u1', 'wwSignup', { yes: Math.random() < 0.5 }).catch(() => {});
+        if (pr.kind === 'order') await room.act('u1', 'wwOrder', { dir: 'down' }).catch(() => {});
         if (pr.kind === 'witch') await room.act('u1', 'wwWitch', { save: pr.canSave }).catch(() => {});
       }
       await sleep(2);
@@ -422,4 +743,37 @@ test('狼人杀：视图只给该看的人看；死人闭麦，说遗言时解�
   }
   await room.teardown();
   assert.ok(mutes.some((m) => m.reason === 'dead' && !m.on), '回大厅解开死人闭麦');
+});
+
+test('狼人杀房间：只有机器人也能打完；机器人会上警、选警长、定方向、移交警徽、自爆', async (t) => {
+  const { Room } = await import('../src/server/room.js');
+  const warns = [];
+  const warn = console.warn;
+  console.warn = (...a) => { warns.push(a.join(' ')); };
+  t.after(() => { console.warn = warn; });
+  const seen = { sheriff: 0, order: 0, badge: 0, boom: 0, postponed: 0 };
+  for (let k = 0; k < 8; k++) {
+    const room = new Room({ key: `b${k}`, guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { ...FAST, mode: 'human' } }); // 真人说书：房主不坐下，全是机器人
+    // 自爆概率拉满：头几局每只机器人狼一轮到发言就自爆
+    room.wwBotRates = k < 3 ? { boom: 1 } : { signup: 0.5 };
+    room.users.set('u1', { id: 'u1', name: '房主', avatar: null });
+    await room.act('u1', 'addBots', { count: 12 });
+    await room.act('u1', 'start');
+    t.after(() => room.teardown());
+    const g = room.game;
+    const end = Date.now() + 30_000;
+    while (!room.ended && Date.now() < end) {
+      if (g.stage === 'order') seen.order++;
+      if (g.stage === 'badge') seen.badge++;
+      await sleep(2);
+    }
+    assert.ok(room.ended, `第 ${k + 1} 局分出了胜负`);
+    if (g.timeline.some((e) => /当选警长/.test(e.text))) seen.sheriff++;
+    if (g.players.some((p) => p.cause === 'boom')) seen.boom++;
+    if (g.timeline.some((e) => /推迟到明天/.test(e.text))) seen.postponed++;
+    await room.teardown();
+  }
+  assert.deepEqual(warns.filter((w) => /\[ww\]/.test(w)), [], '机器人的操作都合规则');
+  assert.ok(seen.sheriff > 0, '有局选出了警长');
+  assert.ok(seen.boom > 0, '有狼人自爆');
 });

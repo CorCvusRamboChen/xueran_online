@@ -1764,3 +1764,6 @@ span.lr-newbie { cursor: default; }
 .ww-checks li { padding: 2px 0; font: 14px/1.6 var(--sans); }
 .ww-votes li { border-bottom: 1px solid var(--line); padding: 6px 0; }
 .ww-votes header { display: flex; gap: 8px; align-items: baseline; margin-bottom: 2px; }
+.mark.sheriff { position: absolute; right: -8px; top: -8px; background: var(--mot); color: #111; font: 900 10px/1.5 var(--sans); padding: 0 3px; white-space: nowrap; box-shadow: 0 0 0 1px #111; }
+.ww-boom { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.ww-boom .btn-primary { background: #7a1c2a; }

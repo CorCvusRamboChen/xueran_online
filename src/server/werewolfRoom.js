@@ -1,14 +1,17 @@
 // 狼人杀（娱乐模式）的房间流程：开局、给每个阶段计时、叫机器人、语音（发言闭麦、死人闭麦）、每个人的视图。
 // 规则全在 engine/werewolf.js；这里的方法挂到 Room 上（room.js 末尾 Object.assign），Room 里只在几个入口转过来：
 // start / act / viewFor / resume / restore / teardown / pause。
-import { Werewolf, rollWerewolf, wwSetup, STAGE_NAME, WW_ROLES } from '../engine/werewolf.js';
+import { Werewolf, rollWerewolf, wwSetup, STAGE_NAME, WW_ROLES, SPEECH_STAGES, VOTE_STAGES, ELECTION_STAGES, BOOM_STAGES } from '../engine/werewolf.js';
 import { ttsUrl } from './tts.js';
 
 // 狼人杀专用的操作（act 的 type）
-export const WW_ACTIONS = new Set(['wwGuard', 'wwWolf', 'wwWitch', 'wwSeer', 'wwShoot', 'wwDone', 'wwVote', 'wwSkip']);
+export const WW_ACTIONS = new Set(['wwGuard', 'wwWolf', 'wwWitch', 'wwSeer', 'wwShoot', 'wwDone', 'wwVote', 'wwSkip', 'wwSignup', 'wwWithdraw', 'wwOrder', 'wwBadge', 'wwBoom']);
 // 狼人杀里照样能用的通用操作；血染的提名、自由活动这些不能用
 const WW_GENERIC = new Set(['join', 'leave', 'claimHost', 'releaseHost', 'settings', 'character', 'outfit', 'addBots', 'assignRole', 'kick', 'markNewbie',
   'start', 'history', 'stats', 'pastGame', 'fixVoice', 'end', 'fullLog', 'marks']);
+
+/** 机器人的几个概率：上警、退水、自爆（测试里可以用 room.wwBotRates 改）。 */
+export const WW_BOT_RATES = { signup: 0.35, withdraw: 0.15, boom: 0.04 };
 
 const SIDE_NAME = { wolf: '狼人', god: '神职', villager: '平民' };
 // 法官叫人的台词（固定的几句，配音只合成一次）
@@ -94,7 +97,7 @@ export const WW_ROOM = {
     const s = this.settings;
     if (stage === 'hunter') return Math.min(s.chooseSeconds, 15);
     if (stage === 'words') return Math.min(s.speechSeconds ?? 90, 60);
-    if (stage === 'speech' || stage === 'pk') return s.speechSeconds ?? 90;
+    if (stage === 'speech' || stage === 'pk' || stage === 'campaign' || stage === 'campaignPk') return s.speechSeconds ?? 90;
     return s.chooseSeconds;
   },
 
@@ -150,14 +153,27 @@ export const WW_ROOM = {
         timed(this.wwSeconds('hunter'));
         this.wwBots();
         return;
-      case 'words': case 'speech': case 'pk':
-        if (!resumed) this.announce(`${stage === 'words' ? '遗言' : stage === 'pk' ? 'PK 发言' : '发言'}：**${g.name(g.speaker)}**`, 'info', false);
+      case 'words': case 'speech': case 'pk': case 'campaign': case 'campaignPk':
+        if (!resumed) this.announce(`${STAGE_NAME[stage]}：**${g.name(g.speaker)}**`, 'info', false);
         this.speakOnly(g.speaker);
         timed(this.isFake(g.speaker) ? Math.min(3, this.wwSeconds(stage)) : this.wwSeconds(stage));
+        this.wwBots();
         return;
-      case 'vote': case 'pkvote':
+      case 'vote': case 'pkvote': case 'elect': case 'electPk':
         this.speakOnly(null);
-        if (!resumed) this.wwSay(stage === 'pkvote' ? 'PK 发言结束，请投票。' : '发言结束，请投票。');
+        if (!resumed) this.wwSay({ vote: '发言结束，请投票。', pkvote: 'PK 发言结束，请投票。', elect: '警上发言结束，警下请投票选警长。', electPk: '警上 PK 发言结束，警下请投票。' }[stage]);
+        timed(this.settings.chooseSeconds);
+        this.wwBots();
+        return;
+      case 'signup':
+        this.speakOnly(null);
+        if (!resumed) this.wwSay('现在开始竞选警长。想当警长的请上警。', g.election.postponed ? '重新上警' : '竞选警长');
+        timed(this.settings.chooseSeconds);
+        this.wwBots();
+        return;
+      case 'order': case 'badge':
+        this.speakOnly(null);
+        if (!resumed && stage === 'badge') this.announce(`警长 **${g.name(g.sheriff)}** 出局：请移交警徽或撕掉。`, 'info', false);
         timed(this.settings.chooseSeconds);
         this.wwBots();
         return;
@@ -200,10 +216,15 @@ export const WW_ROOM = {
       case 'wwDone': g.doneSpeaking(uid); break;
       case 'wwSkip': // 房主跳过正在发言的人（掉线、挂机）
         this.requireHost(uid);
-        if (!['words', 'speech', 'pk'].includes(g.stage)) throw new Error('现在没有人在发言');
+        if (!SPEECH_STAGES.has(g.stage)) throw new Error('现在没有人在发言');
         g.advanceSpeech();
         break;
       case 'wwVote': if (g.castVote(uid, t)) this.wwVoted(); break;
+      case 'wwSignup': if (g.signup(uid, !!p.yes)) this.wwVoted(); break;
+      case 'wwWithdraw': g.withdraw(uid); break;
+      case 'wwOrder': g.chooseOrder(uid, p.dir); break;
+      case 'wwBadge': g.passBadge(uid, t); break;
+      case 'wwBoom': g.boom(uid); break;
       default: throw new Error('未知操作');
     }
     this.wwStep();
@@ -220,12 +241,14 @@ export const WW_ROOM = {
     });
   },
 
-  /** 所有人都投完了：稍等一下再唱票（最后一个人刚点完，界面先显示「已投」）。 */
+  /** 所有人都投完了（或都表过态要不要上警）：稍等一下再唱票（最后一个人刚点完，界面先显示「已投」）。 */
   wwVoted() {
     const g = this.game; const seq = g.seq;
     this.later(Math.min(800, this.settings.pauseMs), () => {
-      if (this.game !== g || g.seq !== seq || !['vote', 'pkvote'].includes(g.stage)) return;
-      g.settleVote();
+      if (this.game !== g || g.seq !== seq) return;
+      if (VOTE_STAGES.has(g.stage)) g.settleVote();
+      else if (g.stage === 'signup') g.settleSignup();
+      else return;
       this.wwStep();
     });
   },
@@ -235,6 +258,7 @@ export const WW_ROOM = {
   wwBots() {
     const g = this.game; const seq = g.seq; const stage = g.stage;
     const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    const rates = { ...WW_BOT_RATES, ...this.wwBotRates };
     const bots = g.actors().filter((id) => this.isFake(id));
     const go = (fn) => this.later(this.wwBotMs(), () => {
       if (this.game !== g || g.seq !== seq || this.ended) return;
@@ -274,7 +298,16 @@ export const WW_ROOM = {
       const id = g.hunterId;
       go(() => g.hunterShoot(id, Math.random() < 0.75 ? rand(others(id)) : null));
     }
-    if (stage === 'vote' || stage === 'pkvote') for (const id of bots) {
+    if (stage === 'signup') for (const id of bots) go(() => { if (g.signup(id, Math.random() < rates.signup)) this.wwVoted(); });
+    if (stage === 'order' && this.isFake(g.sheriff)) go(() => g.chooseOrder(g.sheriff, Math.random() < 0.5 ? 'up' : 'down'));
+    if (stage === 'badge' && this.isFake(g.sheriff)) { const id = g.sheriff; go(() => g.passBadge(id, Math.random() < 0.7 ? rand(others(id)) ?? null : null)); }
+    // 轮到机器人发言：警上偶尔退水；狼人偶尔自爆（规则对就行，不求聪明）
+    if (SPEECH_STAGES.has(stage) && g.speaker && this.isFake(g.speaker)) {
+      const id = g.speaker;
+      if (['campaign', 'campaignPk'].includes(stage) && g.runners.includes(id) && Math.random() < rates.withdraw) go(() => g.withdraw(id));
+      else if (BOOM_STAGES.has(stage) && g.get(id).role === 'ww_wolf' && Math.random() < rates.boom) go(() => g.boom(id));
+    }
+    if (VOTE_STAGES.has(stage)) for (const id of bots) {
       go(() => {
         const me = g.get(id);
         const can = g.candidates.filter((x) => x !== id && g.get(x).alive);
@@ -336,9 +369,17 @@ export const WW_ROOM = {
       if (g.dying?.includes(uid)) return { kind: 'dying', hunter: g.hunterId === uid, poisoned: p.role === 'ww_hunter' && p.cause === 'poison' };
       return null;
     }
-    if (['words', 'speech', 'pk'].includes(stage) && g.speaker === uid) return { kind: 'speak', stage };
-    if (['vote', 'pkvote'].includes(stage) && g.voters.includes(uid)) {
-      return { kind: 'vote', pk: stage === 'pkvote', options: g.candidates.filter((id) => id !== uid), mine: uid in g.ballots ? g.ballots[uid] : undefined };
+    if (stage === 'signup' && p.alive) return { kind: 'signup', mine: uid in g.signups ? g.signups[uid] : undefined };
+    if (stage === 'order' && g.sheriff === uid) {
+      const first = (dir) => { const keep = g.speechDir; g.speechDir = dir; const id = g.speechOrder(null)[0]; g.speechDir = keep; return id; };
+      return { kind: 'order', up: first('up'), down: first('down') };
+    }
+    if (stage === 'badge' && g.sheriff === uid) return { kind: 'badge', options: others };
+    const running = ['campaign', 'campaignPk'].includes(stage) && g.runners.includes(uid);
+    if (SPEECH_STAGES.has(stage) && g.speaker === uid) return { kind: 'speak', stage, canWithdraw: running };
+    if (running) return { kind: 'withdraw', stage };
+    if (VOTE_STAGES.has(stage) && g.voters.includes(uid)) {
+      return { kind: 'vote', election: ELECTION_STAGES.has(stage), pk: stage === 'pkvote' || stage === 'electPk', options: g.candidates.filter((id) => id !== uid), mine: uid in g.ballots ? g.ballots[uid] : undefined };
     }
     return null;
   },
@@ -375,14 +416,21 @@ export const WW_ROOM = {
       ww: {
         stage, stageName: STAGE_NAME[stage] ?? '', seq: g.seq,
         setup: wwSetup(g.players.length),
-        speaker: ['words', 'speech', 'pk'].includes(stage) ? g.speaker : null,
-        speakers: ['speech', 'pk'].includes(stage) ? g.speakers : null,
-        spoke: ['speech', 'pk'].includes(stage) ? g.spoke : null,
-        pk: ['pk', 'pkvote'].includes(stage) ? g.pk : null,
+        speaker: SPEECH_STAGES.has(stage) ? g.speaker : null,
+        speakers: SPEECH_STAGES.has(stage) && stage !== 'words' ? g.speakers : null,
+        spoke: SPEECH_STAGES.has(stage) && stage !== 'words' ? g.spoke : null,
+        pk: ['pk', 'pkvote'].includes(stage) ? g.pk : ['campaignPk', 'electPk'].includes(stage) ? g.electTie : null,
         dying: stage === 'hunter' ? g.dying : null,
         // 投票中只公开谁投了，投给谁唱票时才公开
-        voting: ['vote', 'pkvote'].includes(stage) ? { voters: g.voters, candidates: g.candidates, done: Object.keys(g.ballots), pk: stage === 'pkvote' } : null,
+        voting: VOTE_STAGES.has(stage) ? { voters: g.voters, candidates: g.candidates, done: Object.keys(g.ballots), pk: stage === 'pkvote' || stage === 'electPk', election: ELECTION_STAGES.has(stage) } : null,
         votes: g.voteHistory,
+        sheriff: g.sheriff ?? null,
+        // 上警：谁上了警、谁还在竞选（上警是当众举手，公开）；表态阶段只公开有几人表过态
+        election: ELECTION_STAGES.has(stage) ? {
+          ran: stage === 'signup' ? null : g.ran, runners: stage === 'signup' ? null : g.runners,
+          decided: stage === 'signup' ? Object.keys(g.signups).length : null, postponed: !!g.election.postponed,
+        } : null,
+        canBoom: !!me && me.alive && wolf && g.phase === 'day' && BOOM_STAGES.has(stage) && !this.ended,
       },
     });
     if (me) {
@@ -396,6 +444,7 @@ export const WW_ROOM = {
         checks: me.role === 'ww_seer' ? g.checks : null,
         potions: me.role === 'ww_witch' ? { ...g.potions } : null,
         lastGuard: me.role === 'ww_guard' ? g.lastGuard : null,
+        sheriff: g.sheriff === uid && me.alive,
       };
     }
     if (isST) view.st = { log: this.stLog.slice(-30), pendingInfo: [], waiting: g.actors(), roles: [] };
