@@ -31,6 +31,7 @@ const HOST_GONE_MS = 15_000;  // 房主离线这么久没回来，自动交给�
 const GOSSIP_WAIT_MS = 32_000;
 const SEAT7 = 'bot-seat7'; // 七步成诗的 7 号空座：当机器人用（夜里替它选人），但不提名、不投票、不在镇上走，见 seat7Speak
 const BOOM_MS = 25_000; // 炸弹人引爆后的倒数：先留时间看清是谁，再倒数十声
+const RAG_SHOT_MS = 20_000; // 诸神黄昏：每个死掉的人都给这么久决定开不开枪（狼人也一样等，免得从等多久看出谁是狼）
 // 语音校正：每隔几秒对一遍"每个人该在哪个语音频道"和"他实际在哪"，不对就拉过去（拉人偶尔会失败或被网络延迟打乱顺序）
 const VOICE_CHECK_MS = 4000;
 const VOICE_GRACE_MS = 3000; // 刚进出房子的人先不管，等这次拉人落地
@@ -247,6 +248,7 @@ export class Room {
       case 'damsel': this.damsel(uid, p.target); break;
       case 'harpyClaim': this.harpyClaim(uid); break;
       case 'boomPoint': this.requireGame().boomPoint(uid, p.target); break;
+      case 'ragShoot': this.ragShoot(uid, p.target ?? null); break;
       case 'pardon': this.pardon(uid); break;
       case 'klutz': this.klutz(uid, p.target); break;
       case 'ravenkeeper': await this.onRavenkeeper(uid, p.target); break;
@@ -481,6 +483,7 @@ export class Room {
     }
     this.game = new Game(seats.map(({ id, name }) => ({ id, name })), { roles, drunkAs: custom ? null : preset?.drunkAs, script, noBaron, evilInfo: seats.length >= 7 || this.settings.smallEvilInfo, deadDrunk: !this.tutorial && !!this.settings.deadDrunk, lunaticGhost: !!this.settings.lunaticGhost, newbies: [...newbies] });
     this.duskDay = null;
+    this.ragCur = null; this.ragQ = []; this.ragThen = null; // 诸神黄昏的开枪队列：上一局剩下的不要带过来
     this.game.records = this.readRecords(seats);
     this.wireGame();
     if (newbies.size) this.stNote(`新手 ${newbies.size} 人：发身份时调低了当邪恶的概率，难角色尽量换成简单的`);
@@ -502,7 +505,7 @@ export class Room {
     try { await this.claimSquare(square); } catch (e) { this.game = null; this.homes = null; this.stLog = []; throw e; }
     this.square = square;
     const [t, o, m, d] = DISTRIBUTION[seats.length];
-    if (ragnarok) this.announce(`游戏开始！《${SCRIPTS[script].name}》${seats.length} 人：${seats.length - ragnarokWolves(seats.length)} 名猎手 · ${ragnarokWolves(seats.length)} 只狼人（小恶魔）。每个猎手白天可以开一枪。`, 'start');
+    if (ragnarok) this.announce(`游戏开始！《${SCRIPTS[script].name}》${seats.length} 人：${seats.length - ragnarokWolves(seats.length)} 名猎手 · ${ragnarokWolves(seats.length)} 只狼人（小恶魔）。猎手死了可以开一枪，打谁谁死。`, 'start');
     else this.announce(`游戏开始！《${SCRIPTS[script].name}》${seats.length} 人：镇民 ${t} · 外来者 ${o} · 爪牙 ${m} · 恶魔 ${d}`, 'start');
     this.narrate('start', { n: seats.length });
     if (!this.square) this.announce('没检测到大家所在的语音频道，夜晚闭麦和拉人私聊不会生效（房主先进语音再开局即可）。');
@@ -885,6 +888,7 @@ export class Room {
     this.moonchildNotice();
     this.klutzNotice();
     if (g.winner) { await this.endGame(); return; }
+    this.ragDied(deaths);
     this.hearToday();
     this.narrate('dawn', { day: g.day, deaths: deaths.map((id) => g.name(id)) });
     // 自动说书：看完死讯就开始自由活动
@@ -1244,6 +1248,7 @@ export class Room {
     if (executed && result !== 'saved') this.narrate('execution', { name: g.name(executed) });
     else if (!executed) this.narrate('noExecution', { already });
     if (g.winner) return this.endGame();
+    if (executed && !g.get(executed)?.alive) this.ragDied([executed]);
     this.nightAfterDusk();
   }
 
@@ -1269,6 +1274,7 @@ export class Room {
    */
   nightAfterDusk() {
     const g = this.game;
+    if (this.ragCur || this.ragQ?.length) { this.ragThen = () => this.nightAfterDusk(); return; } // 诸神黄昏：等死掉的人开完枪再入夜
     if (!g.pendingMoonchild && !g.pendingKlutz && !this.moonchildFakes?.size) { this.later(this.settings.pauseMs, () => this.beginNight()); return; }
     const ms = this.moonchildWaitMs ?? MOONCHILD_WAIT_MS;
     this.moonchildDue = Date.now() + ms;
@@ -1427,6 +1433,66 @@ export class Room {
     g.goblinClaim(uid);
     this.announce(`**${g.name(uid)}** 公开声明：「我是哥布林！」——如果今天处决他，而他真是哥布林，邪恶阵营获胜。`, 'vote');
     this.narrate('gossip', { a: g.name(uid), text: '我是哥布林' });
+  }
+
+  // ───────────── 诸神黄昏：猎手死后开枪（用户 2026-11-04 定的：打谁谁死，被打死的猎手接着开） ─────────────
+  /** 有人死了：排进开枪队列，一个一个来。 */
+  ragDied(ids) {
+    const g = this.game;
+    if (!g || !SCRIPTS[g.script]?.ragnarok || !ids?.length) return;
+    (this.ragQ ??= []).push(...ids);
+    if (!this.ragCur) this.ragNext();
+  }
+  /** 下一个死掉的人：给他一样长的时间决定。狼人也有这段时间（只能不开），结果到时间才公布。 */
+  ragNext() {
+    const g = this.game;
+    const id = this.ragQ?.shift();
+    if (!g || g.winner || this.ended || !id) {
+      this.ragCur = null; this.ragQ = [];
+      const then = this.ragThen; this.ragThen = null;
+      if (then && g && !g.winner && !this.ended) then();
+      return;
+    }
+    const ms = this.ragShotMs ?? RAG_SHOT_MS;
+    this.ragCur = { id, until: Date.now() + ms, target: null };
+    this.announce(`**${g.name(id)}** 倒下了。如果他是猎手，可以开一枪带走一个人（${Math.round(ms / 1000)} 秒）。`, 'death');
+    if (this.isFake(id)) {
+      const opts = g.alive().filter((q) => q.id !== id);
+      if (g.get(id).role === 'slayer' && opts.length && Math.random() < 0.85) this.ragCur.target = opts[Math.floor(Math.random() * opts.length)].id;
+    } else this.tell(id, g.get(id).role === 'slayer' ? '你倒下了——**现在可以开一枪**，打谁谁死（右上角选人，也可以不开）。' : '你倒下了。你是狼人，不能开枪；等时间到就好（大家看不出谁开不了枪）。', 'clock');
+    this.cancel(this.ragTimer);
+    this.ragTimer = this.later(ms, () => this.ragFire());
+    this.changed();
+  }
+  /** 死掉的人选好了（target 为 null 是不开枪）。可以改，到时间才开。 */
+  ragShoot(uid, target) {
+    const g = this.requireGame();
+    const c = this.ragCur;
+    if (!c || c.id !== uid) throw new UserError('现在不是你开枪');
+    if (target != null) {
+      if (g.get(uid).role !== 'slayer') throw new UserError('你是狼人，死了不能开枪');
+      const t = g.get(target);
+      if (!t || !t.alive || t.id === uid) throw new UserError('要选一名存活的玩家');
+    }
+    c.target = target;
+    c.decided = true;
+    this.changed();
+  }
+  ragFire() {
+    const g = this.game; const c = this.ragCur;
+    if (!g || !c) return;
+    const t = c.target && g.get(c.target);
+    if (g.get(c.id)?.role === 'slayer' && t?.alive) {
+      g.kill(t, 'slayer', g.dayMessages());
+      g.record('slay', `${g.tag(c.id)} 死后开枪带走了 ${g.tag(t.id)}`);
+      this.announce(`**${g.name(c.id)}** 开枪带走了 **${g.name(t.id)}**！`, 'death');
+      this.narrate('slay', { a: g.name(c.id), b: g.name(t.id), hit: true });
+      g.checkWinner();
+      if (!g.winner) this.ragQ.push(t.id); // 被打死的猎手接着开枪
+    } else this.announce(`**${g.name(c.id)}** 没有开枪。`, 'info');
+    this.ragCur = null;
+    if (g.winner) { this.ragQ = []; this.later(0, () => this.endGame()); return; }
+    this.ragNext();
   }
 
   /** 公开猜落难少女（爪牙的能力；谁都可以这么说）。猜中了邪恶获胜。 */
@@ -1803,6 +1869,7 @@ export class Room {
     const p = g.get(uid);
     const amnesiacGun = g.engine === 'snv' && p?.role === 'amnesiac' && ['slayer', 'amn_gun', 'amn_judge'].includes(g.abilityOf(p)) && !!g.amnesiacKnown?.[uid];
     if (g.script !== 'tb' && !inScript('slayer', g.script) && !amnesiacGun) throw new UserError('这个剧本没有猎手');
+    if (SCRIPTS[g.script].ragnarok) throw new UserError('诸神黄昏的猎手死了才能开枪');
     const { hit } = g.slay(uid, target);
     this.announce(`**${g.name(uid)}** ${amnesiacGun ? '举起枪' : '声称自己是猎手'}，向 **${g.name(target)}** 开了一枪……${hit ? `**${g.name(target)}** 倒下了！` : '什么都没有发生。'}`, hit ? 'death' : 'info');
     this.narrate('slay', { a: g.name(uid), b: g.name(target), hit });
@@ -2644,6 +2711,7 @@ export class Room {
       })),
       pendingNom: this.pendingNom,
       boom: g.boom?.until ? { until: g.boom.until, alive: g.boom.alive, mine: g.boom.points[uid] ?? null, count: Object.keys(g.boom.points).length } : null, // 炸弹人倒数
+      ragShot: this.ragCur ? { id: this.ragCur.id, until: this.ragCur.until, mine: this.ragCur.id === uid, canShoot: this.ragCur.id === uid && g.get(uid)?.role === 'slayer', target: this.ragCur.id === uid ? this.ragCur.target : null } : null, // 诸神黄昏：谁倒下了正在决定开不开枪
       noms: this.noms && {
         until: this.noms.paused != null ? null : this.noms.until, timeUp: this.noms.timeUp, skipped: this.noms.skips.has(uid),
         done: g.alive().filter((p) => g.visAlive(p) && (g.nominators.has(p.id) || this.noms.skips.has(p.id))).length,

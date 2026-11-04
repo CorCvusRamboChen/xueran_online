@@ -33,7 +33,7 @@ function BoardBar({ n, script }) {
   if (!d) return null;
   const parts = [['镇民', d[0], 'var(--int)'], ['外来者', d[1], 'var(--psy)'], ['爪牙', d[2], '#c9762e'], ['恶魔', d[3], 'var(--phy)']];
   return (
-    <div className="board-bar" title={{ bmr: '教父在场时：外来者 +1 或 −1（说书人决定）', snv: '方古在场时外来者 +1；亡骨魔在场时外来者 −1', ngj: '男爵在场时外来者加到两个（这个剧本只有两个外来者）', luf: '气球驾驶员在场时，说书人可以多放一个外来者', rag: '镇民全是猎手，恶魔全是小恶魔（狼人）', bs7: '男爵 +2、亡骨魔 −1、气球驾驶员 +0~1 外来者；村夫可以有 1–3 个。7 号空座也算一个座位', cat: '教父在场外来者 ±1，方古 +1，亡骨魔 −1，气球驾驶员 +0~1' }[script] ?? '男爵在场时：外来者 +2、镇民 −2'}>
+    <div className="board-bar" title={{ bmr: '教父在场时：外来者 +1 或 −1（说书人决定）', snv: '方古在场时外来者 +1；亡骨魔在场时外来者 −1', ngj: '男爵在场时外来者加到两个（这个剧本只有两个外来者）', luf: '气球驾驶员在场时，说书人可以多放一个外来者', rag: '镇民全是猎手（死了可以开一枪，打谁谁死），恶魔全是小恶魔（狼人）', bs7: '男爵 +2、亡骨魔 −1、气球驾驶员 +0~1 外来者；村夫可以有 1–3 个。7 号空座也算一个座位', cat: '教父在场外来者 ±1，方古 +1，亡骨魔 −1，气球驾驶员 +0~1' }[script] ?? '男爵在场时：外来者 +2、镇民 −2'}>
       <span className="bb-script">{SCRIPTS[script]?.name ?? SCRIPTS.tb.name}</span>
       <span className="bb-n">{n} 人局</span>
       {parts.map(([k, v, c]) => <span key={k} className="bb-item"><b style={{ color: c }}>{v}</b>{k}</span>)}
@@ -582,7 +582,7 @@ function GossipButton({ s, act }) {
 function SlayButton({ s, setMode }) {
   const me = s.self;
   // 暗流涌动和诸神黄昏谁都能声称开枪（死人也行，没有效果）；两个小剧本里只有猜中了猎手能力的失忆者有这把枪（canSlay）
-  if ((engineOf(s.script) !== 'tb' && !me?.canSlay) || s.phase !== 'day' || !me || s.players.find((p) => p.id === s.me)?.shot) return null;
+  if ((engineOf(s.script) !== 'tb' && !me?.canSlay) || s.script === 'rag' || s.phase !== 'day' || !me || s.players.find((p) => p.id === s.me)?.shot) return null; // 诸神黄昏的猎手死了才开枪（RagShotPanel）
   return (
     <div className="btn-row gossip-row">
       <Btn kind={me.role?.id === 'slayer' || me.canSlay ? 'primary' : 'secondary'} onClick={() => setMode('slay')}
@@ -946,6 +946,8 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
     );
   }
 
+  // 诸神黄昏：倒下的人正在决定开不开枪。自己倒下了就先开枪（自由活动也让路）；别人在自由活动时照常活动，看公告
+  if (s.ragShot && (s.ragShot.mine || !s.roam)) return <RagShotPanel s={s} act={act} g={g} />;
   if (s.roam) return <RoamActions s={s} act={act} name={name} face={face} setMode={setMode} />;
 
   if (s.transit) return <TransitCard s={s} />;
@@ -1017,6 +1019,31 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
 }
 
 /** 提名环节剩余时间。 */
+/** 诸神黄昏：有人倒下了，正在决定开不开枪。是自己就选人（猎手）或等时间到（狼人）；别人只看到倒计时。 */
+function RagShotPanel({ s, act, g }) {
+  const r = s.ragShot;
+  const secs = useCountdown(r.until);
+  const who = g(r.id);
+  const clock = secs != null ? <span className="nom-clock">{secs}</span> : null;
+  if (!r.mine) return <Panel title="有人倒下了" tone="phy" extra={clock}><p className="lead"><b>{who?.seat}号 {who?.name}</b> 倒下了。如果他是猎手，可以开一枪带走一个人，打谁谁死。</p></Panel>;
+  if (!r.canShoot) return <Panel title="你倒下了" tone="phy" extra={clock}><p className="lead">你是狼人，死了不能开枪。等时间到就好——大家看不出谁开不了枪。</p></Panel>;
+  const alive = s.players.filter((p) => p.alive && p.id !== s.me);
+  return (
+    <Panel title="你倒下了 · 开一枪" tone="phy" extra={clock}>
+      <p className="lead">打谁谁死。被你打死的如果也是猎手，他还能接着开枪。时间到才开枪，之前可以改。</p>
+      <div className="boom-picks">
+        {alive.map((p) => (
+          <button key={p.id} type="button" className={`boom-pick ${r.target === p.id ? 'on' : ''}`} aria-pressed={r.target === p.id} onClick={() => act('ragShoot', { target: p.id })}>
+            <b>{p.seat}号</b><span>{p.name}</span>
+          </button>
+        ))}
+      </div>
+      <div className="btn-row"><Btn kind={r.target ? 'secondary' : 'primary'} onClick={() => act('ragShoot', { target: null })}>不开枪</Btn></div>
+      <p className="muted">{r.target ? `你瞄准了 ${g(r.target)?.seat}号。` : '还没有瞄准任何人（时间到就是不开枪）。'}</p>
+    </Panel>
+  );
+}
+
 /** 炸弹人引爆后的倒数：每个人（死人也算）指一名还活着的人，被最多人指着的死亡；平票没人死。可以改。 */
 function BoomPanel({ s, act, g }) {
   const secs = useCountdown(s.boom.until);
