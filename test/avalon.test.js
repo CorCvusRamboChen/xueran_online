@@ -280,6 +280,19 @@ async function avalonRoom(bots, settings = {}) {
   return room;
 }
 
+test('在场的角色按固定顺序列，不按座位（不然排第一的就是 1 号的角色）', async () => {
+  const room = await avalonRoom(6);
+  await room.act('u1', 'start');
+  const g = room.game;
+  const want = ['merlin', 'percival', 'loyal', 'assassin', 'morgana', 'mordred'];
+  for (const seats of [['assassin', 'loyal', 'merlin', 'mordred', 'percival', 'loyal', 'morgana'], ['morgana', 'mordred', 'loyal', 'assassin', 'loyal', 'percival', 'merlin']]) {
+    seats.forEach((role, i) => { g.players[i].role = role; });
+    assert.deepEqual(room.viewFor('u1').avalon.roles.map((r) => r.id), want);
+  }
+  assert.ok(!/在场的特殊角色：(刺客|莫甘娜|莫德雷德)/.test(room.log.find((l) => l.kind === 'start').text), '开局公告也按固定顺序：梅林在最前');
+  await room.teardown();
+});
+
 test('房间：阿瓦隆只能 5–10 人；加机器人加到 10 个为止', async () => {
   const room = await avalonRoom(20);
   assert.equal(room.lobby.length, 10);

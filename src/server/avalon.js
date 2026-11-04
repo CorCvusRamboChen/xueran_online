@@ -22,6 +22,8 @@ const pickN = (arr, k) => {
   return a.slice(0, k);
 };
 const rand = (a, b) => a + Math.random() * (b - a);
+/** 在场的角色，按角色表的固定顺序（梅林、派西维尔、忠臣、刺客……）。不能按座位排：排第一的就是座位最靠前那人的角色，等于把身份漏了。 */
+export const inPlay = (g) => Object.keys(AVALON_ROLES).filter((id) => g.players.some((p) => p.role === id));
 
 export class AvalonTable {
   constructor(room) {
@@ -58,7 +60,7 @@ export class AvalonTable {
     r.square = square;
     const roles = g.players.map((p) => p.role);
     const evil = roles.filter((x) => !isGood(x)).length;
-    const special = [...new Set(roles.filter((x) => !['loyal', 'minion'].includes(x)))].map((x) => AVALON_ROLES[x].name);
+    const special = inPlay(g).filter((x) => !['loyal', 'minion'].includes(x)).map((x) => AVALON_ROLES[x].name);
     r.announce(`游戏开始！《阿瓦隆》${g.n} 人：好人 ${g.n - evil} · 坏人 ${evil}。${special.length ? `在场的特殊角色：${special.join('、')}` : '基础局：没有梅林和刺客，三次任务成功好人直接获胜'}${g.lady ? '；用湖中仙女' : ''}${g.options.targeting ? '；自选任务（队长挑做哪个任务，第 5 个任务要先成功两个）' : ''}。`, 'start');
     this.story('阿瓦隆', pickN([
       `${g.n} 名骑士围坐在圆桌旁。亚瑟王的光芒之下，有人在为莫德雷德做事。`,
@@ -490,7 +492,7 @@ export class AvalonTable {
         assassin: stage === 'assassin' || r.ended ? g.assassinId() : null, // 刺杀时刺客公开站出来
         guess: g.guess,
         talking: !!r.roam,
-        roles: [...new Set(g.players.map((p) => p.role))].map((id) => ({ id, name: AVALON_ROLES[id].name, good: isGood(id), ability: AVALON_ROLES[id].ability, count: g.players.filter((p) => p.role === id).length })),
+        roles: inPlay(g).map((id) => ({ id, name: AVALON_ROLES[id].name, good: isGood(id), ability: AVALON_ROLES[id].ability, count: g.players.filter((p) => p.role === id).length })),
       },
     };
     if (me) {
