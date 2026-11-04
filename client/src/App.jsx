@@ -213,7 +213,7 @@ export default function App() {
       )}
       {s.phase === 'lobby' ? <Lobby s={s} act={act} ask={ask} toast={showToast} onTutorial={() => api.current.tutorial(true)} />
         : s.ww ? <WerewolfGame s={s} act={act} ask={ask} />
-          : s.script === 'avalon' ? <AvalonGame s={s} act={act} ask={ask} parts={{ RoamActions, History, SoundToggles, Watchers }} /> // 娱乐模式阿瓦隆：另一套界面，见 Avalon.jsx
+          : s.script === 'avalon' ? <AvalonGame s={s} act={act} ask={ask} parts={{ History, SoundToggles, Watchers }} /> // 娱乐模式阿瓦隆：另一套界面，见 Avalon.jsx
             : <Game s={s} act={act} ask={ask} />}
       {s.tutorial && <Tutorial s={s} onExit={() => api.current.tutorial(false)} />}
       {toast && <div className="toast">{toast}</div>}

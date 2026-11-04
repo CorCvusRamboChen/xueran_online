@@ -1,8 +1,7 @@
 // 娱乐模式「阿瓦隆」的界面：身份确认、任务记录板（5 个任务格 + 否决计数）、队长选队员、全体投票、出任务票、
-// 湖中仙女、刺杀指认。场景沿用血染的广场座位圈和小镇地图（自由活动），右栏沿用记录面板。规则在 src/engine/avalon.js。
+// 湖中仙女、刺杀指认。场景沿用血染的广场座位圈（不用小镇地图：阿瓦隆没有自由活动和私聊），右栏沿用记录面板。规则在 src/engine/avalon.js。
 import { useEffect, useRef, useState } from 'react';
 import { Town } from './Town.jsx';
-import { TownMap } from './TownMap.jsx';
 import { Tag, Panel, Btn, Stat, HudBar } from './ui.jsx';
 import { Portrait, useTick, useCountdown, cnNum } from './util.jsx';
 import { AVALON_ROLES, AVALON_TEAMS, QUEST_SIZES, failsNeeded, avalonRoles, isGood, DEFAULT_OPTIONS } from '../../src/engine/avalon.js';
@@ -10,8 +9,8 @@ import './avalon.css';
 
 const STAGE_NAME = { reveal: '确认身份', propose: '组队', vote: '投票', quest: '任务', lady: '湖中仙女', assassin: '刺杀', ended: '结束' };
 
-/** 整局的界面。parts：从 App.jsx / Lobby.jsx 借来的零件（自由活动面板、记录、声音开关、观战席），免得文件互相引用。 */
-export function AvalonGame({ s, act, ask, parts: { RoamActions, History, SoundToggles, Watchers } }) {
+/** 整局的界面。parts：从 App.jsx / Lobby.jsx 借来的零件（记录、声音开关、观战席），免得文件互相引用。 */
+export function AvalonGame({ s, act, ask, parts: { History, SoundToggles, Watchers } }) {
   useTick(1000);
   const a = s.avalon;
   const me = s.self;
@@ -21,16 +20,14 @@ export function AvalonGame({ s, act, ask, parts: { RoamActions, History, SoundTo
   const [quit, setQuit] = useState(false);
   const g = (id) => s.players.find((p) => p.id === id);
   const name = (id) => { const p = g(id); return p ? `${p.seat}号 ${p.name}` : '?'; };
-  const face = (id, label) => ({ ...g(id), label: label ?? name(id) });
   const av = (kind, p = {}) => act('avalon', { kind, ...p });
 
-  const roaming = !!s.roam;
   const leaderMe = a.leader === s.me;
   const assassinMe = a.stage === 'assassin' && a.assassin === s.me;
   // 这一轮做哪个任务：平常服务器定好了；自选任务时队长先在面板里挑
   const questNo = a.questNo ?? (a.stage === 'propose' && leaderMe ? pickQuest : null);
   // 现在点肖像是在选什么：队长选队员 / 湖中仙女选人 / 刺客指认 / 同伴给刺客出主意（刺客只能指认好人：这时坏人亮明身份一起商量，坏人都不在里面，奥伯伦也算）
-  const pickSpec = s.phase === 'ended' || roaming ? null
+  const pickSpec = s.phase === 'ended' ? null
     : a.stage === 'propose' && leaderMe ? (questNo ? { count: a.quests[questNo - 1].size, options: s.players.map((p) => p.id), what: 'team' } : null)
       : a.stage === 'lady' && a.lady?.options ? { count: 1, options: a.lady.options, what: 'lady' }
         : assassinMe ? { count: 1, options: me.assassinOptions ?? [], what: 'assassin' }
@@ -70,8 +67,8 @@ export function AvalonGame({ s, act, ask, parts: { RoamActions, History, SoundTo
   ];
   const ring = { ...s, players: s.players.map((p) => ({ ...p, tags: tagsOf(p), pips: pipsOf(p) })) };
 
-  const secs = useCountdown(roaming ? s.roam.until : s.deadline);
-  const timer = secs != null ? { label: roaming ? '自由活动结束' : `${STAGE_NAME[a.stage]}倒计时`, secs, urgent: secs <= 10 } : null;
+  const secs = useCountdown(s.deadline);
+  const timer = secs != null ? { label: `${STAGE_NAME[a.stage]}倒计时`, secs, urgent: secs <= 10 } : null;
   const items = [
     me && { id: 'role', icon: 'role', label: '身份', dot: a.stage === 'reveal' && !me.ready ? '' : 0 },
     { id: 'board', icon: 'roster', label: '任务记录' },
@@ -84,15 +81,11 @@ export function AvalonGame({ s, act, ask, parts: { RoamActions, History, SoundTo
   return (
     <div className="game avalon">
       <section className="scene">
-        {!roaming && <Tag className="where">{s.phase === 'ended' ? '圆桌 · 终局' : a.stage === 'reveal' ? '圆桌 · 夜' : `圆桌 · 第${cnNum(a.round)}轮任务`}</Tag>}
+        <Tag className="where">{s.phase === 'ended' ? '圆桌 · 终局' : a.stage === 'reveal' ? '圆桌 · 夜' : `圆桌 · 第${cnNum(a.round)}轮任务`}</Tag>
         {s.spectator && s.phase !== 'ended' && <div className="spectator-bar">观战中{s.settings?.spectatorGrimoire ? ' · 你能看到所有人的身份，别在语音里说' : ' · 看不到任何人的身份'}</div>}
-        {roaming ? (
-          <TownMap s={s} onMove={me ? (x, y) => act('move', { x, y }) : () => null} />
-        ) : (
-          <Town s={ring} picked={picked} pickable={pickSpec?.options ?? null} onTap={onTap}>
-            <QuestBoard a={a} questNo={questNo} />
-          </Town>
-        )}
+        <Town s={ring} picked={picked} pickable={pickSpec?.options ?? null} onTap={onTap}>
+          <QuestBoard a={a} questNo={questNo} />
+        </Town>
         <VoteFlash a={a} s={s} />
         <QuestReveal a={a} s={s} name={name} />
         <SoundToggles onFixVoice={me && s.phase !== 'ended' ? () => act('fixVoice') : null} />
@@ -101,9 +94,7 @@ export function AvalonGame({ s, act, ask, parts: { RoamActions, History, SoundTo
 
       <section className={`dock ${hot ? 'dock-hot' : ''}`}>
         {me && a.stage !== 'reveal' && s.phase !== 'ended' && <MeBar me={me} name={name} />}
-        {roaming && <TalkCard s={s} a={a} name={name} />}
-        {roaming ? <RoamActions s={s} act={act} name={name} face={face} setMode={() => {}} />
-          : <Stage s={s} a={a} me={me} av={av} act={act} name={name} picked={picked} pickSpec={pickSpec} g={g} questNo={questNo} setPickQuest={setPickQuest} />}
+        <Stage s={s} a={a} me={me} av={av} act={act} name={name} picked={picked} pickSpec={pickSpec} g={g} questNo={questNo} setPickQuest={setPickQuest} />
         {a.stage !== 'reveal' && <CarLog a={a} g={g} />}
         {s.isHost && s.phase !== 'ended' && (
           <div className="link-row av-host">
@@ -149,16 +140,6 @@ export function QuestBoard({ a, questNo = a.questNo }) {
         {Array.from({ length: a.maxRejects }, (_, i) => <i key={i} className={i + 1 < a.attempt ? 'used' : i + 1 === a.attempt && a.stage !== 'ended' ? 'now' : ''}>{i + 1}</i>)}
       </div>
     </div>
-  );
-}
-
-/** 自由活动时上面那张小卡：这轮要干什么。 */
-function TalkCard({ s, a, name }) {
-  const q = a.questNo && a.quests[a.questNo - 1];
-  return (
-    <Panel title={`第${cnNum(a.round)}轮任务 · 自由活动`} tone="mot">
-      <p className="lead">队长 <b>{name(a.leader)}</b> 集合后{q ? `组 ${q.size} 人的队伍${q.need > 1 ? `（这一轮要 ${q.need} 张失败票才失败）` : ''}` : '自己挑做哪个任务、再组队'}。先去找人私聊吧。</p>
-    </Panel>
   );
 }
 
@@ -576,8 +557,8 @@ export function AvalonDist({ n }) {
   );
 }
 
-/** 房主设置：可选角色、湖中仙女、每轮自由活动多久。 */
-export function AvalonSettings({ st, set, n, Toggle, Select }) {
+/** 房主设置：可选角色、湖中仙女、自选任务。没有自由活动（阿瓦隆一直在圆桌）。 */
+export function AvalonSettings({ st, set, n, Toggle }) {
   const opts = { ...DEFAULT_OPTIONS, ...st.avalonRoles };
   const roles = AVALON_TEAMS[n] ? avalonRoles(n, opts) : null;
   const flip = (k) => set({ avalonRoles: { ...opts, [k]: !opts[k] } });
@@ -605,7 +586,6 @@ export function AvalonSettings({ st, set, n, Toggle, Select }) {
           <h4>流程</h4>
           <Toggle label="湖中仙女（第 2、3、4 轮后查一个人的阵营）" on={!!st.avalonLady} onChange={(v) => set({ avalonLady: v })} />
           <Toggle label="自选任务（队长挑做哪个任务）" on={!!st.avalonTargeting} onChange={(v) => set({ avalonTargeting: v })} />
-          <Select label="每轮任务前自由活动" value={st.avalonRoamMinutes ?? 0} options={[0, 1, 2, 3, 5]} unit="分钟" zero="不自由活动" onChange={(v) => set({ avalonRoamMinutes: v })} />
           <Toggle label="随机排座位" on={st.shuffle} onChange={(v) => set({ shuffle: v })} />
           <p className="muted setting-note">队长组队 2 分钟、投票 1 分钟、出任务票 45 秒，到点没动作的替他随机选。湖中仙女官方推荐 7 人及以上用。自选任务是规则书里的可选规则：每个任务只做一次，第 5 个要先成功两个，7 人起第 4 个仍要 2 张失败票。</p>
         </div>

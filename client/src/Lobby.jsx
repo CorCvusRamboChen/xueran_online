@@ -155,7 +155,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
               cat: '《冒名钓鱼》（Catfishing，作者 Emily）：最有名的自定义剧本之一，角色全来自三个基础剧本和实验性角色。谁都可能顶着别人的身份：舞蛇人会和恶魔换身，哲学家拿别人的能力，疯子以为自己是恶魔，失忆者不知道自己的能力。人多更好玩。地图是雾夜的钟楼港口。',
               bs7: '《七步成诗》：2025 剧本世界杯冠军（作者 TrashWarlock）。7 号座位没有人坐，照样有角色，由 AI 说书人替它选人，每局替它发言一次——它可能是好人，也可能是恶魔。有贵族、村夫、魔术师、落难少女、炸弹人等新角色。地图是月下诗会的驿站。' }[st.script] ?? '《暗流涌动》：入门剧本，信息多、规则直白，推荐第一次玩。'}</p>
             {!host ? <p className="muted setting-note host-only-note">配置、说书人、计时和房规由房主决定，只有房主看得到。</p>
-              : st.script === 'avalon' ? <AvalonSettings st={st} set={set} n={n} Toggle={Toggle} Select={Select} /> : ww ? (
+              : st.script === 'avalon' ? <AvalonSettings st={st} set={set} n={n} Toggle={Toggle} /> : ww ? (
               <div className="setting-wrap"><div className="setting-groups">
                 <div className="setting-col">
                   <div className="setting-group">

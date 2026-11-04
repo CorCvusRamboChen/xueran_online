@@ -270,7 +270,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (cond, ms = 8000) => { const end = Date.now() + ms; while (!cond() && Date.now() < end) await sleep(5); };
 
 async function avalonRoom(bots, settings = {}) {
-  const room = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { pauseMs: 5, shuffle: false, script: 'avalon', avalonRoamMinutes: 0, ...settings } });
+  const room = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { pauseMs: 5, shuffle: false, script: 'avalon', ...settings } });
   room.av.limits = { reveal: 0.05, propose: 0.05, vote: 0.05, quest: 0.05, lady: 0.05, assassin: 0.05 };
   room.av.pauseMs = 5;
   room.av.speed = 0.002;
@@ -356,22 +356,38 @@ test('房间：真人当队长、投票、出任务票都走 act', async () => {
   await room.teardown();
 });
 
-test('房间：每轮先自由活动，集合后队长组队', async () => {
-  const room = await avalonRoom(4, { avalonRoamMinutes: 1 });
-  room.av.limits = { reveal: 0.05, propose: 30, vote: 30, quest: 30, lady: 30, assassin: 30 }; // 集合后停在组队 / 投票，好看清
+test('房间：阿瓦隆没有自由活动和私聊，一直在圆桌（旧设置里的自由活动分钟数也不管）', async () => {
+  const room = await avalonRoom(4, { avalonRoamMinutes: 2 });
+  room.av.limits = { reveal: 0.05, propose: 30, vote: 30, quest: 30, lady: 30, assassin: 30 };
   await room.act('u1', 'start');
   const g = room.game;
-  await until(() => !!room.roam);
-  assert.ok(room.roam, '第 1 轮开始自由活动');
-  assert.equal(g.stage, 'propose');
-  assert.ok(room.viewFor('u1').avalon.talking);
-  await assert.rejects(room.act(g.leaderId(), 'avalon', { kind: 'propose', team: [] }), /先集合/);
-  await room.act('u1', 'roamVote', { yes: true }); // 只有一个真人：他同意就集合
-  assert.equal(room.roam, null);
-  await until(() => !!room.deadline, 3000);
-  assert.ok(room.deadline, '集合后开始组队计时');
-  assert.equal(g.round, 1);
+  await until(() => !!room.deadline && g.stage !== 'reveal', 3000);
+  assert.equal(room.roam, null, '不进小镇地图');
+  assert.ok(room.deadline, '确认身份后直接组队计时');
+  for (const type of ['roam', 'roamVote', 'pull', 'gather', 'invite', 'nominate']) {
+    await assert.rejects(room.act('u1', type, {}), /阿瓦隆里没有这个操作/, type);
+  }
+  assert.equal(room.viewFor('u1').roam, null);
   await room.teardown();
+});
+
+test('房间：旧存档停在自由活动里，读档后回圆桌接着组队', async () => {
+  const room = await avalonRoom(4);
+  room.av.limits = { reveal: 0.05, propose: 30, vote: 30, quest: 30, lady: 30, assassin: 30 };
+  await room.act('u1', 'start');
+  await until(() => room.game.stage === 'propose' && !!room.deadline, 3000);
+  room.deadline = null;
+  room.startRoam(1); // 模拟上一版的「每轮前自由活动」
+  const snap = JSON.parse(JSON.stringify(room.snapshot()));
+  await room.teardown();
+  const back = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: mockVoice() }).restore(snap);
+  back.av.speed = 0.002;
+  assert.ok(back.roam);
+  back.resume();
+  await until(() => !back.roam && !!back.deadline, 3000);
+  assert.equal(back.roam, null);
+  assert.ok(back.deadline);
+  await back.teardown();
 });
 
 test('房间：存档读档后接着跑完', async () => {

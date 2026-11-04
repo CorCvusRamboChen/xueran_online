@@ -1,5 +1,6 @@
 // 阿瓦隆在房间里的流程：计时、机器人、公告、每个人看到的视图。规则在 engine/avalon.js。
-// room.js 里只接了几处：开局（start）、操作（act 的 'avalon'）、视图（viewFor）、读档恢复（resume）、自由活动集合后（endRoam）。
+// room.js 里只接了几处：开局（start）、操作（act 的 'avalon'）、视图（viewFor）、读档恢复（resume）。
+// 阿瓦隆不用自由活动和私聊房子（用户 2026-11-05：不需要私聊，一直在圆桌）。
 // 语音、自由活动地图、私聊房子、暂停、存档都用房间原来的那套。
 import { Avalon, AVALON_ROLES, MAX_REJECTS, isGood } from '../engine/avalon.js';
 import { ttsUrl } from './tts.js';
@@ -9,8 +10,11 @@ export const AVALON_SETTINGS = {
   avalonRoles: { merlin: true, percival: true, morgana: true, mordred: true, oberon: false }, // 可选角色（merlin：梅林和刺客一起）
   avalonTargeting: false, // 官方可选规则「自选任务」
   avalonLady: false,      // 湖中仙女（官方的可选规则，推荐 7 人及以上）
-  avalonRoamMinutes: 0,   // 每轮任务开始前自由活动几分钟（0 = 不自由活动，一直在圆桌组队；用户 2026-11-05 要一直停在会议界面）
 };
+
+/** 阿瓦隆对局里房间接受的操作：大厅那些、语音归位、结束、阿瓦隆自己的。自由活动、私聊房子、提名投票这些血染的都不要。 */
+export const AV_ACTIONS = new Set(['join', 'leave', 'claimHost', 'releaseHost', 'settings', 'character', 'outfit', 'addBots', 'kick', 'markNewbie',
+  'start', 'history', 'stats', 'pastGame', 'fixVoice', 'end', 'fullLog', 'avalon']);
 
 // 各步的时限（秒）：到点没动作的替他随机选，和血染夜里选人一样
 const LIMITS = { reveal: 30, propose: 120, vote: 60, quest: 45, lady: 60, assassin: 150 };
@@ -45,7 +49,6 @@ export class AvalonTable {
     }
     if (typeof p.avalonLady === 'boolean') s.avalonLady = p.avalonLady;
     if (typeof p.avalonTargeting === 'boolean') s.avalonTargeting = p.avalonTargeting;
-    if (p.avalonRoamMinutes != null) s.avalonRoamMinutes = Math.min(10, Math.max(0, Number(p.avalonRoamMinutes) || 0));
   }
 
   // ───────────── 开局 ─────────────
@@ -128,19 +131,7 @@ export class AvalonTable {
     const q = g.quest();
     if (q) r.announce(`第 ${g.round} 轮任务：要 ${q.size} 个人${q.need > 1 ? `，要 ${q.need} 张失败票才会失败` : ''}。队长是 **${g.name(g.leaderId())}**。`, 'day');
     else r.announce(`第 ${g.round} 轮：队长 **${g.name(g.leaderId())}** 组队时自己挑做哪个任务（还能做：${g.questOptions().map((k) => `任务 ${k}（${g.quests[k - 1].size} 人）`).join('、')}）。`, 'day');
-    const minutes = r.settings.avalonRoamMinutes ?? AVALON_SETTINGS.avalonRoamMinutes;
-    if (minutes > 0) {
-      r.deadline = null;
-      r.roamedToday = false;
-      r.startRoam(minutes);
-      return;
-    }
     this.openPropose();
-  }
-
-  /** 自由活动集合了（时间到 / 大家同意 / 房主喊集合）：轮到队长组队。 */
-  afterTalk() {
-    if (this.g?.stage === 'propose' && !this.room.roam) this.openPropose();
   }
 
   openPropose() {
@@ -149,7 +140,7 @@ export class AvalonTable {
     if (g.stage !== 'propose' || r.ended) return;
     this.arm('propose');
     const leader = g.leaderId();
-    if (r.isFake(leader)) r.later(this.wait(2500, 5000), () => { if (g.stage === 'propose' && g.leaderId() === leader && !r.roam) this.botPropose(leader); });
+    if (r.isFake(leader)) r.later(this.wait(2500, 5000), () => { if (g.stage === 'propose' && g.leaderId() === leader) this.botPropose(leader); });
   }
 
   // ───────────── 操作 ─────────────
@@ -160,7 +151,6 @@ export class AvalonTable {
     switch (p.kind) {
       case 'ready': if (g.setReady(uid)) this.begin(); break;
       case 'propose':
-        if (r.roam) throw new Error('先集合（自由活动结束后队长再组队）');
         this.propose(uid, Array.isArray(p.team) ? p.team : [], p.quest ?? null); break;
       case 'vote': this.vote(uid, !!p.yes); break;
       case 'quest': this.play(uid, !!p.success); break;
@@ -334,14 +324,7 @@ export class AvalonTable {
     const r = this.room;
     const g = this.g;
     if (!g || r.ended) return;
-    if (r.roam) {
-      const ro = r.roam;
-      if (ro.until) r.roamTimer = r.later(Math.max(5000, ro.until - Date.now()), () => r.endRoam('时间到'));
-      r.scheduleRoamSoon();
-      for (const [id, m] of ro.pos) if (m.start + m.dur > Date.now()) ro.arrive.set(id, [r.later(m.start + m.dur - Date.now() + 30, () => r.arrive(id))]);
-      r.wander();
-      return;
-    }
+    if (r.roam) { r.endRoam(); r.deadline = null; } // 旧版存档可能停在自由活动里：直接回圆桌，下面接着组队
     if (g.next) { r.later(this.wait(3000), () => this.runNext()); return; } // 停在两步之间（比如翻完任务票正要开始下一轮）
     if (g.stage === 'propose' && r.deadline == null) { r.later(this.wait(3000), () => this.openPropose()); return; } // 自由活动刚结束、还没轮到队长
     if (!this.limits[g.stage]) return;
@@ -466,16 +449,8 @@ export class AvalonTable {
         fake: r.isFake(p.id), online: r.online.has(p.id),
         ...(showRoles ? { role: p.role, roleName: AVALON_ROLES[p.role].name, evil: !isGood(p.role) } : {}),
       })),
-      rooms: [...r.rooms.values()].map((x) => ({ id: x.channelId, members: x.members, until: x.until, mine: x.members.includes(uid) })),
-      roam: r.roam && {
-        map: r.town.id,
-        until: r.roam.until, since: r.roam.since ?? null,
-        houses: r.roam.houses.map((h) => { const st = r.roam.state.get(h.id); return { ...h, members: [...st.ids], locked: st.locked, knocks: [...st.knocks] }; }),
-        pos: Object.fromEntries(r.roam.pos),
-        myHouse: r.roam.zone.get(uid) ?? null,
-        invite: r.roam.invites?.get(uid) ?? null,
-        endVotes: { count: r.roam.endVotes.size, need: r.roamVoteNeed(), mine: r.roam.endVotes.has(uid) },
-      },
+      rooms: [],
+      roam: null,
       avalon: {
         stage, round: g.round, attempt: g.attempt, maxRejects: MAX_REJECTS,
         questNo: g.questNo,                                          // 这一轮做哪个任务（自选任务时队长组队前是 null）
@@ -491,7 +466,6 @@ export class AvalonTable {
         lady: g.lady && { holder: g.lady.holder, used: g.lady.used, log: g.lady.log, options: stage === 'lady' && g.lady.holder === uid ? g.ladyOptions() : null },
         assassin: stage === 'assassin' || r.ended ? g.assassinId() : null, // 刺杀时刺客公开站出来
         guess: g.guess,
-        talking: !!r.roam,
         roles: inPlay(g).map((id) => ({ id, name: AVALON_ROLES[id].name, good: isGood(id), ability: AVALON_ROLES[id].ability, count: g.players.filter((p) => p.role === id).length })),
       },
     };

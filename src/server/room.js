@@ -16,7 +16,7 @@ import { noteMarks, readTown } from './beliefs.js';
 import { Werewolf } from '../engine/werewolf.js';
 import { WW_ROOM } from './werewolfRoom.js';
 import { Avalon } from '../engine/avalon.js';
-import { AvalonTable, AVALON_SETTINGS } from './avalon.js';
+import { AvalonTable, AVALON_SETTINGS, AV_ACTIONS } from './avalon.js';
 
 // 受害者那段破门过场多长（毫秒）：踹门 → 踹开 → "你死了"，播完再天亮
 const VICTIM_SCENE_MS = 6500;
@@ -210,6 +210,7 @@ export class Room {
     if (type === 'move') return this.move(uid, p.x, p.y);
     if (type === 'marks') return this.recordMarks(uid, p); // 没有状态要推给别人
     if (this.game?.werewolf && !this.wwAllowed(type)) throw new UserError('狼人杀里没有这个操作');
+    if (this.game?.avalon && !AV_ACTIONS.has(type)) throw new UserError('阿瓦隆里没有这个操作'); // 没有自由活动、私聊、提名这些血染的操作
     if (this.game?.werewolf && type.startsWith('ww')) { this.wwAct(uid, type, p); this.changed(); return null; }
     if (type === 'fullLog') return { log: this.log.slice(Math.max(0, this.log.findLastIndex((l) => l.kind === 'start'))) }; // 打开「记录」时取一次这局的全部
     switch (type) {
@@ -2174,11 +2175,10 @@ export class Room {
       if (st.channelId) await this.safeVoice((v) => v.closeRoom(st.channelId, this.square));
     }));
     if (reason !== null) {
-      this.announce(`集合！${reason ? `（${reason}）` : ''}大家回到广场，${this.game?.avalon ? '队长准备组队。' : '现在可以提名了。'}`, 'day');
+      this.announce(`集合！${reason ? `（${reason}）` : ''}大家回到广场，现在可以提名了。`, 'day');
       this.narrate('gather');
-      // 自动说书：回到广场后开放提名（阿瓦隆：轮到队长组队）
-      if (this.game?.avalon) this.later(this.settings.pauseMs / 2, () => this.av.afterTalk());
-      else if (!this.stId) this.later(this.settings.pauseMs / 2, () => this.openNominations());
+      // 自动说书：回到广场后开放提名
+      if (!this.stId) this.later(this.settings.pauseMs / 2, () => this.openNominations());
     }
   }
 
