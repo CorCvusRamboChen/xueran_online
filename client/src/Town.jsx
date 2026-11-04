@@ -165,6 +165,7 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
               {marks[p.id]?.note && <i className="token-note" title={marks[p.id].note}>记</i>}
               {vote && yes.has(p.id) && <span className={`raised ${locked.has(p.id) ? 'locked' : ''}`}>举</span>}
               {inRoom.has(p.id) && <span className="mark whisper">密谈</span>}
+              {s.ww?.sheriff === p.id && <span className="mark sheriff" title="警长">警长</span>}
               <span className="marks">
                 {p.poisoned && <i className="m-phy">毒</i>}
                 {p.drunk && <i className="m-psy">醉</i>}
