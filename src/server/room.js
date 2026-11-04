@@ -1489,16 +1489,59 @@ export class Room {
     const late = g.aliveCount() <= Math.ceil(g.players.length / 2);
     if (!harpy && !lastChance && !g.st.roll('seat7Speak', { nominated, late }, { who: SEAT7 })) return;
     s.spoke = g.day;
-    let text;
-    if (harpy) { const { target } = g.harpyClaim(SEAT7); text = `${g.name(target)} 是邪恶的，我很确定。`; } else text = await this.seat7Text(p, { nominated });
+    if (harpy) {
+      const { target } = g.harpyClaim(SEAT7);
+      return this.seat7Say(g, `${g.name(target)} 是邪恶的，我很确定。`, '（被鹰身女妖弄疯，替它指认）');
+    }
+    // 灯神规则：这次发言可以公开、可以私聊，也可以拿来提名（官方百科）。说书人按它的阵营挑一种
+    const how = nominated ? 'public' : this.seat7Mode(p);
+    if (how === 'nominate') {
+      const t = this.seat7Target(p);
+      try {
+        this.nominate(SEAT7, t.id);
+        return this.seat7Say(g, await this.seat7Text(p, { accuse: t }), `（提名了 ${g.name(t.id)}，这就是它的发言）`);
+      } catch { /* 现在提名不了（台上有人、时间到了……）：改成公开说 */ }
+    }
+    if (how === 'private') {
+      const t = this.seat7Target(p);
+      const text = await this.seat7Text(p, { whisper: t });
+      if (this.game !== g) return;
+      this.tell(t.id, `🪑 **7 号空座**私下对你说（说书人替它说，每局只有这一次，可能是假的）：「${text}」`, 'storyteller');
+      this.announce(`🪑 7 号空座私下找 **${g.name(t.id)}** 说了几句话（它每局只能说这一次）。`, 'day');
+      g.record('st', `7 号空座用掉了唯一一次发言（私聊 ${g.tag(t.id)}）：${text}`);
+      this.changed();
+      return;
+    }
+    return this.seat7Say(g, await this.seat7Text(p, { nominated }), nominated ? '（被提名时辩护）' : '');
+  }
+
+  seat7Say(g, text, why) {
     if (this.game !== g) return;
     this.announce(`🪑 **7 号空座**（说书人替它发言，每局只有这一次）：「${text}」`, 'vote');
-    g.record('st', `7 号空座用掉了唯一一次发言${nominated ? '（被提名时辩护）' : ''}：${text}`);
+    g.record('st', `7 号空座用掉了唯一一次发言${why}：${text}`);
     this.changed();
   }
 
+  /** 发言方式：邪恶的有时拿来提名一个善良玩家，有时私下找人说（编谎话）；善良的有时私下把信息告诉一个人。 */
+  seat7Mode(p) {
+    const g = this.game;
+    const r = Math.random();
+    const canNominate = g.visAlive(p) && !g.nominators.has(SEAT7) && !g.executedToday && !!this.noms && !this.noms.timeUp && !this.pendingNom && !this.vote;
+    const how = g.evilOf(p) ? (canNominate && r < 0.35 ? 'nominate' : r < 0.6 ? 'private' : 'public') : (r < 0.3 ? 'private' : 'public');
+    g.st.decide('seat7Mode', { who: SEAT7, options: ['public', 'private', 'nominate'], chosen: how });
+    return how;
+  }
+  /** 找谁：邪恶的找一个善良玩家（提名、或者私下骗他），善良的找一个存活的人说（不知道谁好谁坏，随便挑）。 */
+  seat7Target(p) {
+    const g = this.game;
+    const live = g.alive().filter((q) => q.id !== p.id && g.visAlive(q) && !g.nominees.has(q.id));
+    const good = live.filter((q) => !g.evilOf(q));
+    const pool = g.evilOf(p) && good.length ? good : live.length ? live : g.alive().filter((q) => q.id !== p.id);
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
   /** 7 号空座这次说什么：先问大模型（只给它知道的和公开的事），不行就按规则：善良说真话，邪恶报一个伪装并把怀疑引到善良玩家身上。 */
-  async seat7Text(p, { nominated }) {
+  async seat7Text(p, { nominated = false, accuse = null, whisper = null } = {}) {
     const g = this.game;
     const evil = g.evilOf(p);
     const notes = g.seat7?.notes ?? [];
@@ -1507,7 +1550,7 @@ export class Room {
     const pub = g.timeline.filter((e) => ['death', 'nominate', 'vote', 'slay'].includes(e.kind)).map((e) => `[${e.when}] ${e.text.replace(/（[^）]*）/g, '')}`);
     const claims = Object.entries(g.claims ?? {}).map(([id, r]) => `${g.name(id)} 公开声称是${ROLES[r]?.name ?? r}`);
     const ctx = [
-      `7 号座位：${evil ? '邪恶' : '善良'}阵营，它以为自己的角色是${shown}。${nominated ? '它现在正被提名，这段话是它的辩护。' : ''}`,
+      `7 号座位：${evil ? '邪恶' : '善良'}阵营，它以为自己的角色是${shown}。${nominated ? '它现在正被提名，这段话是它的辩护。' : ''}${accuse ? `它刚刚提名了 ${g.name(accuse.id)}，这段话是提名理由。` : ''}${whisper ? `这是私聊，只有 ${g.name(whisper.id)} 听得到。` : ''}`,
       notes.length ? `它夜里得到的信息：\n${notes.join('\n')}` : '它夜里没有得到信息。',
       evil ? `它的同伴：${mates.join('、') || '不知道'}${ROLES[p.role].team === 'demon' || g.bluffsShared ? `；可用的伪装：${(g.bluffs ?? []).map((r) => ROLES[r].name).join('、')}` : ''}` : '',
       `存活：${g.alive().map((q) => g.name(q.id)).join('、')}`,
@@ -1527,7 +1570,7 @@ export class Room {
     const knowsBluffs = ROLES[p.role].team === 'demon' || g.bluffsShared; // 爪牙不知道恶魔的伪装：自己挑一个剧本里不显眼的善良角色
     const bluff = knowsBluffs && g.bluffs?.length ? ROLES[g.bluffs[0]].name : ROLES[rolesOf(g.script).filter((r) => ['townsfolk', 'outsider'].includes(ROLES[r].team) && !g.players.some((q) => q.role === r))[0] ?? 'drunk'].name;
     const good = others.filter((q) => !g.evilOf(q));
-    const blame = good.length ? pick(good) : null;
+    const blame = accuse ?? (good.length ? pick(good) : null);
     return `我是${bluff}。${blame ? `我很怀疑 ${g.name(blame.id)}，大家看看他的说法。` : ''}${nominated ? '别处决我。' : ''}`;
   }
 

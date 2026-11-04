@@ -250,7 +250,7 @@ export class AvalonTable {
     r.announce(`好人完成了三次任务！最后的机会：刺客 **${g.name(a)}** 站出来，和同伴商量，指认谁是梅林。指对了坏人获胜，指错了好人获胜。`, 'vote');
     this.story('刺杀', '刺客从阴影里走出来。他只有一次机会。');
     this.arm('assassin');
-    const humans = g.knowledge(a).some((k) => !r.isFake(k.id)); // 有真人同伴：多等一会儿他们的建议
+    const humans = g.evilIds().some((id) => id !== a && !r.isFake(id)); // 有真人同伴（奥伯伦也算）：多等一会儿他们的建议
     if (r.isFake(a)) r.later(humans ? this.wait(40_000) : this.wait(6000, 12000), () => { if (g.stage === 'assassin') this.assassinate(a, this.botMerlinGuess()); });
   }
 
@@ -509,8 +509,8 @@ export class AvalonTable {
         // 刺杀阶段：刺客看到同伴的建议；同伴看到自己给的建议
         suggestions: stage === 'assassin' && isAssassin ? g.suggest : null,
         mySuggest: stage === 'assassin' ? g.suggest?.[uid] ?? null : null,
-        canSuggest: stage === 'assassin' && !isAssassin && g.knowledge(g.assassinId()).some((k) => k.id === uid),
-        assassinOptions: stage === 'assassin' && (isAssassin || g.knowledge(g.assassinId()).some((k) => k.id === uid)) ? g.assassinOptions() : null, // 刺客能指认的人（同伴出主意也只能从这里挑）
+        canSuggest: stage === 'assassin' && !isAssassin && g.evilIds().includes(uid),
+        assassinOptions: stage === 'assassin' && g.evilIds().includes(uid) ? g.assassinOptions() : null, // 刺客能指认的人（坏人亮了身份一起商量，奥伯伦也在）
         inbox: r.inbox.get(uid) ?? [],
       };
     }

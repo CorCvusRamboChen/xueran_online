@@ -300,3 +300,23 @@ test('科学怪人给恶魔的能力：恶魔醉了照样有效', () => {
   assert.ok(g.abilityOn(g.get('p7'), 'soldier'));
   assert.equal(g.lieMode(g.get('p7')), null);
 });
+
+test('7 号空座的发言方式：公开、私聊（只有那个人收到）、提名（邪恶的拿来提名善良玩家）', async () => {
+  const room = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { ...FAST, mode: 'auto', shuffle: false, script: 'bs7' } });
+  room.judgeReady = () => false;
+  for (const [id, name] of [['u1', '阿一'], ['u2', '阿二']]) room.users.set(id, { id, name, avatar: null });
+  await room.act('u1', 'join'); await room.act('u2', 'join'); await room.act('u1', 'addBots', { count: 5 });
+  await room.act('u1', 'start');
+  const g = room.game;
+  g.phase = 'day'; g.day = 1;
+  const told = [];
+  room.tell = (id, text) => told.push({ id, text });
+  g.st.roll = () => true;
+  room.seat7Mode = () => 'private';
+  room.seat7Target = () => g.get('u2');
+  await room.seat7Speak();
+  assert.ok(told.some((t) => t.id === 'u2' && /7 号空座\*\*私下对你说/.test(t.text)));
+  assert.ok(g.timeline.some((e) => /私聊/.test(e.text)));
+  assert.ok(g.seat7.spoke);
+  await room.teardown();
+});

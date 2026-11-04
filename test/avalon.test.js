@@ -174,14 +174,17 @@ test('三次任务成功进入刺杀：刺客指对梅林坏人赢，指错好�
   assert.equal(g2.winner, 'evil');
 });
 
-test('刺客不认识奥伯伦：可以指认他（指错，好人赢）', () => {
+test('刺杀阶段坏人亮明身份一起商量（大众玩法）：奥伯伦也能出主意，刺客不会指到他', () => {
   const g = started(['merlin', 'percival', 'loyal', 'loyal', 'assassin', 'morgana', 'oberon']);
   quest(g, ['p1', 'p2'], []);
   quest(g, ['p1', 'p2', 'p3'], []);
   quest(g, ['p1', 'p2', 'p3'], []);
-  assert.ok(g.assassinOptions().includes('p7'));
+  assert.ok(!g.assassinOptions().includes('p7'));
   assert.ok(!g.assassinOptions().includes('p6'));
-  g.assassinate('p5', 'p7');
+  g.suggestTarget('p7', 'p1');
+  assert.equal(g.suggest.p7, 'p1');
+  assert.throws(() => g.assassinate('p5', 'p7'), /只能指认好人/);
+  g.assassinate('p5', 'p2');
   assert.equal(g.winner, 'good');
 });
 

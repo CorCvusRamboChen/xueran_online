@@ -298,20 +298,20 @@ export class Avalon {
   }
 
   assassinId() { return this.idsWith('assassin')[0] ?? null; }
-  /** 刺客能指认谁：规则书写的是「指认一名好人」——自己和认识的同伴不能选（不认识的奥伯伦选得到，选了就是指错）。 */
+  /** 刺杀阶段的坏人：大家通行的玩法是这时坏人亮明身份一起商量，奥伯伦也在内。 */
+  evilIds() { return this.players.map((p) => p.id).filter((id) => !isGood(this.roleOf(id))); }
+  /** 刺客能指认谁：规则书写的是「指认一名好人」——坏人（包括亮了身份的奥伯伦）都不能选。 */
   assassinOptions() {
-    const a = this.assassinId();
-    const allies = new Set([a, ...this.knowledge(a).map((k) => k.id)]);
-    return this.players.map((p) => p.id).filter((id) => !allies.has(id));
+    const evil = new Set(this.evilIds());
+    return this.players.map((p) => p.id).filter((id) => !evil.has(id));
   }
 
-  /** 坏人同伴给刺客出主意（只有刺客认识的同伴能出，刺客自己看得到）。 */
+  /** 坏人给刺客出主意（所有坏人都能出，奥伯伦也算；刺客自己看得到）。 */
   suggestTarget(id, target) {
     this.require('assassin');
-    const allies = this.knowledge(this.assassinId()).map((k) => k.id);
-    if (!allies.includes(id)) throw new Error('只有刺客的同伴能出主意');
+    if (id === this.assassinId() || !this.evilIds().includes(id)) throw new Error('只有刺客的同伴能出主意');
     if (target == null) delete this.suggest[id];
-    else if (!this.assassinOptions().includes(target)) throw new Error('只能建议好人（你们认识的同伴不用猜）');
+    else if (!this.assassinOptions().includes(target)) throw new Error('只能建议好人（坏人这时已经互相亮明身份）');
     else this.suggest[id] = target;
   }
 
@@ -319,7 +319,7 @@ export class Avalon {
   assassinate(id, target) {
     this.require('assassin');
     if (id !== this.assassinId()) throw new Error('只有刺客能指认梅林');
-    if (!this.assassinOptions().includes(target)) throw new Error('只能指认好人（你和你认识的同伴不能选）');
+    if (!this.assassinOptions().includes(target)) throw new Error('只能指认好人（坏人这时已经互相亮明身份）');
     const merlin = this.roleOf(target) === 'merlin';
     this.guess = { by: id, target, merlin };
     this.note(`刺客 ${this.name(id)} 指认 ${this.name(target)} 是梅林——${merlin ? '指对了' : '指错了'}`);

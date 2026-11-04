@@ -29,7 +29,7 @@ export function AvalonGame({ s, act, ask, parts: { RoamActions, History, SoundTo
   const assassinMe = a.stage === 'assassin' && a.assassin === s.me;
   // 这一轮做哪个任务：平常服务器定好了；自选任务时队长先在面板里挑
   const questNo = a.questNo ?? (a.stage === 'propose' && leaderMe ? pickQuest : null);
-  // 现在点肖像是在选什么：队长选队员 / 湖中仙女选人 / 刺客指认 / 同伴给刺客出主意（刺客只能指认好人：自己和认识的同伴不在里面）
+  // 现在点肖像是在选什么：队长选队员 / 湖中仙女选人 / 刺客指认 / 同伴给刺客出主意（刺客只能指认好人：这时坏人亮明身份一起商量，坏人都不在里面，奥伯伦也算）
   const pickSpec = s.phase === 'ended' || roaming ? null
     : a.stage === 'propose' && leaderMe ? (questNo ? { count: a.quests[questNo - 1].size, options: s.players.map((p) => p.id), what: 'team' } : null)
       : a.stage === 'lady' && a.lady?.options ? { count: 1, options: a.lady.options, what: 'lady' }
