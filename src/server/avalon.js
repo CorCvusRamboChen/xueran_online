@@ -9,7 +9,7 @@ export const AVALON_SETTINGS = {
   avalonRoles: { merlin: true, percival: true, morgana: true, mordred: true, oberon: false }, // 可选角色（merlin：梅林和刺客一起）
   avalonTargeting: false, // 官方可选规则「自选任务」
   avalonLady: false,      // 湖中仙女（官方的可选规则，推荐 7 人及以上）
-  avalonRoamMinutes: 2,   // 每轮任务开始前自由活动几分钟（0 = 不自由活动，直接在广场组队）
+  avalonRoamMinutes: 0,   // 每轮任务开始前自由活动几分钟（0 = 不自由活动，一直在圆桌组队；用户 2026-11-05 要一直停在会议界面）
 };
 
 // 各步的时限（秒）：到点没动作的替他随机选，和血染夜里选人一样
@@ -102,9 +102,9 @@ export class AvalonTable {
   }
 
   /** 停一下再做下一步（开票、翻任务票之后）：记在对局里，重启后接着做。 */
-  then(next) {
+  then(next, ms = this.pauseMs) {
     this.g.next = next;
-    this.room.later(this.pauseMs, () => this.runNext());
+    this.room.later(ms, () => this.runNext());
   }
 
   runNext() {
@@ -220,7 +220,7 @@ export class AvalonTable {
     const out = g.reveal();
     r.announce(`第 ${out.round} 轮${g.options.targeting ? `（任务 ${out.quest}）` : '任务'}${out.result === 'success' ? '**成功**' : '**失败**'}：${out.fails} 张失败票。现在 ${g.wins('success')} 次成功 · ${g.wins('fail')} 次失败。`, out.result === 'success' ? 'day' : 'death');
     if (g.winner) return this.finish();
-    this.then(g.stage === 'assassin' ? 'assassin' : g.stage === 'lady' ? 'lady' : 'round');
+    this.then(g.stage === 'assassin' ? 'assassin' : g.stage === 'lady' ? 'lady' : 'round', this.pauseMs * 2); // 客户端要一张张翻任务票，多停一会儿
   }
 
   openLady() {

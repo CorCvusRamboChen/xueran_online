@@ -1,6 +1,6 @@
 // 娱乐模式「阿瓦隆」的界面：身份确认、任务记录板（5 个任务格 + 否决计数）、队长选队员、全体投票、出任务票、
 // 湖中仙女、刺杀指认。场景沿用血染的广场座位圈和小镇地图（自由活动），右栏沿用记录面板。规则在 src/engine/avalon.js。
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Town } from './Town.jsx';
 import { TownMap } from './TownMap.jsx';
 import { Tag, Panel, Btn, Stat, HudBar } from './ui.jsx';
@@ -49,20 +49,26 @@ export function AvalonGame({ s, act, ask, parts: { RoamActions, History, SoundTo
 
   // 座位圈上的小标签：队长、队员、谁投了 / 出了票、开票后每个人的票
   const last = a.proposals.at(-1);
-  const showLast = last && a.stage === 'propose' && last.round === a.round; // 这一轮被否决的那次开票：每个人的票挂在座位上，直到下一次投票
+  // 最近一次开票的票型一直挂在座位上：被否决后到下一次组队之前、通过后整个出任务阶段
+  const showLast = last && last.round === a.round && ((a.stage === 'propose' && !last.approved) || a.stage === 'quest');
   const tagsOf = (p) => {
     const t = [];
     if (a.leader === p.id && a.stage !== 'assassin') t.push('队长');
     if (a.lady?.holder === p.id && a.stage !== 'ended') t.push('湖中仙女');
-    if (a.team.includes(p.id) && ['vote', 'quest'].includes(a.stage)) t.push('队员');
+    if (a.team.includes(p.id) && a.stage === 'vote') t.push('队员');
     if (a.stage === 'vote' && a.voted.includes(p.id)) t.push('已投');
+    if (showLast && p.id in last.votes) t.push(last.votes[p.id] ? '赞成' : '反对');
     if (a.stage === 'quest' && a.played.includes(p.id)) t.push('已出票');
     if (a.stage === 'reveal' && a.ready.includes(p.id)) t.push('看好了');
     if (a.stage === 'assassin' && a.assassin === p.id) t.push('刺客');
-    if (showLast && p.id in last.votes) t.push(last.votes[p.id] ? '赞成' : '反对');
     return t;
   };
-  const ring = { ...s, players: s.players.map((p) => ({ ...p, tags: tagsOf(p) })) };
+  // 座位下面一排小格：这个人上过哪几次车（格子里是任务号，蓝 = 成功、红 = 失败、金框 = 这次正在出任务）
+  const pipsOf = (p) => [
+    ...a.quests.map((q, i) => (q.result && q.team?.includes(p.id) ? { k: i + 1, c: q.result, title: `任务 ${i + 1} ${q.result === 'success' ? '成功' : `失败（${q.fails} 张失败票）`}` } : null)).filter(Boolean),
+    ...(a.stage === 'quest' && a.team.includes(p.id) && questNo ? [{ k: questNo, c: 'now', title: `正在做任务 ${questNo}` }] : []),
+  ];
+  const ring = { ...s, players: s.players.map((p) => ({ ...p, tags: tagsOf(p), pips: pipsOf(p) })) };
 
   const secs = useCountdown(roaming ? s.roam.until : s.deadline);
   const timer = secs != null ? { label: roaming ? '自由活动结束' : `${STAGE_NAME[a.stage]}倒计时`, secs, urgent: secs <= 10 } : null;
@@ -87,14 +93,18 @@ export function AvalonGame({ s, act, ask, parts: { RoamActions, History, SoundTo
             <QuestBoard a={a} questNo={questNo} />
           </Town>
         )}
+        <VoteFlash a={a} s={s} />
+        <QuestReveal a={a} s={s} name={name} />
         <SoundToggles onFixVoice={me && s.phase !== 'ended' ? () => act('fixVoice') : null} />
         <HudBar items={items} active={tab} onPick={(id) => setTab((cur) => (cur === id ? null : id))} label={STAGE_NAME[a.stage]} timer={timer} />
       </section>
 
       <section className={`dock ${hot ? 'dock-hot' : ''}`}>
+        {me && a.stage !== 'reveal' && s.phase !== 'ended' && <MeBar me={me} name={name} />}
         {roaming && <TalkCard s={s} a={a} name={name} />}
         {roaming ? <RoamActions s={s} act={act} name={name} face={face} setMode={() => {}} />
           : <Stage s={s} a={a} me={me} av={av} act={act} name={name} picked={picked} pickSpec={pickSpec} g={g} questNo={questNo} setPickQuest={setPickQuest} />}
+        {a.stage !== 'reveal' && <CarLog a={a} g={g} />}
         {s.isHost && s.phase !== 'ended' && (
           <div className="link-row av-host">
             {quit ? <button type="button" onClick={() => act('end')} onMouseLeave={() => setQuit(false)}>确定结束这局、回到大厅</button>
@@ -216,10 +226,12 @@ function Stage({ s, a, me, av, act, name, picked, pickSpec, g, questNo, setPickQ
               <Chips ids={picked} need={q.size} name={name} />
               <div className="btn-row"><Btn kind="primary" disabled={picked.length !== q.size} onClick={() => av('propose', { team: picked, quest: questNo })}>提名这支队伍</Btn></div>
             </>}
+            <NextLeaders s={s} a={a} />
           </Panel>
         ) : (
           <Panel title={`第${cnNum(a.round)}轮 · 组队`} tone="light">
             <p className="lead">队长 <b>{name(a.leader)}</b> 正在{q ? `挑 ${q.size} 名队员` : '挑做哪个任务、再挑队员'}{a.attempt > 1 ? `（第 ${a.attempt} 次组队）` : ''}。在语音里说说你想让谁去。</p>
+            <NextLeaders s={s} a={a} />
           </Panel>
         )}
       </>
@@ -233,6 +245,7 @@ function Stage({ s, a, me, av, act, name, picked, pickSpec, g, questNo, setPickQ
         <p className="lead">队长 <b>{name(a.leader)}</b> 提名{qLabel ? `去做${qLabel}${q.need > 1 ? '（要 2 张失败票才失败）' : ''}` : ''}：{a.team.map((id) => <span key={id} className="chip">{name(id)}</span>)}</p>
         <p className="muted">所有人同时投，投完一起公开。过半赞成就组队成功。{a.attempt === a.maxRejects ? '这是这一轮第 5 次组队：再被否决，坏人直接获胜。' : ''}</p>
         <div className="stats"><Stat value={a.voted.length} label="已投" color="var(--opt)" /><Stat value={Math.floor(s.players.length / 2) + 1} label="通过要赞成" color="var(--cream)" /></div>
+        <NextLeaders s={s} a={a} />
         {me && (
           <div className="btn-row av-vote">
             <Btn kind={mine === true ? 'primary' : 'secondary'} onClick={() => av('vote', { yes: true })}>赞成</Btn>
@@ -314,6 +327,118 @@ function Stage({ s, a, me, av, act, name, picked, pickSpec, g, questNo, setPickQ
     );
   }
   return null;
+}
+
+/** 这一轮接下来的队长：被否决一次换下一个座位，第 5 次组队的人一般叫「最后一车」。 */
+function NextLeaders({ s, a }) {
+  const i = s.players.findIndex((p) => p.id === a.leader);
+  if (i < 0) return null;
+  const left = a.maxRejects - a.attempt;
+  const list = Array.from({ length: left + 1 }, (_, k) => ({ p: s.players[(i + k) % s.players.length], n: a.attempt + k }));
+  return (
+    <p className="av-next">
+      <span>队长顺序</span>
+      {list.map(({ p, n }) => <b key={n} className={`${n === a.attempt ? 'now' : ''} ${n === a.maxRejects ? 'last' : ''}`} title={n === a.maxRejects ? '第 5 次组队：再被否决坏人直接获胜' : `第 ${n} 次组队`}>{p.seat}号</b>)}
+    </p>
+  );
+}
+
+/** 操作区最上面一条：我是谁、我看到了谁（不用切到「身份」页）。 */
+function MeBar({ me, name }) {
+  const r = me.role;
+  const label = r.id === 'merlin' ? '坏人' : r.id === 'percival' ? '梅林 / 莫甘娜' : '同伴';
+  return (
+    <div className={`av-me ${r.good ? 'good' : 'evil'}`}>
+      <b>{r.name}</b>
+      {me.sees.length > 0 && <span>{label}：{me.sees.map((k) => name(k.id).replace(/ .*/, '')).join(' ')}</span>}
+      {me.ladySeen.map((x) => <span key={x.id} className={x.good ? 'good' : 'evil'}>湖中仙女：{name(x.id).replace(/ .*/, '')} {x.good ? '好人' : '坏人'}</span>)}
+    </div>
+  );
+}
+
+/** 车队记录：每次任务谁上了车、谁当队长、几张失败；这一轮被否决的组队也列着。一直挂在操作区下面。 */
+function CarLog({ a, g }) {
+  const seat = (id) => g(id)?.seat ?? '?';
+  const done = a.quests.map((q, i) => ({ q, k: i + 1 })).filter((x) => x.q.result).sort((x, y) => (x.q.round ?? x.k) - (y.q.round ?? y.k));
+  const rejected = a.proposals.filter((pr) => pr.round === a.round && !pr.approved);
+  if (!done.length && !rejected.length) return null;
+  return (
+    <Panel title="车队记录" tone="light" className="av-cars">
+      {done.map(({ q, k }) => (
+        <div key={k} className={`av-car ${q.result}`}>
+          <i>{q.result === 'success' ? '成' : '败'}</i>
+          <span className="av-car-q">{a.targeting ? `任务${k}` : `第${cnNum(k)}轮`}</span>
+          <span className="av-car-seats">{q.team.map((id) => <b key={id}>{seat(id)}</b>)}</span>
+          <small>队长 {seat(q.leader)}号{q.attempt > 1 ? ` · 第 ${q.attempt} 次组队` : ''} · {q.fails} 张失败</small>
+        </div>
+      ))}
+      {rejected.map((pr) => (
+        <div key={pr.attempt} className="av-car rejected">
+          <i>否</i>
+          <span className="av-car-q">本轮第 {pr.attempt} 次</span>
+          <span className="av-car-seats">{pr.team.map((id) => <b key={id}>{seat(id)}</b>)}</span>
+          <small>队长 {seat(pr.leader)}号 · {pr.yes} 赞成</small>
+        </div>
+      ))}
+    </Panel>
+  );
+}
+
+/** 开票时画面正中闪一下结果：通过 / 否决、几比几。 */
+function VoteFlash({ a, s }) {
+  const [rec, setRec] = useState(null);
+  const seen = useRef(a.proposals.length);
+  useEffect(() => {
+    if (a.proposals.length > seen.current) setRec(a.proposals.at(-1));
+    seen.current = a.proposals.length;
+  }, [a.proposals.length]);
+  useEffect(() => { if (!rec) return undefined; const t = setTimeout(() => setRec(null), 2600); return () => clearTimeout(t); }, [rec]);
+  if (!rec) return null;
+  return (
+    <div className={`av-flash ${rec.approved ? 'ok' : 'no'}`} onClick={() => setRec(null)} role="status">
+      <b>{rec.approved ? '组队通过' : '组队被否决'}</b>
+      <span>{rec.yes} 赞成 · {s.players.length - rec.yes} 反对</span>
+    </div>
+  );
+}
+
+/** 任务结果：翻开洗过的任务票（一张张翻），最后盖上「任务成功 / 任务失败」。所有人一起看。 */
+function QuestReveal({ a, s, name }) {
+  const [show, setShow] = useState(null);
+  const seen = useRef(a.quests.map((q) => q.result));
+  const key = a.quests.map((q) => q.result ?? '').join();
+  useEffect(() => {
+    const i = a.quests.findIndex((q, k) => q.result && !seen.current[k]);
+    if (i >= 0) setShow({ i, q: a.quests[i] });
+    seen.current = a.quests.map((q) => q.result);
+  }, [key]);
+  const n = show?.q.team?.length ?? 0;
+  useEffect(() => { if (!show) return undefined; const t = setTimeout(() => setShow(null), 3200 + n * 550); return () => clearTimeout(t); }, [show]);
+  if (!show) return null;
+  const { q, i } = show;
+  // 洗过的票：失败票插在固定的随机位置（同一个任务每个人看到的顺序一样，不代表谁出的）
+  const order = Array.from({ length: n }, (_, k) => k).sort((x, y) => ((x * 7 + i * 3) % 11) - ((y * 7 + i * 3) % 11));
+  const cards = order.map((k) => k < q.fails);
+  return (
+    <div className="av-reveal" onClick={() => setShow(null)} role="status">
+      <div className="av-reveal-box">
+        <small>{a.targeting ? `任务 ${i + 1}` : `第${cnNum(i + 1)}轮任务`} · 翻开任务票</small>
+        <div className="av-reveal-cards">
+          {cards.map((fail, k) => (
+            <div key={k} className="av-flip" style={{ animationDelay: `${0.3 + k * 0.55}s` }}>
+              <div className="back">?</div>
+              <div className={`front ${fail ? 'fail' : 'success'}`}>{fail ? '失败' : '成功'}</div>
+            </div>
+          ))}
+        </div>
+        <div className={`av-stamp ${q.result}`} style={{ animationDelay: `${0.5 + n * 0.55}s` }}>
+          {q.result === 'success' ? '任务成功' : '任务失败'}
+          <span>{q.fails} 张失败票{q.need > 1 ? `（要 ${q.need} 张才失败）` : ''}</span>
+        </div>
+        <p className="av-reveal-team">车上：{q.team.map((id) => name(id)).join('、')}</p>
+      </div>
+    </div>
+  );
 }
 
 function Chips({ ids, need, name }) {
@@ -480,7 +605,7 @@ export function AvalonSettings({ st, set, n, Toggle, Select }) {
           <h4>流程</h4>
           <Toggle label="湖中仙女（第 2、3、4 轮后查一个人的阵营）" on={!!st.avalonLady} onChange={(v) => set({ avalonLady: v })} />
           <Toggle label="自选任务（队长挑做哪个任务）" on={!!st.avalonTargeting} onChange={(v) => set({ avalonTargeting: v })} />
-          <Select label="每轮任务前自由活动" value={st.avalonRoamMinutes ?? 2} options={[0, 1, 2, 3, 5]} unit="分钟" zero="不自由活动" onChange={(v) => set({ avalonRoamMinutes: v })} />
+          <Select label="每轮任务前自由活动" value={st.avalonRoamMinutes ?? 0} options={[0, 1, 2, 3, 5]} unit="分钟" zero="不自由活动" onChange={(v) => set({ avalonRoamMinutes: v })} />
           <Toggle label="随机排座位" on={st.shuffle} onChange={(v) => set({ shuffle: v })} />
           <p className="muted setting-note">队长组队 2 分钟、投票 1 分钟、出任务票 45 秒，到点没动作的替他随机选。湖中仙女官方推荐 7 人及以上用。自选任务是规则书里的可选规则：每个任务只做一次，第 5 个要先成功两个，7 人起第 4 个仍要 2 张失败票。</p>
         </div>

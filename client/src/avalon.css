@@ -87,3 +87,72 @@
 .av-qpick button:disabled { opacity: .35; cursor: not-allowed; }
 .av-quest.open { border-style: dashed; border-color: var(--mot); }
 .av-warn { color: var(--mot); }
+
+/* 座位下面：上过哪几次车（任务号；蓝成功、红失败、金框正在做） */
+.token-pips { display: flex; gap: 2px; justify-content: center; margin-top: 2px; }
+.token-pips i { min-width: 14px; height: 14px; padding: 0 2px; font: 900 10px/14px var(--cond); font-style: normal; text-align: center; color: #fff; }
+.token-pips i.success { background: var(--int); color: #0b1a1f; }
+.token-pips i.fail { background: var(--phy); }
+.token-pips i.now { background: #111; color: var(--mot); box-shadow: inset 0 0 0 1.5px var(--mot); }
+
+/* 操作区顶上：我是谁、看到了谁 */
+.av-me { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 6px 10px; margin-bottom: 8px; border-left: 4px solid var(--int); background: rgba(95, 184, 207, .08); font: 700 12px var(--sans); }
+.av-me.evil { border-color: var(--phy); background: rgba(219, 84, 68, .08); }
+.av-me b { font: 900 15px var(--serif); }
+.av-me span { color: var(--muted); }
+.av-me span.evil { color: var(--phy); }
+.av-me span.good { color: var(--int); }
+
+/* 队长顺序 */
+.av-next { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 8px 0 0; font: 700 12px var(--sans); }
+.av-next span { color: var(--muted); margin-right: 4px; }
+.av-next b { padding: 0 6px; border: 1px solid rgba(233, 228, 216, .35); color: var(--cream); font-weight: 900; }
+.av-next b.now { background: var(--mot); border-color: var(--mot); color: #1d1606; }
+.av-next b.last { border-color: var(--phy); color: var(--phy); }
+.av-next b.now.last { background: var(--phy); color: #fff; }
+
+/* 车队记录 */
+.av-cars { margin-top: 10px; }
+.av-car { display: grid; grid-template-columns: 22px auto 1fr; align-items: center; gap: 2px 8px; padding: 4px 0; border-top: 1px solid var(--line); }
+.av-car:first-of-type { border-top: 0; }
+.av-car > i { grid-row: span 2; width: 22px; height: 22px; border-radius: 50%; font: 900 12px/22px var(--sans); font-style: normal; text-align: center; color: #fff; background: var(--phy); }
+.av-car.success > i { background: var(--int); color: #0b1a1f; }
+.av-car.rejected > i { background: transparent; border: 1px dashed var(--muted); color: var(--muted); line-height: 20px; }
+.av-car-q { font: 900 12px var(--sans); }
+.av-car-seats { display: flex; flex-wrap: wrap; gap: 3px; }
+.av-car-seats b { min-width: 20px; padding: 0 3px; background: var(--paper); color: #111; font: 900 11px/18px var(--cond); text-align: center; }
+.av-car.rejected .av-car-seats b { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--muted); }
+.av-car small { grid-column: 2 / 4; color: var(--muted); font: 700 11px var(--sans); }
+
+/* 开票闪一下 */
+.av-flash { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); z-index: 30; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 26px; background: rgba(14, 16, 16, .92); border: 2px solid var(--int); cursor: pointer; animation: av-pop .25s ease-out; }
+.av-flash.no { border-color: var(--phy); }
+.av-flash b { font: 900 24px var(--serif); letter-spacing: 4px; color: var(--int); }
+.av-flash.no b { color: var(--phy); }
+.av-flash span { font: 700 13px var(--sans); color: var(--cream); }
+
+/* 翻任务票 */
+.av-reveal { position: absolute; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; background: rgba(5, 6, 6, .72); cursor: pointer; animation: av-fade .25s ease-out; }
+.av-reveal-box { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 16px; max-width: 100%; }
+.av-reveal-box > small { font: 900 13px var(--sans); letter-spacing: 3px; color: var(--muted); }
+.av-reveal-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; perspective: 700px; }
+.av-flip { position: relative; width: 70px; height: 100px; transform-style: preserve-3d; animation: av-flip .45s ease-out both; }
+.av-flip > div { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; backface-visibility: hidden; border: 2px solid; font: 900 18px var(--serif); letter-spacing: 2px; }
+.av-flip .back { background: repeating-linear-gradient(45deg, #2a2620 0 6px, #1d1a16 6px 12px); border-color: #c9a227; color: #c9a227; font-size: 28px; }
+.av-flip .front { transform: rotateY(180deg); }
+.av-flip .front.success { background: var(--int); border-color: #d8f2f8; color: #0b1a1f; }
+.av-flip .front.fail { background: var(--phy); border-color: #ffd9d3; color: #fff; }
+.av-stamp { display: flex; flex-direction: column; align-items: center; padding: 6px 22px; border: 3px solid; font: 900 34px var(--serif); letter-spacing: 8px; opacity: 0; animation: av-stamp .35s ease-out both; }
+.av-stamp.success { color: var(--int); border-color: var(--int); }
+.av-stamp.fail { color: var(--phy); border-color: var(--phy); }
+.av-stamp span { font: 700 13px var(--sans); letter-spacing: 1px; color: var(--cream); }
+.av-reveal-team { margin: 0; font: 700 13px var(--sans); color: var(--cream); text-align: center; }
+@keyframes av-flip { from { transform: rotateY(0); } to { transform: rotateY(180deg); } }
+@keyframes av-stamp { from { opacity: 0; transform: scale(1.6) rotate(-6deg); } to { opacity: 1; transform: scale(1) rotate(-3deg); } }
+@keyframes av-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes av-pop { from { opacity: 0; transform: translateX(-50%) scale(.85); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+@media (max-width: 520px) {
+  .av-flip { width: 52px; height: 76px; }
+  .av-flip > div { font-size: 14px; }
+  .av-stamp { font-size: 26px; letter-spacing: 5px; }
+}

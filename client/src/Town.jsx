@@ -180,6 +180,7 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
             {!p.roleName && (p.tags?.length > 0 || p.nominated || p.nominator) && (
               <div className="token-tags">{(p.tags ?? [p.nominator && '已提名', p.nominated && '被提名']).filter(Boolean).join(' · ')}</div>
             )}
+            {p.pips?.length > 0 && <div className="token-pips">{p.pips.map((x, i) => <i key={i} className={x.c} title={x.title}>{x.k}</i>)}</div>}
           </button>
         );
       })}
