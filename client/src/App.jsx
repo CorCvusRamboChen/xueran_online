@@ -9,6 +9,7 @@ import { useAmbience } from './world/ambience.js';
 import { Cottage, DawnWake } from './Cottage.jsx';
 import { Lobby } from './Lobby.jsx';
 import { AvalonGame } from './Avalon.jsx';
+import { MarkGame } from './Mark.jsx';
 import { Line, Portrait, clock, syncClock, serverNow, gameClock, useTick, useCountdown, cnNum } from './util.jsx';
 import { Tag, Panel, Btn, Stat, Check, Faces, HudBar } from './ui.jsx';
 import { tick } from './world/footsteps.js';
@@ -214,10 +215,11 @@ export default function App() {
       {s.phase === 'lobby' ? <Lobby s={s} act={act} ask={ask} toast={showToast} onTutorial={() => api.current.tutorial(true)} />
         : s.ww ? <WerewolfGame s={s} act={act} ask={ask} />
           : s.script === 'avalon' ? <AvalonGame s={s} act={act} ask={ask} parts={{ History, SoundToggles, Watchers }} /> // 娱乐模式阿瓦隆：另一套界面，见 Avalon.jsx
+            : s.script === 'mark' ? <MarkGame s={s} act={act} ask={ask} parts={{ History, SoundToggles, Watchers, onMove: (x, y) => { predictMove(s, x, y); return act('move', { x, y }); } }} /> // 娱乐模式暗印：见 Mark.jsx
             : <Game s={s} act={act} ask={ask} />}
       {s.tutorial && <Tutorial s={s} onExit={() => api.current.tutorial(false)} />}
       {toast && <div className="toast">{toast}</div>}
-      <TitleCard card={card} onClose={closeCard} players={s?.players} kicker={s?.ww ? '法官' : undefined} />
+      <TitleCard card={card} onClose={closeCard} players={s?.players} kicker={s?.ww ? '法官' : s?.script === 'mark' ? '钟楼' : undefined} />
     </div>
   );
 }

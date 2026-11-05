@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROLES } from '../engine/roles.js';
+import { summarizeMark } from '../engine/mark.js';
 
 const DIR = path.resolve('data/rooms');
 const MAX_AGE = 24 * 3600_000; // 一天没动静的存档启动时清掉
@@ -82,6 +83,30 @@ export function archiveGame(room) {
 }
 
 /** 这个服务器最近的对局（只要摘要）。 */
+/** 暗印打完一局：记每人活到第几天、被谁骗死（生还排行用）。和血染的对局分开放（data/mark/），免得算进血染的胜率。 */
+const MARK = path.resolve('data/mark');
+export function archiveMark(room) {
+  const g = room.game;
+  if (!g?.winner || !g.survival) return;
+  try {
+    const dir = path.join(MARK, safe(room.guildId));
+    fs.mkdirSync(dir, { recursive: true });
+    const endedAt = Date.now();
+    fs.writeFileSync(path.join(dir, `${endedAt}_${safe(room.key.split(':')[1] ?? 'x')}.json`), JSON.stringify({ endedAt, winner: g.winner, days: g.day, players: g.survival() }));
+  } catch (e) {
+    console.warn('[botc] 暗印存档失败：', e.message);
+  }
+}
+
+/** 这个服务器的暗印生还排行。 */
+export function markStatsFor(guildId) {
+  const dir = path.join(MARK, safe(guildId));
+  let names = [];
+  try { names = fs.readdirSync(dir).filter((n) => n.endsWith('.json')); } catch { return []; }
+  const games = names.map((n) => { try { return JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8')); } catch { return null; } }).filter(Boolean);
+  return summarizeMark(games);
+}
+
 export function listGames(guildId, limit = 20) {
   const dir = path.join(GAMES, safe(guildId));
   let names = [];

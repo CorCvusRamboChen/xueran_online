@@ -1,0 +1,249 @@
+/* 娱乐模式「暗印」：花色、公审板、夜里的烙印板、看后颈的翻转卡、被看时的发烫、在屋里爆炸。
+   颜色沿用全局的 --int（镇民）/ --phy（伪证者、危险）/ --mot（自己、提醒）。印记是烧红的炭火色。 */
+.mark { --ember: #ff8a3d; --ember-hi: #ffd79a; --burn: #c8401e; }
+
+/* 花色 */
+.mk-suit { display: inline-flex; align-items: baseline; gap: 3px; font: 900 1.15em/1 var(--serif); }
+.mk-suit.red { color: #ff6b5b; }
+.mk-suit.black { color: var(--paper); }
+.mk-suit.big { font-size: 1.8em; vertical-align: -.15em; }
+.mk-suit small { font: 700 13px var(--sans); color: inherit; opacity: .9; }
+.mk-suit.unknown { color: var(--muted); }
+
+/* 座位圈中间的公审板 */
+.mk-board {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 16px; min-width: 150px; text-align: center;
+  background: rgba(14, 16, 16, .86); border: 1px solid rgba(233, 228, 216, .25); box-shadow: 0 4px 18px rgba(0, 0, 0, .55); pointer-events: auto;
+}
+.mk-board small { font: 900 11px var(--sans); letter-spacing: 3px; color: var(--muted); }
+.mk-board b { font: 900 20px var(--serif); color: var(--cream); }
+.mk-board b.good { color: var(--int); }
+.mk-board b.evil { color: var(--phy); }
+.mk-board span { font-size: 12px; color: var(--muted); }
+.mk-board-who { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.mk-board-who b { font-size: 15px; color: var(--phy); }
+
+/* 自己的信息条 */
+.mk-me { margin: 0 0 10px; padding: 8px 12px; border-left: 4px solid var(--int); background: rgba(95, 184, 207, .07); }
+.mk-me.evil { border-color: var(--phy); background: rgba(219, 84, 68, .08); }
+.mk-me-role { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+.mk-me-role b { font: 900 15px var(--serif); color: var(--cream); }
+.mk-me-role .dead { color: var(--phy); font-weight: 900; }
+.mk-own { margin: 4px 0 8px; padding: 6px 10px; background: rgba(219, 84, 68, .12); border: 1px solid rgba(219, 84, 68, .4); font-size: 14px; }
+.mk-heard { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 13px; }
+.mk-heard > small { width: 100%; font: 900 10px var(--sans); letter-spacing: 2px; color: var(--muted); }
+.mk-heard span { padding: 2px 8px; background: rgba(233, 228, 216, .07); border: 1px solid var(--line); }
+.mk-heard-empty { margin: 6px 0 0; font-size: 12px; }
+
+/* 花色按钮 */
+.mk-suits { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0 4px; }
+.mk-suit-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 78px; cursor: pointer;
+  background: #f1ece0; border: 2px solid #f1ece0; color: #141414; transition: transform .1s ease, box-shadow .1s ease;
+}
+.mk-suit-btn span { font: 900 38px/1 var(--serif); }
+.mk-suit-btn small { font: 700 11px var(--sans); color: #555; }
+.mk-suit-btn.red span { color: #c0281b; }
+.mk-suit-btn:hover { transform: translateY(-2px); }
+.mk-suit-btn.on { border-color: var(--ember); box-shadow: 0 0 0 3px rgba(255, 138, 61, .45), 0 0 22px rgba(255, 138, 61, .55); background: #fff6e6; }
+.mk-suit-btn.small { height: 46px; min-width: 46px; flex: 1; }
+.mk-suit-btn.small span { font-size: 24px; }
+.mk-suit-btn.small small { font-size: 9px; }
+.mk-suit-btn.true { border-color: var(--int); }
+.mk-writer .btn-primary { width: 100%; }
+
+/* 屋里的人 */
+.mk-mates { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.mk-mate { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; padding: 6px; background: rgba(233, 228, 216, .05); border: 1px solid var(--line); }
+.mk-mate.dead { opacity: .5; }
+.mk-mate-name { display: flex; flex-direction: column; min-width: 0; font-weight: 700; font-size: 13px; line-height: 1.25; word-break: break-all; }
+.mk-mate-name i { font: 900 13px var(--cond); font-style: normal; color: var(--mot); }
+.mk-mate-acts { display: flex; gap: 6px; }
+.mk-mate-acts .btn { padding: 6px 10px; font-size: 13px; }
+.mk-tell { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mk-tell > small { width: 100%; color: var(--muted); font-size: 12px; }
+
+/* 夜里屋里浮着的烙印板 */
+.mk-nightboard {
+  position: absolute; left: 50%; top: 92px; transform: translateX(-50%); z-index: 20; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 18px; background: rgba(10, 8, 6, .78); border: 1px solid rgba(255, 138, 61, .45); box-shadow: 0 0 24px rgba(255, 138, 61, .18); pointer-events: none;
+}
+.mk-nightboard b { font: 900 16px var(--serif); color: var(--ember-hi); }
+.mk-nightboard span { font-size: 12px; color: var(--muted); }
+
+/* ───── 看后颈：转过身的卡 ───── */
+.mk-peek {
+  position: absolute; inset: 0; z-index: 970; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: radial-gradient(circle at 50% 40%, rgba(40, 24, 14, .82), rgba(5, 4, 3, .95) 70%); animation: mk-fade .3s ease;
+}
+.mk-peek-stage { perspective: 900px; }
+.mk-peek-card { position: relative; width: 200px; height: 240px; transform-style: preserve-3d; transition: transform 1.05s cubic-bezier(.5, -.2, .3, 1.25); }
+.mk-peek-card.turned { transform: rotateY(180deg); }
+.mk-face { position: absolute; inset: 0; display: grid; place-items: center; backface-visibility: hidden; -webkit-backface-visibility: hidden; background: #1b1714; border: 3px solid #f4f4f0; box-shadow: 0 10px 40px rgba(0, 0, 0, .7); }
+.mk-face.back { transform: rotateY(180deg); background: radial-gradient(circle at 50% 70%, #3a2416, #120c08 75%); }
+.mk-nape { width: 100%; height: 100%; }
+.mk-brand-glow { animation: mk-ember 1.6s ease-in-out infinite; transform-origin: 100px 158px; }
+.mk-peek-card.turned .mk-brand { animation: mk-brand-in 1.2s ease-out .6s both; transform-origin: 100px 158px; }
+.mk-peek-text { max-width: 420px; padding: 0 16px; text-align: center; }
+.mk-peek-text p { margin: 4px 0; }
+.mk-peek-result { font: 900 20px var(--serif); color: var(--cream); animation: mk-fade .5s ease .9s both; }
+.mk-peek-text .mk-tell { justify-content: center; margin-top: 10px; animation: mk-fade .5s ease 1.2s both; }
+.mk-peek-text .mk-tell > small { text-align: center; }
+.mk-peek-text .btn-row { justify-content: center; }
+
+/* ───── 被人看了：屏幕边缘发烫 + 上方一条 ───── */
+.mk-burn { position: absolute; inset: 0; z-index: 955; pointer-events: none; box-shadow: inset 0 0 90px 20px rgba(255, 110, 40, .55); animation: mk-burn 3.8s ease forwards; }
+.mk-peeked {
+  position: absolute; left: 50%; top: 52px; z-index: 965; display: flex; align-items: center; gap: 10px; max-width: min(92%, 520px);
+  padding: 8px 14px; transform: translateX(-50%); background: rgba(20, 10, 6, .92); border: 1px solid var(--ember); color: var(--cream);
+  box-shadow: 0 0 30px rgba(255, 110, 40, .35); animation: mk-drop 3.8s ease forwards; pointer-events: none;
+}
+.mk-peeked span { font-size: 14px; }
+.mk-peeked small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+
+/* ───── 爆炸 ───── */
+.mk-blast { position: relative; --ox: 68%; --oy: 50%; background: #000; overflow: hidden; }
+.mk-blast-room { position: relative; }
+.mk-blast-glow, .mk-blast-flash, .mk-blast-ring, .mk-blast-shards, .mk-blast-smoke, .mk-blast-embers, .mk-blast-mark, .mk-blast-scorch, .mk-blast-haze { position: absolute; pointer-events: none; }
+/* 0：印记烧红，屋里越来越红，轻轻发抖 */
+.mk-blast-glow { inset: 0; background: radial-gradient(circle at var(--ox) var(--oy), rgba(255, 120, 40, .0), rgba(120, 10, 0, 0) 60%); }
+.mk-blast.t0 .mk-blast-glow { animation: mk-redden 1.5s ease-in forwards; }
+.mk-blast.t0 .mk-blast-room { animation: mk-tremble .12s linear infinite; }
+.mk-blast-mark { left: var(--ox); top: calc(var(--oy) - 4%); transform: translate(-50%, -100%); filter: drop-shadow(0 0 6px #ff3a10) drop-shadow(0 0 24px #ff6a2a); animation: mk-mark-pulse 1.5s ease-in forwards; }
+.mk-blast-mark .mk-suit { color: #ffcf8a !important; font-size: 56px; -webkit-text-stroke: 2px #9e1c08; }
+/* 1：白光、冲击波、碎片、震屏 */
+.mk-blast-flash { inset: 0; background: radial-gradient(circle at var(--ox) var(--oy), #fffbe8, #ffd27a 25%, #ff6a2a 45%, rgba(80, 10, 0, .0) 75%); opacity: 0; }
+.mk-blast.t1 .mk-blast-flash, .mk-blast.t2 .mk-blast-flash, .mk-blast.t3 .mk-blast-flash { animation: mk-flash 1.6s ease-out forwards; }
+.mk-blast-ring { left: var(--ox); top: var(--oy); width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; border: 6px solid rgba(255, 230, 190, .9); opacity: 0; }
+.mk-blast.t1 .mk-blast-ring, .mk-blast.t2 .mk-blast-ring, .mk-blast.t3 .mk-blast-ring { animation: mk-ring .9s ease-out forwards; }
+.mk-blast-ring.r2 { border-width: 3px; border-color: rgba(255, 150, 80, .8); }
+.mk-blast.t1 .mk-blast-ring.r2, .mk-blast.t2 .mk-blast-ring.r2, .mk-blast.t3 .mk-blast-ring.r2 { animation: mk-ring 1.3s ease-out .12s forwards; }
+.mk-blast.t1 .mk-blast-room, .mk-blast.t2 .mk-blast-room { animation: mk-shake .9s cubic-bezier(.36, .07, .19, .97) both; }
+.mk-blast.t1, .mk-blast.t2 { animation: mk-shake-big .6s cubic-bezier(.36, .07, .19, .97) both; }
+.mk-blast-shards { left: var(--ox); top: var(--oy); width: 0; height: 0; }
+.mk-blast-shards i {
+  position: absolute; width: var(--s); height: calc(var(--s) * .6); margin: calc(var(--s) * -.3) 0 0 calc(var(--s) * -.5);
+  background: #3b2a1c; border: 1px solid #0e0a06; opacity: 0;
+}
+.mk-blast.t1 .mk-blast-shards i, .mk-blast.t2 .mk-blast-shards i, .mk-blast.t3 .mk-blast-shards i { animation: mk-shard 1.1s cubic-bezier(.15, .7, .3, 1) forwards; }
+.mk-blast-embers { left: var(--ox); top: var(--oy); width: 0; height: 0; }
+.mk-blast-embers i { position: absolute; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: var(--ember-hi); box-shadow: 0 0 8px var(--ember); opacity: 0; }
+.mk-blast.t1 .mk-blast-embers i, .mk-blast.t2 .mk-blast-embers i, .mk-blast.t3 .mk-blast-embers i { animation: mk-ember-fly 2.4s ease-out forwards; }
+/* 2：烟尘慢慢涨满屋子再散开，屋里只剩暗红 */
+.mk-blast-smoke { left: var(--ox); top: var(--oy); width: 0; height: 0; }
+.mk-blast-smoke i {
+  position: absolute; left: var(--x); top: var(--y); width: 220px; height: 220px; margin: -110px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(62, 54, 50, .95), rgba(38, 32, 28, .7) 42%, rgba(20, 18, 16, 0) 70%); opacity: 0; transform: scale(.2);
+}
+.mk-blast.t1 .mk-blast-smoke i, .mk-blast.t2 .mk-blast-smoke i, .mk-blast.t3 .mk-blast-smoke i { animation: mk-smoke 4.5s ease-out var(--d) forwards; }
+/* 爆炸后：屋子烧黑、一片焦痕、整屋的灰雾 */
+.mk-blast-scorch { left: var(--ox); top: calc(var(--oy) + 10%); width: 46%; aspect-ratio: 2 / 1; border-radius: 50%; opacity: 0;
+  background: radial-gradient(ellipse, rgba(5, 3, 2, .95), rgba(30, 12, 6, .8) 40%, rgba(60, 20, 8, .35) 60%, rgba(0, 0, 0, 0) 72%); transform: translate(-50%, -50%); }
+.mk-blast.t1 .mk-blast-scorch, .mk-blast.t2 .mk-blast-scorch, .mk-blast.t3 .mk-blast-scorch { animation: mk-scorch .6s ease-out forwards; }
+.mk-blast-haze { inset: 0; opacity: 0; background: radial-gradient(circle at var(--ox) var(--oy), rgba(70, 58, 50, .75), rgba(30, 24, 20, .7) 55%, rgba(8, 6, 5, .85)); }
+.mk-blast.t2 .mk-blast-haze, .mk-blast.t3 .mk-blast-haze { animation: mk-haze 3s ease-out forwards; }
+.mk-blast.t2 .mk-blast-room, .mk-blast.t3 .mk-blast-room { filter: sepia(.7) saturate(1.6) hue-rotate(-20deg) brightness(.5) contrast(1.25); transition: filter 1.2s ease; }
+.mk-blast-text {
+  position: absolute; left: 50%; bottom: 10%; transform: translateX(-50%); z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  width: min(92%, 460px); padding: 14px 18px; text-align: center; background: rgba(8, 4, 3, .88); border: 1px solid var(--phy); animation: mk-fade 1.2s ease;
+}
+.mk-blast-text b { font: 900 22px var(--serif); color: var(--phy); letter-spacing: 2px; }
+.mk-blast-text span { font-size: 15px; }
+.mk-blast-text small { color: var(--muted); }
+
+@keyframes mk-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mk-ember { 0%, 100% { opacity: .75; transform: scale(.95); } 50% { opacity: 1; transform: scale(1.08); } }
+@keyframes mk-brand-in { 0% { opacity: 0; transform: scale(.3); filter: brightness(3); } 60% { opacity: 1; transform: scale(1.15); } 100% { transform: scale(1); filter: none; } }
+@keyframes mk-burn { 0% { opacity: 0; } 12% { opacity: 1; } 30% { opacity: .6; } 45% { opacity: .95; } 100% { opacity: 0; } }
+@keyframes mk-drop { 0% { opacity: 0; transform: translate(-50%, -12px); } 8%, 85% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -6px); } }
+@keyframes mk-redden { to { background: radial-gradient(circle at var(--ox) var(--oy), rgba(255, 140, 50, .55), rgba(140, 16, 0, .55) 45%, rgba(40, 0, 0, .7) 100%); } }
+@keyframes mk-tremble { 0% { transform: translate(0, 0); } 25% { transform: translate(1px, -1px); } 50% { transform: translate(-1px, 1px); } 75% { transform: translate(1px, 1px); } }
+@keyframes mk-mark-pulse { 0% { opacity: .4; transform: translate(-50%, -100%) scale(.8); } 70% { opacity: 1; transform: translate(-50%, -100%) scale(1.15); } 100% { opacity: 1; transform: translate(-50%, -100%) scale(1.6); filter: brightness(2.2) drop-shadow(0 0 40px #fff); } }
+@keyframes mk-flash { 0% { opacity: 1; } 12% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes mk-ring { 0% { opacity: 1; transform: scale(.3); } 100% { opacity: 0; transform: scale(22); } }
+@keyframes mk-shard { 0% { opacity: 1; transform: rotate(var(--a)) translateX(0) rotate(0); } 80% { opacity: 1; } 100% { opacity: 0; transform: rotate(var(--a)) translateX(var(--d)) rotate(var(--r)); } }
+@keyframes mk-ember-fly { 0% { opacity: 1; transform: rotate(var(--a)) translateX(0); } 100% { opacity: 0; transform: rotate(var(--a)) translateX(var(--d)) translateY(-40px); } }
+@keyframes mk-smoke { 0% { opacity: 0; transform: scale(.2); } 18% { opacity: 1; } 100% { opacity: .32; transform: scale(calc(var(--s) * 2.4)) translateY(-50px); } }
+@keyframes mk-haze { 0% { opacity: 0; } 25% { opacity: .7; } 100% { opacity: .38; } }
+@keyframes mk-scorch { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.3); } 100% { opacity: .9; transform: translate(-50%, -50%) scale(1); } }
+@keyframes mk-shake {
+  0% { transform: translate(0, 0) rotate(0); } 10% { transform: translate(-14px, 8px) rotate(-1.4deg); } 20% { transform: translate(12px, -10px) rotate(1.2deg); }
+  30% { transform: translate(-10px, 6px) rotate(-.8deg); } 45% { transform: translate(7px, -4px) rotate(.5deg); } 60% { transform: translate(-4px, 3px); } 80% { transform: translate(2px, -1px); } 100% { transform: translate(0, 0); }
+}
+@keyframes mk-shake-big { 0% { transform: scale(1.04); } 30% { transform: scale(1.01) translate(4px, -3px); } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .mk-blast.t1, .mk-blast.t2, .mk-blast.t1 .mk-blast-room, .mk-blast.t2 .mk-blast-room, .mk-blast.t0 .mk-blast-room { animation: none !important; }
+}
+
+/* 右栏 */
+.mk-role { border-left: 4px solid var(--int); padding: 6px 12px; margin: 4px 0 12px; background: rgba(95, 184, 207, .07); }
+.mk-role.evil { border-color: var(--phy); background: rgba(219, 84, 68, .08); }
+.mk-role p { margin: 6px 0; line-height: 1.6; }
+.mk-notes, .mk-record, .mk-rules { margin: 8px 0 14px; }
+.mk-notes h4, .mk-record h4, .mk-rules h4 { margin: 10px 0 6px; font: 900 13px var(--sans); letter-spacing: 2px; color: var(--muted); }
+.mk-note-day, .mk-rec-day { padding: 6px 10px; margin-bottom: 6px; border-left: 2px solid var(--line); }
+.mk-note-day > small, .mk-rec-day > small { font: 900 11px var(--sans); color: var(--mot); }
+.mk-note-day p, .mk-rec-day p { margin: 3px 0; font-size: 13px; }
+.mk-rec-night { color: var(--phy); }
+.mk-suitlog { overflow-x: auto; }
+.mk-suitlog table { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+.mk-suitlog th, .mk-suitlog td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.mk-suitlog tr.evil td:first-child { color: var(--phy); font-weight: 700; }
+.mk-lie { margin-left: 4px; font: 700 10px var(--sans); font-style: normal; color: var(--phy); }
+.mk-rules ol { margin: 0; padding-left: 20px; line-height: 1.65; font-size: 13px; }
+.mk-rules li { margin-bottom: 4px; }
+.mk-show-row { display: flex; gap: 18px; justify-content: center; margin: 6px 0 10px; font-size: 22px; }
+.mk-show-row .mk-suit { text-shadow: 0 0 14px rgba(255, 138, 61, .5); }
+
+@media (max-width: 520px) {
+  .mk-peek-card { width: 160px; height: 192px; }
+  .mk-suit-btn { height: 64px; }
+  .mk-suit-btn span { font-size: 30px; }
+  .mk-mate { grid-template-columns: 36px 1fr; }
+  .mk-mate-acts { grid-column: 1 / -1; }
+}
+
+/* ───── 第二版：鬼牌、雾天、对视、调包、匿名信、遗言、发光、生还排行 ───── */
+.mk-suit.joker { color: #c49cff; text-shadow: 0 0 8px rgba(160, 100, 255, .6); }
+.mk-suit.fog { display: inline-grid; place-items: center; min-width: 1.5em; height: 1.4em; padding: 0 4px; border-radius: 3px; font: 900 .8em/1 var(--sans); filter: blur(.2px); }
+.mk-suit.fog.red { background: rgba(255, 107, 91, .25); color: #ff8f80; }
+.mk-suit.fog.black { background: rgba(233, 228, 216, .15); color: var(--paper); }
+.mk-suit-btn.joker span { color: #6b2bb5; font-size: 30px; }
+.mk-suits.five { grid-template-columns: repeat(5, 1fr); }
+.mk-suits.five .mk-suit-btn { height: 70px; }
+.mk-suits.five .mk-suit-btn span { font-size: 32px; }
+.mk-fogbar { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); z-index: 15; padding: 4px 14px; background: rgba(200, 205, 210, .18); border: 1px solid rgba(220, 225, 230, .4); color: #e4e8ec; font-size: 12px; letter-spacing: 1px; backdrop-filter: blur(4px); pointer-events: none; }
+.mk-foggy .map::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, rgba(220, 225, 230, 0), rgba(220, 225, 230, .28) 70%); pointer-events: none; }
+.mk-hint { margin: 6px 0; padding: 6px 10px; background: rgba(226, 181, 44, .08); border-left: 3px solid var(--mot); font-size: 14px; }
+.mk-hint.fog { border-color: #c8ced4; background: rgba(200, 206, 212, .08); }
+.mk-glow { margin: 6px 0; padding: 6px 10px; border: 1px solid rgba(255, 138, 61, .5); background: rgba(255, 110, 40, .1); font-size: 13px; }
+.mk-glow small { display: block; color: var(--muted); }
+.mk-glow-line { color: var(--ember-hi) !important; }
+.mk-heard span.mail { border-style: dashed; color: var(--muted); }
+.mk-swap { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px; border: 1px dashed rgba(219, 84, 68, .6); background: rgba(219, 84, 68, .08); }
+.mk-swap > small { width: 100%; color: #f0b4ab; font-size: 12px; }
+.mk-swap.off { margin: 0; padding: 4px 8px; font-size: 12px; color: var(--muted); border-style: dotted; }
+.mk-swap .mk-suit-btn.small { flex: 0 0 46px; }
+.mk-peek-text .mk-swap { justify-content: center; margin-top: 10px; }
+.mk-fognote { display: block; font: 12px var(--sans); color: var(--muted); }
+.mk-reveal { margin-top: 6px; }
+.mk-letter .invite-people button.on span { color: var(--mot); }
+.mk-letter-open, .mk-letter-sent { margin: 6px 0; }
+.mk-lastword .mk-lw-row { display: flex; gap: 8px; }
+.mk-lastword input { flex: 1; min-width: 0; padding: 8px 10px; background: #f1ece0; border: 2px solid #f1ece0; color: #141414; font: 15px var(--sans); }
+.mk-lw-seen { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mk-lw-seen > small { width: 100%; color: var(--muted); }
+.mk-lw-seen button { padding: 4px 10px; background: rgba(233, 228, 216, .08); border: 1px solid var(--line); color: var(--cream); cursor: pointer; }
+.mk-lw-seen button:hover { border-color: var(--mot); }
+.mk-burn.cold { box-shadow: inset 0 0 90px 20px rgba(140, 190, 230, .45); }
+.mk-peek .mk-burn { z-index: 0; }
+.mk-note-day p.evil { color: #f0b4ab; }
+.mk-rec-glow { color: var(--ember-hi); }
+.mk-board-list table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mk-board-list th, .mk-board-list td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; }
+.mk-board-list h4 { margin: 14px 0 6px; font: 900 13px var(--sans); letter-spacing: 2px; color: var(--muted); }
+@media (max-width: 520px) {
+  .mk-suits.five .mk-suit-btn { height: 58px; }
+  .mk-suits.five .mk-suit-btn span { font-size: 24px; }
+}
+.mk-swap-btn { color: #f0b4ab !important; }

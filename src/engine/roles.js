@@ -303,6 +303,8 @@ export const SCRIPTS = {
   ww: { id: 'ww', name: '狼人杀', en: 'Werewolf', engine: 'ww', werewolf: true, players: WW_PLAYERS, roles: Object.keys(WW_ROLES) },
   // 娱乐模式（用户 2026-11-04 要的）：不是血染，是《抵抗组织：阿瓦隆》原版规则。没有血染角色，规则和角色都在 engine/avalon.js
   avalon: { id: 'avalon', name: '阿瓦隆', en: 'Avalon', engine: 'avalon', avalon: true, players: [5, 10], roles: [] },
+  // 娱乐模式「暗印」（原创，用户 2026-11-05 要的）：后颈的花色自己看不到，同屋私聊才能互相看，夜里写错就爆炸。规则在 engine/mark.js
+  mark: { id: 'mark', name: '暗印', en: 'The Unseen Mark', engine: 'mark', mark: true, players: [5, 15], roles: [] },
 };
 /** 诸神黄昏几只狼人（小恶魔）：其余全是猎手。 */
 export const ragnarokWolves = (n) => (n <= 6 ? 1 : n <= 9 ? 2 : n <= 12 ? 3 : 4);

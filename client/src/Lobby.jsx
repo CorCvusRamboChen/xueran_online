@@ -7,6 +7,7 @@ import { ClockTower, Tree, Lamp, House, MAP_COLORS as C, INK } from './art/TownA
 import { SCENE_ART, ROLE_ART } from './art.js';
 import { ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, rolesOf, inScript, engineOf, playersOf, ragnarokWolves } from '../../src/engine/roles.js';
 import { AvalonDist, AvalonSettings, AvalonShowcase } from './Avalon.jsx';
+import { MarkDist, MarkSettings, MarkShowcase } from './Mark.jsx';
 import { ATTR } from './flavor.js';
 import { AbilityCard } from './AbilityCard.jsx';
 import { useEffect, useState } from 'react';
@@ -109,7 +110,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
         {/* 右：镇民、形象、房间设置 */}
         <section className="lobby-right">
           <Panel title="镇民" className="glass" extra={<span className="muted">{n} / {hi}</span>}>
-            {st.script === 'avalon' ? <AvalonDist n={n} /> : <DistBar n={n} d={d} lo={lo} hi={hi} parts={ww ? wwDist(n) : null} />}
+            {st.script === 'avalon' ? <AvalonDist n={n} /> : st.script === 'mark' ? <MarkDist n={n} /> : <DistBar n={n} d={d} lo={lo} hi={hi} parts={ww ? wwDist(n) : null} />}
             {SCRIPTS[st.script]?.seat7 && <p className="muted seat7-note">🪑 灯神规则：<b>7 号座位留空</b>，照样发角色，由说书人替它做决定，每局还会替它发言一次。{seat7 ? `开局后共 ${n + 1} 个座位。` : ''}</p>}
             {!n && <p className="muted">广场上还空无一人。</p>}
             {(
@@ -151,11 +152,12 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
               ww: '《狼人杀》：娱乐模式，不是血染——经典网杀「预女猎守」。狼人每晚刀人，守卫、女巫、预言家各显神通；第一天竞选警长（1.5 票、定发言顺序）；白天轮流发言、同时投票放逐，平票 PK；狼人可以自爆。屠边：狼人全死好人赢，神职或平民全死狼人赢，同时达成算狼人赢。',
               rag: '《诸神黄昏》：娱乐模式，只有猎手和狼人（小恶魔）。狼人互相认识，每晚各刀一人；猎手死了（被狼刀或被处决）可以开一枪，打谁谁死，被打死的猎手接着开。狼人全死好人赢，狼人追平好人狼人赢。',
               avalon: '《阿瓦隆》：娱乐模式，不是血染——照《抵抗组织：阿瓦隆》原版规则。没有夜里杀人、没有处决：队长组队，所有人公开投票，队员秘密出任务票。好人完成三次任务后，刺客还有一次认出梅林的机会。5–10 人。',
+              mark: '《暗印》：原创娱乐模式，不是血染。每天天亮，每个人后颈烙上一个新的印记（♠♥♦♣，偶尔是鬼牌），自己看不到——只有和别人关在同一栋房子里才能互相看（每天两次，对视），别人可能骗你。坏人照血染人数（1 个头头，其余手下），能在看人背后的那一刻把他的印记调包。回到广场圆桌讨论，没有投票。入夜在自己家里写下自己的印记，写错就在屋里炸开。坏人全死好人赢，坏人追平好人坏人赢。5–15 人。',
               luf: '《窃窃私语》：官方 5–6 人小剧本。恶魔利维坦不杀人，但处决两个好人、或者撑到第五天结束，邪恶就赢；失忆者、食人族不知道自己的能力。地图是雾锁溪谷的驿站。',
               cat: '《冒名钓鱼》（Catfishing，作者 Emily）：最有名的自定义剧本之一，角色全来自三个基础剧本和实验性角色。谁都可能顶着别人的身份：舞蛇人会和恶魔换身，哲学家拿别人的能力，疯子以为自己是恶魔，失忆者不知道自己的能力。人多更好玩。地图是雾夜的钟楼港口。',
               bs7: '《七步成诗》：2025 剧本世界杯冠军（作者 TrashWarlock）。7 号座位没有人坐，照样有角色，由 AI 说书人替它选人，每局替它发言一次——它可能是好人，也可能是恶魔。有贵族、村夫、魔术师、落难少女、炸弹人等新角色。地图是月下诗会的驿站。' }[st.script] ?? '《暗流涌动》：入门剧本，信息多、规则直白，推荐第一次玩。'}</p>
             {!host ? <p className="muted setting-note host-only-note">配置、说书人、计时和房规由房主决定，只有房主看得到。</p>
-              : st.script === 'avalon' ? <AvalonSettings st={st} set={set} n={n} Toggle={Toggle} /> : ww ? (
+              : st.script === 'avalon' ? <AvalonSettings st={st} set={set} n={n} Toggle={Toggle} /> : st.script === 'mark' ? <MarkSettings st={st} set={set} Toggle={Toggle} Select={Select} /> : ww ? (
               <div className="setting-wrap"><div className="setting-groups">
                 <div className="setting-col">
                   <div className="setting-group">
@@ -252,7 +254,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
         </section>
 
         <RecordAndHistory s={s} ask={ask} />
-        {ww ? <WwShowcase n={n} /> : st.script === 'avalon' ? <AvalonShowcase /> : <RoleShowcase script={st.script} />}
+        {ww ? <WwShowcase n={n} /> : st.script === 'avalon' ? <AvalonShowcase /> : st.script === 'mark' ? <MarkShowcase ask={ask} /> : <RoleShowcase script={st.script} />}
       </div>
     </div>
   );
@@ -710,10 +712,11 @@ const SCRIPT_CARDS = {
   cat: { tag: '最有名的自定义剧本 · 困难', map: '雾夜港口 · 钟楼广场', color: '#6fa3a8' },
   ww: { tag: '预女猎守 · 6–15 人', map: '经典网杀 · 不是血染', color: '#6f8f4e' },
   avalon: { tag: '组队 · 投票 · 任务', map: '5–10 人 · 不杀人', color: '#c9a227' },
+  mark: { tag: '看不到自己的印记', map: '原创 · 同屋才能互看', color: '#e0703a' },
 };
 
 function ScriptPicker({ value, disabled, onPick }) {
-  const groups = [['标准剧本', '5–15 人', ['tb', 'bmr', 'snv']], ['比赛和社区剧本', '5–15 人', ['bs7', 'cat']], ['小剧本', '5–6 人', ['ngj', 'luf']], ['娱乐模式', '5–15 人', ['rag', 'ww', 'avalon']]];
+  const groups = [['标准剧本', '5–15 人', ['tb', 'bmr', 'snv']], ['比赛和社区剧本', '5–15 人', ['bs7', 'cat']], ['小剧本', '5–6 人', ['ngj', 'luf']], ['娱乐模式', '5–15 人', ['rag', 'ww', 'avalon', 'mark']]];
   return (
     <div className="script-pick">
       <span className="script-pick-label">剧本</span>

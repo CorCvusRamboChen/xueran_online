@@ -10,7 +10,7 @@ import { Client, Events, GatewayIntentBits } from 'discord.js';
 import { Room, UserError } from './room.js';
 import { VoiceHub } from './voice.js';
 import { ttsHandler, ttsEnabled } from './tts.js';
-import { saveSoon, flushAll, loadAll, archiveGame, listGames, getGame, statsFor } from './store.js';
+import { saveSoon, flushAll, loadAll, archiveGame, listGames, getGame, statsFor, archiveMark, markStatsFor } from './store.js';
 import { startTutorial } from './tutorial.js';
 import { KookBot, KOOK_PREFIX } from './kook.js';
 import { verifyTicket } from './tickets.js';
@@ -336,7 +336,8 @@ function roomFor(guildId, channelId, hostId) {
     room.onPos = (r, id, move) => { broadcastPos(r, id, move); saveSoon(r); };
     room.onQuiet = saveSoon;
     room.onEnded = archiveGame;
-    room.history = { list: listGames, get: getGame, stats: statsFor };
+    room.onMarkEnded = archiveMark; // 暗印的生还排行
+    room.history = { list: listGames, get: getGame, stats: statsFor, markStats: markStatsFor };
     room.peers = () => rooms.values(); // 开局时查同一个语音频道有没有别的局
     rooms.set(key, room);
     sockets.set(room, new Set());

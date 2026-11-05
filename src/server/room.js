@@ -17,6 +17,8 @@ import { Werewolf } from '../engine/werewolf.js';
 import { WW_ROOM } from './werewolfRoom.js';
 import { Avalon } from '../engine/avalon.js';
 import { AvalonTable, AVALON_SETTINGS, AV_ACTIONS } from './avalon.js';
+import { MarkGame } from '../engine/mark.js';
+import { MarkTable, MK_ACTIONS } from './mark.js';
 
 // 受害者那段破门过场多长（毫秒）：踹门 → 踹开 → "你死了"，播完再天亮
 const VICTIM_SCENE_MS = 6500;
@@ -160,6 +162,7 @@ export class Room {
   realIds() { return this.game ? this.game.players.map((p) => p.id).filter((id) => !this.isFake(id)) : []; }
   changed() { this.onChange(this); }
   get av() { return (this.avalonTable ??= new AvalonTable(this)); } // 阿瓦隆的流程（只在 script 是 avalon 时用）
+  get mk() { return (this.markTable ??= new MarkTable(this)); } // 暗印的流程（只在 script 是 mark 时用），见 server/mark.js
 
   later(ms, fn) {
     const t = setTimeout(async () => {
@@ -182,7 +185,7 @@ export class Room {
   }
   /** AI 房主的一句旁白（极乐迪斯科式）。客户端会读出来；有 title 的弹出过场标题卡。 */
   narrate(event, vars) {
-    if (this.game?.werewolf) return; // 狼人杀有自己的法官台词（wwSay），不念血染的旁白
+    if (this.game?.werewolf || this.game?.mark) return; // 狼人杀、暗印有自己的台词，不念血染的旁白
     const n = narration(event, { script: this.game?.script, ...vars });
     if (!n) return;
     this.log.push({ id: ++this.logSeq, kind: 'story', text: n.text, title: n.title ?? null, audio: ttsUrl(n.text), at: Date.now() });
@@ -211,6 +214,7 @@ export class Room {
     if (type === 'marks') return this.recordMarks(uid, p); // 没有状态要推给别人
     if (this.game?.werewolf && !this.wwAllowed(type)) throw new UserError('狼人杀里没有这个操作');
     if (this.game?.avalon && !AV_ACTIONS.has(type)) throw new UserError('阿瓦隆里没有这个操作'); // 没有自由活动、私聊、提名这些血染的操作
+    if (this.game?.mark && !MK_ACTIONS.has(type)) throw new UserError('暗印里没有这个操作'); // 自由活动和私聊照用，提名投票、夜里选人这些血染的不要
     if (this.game?.werewolf && type.startsWith('ww')) { this.wwAct(uid, type, p); this.changed(); return null; }
     if (type === 'fullLog') return { log: this.log.slice(Math.max(0, this.log.findLastIndex((l) => l.kind === 'start'))) }; // 打开「记录」时取一次这局的全部
     switch (type) {
@@ -235,6 +239,7 @@ export class Room {
       case 'markNewbie': this.requireHost(uid); this.markNewbie(p.player, !!p.on); break;
       case 'start': this.requireHost(uid); await this.start(); break;
       case 'avalon': await this.av.act(uid, p); break;
+      case 'mark': await this.mk.act(uid, p); break;
       case 'choose': if (p.targets != null && !Array.isArray(p.targets)) throw new UserError('选择格式不对'); this.choose(uid, p.night, p.targets ?? [], p.role ?? null); break;
       case 'gossip': this.gossip(uid, p.statement ?? {}); break;
       case 'moonchild': this.moonchild(uid, p.target); break;
@@ -260,6 +265,7 @@ export class Room {
       case 'hand': this.hand(uid, !!p.up); break;
       case 'history': return { games: this.history?.list(this.guildId) ?? [] };
       case 'stats': return { stats: this.history?.stats?.(this.guildId, uid) ?? null };
+      case 'markStats': return { stats: this.history?.markStats?.(this.guildId) ?? [] }; // 暗印的生还排行
       case 'pastGame': return { game: this.history?.get(this.guildId, String(p.id ?? '')) ?? null };
       case 'shareBluffs': if (!this.game) throw new UserError('游戏还没开始'); this.game.shareBluffs(uid); break;
       case 'slay': this.slay(uid, p.target); break;
@@ -457,6 +463,7 @@ export class Room {
     const [lo, hi] = playersOf(script);
     if (seats.length < lo || seats.length > hi) throw new UserError(`《${SCRIPTS[script].name}》要 ${lo}–${hi} 名玩家（现在 ${seats.length} 人）`);
     if (SCRIPTS[script].avalon) return this.av.start(seats); // 阿瓦隆：完全是另一套流程
+    if (SCRIPTS[script].mark) return this.mk.start(seats); // 暗印：另一套流程（server/mark.js），自由活动照用
     if (SCRIPTS[script].werewolf) return this.wwStart(seats); // 狼人杀：另一套流程（werewolfRoom.js）
     // 七步成诗的灯神规则：7 号座位没有人坐，照样发角色，由说书人替它做决定
     if (SCRIPTS[script].seat7) seats.splice(6, 0, { id: SEAT7, name: '7号空座', avatar: null, fake: true });
@@ -2134,7 +2141,7 @@ export class Room {
   /** 机器人玩家在街上随便溜达（不进房子），让地图有点生气。 */
   wander() {
     this.later(2500 + Math.random() * 3500, async () => {
-      if (!this.roam) return;
+      if (!this.roam || this.game?.mark) return; // 暗印的机器人自己找人看后颈（server/mark.js 的 botRoam）
       const bots = this.game.players.filter((p) => this.isFake(p.id) && p.id !== SEAT7);
       if (!bots.length) return;
       const bot = bots[Math.floor(Math.random() * bots.length)];
@@ -2177,8 +2184,9 @@ export class Room {
     if (reason !== null) {
       this.announce(`集合！${reason ? `（${reason}）` : ''}大家回到广场，现在可以提名了。`, 'day');
       this.narrate('gather');
-      // 自动说书：回到广场后开放提名
-      if (!this.stId) this.later(this.settings.pauseMs / 2, () => this.openNominations());
+      // 自动说书：回到广场后开放提名（暗印：回到广场公审）
+      if (this.game?.mark) this.later(this.settings.pauseMs / 2, () => this.mk.gathered());
+      else if (!this.stId) this.later(this.settings.pauseMs / 2, () => this.openNominations());
     }
   }
 
@@ -2544,7 +2552,7 @@ export class Room {
     this.lobby = s.lobby ?? [];
     this.roleAssign = s.roleAssign ?? {};
     this.newbies = s.newbies ?? [];
-    this.game = s.game ? (s.game.werewolf ? Werewolf.fromJSON(s.game) : s.game.avalon ? Avalon.fromJSON(s.game) : Game.fromJSON(s.game)) : null;
+    this.game = s.game ? (s.game.werewolf ? Werewolf.fromJSON(s.game) : s.game.avalon ? Avalon.fromJSON(s.game) : s.game.mark ? MarkGame.fromJSON(s.game) : Game.fromJSON(s.game)) : null;
     this.wireGame();
     Object.assign(this, {
       artistAsks: s.artistAsks ?? [], ended: s.ended, square: s.square, log: s.log ?? [], logSeq: s.logSeq ?? 0, epoch: s.logEpoch ?? this.epoch, stLog: s.stLog ?? [],
@@ -2584,6 +2592,7 @@ export class Room {
     for (const r of this.rooms.values()) if (r.until) r.timer = this.later(left(r.until), () => this.closeRoom(r.channelId, '时间到'));
     // 令牌和文字都不存档：重启后重新打开、发新的。全员离线后回来不算重启，已经收到的话不能清掉
     if (g.avalon) return this.av.resume();
+    if (g.mark) return this.mk.resume();
     if (!this.hearing && !this.mic) this.openHearing().then(() => { if (this.game === g && g.phase === 'day') this.hearToday(); });
     if (g.phase === 'night') {
       const night = g.night;
@@ -2676,6 +2685,7 @@ export class Room {
     if (!g) return { ...view, phase: 'lobby' };
     if (g.werewolf) return this.wwView(uid, view);
     if (g.avalon) return this.av.view(uid, view);
+    if (g.mark) return this.mk.view(uid, view);
 
     const spectator = !isST && !g.get(uid);
     const showRoles = isST || this.ended || (spectator && this.settings.spectatorGrimoire);
