@@ -216,20 +216,16 @@ export class MarkTable {
       : `**${g.name(uid)}** 的遗言：「${w.text}」`, 'death');
   }
 
-  /** 回家：坏人被三个人看过背后的，今晚印记发光。 */
+  /** 回家。 */
   dusk(reason) {
     const r = this.room;
     const g = this.g;
     if (!g.daytime()) return;
     if (r.roam) r.endRoam();
-    const glow = g.dusk();
+    g.dusk();
     this.disarm();
     if (reason) r.announce(`圆桌散了（${reason}）。`, 'day');
     r.announce('天快黑了，每个人回到自己家里。入夜后写下自己后颈的印记——写错或者没写，午夜钟响时印记就会炸开。', 'night');
-    if (glow.length) {
-      r.announce(`有人的印记在发光——一天里被三个人看过背后：${glow.map((x) => `**${g.name(x.id)}** 后颈是 ${suitText(x.suit)}`).join('；')}。只有坏人的印记会这样暴露。`, 'death', true);
-      this.story('发光', '黄昏里，有人后颈的印记亮了起来，像一块烧红的炭。所有人都看见了。');
-    }
     this.after(this.secs('dusk') * 1000, () => this.night());
     r.changed();
   }
@@ -376,7 +372,7 @@ export class MarkTable {
   // ───────────── 机器人 ─────────────
   /**
    * 机器人自由活动：往有人的房子里钻；和别人在同一间屋里就看他（每天最多两个）、告诉他（好人说真话，坏人多半说谎），
-   * 坏人偶尔调包（优先当天被很多人看过背后的人）；坏人被两个人看过以后就躲在街上，免得暴露。每次只做一件事，看起来像人。
+   * 手下偶尔调包（优先当天被很多人看过背后的人）。每次只做一件事，看起来像人。
    */
   botRoam() {
     const r = this.room;
@@ -397,20 +393,13 @@ export class MarkTable {
     const roam = r.roam;
     const hid = roam.zone.get(id);
     const mates = hid ? [...roam.state.get(hid).ids].filter((x) => x !== id && g.get(x)?.alive) : [];
-    const evil = g.isEvil(id);
     const allies = new Set(g.allies(id));
     const told = (t) => g.tells.some((x) => x.day === g.day && x.from === id && x.to === t);
     const owes = (t) => g.saw(id, t) && !allies.has(t) && !told(t);
     // 塞一封匿名信（每天一封，随机某个时候）
     if (!g.letters.some((x) => x.day === g.day && x.from === id) && Math.random() < 0.08) this.botLetter(id);
-    // 坏人被两个人看过了：不再看人（对视会让对方也看到自己），别再进屋——第三个人一看，今晚就发光
-    if (evil && g.viewers(id).length >= g.rules.exposeAt - 1) {
-      for (const m of mates) if (owes(m) && Math.random() < 0.8) { this.tell(id, m, this.botClaim(id, m)); return; }
-      if (hid || Math.random() < 0.3) { const pt = r.town.randomSpot(roam.houses); r.move(id, pt.x, pt.y); }
-      return;
-    }
     for (const m of mates) if (!g.saw(id, m) && g.peeksLeft(id) > 0) { this.peek(id, m); return; }
-    if (evil) {
+    if (g.get(id).role === 'mk_hand' && g.rules.swap) { // 调包是手下的本事
       const target = mates.filter((m) => !g.swapBlock(id, m)).sort((a, b) => g.viewers(b).length - g.viewers(a).length)[0];
       if (target && Math.random() < 0.12 + 0.12 * g.viewers(target).length) { this.swap(id, target, pick(SUITS.filter((s) => s !== g.suits[target]))); return; }
     }
@@ -491,13 +480,11 @@ export class MarkTable {
   }
 
   /**
-   * 机器人夜里写的：印记发光了就写发光的；头头没把握时用一次机会看自己；
+   * 机器人夜里写的：头头没把握时用一次机会看自己；
    * 不然按今天听到的打分（说过真话的人当面说的最可信，匿名信打折，说过谎的人不信），没人说就瞎猜。
    */
   botGuess(id) {
     const g = this.g;
-    const glow = (g.glow[g.day] ?? []).find((x) => x.id === id);
-    if (glow) return glow.suit;
     const { liars, honest } = this.memory(id);
     const score = {};
     for (const t of g.heard(id)) if (!liars.has(t.from)) score[t.suit] = (score[t.suit] ?? 0) + (honest.has(t.from) ? 3 : 1);
@@ -560,7 +547,6 @@ export class MarkTable {
         rules: g.rules,
         foggy: g.foggy,
         nights: g.nights,           // 每晚死了谁、那天被调包了几个人（只有人数）
-        glow: g.glow,               // 发光暴露的（公开）
         lastWords: g.lastWords,
         done: stage === 'table' ? g.done.length : null,
         midnight: stage === 'night' && !!g.blast, // 钟已经敲过，等天亮
@@ -574,12 +560,12 @@ export class MarkTable {
       const exploded = stage === 'night' && !!g.blast?.ids.includes(uid);
       const myHouse = r.roam?.zone.get(uid);
       const mates = myHouse ? [...r.roam.state.get(myHouse).ids].filter((x) => x !== uid) : [];
-      const known = r.ended ? g.suits[uid] : (g.glow[g.day] ?? []).find((x) => x.id === uid)?.suit ?? g.reveals.find((x) => x.by === uid && x.day === g.day)?.suit ?? null;
+      const known = r.ended ? g.suits[uid] : g.reveals.find((x) => x.by === uid && x.day === g.day)?.suit ?? null;
       view.self = {
         seat: me.seat, alive: me.alive,
         role: { id: me.role, name: role.name, good: role.good, evil: !role.good, ability: roleAbility(me.role, g.rules), teamName: role.good ? '好人' : '坏人' },
         allies: g.isEvil(uid) ? g.allies(uid).map((id) => ({ id, team: MARK_ROLES[g.get(id).role].name })) : null,
-        suit: me.alive || r.ended ? known : null, // 自己知道的今天的印记（头头看过 / 发光了 / 终局）
+        suit: me.alive || r.ended ? known : null, // 自己知道的今天的印记（头头看过 / 终局）
         reveals: me.role === 'mk_boss' ? { left: g.revealsLeft(uid), used: g.reveals.filter((x) => x.by === uid) } : null,
         peeksLeft: g.stage === 'roam' ? g.peeksLeft(uid) : g.rules.peeksPerDay,
         sightings: g.sightings.filter((x) => x.by === uid), // 我看到过谁的背后、看到了什么（主动看 / 对视 / 路上瞟到）
@@ -590,7 +576,7 @@ export class MarkTable {
         sent: g.letters.filter((x) => x.from === uid).map(({ lie, ...x }) => x),
         swaps: g.swaps.filter((x) => x.by === uid),
         // 现在能调包谁：同屋、看过背后的人 → null（能）或者不能的原因
-        swapTargets: g.isEvil(uid) && g.stage === 'roam' && g.rules.swap ? Object.fromEntries(mates.filter((x) => g.saw(uid, x)).map((x) => [x, g.swapBlock(uid, x)])) : null,
+        swapTargets: me.role === 'mk_hand' && g.stage === 'roam' && g.rules.swap ? Object.fromEntries(mates.filter((x) => g.saw(uid, x)).map((x) => [x, g.swapBlock(uid, x)])) : null,
         guess: stage === 'night' ? g.guesses[uid] ?? null : null,
         exploded,
         blastWhy: exploded ? g.blast.why[uid] : null,

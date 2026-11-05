@@ -124,7 +124,6 @@ export function MarkGame({ s, act, ask, parts: { History, SoundToggles, Watchers
   const shown = tab ?? (me ? 'role' : 'record');
   const hot = (night && me?.alive && !me.guess && !m.midnight) || !!me?.lastWord;
   const place = s.phase === 'ended' ? '钟楼镇 · 终局' : night || (stage === 'morning' && me) ? (me ? '你的家' : '钟楼镇 · 夜') : stage === 'dusk' ? '钟楼镇 · 黄昏' : `钟楼镇 · 第${cnNum(s.day)}天`;
-  const glowTonight = m.glow?.[s.day] ?? [];
 
   let scene;
   if (roaming) scene = <TownMap s={s} onMove={me ? onMove : () => null} />;
@@ -141,7 +140,7 @@ export function MarkGame({ s, act, ask, parts: { History, SoundToggles, Watchers
         {s.spectator && s.phase !== 'ended' && <div className="spectator-bar">观战中{s.settings?.spectatorGrimoire ? ' · 你能看到所有人的身份，别在语音里说' : ' · 看不到任何人的身份和印记'}</div>}
         {scene}
         {m.foggy && roaming && <div className="mk-fogbar">今天起雾 · 看背后只看得出红黑</div>}
-        {night && me?.alive && !me.exploded && <NightBoard me={me} m={m} glow={glowTonight} name={name} />}
+        {night && me?.alive && !me.exploded && <NightBoard me={me} m={m} />}
         {card && roaming && <PeekCard s={s} me={me} card={card} g={g} mk={mk} onClose={() => setCard(null)} />}
         <Notices s={s} me={me} g={g} onMutual={onMutual} />
         <SoundToggles onFixVoice={me && s.phase !== 'ended' ? () => act('fixVoice') : null} />
@@ -150,7 +149,7 @@ export function MarkGame({ s, act, ask, parts: { History, SoundToggles, Watchers
 
       <section className={`dock ${hot ? 'dock-hot' : ''}`}>
         {me?.lastWord && <LastWordPanel s={s} me={me} mk={mk} name={name} />}
-        <Dock s={s} m={m} me={me} mk={mk} act={act} g={g} name={name} peek={peek} glow={glowTonight} />
+        <Dock s={s} m={m} me={me} mk={mk} act={act} g={g} name={name} peek={peek} />
         {me && s.phase !== 'ended' && <MeBar s={s} me={me} mk={mk} name={name} />}
         {me?.alive && ['roam', 'table'].includes(stage) && <LetterPanel s={s} me={me} mk={mk} name={name} />}
         {s.isHost && s.phase !== 'ended' && (
@@ -178,13 +177,12 @@ export function MarkGame({ s, act, ask, parts: { History, SoundToggles, Watchers
   );
 }
 
-/** 座位圈上的小标签：炸死、同伴、发光、说完了。 */
+/** 座位圈上的小标签：炸死、同伴。 */
 function tagsOf(p, m, s) {
   const t = [];
   if (!p.alive) t.push('炸死');
   const ally = s.self?.allies?.find((a) => a.id === p.id);
   if (ally) t.push(`同伴·${ally.team}`);
-  if ((m.glow?.[s.day] ?? []).some((x) => x.id === p.id)) t.push('发光');
   return t;
 }
 
@@ -202,15 +200,12 @@ function TableBoard({ s, m, name }) {
       </div>
     );
   }
-  if (m.stage === 'dusk') {
-    const glow = m.glow?.[s.day] ?? [];
-    return <div className="mk-board"><small>黄昏</small><b>回家</b><span>{glow.length ? glow.map((x) => <span key={x.id}>{name(x.id)} 发光 <Suit suit={x.suit} /> </span>) : '各自回到自己的房间'}</span></div>;
-  }
+  if (m.stage === 'dusk') return <div className="mk-board"><small>黄昏</small><b>回家</b><span>各自回到自己的房间</span></div>;
   return <div className="mk-board"><small>第{cnNum(s.day)}天</small><b>暗印</b></div>;
 }
 
 // ───────────── 操作区 ─────────────
-function Dock({ s, m, me, mk, act, g, name, peek, glow }) {
+function Dock({ s, m, me, mk, act, g, name, peek }) {
   const stage = m.stage;
   if (s.phase === 'ended') {
     const good = s.winner?.team === 'good';
@@ -245,22 +240,18 @@ function Dock({ s, m, me, mk, act, g, name, peek, glow }) {
       </Panel>
     );
   }
-  if (stage === 'dusk') return <Panel title="回家" tone="dark"><p className="lead">天快黑了，大家回到自己的房间。</p>{glow.length > 0 && <GlowList glow={glow} name={name} />}</Panel>;
+  if (stage === 'dusk') return <Panel title="回家" tone="dark"><p className="lead">天快黑了，大家回到自己的房间。</p></Panel>;
   if (stage === 'night') {
     if (!me) return <Panel title="夜" tone="dark"><p className="lead">大家在自己家里写下后颈的印记……{m.written != null ? `（${m.written} 人写好了）` : ''}</p></Panel>;
     if (me.exploded) return <Panel title="你死了" tone="phy"><p className="lead">印记在你屋里炸开了。{me.blastWhy === 'timeout' ? '你没在钟响前写下印记。' : <>你写的是 <Suit suit={me.blastGuess} name />，其实是 <Suit suit={me.blastSuit} name />。</>}</p><p className="muted">别人天亮才会知道你死了，不知道你写了什么。明天白天你可以留一句遗言。</p></Panel>;
     if (!me.alive) return <Panel title="夜" tone="dark"><p className="lead">你已经死了。等天亮……</p></Panel>;
-    return <BrandWriter s={s} me={me} m={m} mk={mk} name={name} glow={glow} />;
+    return <BrandWriter s={s} me={me} m={m} mk={mk} name={name} />;
   }
   return null;
 }
 
-function GlowList({ glow, name }) {
-  return <p className="mk-glow">发光：{glow.map((x) => <span key={x.id}><b>{name(x.id)}</b> 后颈是 <Suit suit={x.suit} /> </span>)}<small>一天里被三个人看过背后的坏人，印记会发光。</small></p>;
-}
-
 /** 夜里写下自己的印记：先点一个，再按「烙下」确认（写了就不能改）。 */
-function BrandWriter({ s, me, m, mk, name, glow }) {
+function BrandWriter({ s, me, m, mk, name }) {
   const [pick, setPick] = useState(null);
   const [peeking, setPeeking] = useState(false);
   if (m.midnight) return <Panel title="午夜" tone="dark"><p className="lead">钟声敲过了。等天亮……</p></Panel>;
@@ -280,7 +271,6 @@ function BrandWriter({ s, me, m, mk, name, glow }) {
         <p className="mk-own">{peeking ? <><Btn kind="primary" onClick={() => mk('reveal')}>确定用掉一次</Btn> <Btn kind="ghost" onClick={() => setPeeking(false)}>算了</Btn></>
           : <Btn onClick={() => setPeeking(true)}>头头：看自己的印记（剩 {me.reveals.left} 次）</Btn>}</p>
       )}
-      {glow.length > 0 && <GlowList glow={glow} name={name} />}
       <div className="mk-suits five">
         {MARKS.map((x) => (
           <button key={x} type="button" className={`mk-suit-btn ${pick === x ? 'on' : ''} ${SUIT_INFO[x].color}`} onClick={() => setPick(x)}>
@@ -297,13 +287,12 @@ function BrandWriter({ s, me, m, mk, name, glow }) {
 }
 
 /** 夜里屋里浮着的烙印板。 */
-function NightBoard({ me, m, glow, name }) {
+function NightBoard({ me, m }) {
   if (m.midnight) return <div className="mk-nightboard"><b>午夜</b><span>钟声敲过了，等天亮</span></div>;
   return (
     <div className="mk-nightboard">
       <b>{me.guess ? <>已写下 <Suit suit={me.guess} /></> : '写下你后颈的印记'}</b>
       <span>{me.guess ? '吹灭油灯，等钟声' : '在右边（手机在下面）选一个'}</span>
-      {glow.length > 0 && <span className="mk-glow-line">窗外有人的印记在发光：{glow.map((x) => <span key={x.id}>{name(x.id)} <Suit suit={x.suit} /> </span>)}</span>}
     </div>
   );
 }
@@ -733,18 +722,17 @@ function RoleSheet({ s, me, name }) {
 }
 
 function Record({ s, m, name }) {
-  const days = [...new Set([...m.nights.map((x) => x.night), ...Object.keys(m.glow ?? {}).map(Number), ...m.lastWords.map((x) => x.day)])].sort((a, b) => a - b);
+  const days = [...new Set([...m.nights.map((x) => x.night), ...m.lastWords.map((x) => x.day)])].sort((a, b) => a - b);
   const rv = m.review;
   const seat = (id) => s.players.find((p) => p.id === id)?.seat;
   return (
     <section className="mk-record">
-      <h4>死讯、发光和遗言</h4>
+      <h4>死讯和遗言</h4>
       {!days.length && <p className="muted">还没有人死。</p>}
       {days.map((d) => (
         <div key={d} className="mk-rec-day">
           <small>第{cnNum(d)}天</small>
           {m.lastWords.filter((x) => x.day === d).map((x) => <p key={x.by}><b>{name(x.by)}</b> 的遗言：{x.reveal ? <>公开 {name(x.reveal.target)} 第{x.reveal.day}天 <Suit suit={x.reveal.seen} /></> : `「${x.text}」`}</p>)}
-          {(m.glow?.[d] ?? []).map((x) => <p key={`g${x.id}`} className="mk-rec-glow">{name(x.id)} 的印记发光：<Suit suit={x.suit} /></p>)}
           {m.nights.filter((x) => x.night === d).map((x) => <p key="n" className="mk-rec-night">第{cnNum(d)}夜：{x.dead.length ? `${x.dead.map(name).join('、')} 炸死` : '没有人死'}{m.rules.swap !== false ? ` · 这天 ${x.swaps} 人被调包` : ''}</p>)}
         </div>
       ))}
@@ -791,7 +779,7 @@ export function Rules({ n, rules = {} }) {
         <li><b>身份</b>：好人，和藏在里面的坏人（人数照血染：5–9 人 2 个、10–12 人 3 个、13–15 人 4 个{e ? `，这局 ${e} 个` : ''}）。坏人里 1 个头头，其余是手下；7 人及以上坏人互相认识。</li>
         <li><b>天亮</b>：钟声响过，每个活人后颈换上一个新的随机印记 ♠♥♦♣，极少数是<b>鬼牌</b>，自己看不到。{swap && '说书人公布「昨天有 N 个人被调包」（只说人数）。'}有些白天会<b>起雾</b>：看背后只看得出红色还是黑色。</li>
         <li><b>自由活动</b>：只有和别人进了<b>同一栋房子</b>才能看后颈，每天最多看两个人，而且是<b>对视</b>——你看他的同时他也看到你的。路上从别人身后经过，偶尔能<b>瞟到</b>一眼（他只知道有人从背后经过）。说真话还是说谎由你；每人每天还能塞一封只写一个花色的<b>匿名信</b>。</li>
-        <li><b>坏人</b>：头头整局有 2 次机会，自己挑哪天看自己当天的印记；手下一次都没有。{swap ? <>坏人看某人背后的那一刻可以<b>调包</b>，把他今天的印记换掉（每个坏人每两天最多一次，同一个人整局只被调包一次，不能调包自己人，被调包的人不知道）。</> : '（这局关掉了调包。）'}坏人一天里被三个不同的人看过背后，当晚他的印记会<b>发光</b>，所有人都看得到。</li>
+        <li><b>坏人</b>：头头整局有 2 次机会，自己挑哪天看自己当天的印记；手下看不到自己，{swap ? <>但会<b>调包</b>：看某人背后的那一刻，把他今天的印记换掉（每个手下每两天最多一次，同一个人整局只被调包一次，不能调包自己人，被调包的人不知道）。头头不会调包。</> : '这局关掉了调包。'}</li>
         <li><b>圆桌</b>：回到广场讨论，没有提名，也没有投票。说完了各自回家。</li>
         <li><b>夜里</b>：每人在自己家写下自己的印记（鬼牌就写鬼牌），有时限。写错或者没写，午夜钟响时印记在屋里炸开。天亮只公布谁死了。{words ? <>炸死的人第二天白天可以留一句<b>遗言</b>，或者公开一个他看过的人的印记。</> : '（这局关掉了遗言。）'}</li>
         <li><b>胜负</b>：坏人全死，好人赢；活着的坏人人数追平活着的好人，坏人赢。</li>
@@ -828,7 +816,7 @@ export function MarkSettings({ st, set, Toggle, Select }) {
       <div className="setting-col">
         <div className="setting-group">
           <h4>玩法</h4>
-          <Toggle label="调包（坏人看背后时换掉对方的印记）" on={st.markSwap !== false} onChange={(v) => set({ markSwap: v })} />
+          <Toggle label="调包（手下看背后时换掉对方的印记）" on={st.markSwap !== false} onChange={(v) => set({ markSwap: v })} />
           <Toggle label="遗言（炸死的人第二天留一句）" on={st.markLastWords !== false} onChange={(v) => set({ markLastWords: v })} />
           <Toggle label="随机排座位" on={st.shuffle} onChange={(v) => set({ shuffle: v })} />
           <Toggle label="观战者能看所有身份" on={st.spectatorGrimoire} onChange={(v) => set({ spectatorGrimoire: v })} />

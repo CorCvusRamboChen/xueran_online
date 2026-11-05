@@ -4,9 +4,8 @@
 // 回到广场圆桌讨论（没有提名，也没有投票），然后各自回家。夜里在家写下自己的印记：写错或者没写，印记在屋里炸开。
 //
 // 坏人人数照血染的人数表（爪牙 + 恶魔）：1 个头头，其余是手下；7 人及以上坏人互相认识。
-// 头头整局有 2 次机会，自己挑哪天得知当天自己的印记；手下一次都没有。
-// 坏人看某人背后的那一刻可以「调包」：把他今天的印记换成指定的一个（每个坏人每两天最多一次，同一个人整局只被调包一次，不能调包自己人）。
-// 坏人一天里被三个不同的人看过背后，当晚他的印记会发光，所有人都看得到。
+// 头头整局有 2 次机会，自己挑哪天得知当天自己的印记；手下看不到自己，但有头头没有的「调包」：
+// 看某人背后的那一刻把他今天的印记换成指定的一个（每个手下每两天最多一次，同一个人整局只被调包一次，不能调包自己人）。
 // 坏人全死，好人赢；活着的坏人追平活着的好人，坏人赢。
 //
 // 这里只管规则和状态，不碰计时、语音、地图（那些在 server/mark.js）。和血染的 Game 共用几个字段名
@@ -32,11 +31,11 @@ export const colorOf = (s) => (s === JOKER ? JOKER : SUIT_INFO[s]?.color ?? null
 
 export const MARK_ROLES = {
   mk_town: { name: '好人', good: true,
-    ability: '每天天亮，你后颈会烙上一个新的印记，你自己看不到。白天和别人进同一栋房子，请他帮你看——他可能骗你，你的印记也可能已经被坏人调包。入夜在家写下自己的印记，写错就会爆炸。活下去，熬到坏人全死。' },
+    ability: '每天天亮，你后颈会烙上一个新的印记，你自己看不到。白天和别人进同一栋房子，请他帮你看——他可能骗你，你的印记也可能已经被坏人的手下调包。入夜在家写下自己的印记，写错就会爆炸。活下去，熬到坏人全死。' },
   mk_boss: { name: '头头', good: false,
-    ability: '你是坏人的头头。整局有 2 次机会，自己挑哪天，得知当天自己的印记。看别人背后的那一刻可以「调包」，把他今天的印记换掉（每两天最多一次，同一个人只能被调包一次，不能调包自己人）。一天里被三个人看过背后，当晚你的印记会发光，暴露给所有人。' },
+    ability: '你是坏人的头头。整局有 2 次机会，自己挑哪天，得知当天自己的印记；其余日子和好人一样，只能靠别人告诉你。调包是手下的本事，你不会。' },
   mk_hand: { name: '手下', good: false,
-    ability: '你是坏人的手下。你和好人一样看不到自己的印记，只能靠别人告诉你。看别人背后的那一刻可以「调包」，把他今天的印记换掉（每两天最多一次，同一个人只能被调包一次，不能调包自己人）。一天里被三个人看过背后，当晚你的印记会发光，暴露给所有人。' },
+    ability: '你是坏人的手下。你和好人一样看不到自己的印记，只能靠别人告诉你。但你会「调包」：看别人背后的那一刻，把他今天的印记换掉（每两天最多一次，同一个人只能被调包一次，不能调包自己人）。' },
 };
 export const isEvilRole = (r) => r === 'mk_boss' || r === 'mk_hand';
 
@@ -44,7 +43,7 @@ export const isEvilRole = (r) => r === 'mk_boss' || r === 'mk_hand';
 export function roleAbility(role, rules = {}) {
   const text = MARK_ROLES[role]?.ability ?? '';
   if (rules.swap !== false) return text;
-  return text.replace('，你的印记也可能已经被坏人调包', '').replace(/看别人背后的那一刻可以「调包」[^。]*。/, '');
+  return text.replace('，你的印记也可能已经被坏人的手下调包', '').replace('调包是手下的本事，你不会。', '').replace(/但你会「调包」[^。]*。/, '');
 }
 
 export const MARK_MIN = 5;
@@ -59,7 +58,6 @@ export const MARK_RULES = {
   peeksPerDay: 2,    // 每天最多主动看几个人的背后
   bossReveals: 2,    // 头头整局能看自己几次
   swapGap: 2,        // 调包后隔几天才能再调（2 = 每两天最多一次）
-  exposeAt: 3,       // 坏人一天被几个不同的人看过背后就发光
   jokerChance: 0.04, // 每人每天抽到鬼牌的概率
   fogChance: 0.25,   // 第 2 天起每天起雾的概率
   lastWordMax: 60,   // 遗言最多几个字
@@ -108,7 +106,6 @@ export class MarkGame {
     this.blast = null;      // 今晚结算（天亮才公布）：{ ids, why, guesses, fooled }
     this.nights = [];       // 每晚的死者：{ night, dead, swaps }（swaps：那天被调包的人数，天亮公布）
     this.fooledLog = {};    // 炸死的人被谁骗死：id → [{ by, how }]（终局复盘、战绩用）
-    this.glow = {};         // 暴露：day → [{ id, suit }]（入夜时公开）
     this.done = [];         // 圆桌上表示「说完了」的人
     this.lastWords = [];    // 遗言：{ day, by, text } 或 { day, by, reveal: { target, day, seen } }
     this.winner = null;     // 'good' | 'evil'
@@ -247,7 +244,7 @@ export class MarkGame {
   swapBlock(by, target) {
     if (this.rules.swap === false) return '这局关掉了调包';
     if (this.stage !== 'roam') return '只有白天自由活动时能调包';
-    if (!this.isEvil(by)) return '只有坏人能调包';
+    if (this.get(by)?.role !== 'mk_hand') return '只有手下能调包';
     if (!this.get(by)?.alive) return '你已经死了';
     if (!this.get(target)?.alive) return '他已经死了';
     if (!this.saw(by, target)) return '只能在看他背后的那一刻调包';
@@ -295,16 +292,9 @@ export class MarkGame {
     return this.aliveIds().every((x) => this.done.includes(x));
   }
 
-  /** 回家。坏人一天里被三个不同的人看过背后：他今晚的印记发光，所有人都看得到。返回发光的 [{ id, suit }]。 */
+  /** 回家。 */
   dusk() {
-    if (!this.daytime()) return this.glow[this.day] ?? [];
-    this.stage = 'dusk';
-    const glow = this.alive().filter((p) => isEvilRole(p.role) && this.viewers(p.id).length >= this.rules.exposeAt).map((p) => ({ id: p.id, suit: this.suits[p.id] }));
-    if (glow.length) {
-      this.glow[this.day] = glow;
-      this.note(`暴露：${glow.map((x) => `${this.name(x.id)}（${suitText(x.suit)}）`).join('、')} 的印记在发光`);
-    }
-    return glow;
+    if (this.daytime()) this.stage = 'dusk';
   }
 
   // ───────────── 夜里：写下自己的印记 ─────────────

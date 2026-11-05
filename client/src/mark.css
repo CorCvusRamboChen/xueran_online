@@ -54,11 +54,11 @@
 
 /* 屋里的人 */
 .mk-mates { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
-.mk-mate { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; padding: 6px; background: rgba(233, 228, 216, .05); border: 1px solid var(--line); }
+.mk-mate { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 4px 10px; padding: 6px; background: rgba(233, 228, 216, .05); border: 1px solid var(--line); }
 .mk-mate.dead { opacity: .5; }
-.mk-mate-name { display: flex; flex-direction: column; min-width: 0; font-weight: 700; font-size: 13px; line-height: 1.25; word-break: break-all; }
+.mk-mate-name { display: flex; flex-direction: row; gap: 6px; align-items: baseline; min-width: 0; font-weight: 700; font-size: 13px; line-height: 1.25; word-break: break-all; }
 .mk-mate-name i { font: 900 13px var(--cond); font-style: normal; color: var(--mot); }
-.mk-mate-acts { display: flex; gap: 6px; }
+.mk-mate-acts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
 .mk-mate-acts .btn { padding: 6px 10px; font-size: 13px; }
 .mk-tell { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .mk-tell > small { width: 100%; color: var(--muted); font-size: 12px; }
@@ -203,7 +203,7 @@
   .mk-mate-acts { grid-column: 1 / -1; }
 }
 
-/* ───── 第二版：鬼牌、雾天、对视、调包、匿名信、遗言、发光、生还排行 ───── */
+/* ───── 第二版：鬼牌、雾天、对视、调包、匿名信、遗言、生还排行 ───── */
 .mk-suit.joker { color: #c49cff; text-shadow: 0 0 8px rgba(160, 100, 255, .6); }
 .mk-suit.fog { display: inline-grid; place-items: center; min-width: 1.5em; height: 1.4em; padding: 0 4px; border-radius: 3px; font: 900 .8em/1 var(--sans); filter: blur(.2px); }
 .mk-suit.fog.red { background: rgba(255, 107, 91, .25); color: #ff8f80; }
@@ -216,9 +216,6 @@
 .mk-foggy .map::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, rgba(220, 225, 230, 0), rgba(220, 225, 230, .28) 70%); pointer-events: none; }
 .mk-hint { margin: 6px 0; padding: 6px 10px; background: rgba(226, 181, 44, .08); border-left: 3px solid var(--mot); font-size: 14px; }
 .mk-hint.fog { border-color: #c8ced4; background: rgba(200, 206, 212, .08); }
-.mk-glow { margin: 6px 0; padding: 6px 10px; border: 1px solid rgba(255, 138, 61, .5); background: rgba(255, 110, 40, .1); font-size: 13px; }
-.mk-glow small { display: block; color: var(--muted); }
-.mk-glow-line { color: var(--ember-hi) !important; }
 .mk-heard span.mail { border-style: dashed; color: var(--muted); }
 .mk-swap { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px; border: 1px dashed rgba(219, 84, 68, .6); background: rgba(219, 84, 68, .08); }
 .mk-swap > small { width: 100%; color: #f0b4ab; font-size: 12px; }
@@ -238,7 +235,6 @@
 .mk-burn.cold { box-shadow: inset 0 0 90px 20px rgba(140, 190, 230, .45); }
 .mk-peek .mk-burn { z-index: 0; }
 .mk-note-day p.evil { color: #f0b4ab; }
-.mk-rec-glow { color: var(--ember-hi); }
 .mk-board-list table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .mk-board-list th, .mk-board-list td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; }
 .mk-board-list h4 { margin: 14px 0 6px; font: 900 13px var(--sans); letter-spacing: 2px; color: var(--muted); }
