@@ -2,11 +2,14 @@
 // → 回到广场圆桌讨论（没有提名，也没有投票）→ 回家 → 夜里在家写下印记 → 午夜结算 → 天亮公布。
 // 规则在 engine/mark.js。room.js 里只接了几处：开局（start）、操作（act 的 'mark'）、集合（endRoam 之后转到圆桌）、
 // 视图（viewFor）、读档 / 暂停后恢复（resume）、读档（restore）。自由活动、私聊房子、语音、暂停、存档都用房间原来的那套。
-import { MarkGame, MARK_ROLES, SUITS, MARKS, suitText, evilCount, evilKnow, colorOf } from '../engine/mark.js';
+import { MarkGame, MARK_ROLES, SUITS, MARKS, suitText, evilCount, evilKnow, colorOf, roleAbility } from '../engine/mark.js';
 import { houseCenter, positionAt } from '../shared/map.js';
 import { ttsUrl } from './tts.js';
 
 /** 暗印对局里房间接受的操作：大厅那些、自由活动的（锁门、敲门、邀请、提前集合）、语音归位、结束、暗印自己的。血染的提名投票、夜里选人这些都不要。 */
+/** 暗印的房间设置（并进 DEFAULT_SETTINGS）：房主能关掉调包和遗言。 */
+export const MARK_SETTINGS = { markSwap: true, markLastWords: true };
+
 export const MK_ACTIONS = new Set(['join', 'leave', 'claimHost', 'releaseHost', 'settings', 'character', 'outfit', 'addBots', 'kick', 'markNewbie',
   'start', 'history', 'stats', 'pastGame', 'fixVoice', 'end', 'fullLog', 'gather', 'markStats',
   'lock', 'knock', 'invite', 'inviteReply', 'roamVote', 'mark']);
@@ -30,6 +33,12 @@ export class MarkTable {
   }
   get g() { return this.room.game; }
   wait(a, b = a) { return rand(a, b) * this.speed; }
+
+  updateSettings(p) {
+    const s = this.room.settings;
+    if (typeof p.markSwap === 'boolean') s.markSwap = p.markSwap;
+    if (typeof p.markLastWords === 'boolean') s.markLastWords = p.markLastWords;
+  }
 
   /** 这一步多少秒。 */
   secs(stage) {
@@ -69,7 +78,7 @@ export class MarkTable {
   // ───────────── 开局 ─────────────
   async start(seats) {
     const r = this.room;
-    const g = new MarkGame(seats.map(({ id, name }) => ({ id, name })));
+    const g = new MarkGame(seats.map(({ id, name }) => ({ id, name })), { rules: { swap: r.settings.markSwap !== false, lastWords: r.settings.markLastWords !== false } });
     r.game = g;
     // 本地测试（DEV_LOGIN 的 ?devRole=mk_boss / mk_hand / mk_town）：开局把这个身份和别人对调。线上的 Discord 用户没有 devRole
     for (const p of g.players) {
@@ -84,7 +93,7 @@ export class MarkTable {
     try { await r.claimSquare(square); } catch (e) { r.game = null; r.homes = null; throw e; }
     r.square = square;
     const e = evilCount(g.n);
-    r.announce(`游戏开始！《暗印》${g.n} 人：好人 ${g.n - e} · 坏人 ${e}（1 个头头${e > 1 ? `、${e - 1} 个手下` : ''}）。${evilKnow(g.n) ? '坏人互相认识' : '6 人及以下坏人互相不认识'}。坏人全死好人赢；活着的坏人追平活着的好人，坏人赢。`, 'start');
+    r.announce(`游戏开始！《暗印》${g.n} 人：好人 ${g.n - e} · 坏人 ${e}（1 个头头${e > 1 ? `、${e - 1} 个手下` : ''}）。${evilKnow(g.n) ? '坏人互相认识' : '6 人及以下坏人互相不认识'}。${g.rules.swap ? '' : '这局没有调包。'}${g.rules.lastWords ? '' : '这局没有遗言。'}坏人全死好人赢；活着的坏人追平活着的好人，坏人赢。`, 'start');
     this.story('暗印', pick([
       '钟楼敲响第一声的时候，每个人的后颈都烫了一下。那里多了一枚印记——你自己永远看不到它。',
       '镇上流传着一个诅咒：午夜钟响之前，写不出自己后颈上的印记，印记就会在你屋里炸开。',
@@ -107,9 +116,9 @@ export class MarkTable {
     const g = this.g;
     const last = g.nights.at(-1);
     r.announce(`第 ${g.day} 天。钟声响过，每个活着的人后颈都换上了新的印记，自己看不到。只有和别人关在同一栋房子里，才能绕到他身后看（每天最多看 ${g.rules.peeksPerDay} 个人，看的同时他也看到你的）。`, 'day');
-    if (last) r.announce(`说书人：昨天有 **${last.swaps}** 个人被调包了。`, 'day', true);
+    if (last && g.rules.swap) r.announce(`说书人：昨天有 **${last.swaps}** 个人被调包了。`, 'day', true);
     if (g.foggy) { r.announce('今天起雾了：看别人背后，只看得出是红色还是黑色。', 'day', true); this.story('起雾', '雾从钟楼脚下漫上来。今天凑得再近，也只看得清颜色。'); }
-    if (last?.dead.length) {
+    if (last?.dead.length && g.rules.lastWords) {
       r.announce(`${last.dead.map((id) => `**${g.name(id)}**`).join('、')} 今天白天可以留一句遗言，或者公开一个他看过的人的印记。`, 'day');
       for (const id of last.dead) if (r.isFake(id)) r.later(this.wait(4000, 12000), () => { if (!r.ended && this.g === g) this.botLastWord(id); });
     }
@@ -568,7 +577,7 @@ export class MarkTable {
       const known = r.ended ? g.suits[uid] : (g.glow[g.day] ?? []).find((x) => x.id === uid)?.suit ?? g.reveals.find((x) => x.by === uid && x.day === g.day)?.suit ?? null;
       view.self = {
         seat: me.seat, alive: me.alive,
-        role: { id: me.role, name: role.name, good: role.good, evil: !role.good, ability: role.ability, teamName: role.good ? '好人' : '坏人' },
+        role: { id: me.role, name: role.name, good: role.good, evil: !role.good, ability: roleAbility(me.role, g.rules), teamName: role.good ? '好人' : '坏人' },
         allies: g.isEvil(uid) ? g.allies(uid).map((id) => ({ id, team: MARK_ROLES[g.get(id).role].name })) : null,
         suit: me.alive || r.ended ? known : null, // 自己知道的今天的印记（头头看过 / 发光了 / 终局）
         reveals: me.role === 'mk_boss' ? { left: g.revealsLeft(uid), used: g.reveals.filter((x) => x.by === uid) } : null,
@@ -581,7 +590,7 @@ export class MarkTable {
         sent: g.letters.filter((x) => x.from === uid).map(({ lie, ...x }) => x),
         swaps: g.swaps.filter((x) => x.by === uid),
         // 现在能调包谁：同屋、看过背后的人 → null（能）或者不能的原因
-        swapTargets: g.isEvil(uid) && g.stage === 'roam' ? Object.fromEntries(mates.filter((x) => g.saw(uid, x)).map((x) => [x, g.swapBlock(uid, x)])) : null,
+        swapTargets: g.isEvil(uid) && g.stage === 'roam' && g.rules.swap ? Object.fromEntries(mates.filter((x) => g.saw(uid, x)).map((x) => [x, g.swapBlock(uid, x)])) : null,
         guess: stage === 'night' ? g.guesses[uid] ?? null : null,
         exploded,
         blastWhy: exploded ? g.blast.why[uid] : null,

@@ -11,7 +11,7 @@ import { Tag, Panel, Btn, Stat, HudBar } from './ui.jsx';
 import { Portrait, useTick, useCountdown, cnNum, hue } from './util.jsx';
 import { audio, heartbeat, tick, sfxEnabled } from './world/footsteps.js';
 import { bus } from './mixer.js';
-import { SUITS, MARKS, SUIT_INFO, MARK_ROLES, MARK_RULES, evilCount } from '../../src/engine/mark.js';
+import { SUITS, MARKS, SUIT_INFO, MARK_ROLES, MARK_RULES, evilCount, roleAbility } from '../../src/engine/mark.js';
 import './mark.css';
 
 const STAGE_NAME = { setup: '天亮', morning: '天亮', roam: '自由活动', table: '圆桌讨论', dusk: '回家', night: '写下印记', ended: '终局' };
@@ -171,7 +171,7 @@ export function MarkGame({ s, act, ask, parts: { History, SoundToggles, Watchers
           {shown === 'record' && <Record s={s} m={m} name={name} />}
           {shown === 'record' && <Watchers s={s} />}
           {shown === 'log' && <History log={s.log} players={s.players} ask={ask} epoch={s.logEpoch} />}
-          {shown === 'rules' && <Rules n={s.players.length} />}
+          {shown === 'rules' && <Rules n={s.players.length} rules={m.rules} />}
         </div>
       </aside>
     </div>
@@ -198,7 +198,7 @@ function TableBoard({ s, m, name }) {
       <div className="mk-board">
         <small>圆桌讨论</small>
         <b>没有投票</b>
-        <span>说完了 {m.done ?? 0} / {alive}{last ? ` · 昨天 ${last.swaps} 人被调包` : ''}</span>
+        <span>说完了 {m.done ?? 0} / {alive}{last && m.rules.swap !== false ? ` · 昨天 ${last.swaps} 人被调包` : ''}</span>
       </div>
     );
   }
@@ -228,7 +228,7 @@ function Dock({ s, m, me, mk, act, g, name, peek, glow }) {
     return (
       <Panel title={`第${cnNum(s.day)}天 · 天亮`} tone="mot">
         <p className="lead">钟声响过。每个活着的人后颈都换上了新的印记——你自己看不到。</p>
-        {last && <p className="mk-hint">说书人：昨天有 <b>{last.swaps}</b> 个人被调包了。{last.dead.length ? `昨晚 ${last.dead.map(name).join('、')} 炸死了。` : '昨晚没有人死。'}</p>}
+        {last && <p className="mk-hint">{m.rules.swap !== false && <>说书人：昨天有 <b>{last.swaps}</b> 个人被调包了。</>}{last.dead.length ? `昨晚 ${last.dead.map(name).join('、')} 炸死了。` : '昨晚没有人死。'}</p>}
         {m.foggy && <p className="mk-hint fog">今天起雾：看别人背后只看得出红色还是黑色。</p>}
         <p className="muted">马上开始自由活动：走进房子和别人私聊，请他帮你看后颈（每天最多看 {m.rules.peeksPerDay} 个人）。</p>
       </Panel>
@@ -745,7 +745,7 @@ function Record({ s, m, name }) {
           <small>第{cnNum(d)}天</small>
           {m.lastWords.filter((x) => x.day === d).map((x) => <p key={x.by}><b>{name(x.by)}</b> 的遗言：{x.reveal ? <>公开 {name(x.reveal.target)} 第{x.reveal.day}天 <Suit suit={x.reveal.seen} /></> : `「${x.text}」`}</p>)}
           {(m.glow?.[d] ?? []).map((x) => <p key={`g${x.id}`} className="mk-rec-glow">{name(x.id)} 的印记发光：<Suit suit={x.suit} /></p>)}
-          {m.nights.filter((x) => x.night === d).map((x) => <p key="n" className="mk-rec-night">第{cnNum(d)}夜：{x.dead.length ? `${x.dead.map(name).join('、')} 炸死` : '没有人死'} · 这天 {x.swaps} 人被调包</p>)}
+          {m.nights.filter((x) => x.night === d).map((x) => <p key="n" className="mk-rec-night">第{cnNum(d)}夜：{x.dead.length ? `${x.dead.map(name).join('、')} 炸死` : '没有人死'}{m.rules.swap !== false ? ` · 这天 ${x.swaps} 人被调包` : ''}</p>)}
         </div>
       ))}
       {rv && (
@@ -780,18 +780,20 @@ function Record({ s, m, name }) {
   );
 }
 
-export function Rules({ n }) {
+export function Rules({ n, rules = {} }) {
   const e = n >= 5 && n <= 15 ? evilCount(n) : null;
+  const swap = rules.swap !== false;
+  const words = rules.lastWords !== false;
   return (
     <section className="mk-rules">
       <h4>暗印 · 规则</h4>
       <ol>
         <li><b>身份</b>：好人，和藏在里面的坏人（人数照血染：5–9 人 2 个、10–12 人 3 个、13–15 人 4 个{e ? `，这局 ${e} 个` : ''}）。坏人里 1 个头头，其余是手下；7 人及以上坏人互相认识。</li>
-        <li><b>天亮</b>：钟声响过，每个活人后颈换上一个新的随机印记 ♠♥♦♣，极少数是<b>鬼牌</b>，自己看不到。说书人公布「昨天有 N 个人被调包」（只说人数）。有些白天会<b>起雾</b>：看背后只看得出红色还是黑色。</li>
+        <li><b>天亮</b>：钟声响过，每个活人后颈换上一个新的随机印记 ♠♥♦♣，极少数是<b>鬼牌</b>，自己看不到。{swap && '说书人公布「昨天有 N 个人被调包」（只说人数）。'}有些白天会<b>起雾</b>：看背后只看得出红色还是黑色。</li>
         <li><b>自由活动</b>：只有和别人进了<b>同一栋房子</b>才能看后颈，每天最多看两个人，而且是<b>对视</b>——你看他的同时他也看到你的。路上从别人身后经过，偶尔能<b>瞟到</b>一眼（他只知道有人从背后经过）。说真话还是说谎由你；每人每天还能塞一封只写一个花色的<b>匿名信</b>。</li>
-        <li><b>坏人</b>：头头整局有 2 次机会，自己挑哪天看自己当天的印记；手下一次都没有。坏人看某人背后的那一刻可以<b>调包</b>，把他今天的印记换掉（每个坏人每两天最多一次，同一个人整局只被调包一次，不能调包自己人，被调包的人不知道）。坏人一天里被三个不同的人看过背后，当晚他的印记会<b>发光</b>，所有人都看得到。</li>
+        <li><b>坏人</b>：头头整局有 2 次机会，自己挑哪天看自己当天的印记；手下一次都没有。{swap ? <>坏人看某人背后的那一刻可以<b>调包</b>，把他今天的印记换掉（每个坏人每两天最多一次，同一个人整局只被调包一次，不能调包自己人，被调包的人不知道）。</> : '（这局关掉了调包。）'}坏人一天里被三个不同的人看过背后，当晚他的印记会<b>发光</b>，所有人都看得到。</li>
         <li><b>圆桌</b>：回到广场讨论，没有提名，也没有投票。说完了各自回家。</li>
-        <li><b>夜里</b>：每人在自己家写下自己的印记（鬼牌就写鬼牌），有时限。写错或者没写，午夜钟响时印记在屋里炸开。天亮只公布谁死了。炸死的人第二天白天可以留一句<b>遗言</b>，或者公开一个他看过的人的印记。</li>
+        <li><b>夜里</b>：每人在自己家写下自己的印记（鬼牌就写鬼牌），有时限。写错或者没写，午夜钟响时印记在屋里炸开。天亮只公布谁死了。{words ? <>炸死的人第二天白天可以留一句<b>遗言</b>，或者公开一个他看过的人的印记。</> : '（这局关掉了遗言。）'}</li>
         <li><b>胜负</b>：坏人全死，好人赢；活着的坏人人数追平活着的好人，坏人赢。</li>
       </ol>
     </section>
@@ -825,7 +827,9 @@ export function MarkSettings({ st, set, Toggle, Select }) {
       </div>
       <div className="setting-col">
         <div className="setting-group">
-          <h4>其他</h4>
+          <h4>玩法</h4>
+          <Toggle label="调包（坏人看背后时换掉对方的印记）" on={st.markSwap !== false} onChange={(v) => set({ markSwap: v })} />
+          <Toggle label="遗言（炸死的人第二天留一句）" on={st.markLastWords !== false} onChange={(v) => set({ markLastWords: v })} />
           <Toggle label="随机排座位" on={st.shuffle} onChange={(v) => set({ shuffle: v })} />
           <Toggle label="观战者能看所有身份" on={st.spectatorGrimoire} onChange={(v) => set({ spectatorGrimoire: v })} />
           <Toggle label="观战者在语音里闭麦" on={st.muteSpectators} onChange={(v) => set({ muteSpectators: v })} />
@@ -836,7 +840,8 @@ export function MarkSettings({ st, set, Toggle, Select }) {
 }
 
 /** 大厅下面：规则、身份牌、生还排行。 */
-export function MarkShowcase({ ask }) {
+export function MarkShowcase({ ask, st = {} }) {
+  const rules = { swap: st.markSwap !== false, lastWords: st.markLastWords !== false };
   const [board, setBoard] = useState(null);
   useEffect(() => { ask?.('markStats').then((r) => setBoard(r?.stats ?? [])).catch(() => setBoard([])); }, []);
   return (
@@ -849,9 +854,9 @@ export function MarkShowcase({ ask }) {
       </header>
       <div className="mk-show-row">{MARKS.map((x) => <Suit key={x} suit={x} big />)}</div>
       <div className="av-roles">
-        {Object.entries(MARK_ROLES).map(([id, r]) => <div key={id} className={`av-r ${r.good ? 'good' : 'evil'}`}><b>{r.name}</b><p>{r.ability}</p></div>)}
+        {Object.entries(MARK_ROLES).map(([id, r]) => <div key={id} className={`av-r ${r.good ? 'good' : 'evil'}`}><b>{r.name}</b><p>{roleAbility(id, rules)}</p></div>)}
       </div>
-      <Rules n={0} />
+      <Rules n={0} rules={rules} />
       <section className="mk-board-list">
         <h4>生还排行</h4>
         {board == null ? <p className="muted">读取中……</p> : !board.length ? <p className="muted">还没有人打完过一局暗印。</p> : (

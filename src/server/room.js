@@ -18,7 +18,7 @@ import { WW_ROOM } from './werewolfRoom.js';
 import { Avalon } from '../engine/avalon.js';
 import { AvalonTable, AVALON_SETTINGS, AV_ACTIONS } from './avalon.js';
 import { MarkGame } from '../engine/mark.js';
-import { MarkTable, MK_ACTIONS } from './mark.js';
+import { MarkTable, MK_ACTIONS, MARK_SETTINGS } from './mark.js';
 
 // 受害者那段破门过场多长（毫秒）：踹门 → 踹开 → "你死了"，播完再天亮
 const VICTIM_SCENE_MS = 6500;
@@ -87,6 +87,7 @@ export const DEFAULT_SETTINGS = {
   muteSpectators: true,     // 开局后观战的人在语音里被服务器闭麦（免得漏信息）；离开或终局自动解除
   settingsVersion: 2,       // 2：闭麦闭耳、隐藏票型改成默认关（老房间读档时改一次，之后房主怎么设就怎么样）
   ...AVALON_SETTINGS,       // 娱乐模式阿瓦隆的设置，见 server/avalon.js
+  ...MARK_SETTINGS,         // 娱乐模式暗印的设置（调包、遗言开关），见 server/mark.js
 };
 
 /** 一间房子的空状态：谁在里面、锁没锁、谁在敲门、谁被放行、对应的语音频道。 */
@@ -396,6 +397,7 @@ export class Room {
     if (typeof p.lunaticGhost === 'boolean') s.lunaticGhost = p.lunaticGhost;
     if (typeof p.hearMadness === 'boolean') s.hearMadness = p.hearMadness;
     this.av.updateSettings(p);
+    this.mk.updateSettings(p);
     if (SCRIPTS[p.script]) { if (s.script !== p.script) s.preset = null; s.script = p.script; }
     if (['preset', 'ai', 'random'].includes(p.setupMode)) s.setupMode = p.setupMode;
     if ('preset' in p) s.preset = p.preset == null ? null : Math.max(0, Math.min((SETUPS[s.script]?.length ?? 1) - 1, Number(p.preset) || 0));

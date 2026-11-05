@@ -40,6 +40,13 @@ export const MARK_ROLES = {
 };
 export const isEvilRole = (r) => r === 'mk_boss' || r === 'mk_hand';
 
+/** 身份牌上的说明：房主关掉调包时，把讲调包的那几句去掉。 */
+export function roleAbility(role, rules = {}) {
+  const text = MARK_ROLES[role]?.ability ?? '';
+  if (rules.swap !== false) return text;
+  return text.replace('，你的印记也可能已经被坏人调包', '').replace(/看别人背后的那一刻可以「调包」[^。]*。/, '');
+}
+
 export const MARK_MIN = 5;
 export const MARK_MAX = 15;
 /** 坏人几个：照血染人数表的爪牙 + 恶魔（5–9 人 2 个，10–12 人 3 个，13–15 人 4 个）。 */
@@ -56,6 +63,8 @@ export const MARK_RULES = {
   jokerChance: 0.04, // 每人每天抽到鬼牌的概率
   fogChance: 0.25,   // 第 2 天起每天起雾的概率
   lastWordMax: 60,   // 遗言最多几个字
+  swap: true,        // 坏人能调包（房主可以关）
+  lastWords: true,   // 炸死的人能留遗言（房主可以关）
 };
 
 const shuffleArr = (arr, rng) => {
@@ -236,6 +245,7 @@ export class MarkGame {
   // ───────────── 坏人：调包、头头看自己 ─────────────
   /** 能不能调包 target（不检查在不在同一栋房子）。不能就返回原因。 */
   swapBlock(by, target) {
+    if (this.rules.swap === false) return '这局关掉了调包';
     if (this.stage !== 'roam') return '只有白天自由活动时能调包';
     if (!this.isEvil(by)) return '只有坏人能调包';
     if (!this.get(by)?.alive) return '你已经死了';
@@ -361,7 +371,7 @@ export class MarkGame {
   /** 昨晚炸死、今天白天还没留遗言的人。 */
   canLastWord(id) {
     const last = this.nights.at(-1);
-    return !!last && last.night === this.day - 1 && last.dead.includes(id) && this.daytime() && !this.lastWords.some((w) => w.by === id);
+    return this.rules.lastWords !== false && !!last && last.night === this.day - 1 && last.dead.includes(id) && this.daytime() && !this.lastWords.some((w) => w.by === id);
   }
   /** 留遗言：一句话，或者公开一个自己看过的人那天的印记（reveal：{ target, day }）。 */
   lastWord(id, { text, reveal } = {}) {

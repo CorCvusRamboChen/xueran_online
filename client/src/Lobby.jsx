@@ -254,7 +254,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
         </section>
 
         <RecordAndHistory s={s} ask={ask} />
-        {ww ? <WwShowcase n={n} /> : st.script === 'avalon' ? <AvalonShowcase /> : st.script === 'mark' ? <MarkShowcase ask={ask} /> : <RoleShowcase script={st.script} />}
+        {ww ? <WwShowcase n={n} /> : st.script === 'avalon' ? <AvalonShowcase /> : st.script === 'mark' ? <MarkShowcase ask={ask} st={st} /> : <RoleShowcase script={st.script} />}
       </div>
     </div>
   );

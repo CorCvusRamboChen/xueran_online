@@ -1,7 +1,7 @@
 // 娱乐模式「暗印」：规则（engine/mark.js）、房间流程和机器人（server/mark.js）、生还排行（summarizeMark）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MarkGame, markRoles, evilCount, evilKnow, SUITS, JOKER, colorOf, summarizeMark } from '../src/engine/mark.js';
+import { MarkGame, markRoles, evilCount, evilKnow, SUITS, JOKER, colorOf, summarizeMark, roleAbility } from '../src/engine/mark.js';
 import { Room } from '../src/server/room.js';
 import { SCRIPTS, DISTRIBUTION } from '../src/engine/roles.js';
 
@@ -201,6 +201,21 @@ test('胜负：坏人全死好人赢；活着的坏人追平好人坏人赢；�
   toNight(g); g.dawn();
   assert.equal(g.winner, 'good');
   assert.equal(g.stage, 'ended');
+});
+
+test('房主可以关掉调包和遗言', () => {
+  const g = make([T, T, T, T, T, B, H], { swap: false, lastWords: false });
+  g.peek('p6', 'p1');
+  assert.equal(g.swapBlock('p6', 'p1'), '这局关掉了调包');
+  assert.throws(() => g.swap('p6', 'p1', other(g.suits.p1)), /关掉了调包/);
+  toNight(g);
+  g.guess('p1', other(g.suits.p1));
+  allRight(g);
+  assert.equal(g.canLastWord('p1'), false);
+  assert.throws(() => g.lastWord('p1', { text: '再见' }), /不能留遗言/);
+  assert.ok(!roleAbility('mk_boss', g.rules).includes('调包'), '头头的说明不再提调包');
+  assert.ok(!roleAbility('mk_town', g.rules).includes('调包'));
+  assert.ok(roleAbility('mk_hand', {}).includes('调包'), '默认开着');
 });
 
 test('存档读档：状态原样回来', () => {
@@ -452,6 +467,32 @@ test('机器人：坏人七成说谎；好人说看到的（雾天挑同色的�
   g.fog[g.day] = true;
   g.peek(t2, 'u1');
   for (let i = 0; i < 20; i++) assert.equal(colorOf(room.mk.botClaim(t2, 'u1')), colorOf(g.suits.u1));
+  await room.teardown();
+});
+
+test('房间：房主关掉调包和遗言后，开局的规则跟着关，界面和公告都不提', async () => {
+  const room = await markRoom(5, { ...FAST, roam: 60, night: 60, blast: 60 }, ['u2']);
+  await room.act('u1', 'settings', { markSwap: false, markLastWords: false });
+  await assert.rejects(room.act('u2', 'settings', { markSwap: true }), /房主/);
+  assert.equal(room.settings.markSwap, false);
+  const g = await started(room, [T, B, T, T, T, T, H]);
+  assert.deepEqual([g.rules.swap, g.rules.lastWords], [false, false]);
+  assert.ok(room.log.some((l) => /这局没有调包。这局没有遗言/.test(l.text)));
+  const h = room.roam.houses[0];
+  putIn(room, 'u1', h.id); putIn(room, 'u2', h.id);
+  await room.act('u2', 'mark', { kind: 'peek', target: 'u1' });
+  assert.equal(room.viewFor('u2').self.swapTargets, null, '坏人没有调包按钮');
+  await assert.rejects(room.act('u2', 'mark', { kind: 'swap', target: 'u1', suit: other(g.suits.u1) }), /关掉了调包/);
+  assert.ok(!room.viewFor('u2').self.role.ability.includes('调包'));
+  room.mk.botGuess = (id) => g.suits[id];
+  await room.endRoam('时间到');
+  await until(() => g.stage === 'night', 10000);
+  await room.act('u1', 'mark', { kind: 'guess', suit: other(g.suits.u1) });
+  await room.act('u2', 'mark', { kind: 'guess', suit: g.suits.u2 });
+  await until(() => !!g.blast, 5000);
+  room.mk.dawn();
+  assert.equal(room.viewFor('u1').self.lastWord, false, '炸死了也不能留遗言');
+  assert.ok(!room.log.some((l) => /被调包了|留一句遗言/.test(l.text)), '天亮不公布调包人数、不提遗言');
   await room.teardown();
 });
 
