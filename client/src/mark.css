@@ -203,15 +203,10 @@
   .mk-mate-acts { grid-column: 1 / -1; }
 }
 
-/* ───── 第二版：鬼牌、雾天、对视、调包、匿名信、遗言、生还排行 ───── */
-.mk-suit.joker { color: #c49cff; text-shadow: 0 0 8px rgba(160, 100, 255, .6); }
+/* ───── 第二版：雾天、对视、调包、匿名信、遗言、生还排行 ───── */
 .mk-suit.fog { display: inline-grid; place-items: center; min-width: 1.5em; height: 1.4em; padding: 0 4px; border-radius: 3px; font: 900 .8em/1 var(--sans); filter: blur(.2px); }
 .mk-suit.fog.red { background: rgba(255, 107, 91, .25); color: #ff8f80; }
 .mk-suit.fog.black { background: rgba(233, 228, 216, .15); color: var(--paper); }
-.mk-suit-btn.joker span { color: #6b2bb5; font-size: 30px; }
-.mk-suits.five { grid-template-columns: repeat(5, 1fr); }
-.mk-suits.five .mk-suit-btn { height: 70px; }
-.mk-suits.five .mk-suit-btn span { font-size: 32px; }
 .mk-fogbar { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); z-index: 15; padding: 4px 14px; background: rgba(200, 205, 210, .18); border: 1px solid rgba(220, 225, 230, .4); color: #e4e8ec; font-size: 12px; letter-spacing: 1px; backdrop-filter: blur(4px); pointer-events: none; }
 .mk-foggy .map::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, rgba(220, 225, 230, 0), rgba(220, 225, 230, .28) 70%); pointer-events: none; }
 .mk-hint { margin: 6px 0; padding: 6px 10px; background: rgba(226, 181, 44, .08); border-left: 3px solid var(--mot); font-size: 14px; }
@@ -239,7 +234,5 @@
 .mk-board-list th, .mk-board-list td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; }
 .mk-board-list h4 { margin: 14px 0 6px; font: 900 13px var(--sans); letter-spacing: 2px; color: var(--muted); }
 @media (max-width: 520px) {
-  .mk-suits.five .mk-suit-btn { height: 58px; }
-  .mk-suits.five .mk-suit-btn span { font-size: 24px; }
 }
 .mk-swap-btn { color: #f0b4ab !important; }

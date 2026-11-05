@@ -1,13 +1,13 @@
 // 娱乐模式「暗印」：规则（engine/mark.js）、房间流程和机器人（server/mark.js）、生还排行（summarizeMark）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MarkGame, markRoles, evilCount, evilKnow, SUITS, JOKER, colorOf, summarizeMark, roleAbility } from '../src/engine/mark.js';
+import { MarkGame, markRoles, evilCount, evilKnow, SUITS, colorOf, summarizeMark, roleAbility } from '../src/engine/mark.js';
 import { Room } from '../src/server/room.js';
 import { SCRIPTS, DISTRIBUTION } from '../src/engine/roles.js';
 
 const ids = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, name: `玩家${i + 1}` }));
 const T = 'mk_town'; const B = 'mk_boss'; const H = 'mk_hand';
-const NOFX = { jokerChance: 0, fogChance: 0 };
+const NOFX = { fogChance: 0 };
 /** 开好局、进到自由活动。 */
 const make = (roles, rules = {}) => { const g = new MarkGame(ids(roles.length), { roles, rules: { ...NOFX, ...rules } }); g.begin(); g.openRoam(); return g; };
 const other = (s) => SUITS.find((x) => x !== s);
@@ -36,13 +36,13 @@ test('人数照血染：坏人 = 爪牙 + 恶魔，1 个头头其余手下；7 �
   assert.deepEqual(SCRIPTS.mark.players, [5, 15]);
 });
 
-test('对视：看他的同时他看到你的；每天最多主动看两个人，再看同一个人不算次数', () => {
+test('看后颈只看得到对方的（不对视）；每天最多看两个人，再看同一个人不算次数', () => {
   const g = make([T, T, T, T, T, B, H]);
   const r = g.peek('p1', 'p2');
-  assert.deepEqual(r, { seen: g.suits.p2, mutual: g.suits.p1 });
-  assert.ok(g.sightings.some((x) => x.by === 'p2' && x.target === 'p1' && x.kind === 'mutual'), '被看的人同时看到看的人');
+  assert.deepEqual(r, { seen: g.suits.p2 });
+  assert.ok(!g.sightings.some((x) => x.by === 'p2'), '被看的人看不到看他的人');
   assert.equal(g.peeksLeft('p1'), 1);
-  assert.equal(g.peeksLeft('p2'), 2, '对视不占被看的人的次数');
+  assert.equal(g.peeksLeft('p2'), 2, '被看不占次数');
   g.peek('p1', 'p2');
   assert.equal(g.peeksLeft('p1'), 1, '再看同一个人不算');
   g.peek('p1', 'p3');
@@ -52,15 +52,11 @@ test('对视：看他的同时他看到你的；每天最多主动看两个人�
   assert.throws(() => g.peek('p2', 'p5'), /死/);
 });
 
-test('鬼牌和雾天：鬼牌那晚要写鬼牌；雾天看背后只看得出红黑', () => {
-  const g = make(town5, { jokerChance: 1 });
-  assert.ok(Object.values(g.suits).every((s) => s === JOKER));
+test('只有四个花色（没有鬼牌）；雾天看背后只看得出红黑', () => {
+  const g = make(town5);
+  for (let d = 0; d < 30; d++) { g.deal(); assert.ok(Object.values(g.suits).every((x) => SUITS.includes(x))); }
   toNight(g);
-  g.guess('p1', JOKER);
-  g.guess('p2', 'spade');
-  for (const id of ['p3', 'p4', 'p5']) g.guess(id, JOKER);
-  assert.deepEqual(g.resolveNight().ids, ['p2']);
-
+  assert.throws(() => g.guess('p1', 'joker'), /花色/);
   const f = make(town5, { fogChance: 1 });
   assert.equal(f.foggy, false, '第 1 天不起雾');
   toNight(f); allRight(f); f.openRoam();
@@ -80,7 +76,7 @@ test('路上瞟到：同一天同一对只掷一次，瞟到的算看过背后',
 });
 
 test('调包是手下的本事：看背后的那一刻把他今天的印记换掉；每两天一次，同一个人只被调包一次，不能调包自己人；头头不会', () => {
-  const g = make([T, T, T, T, T, B, H]);
+  const g = make([T, T, T, T, T, B, H], { peeksPerDay: 3 }); // 这条要多看一个人
   assert.match(g.swapBlock('p7', 'p1'), /看他背后/);
   g.peek('p2', 'p1');               // 2 号先看了 1 号
   const before = g.suits.p1;
@@ -92,7 +88,7 @@ test('调包是手下的本事：看背后的那一刻把他今天的印记换�
   assert.equal(g.suits.p1, other(before));
   assert.equal(g.suitLog[1].p1, other(before));
   assert.equal(g.sightings.find((x) => x.by === 'p2' && x.target === 'p1').seen, before, '之前看过他的人记着的是旧的');
-  g.peek('p6', 'p7');             // 头头看手下：对视，手下也看到了头头
+  g.peek('p7', 'p6');
   assert.equal(g.swapBlock('p7', 'p6'), '不能调包自己人');
   g.peek('p7', 'p2');
   assert.match(g.swapBlock('p7', 'p2'), /今天已经调包过/);
@@ -141,7 +137,7 @@ test('匿名信：每人每天一封、只写一个花色，收信人不知道�
   assert.throws(() => g.letter('p2', 'p3', 'star'), /一个花色/);
   assert.deepEqual(g.mail('p2').map((x) => [x.suit, 'from' in x]), [['heart', false]]);
   g.openTable();
-  g.letter('p2', 'p1', JOKER);
+  g.letter('p2', 'p1', 'club');
   toNight(g);
   assert.throws(() => g.letter('p3', 'p1', 'heart'), /白天/);
 });
@@ -280,13 +276,12 @@ async function markRoom(bots, limits = FAST, humans = []) {
   await room.act('u1', 'addBots', { count: bots });
   return room;
 }
-/** 开局，把身份按 roles 摆好（真人在前），去掉鬼牌和雾，等到自由活动。 */
+/** 开局，把身份按 roles 摆好（真人在前），去掉雾，等到自由活动。 */
 async function started(room, roles) {
   await room.act('u1', 'start');
   const g = room.game;
   if (roles) g.players.forEach((p, i) => { p.role = roles[i]; });
   Object.assign(g.rules, NOFX);
-  for (const id of Object.keys(g.suits)) if (g.suits[id] === JOKER) g.suits[id] = 'spade';
   await until(() => g.stage === 'roam');
   room.mk.botRoam = () => {}; // 机器人别乱走
   room.mk.glimpseLoop = () => {};
@@ -309,7 +304,7 @@ test('房间：机器人能跑完整局（真人不写就炸），视图不漏�
     assert.equal(Object.keys(room.homes).length, n, '每人一栋家');
     assert.equal(v.self.suit, null, '一开始谁都不知道自己的印记');
     if (!v.self.role.evil) assert.ok(v.players.every((p) => p.id === 'u1' || p.role === undefined), '好人看不到别人的身份');
-    assert.ok(!/"(spade|heart|diamond|club|joker)"/.test(JSON.stringify(v.mark)), '公开的部分不带任何印记');
+    assert.ok(!/"(spade|heart|diamond|club)"/.test(JSON.stringify(v.mark)), '公开的部分不带任何印记');
     await until(() => room.ended, 20000);
     assert.ok(room.ended, `${n} 人局没跑完：停在 ${g.stage}`);
     assert.ok(['good', 'evil'].includes(g.winner));
@@ -321,7 +316,7 @@ test('房间：机器人能跑完整局（真人不写就炸），视图不漏�
   }
 });
 
-test('房间：同屋才能看后颈，对视双方都看到；被看的人知道是谁看的；调包他不知道；血染的提名不能用', async () => {
+test('房间：同屋才能看后颈，只有看的人看到；被看的人知道是谁看的；调包他不知道；血染的提名不能用', async () => {
   const room = await markRoom(5, { ...FAST, roam: 60 }, ['u2']);
   const g = await started(room, [T, H, T, T, T, T, B]);
   const [h1, h2] = room.roam.houses;
@@ -333,9 +328,9 @@ test('房间：同屋才能看后颈，对视双方都看到；被看的人知�
   assert.deepEqual(v2.self.sightings.map((x) => [x.target, x.seen, x.kind]), [['u1', g.suits.u1, 'peek']]);
   assert.equal(v2.self.peeksLeft, 1);
   const v1 = room.viewFor('u1');
-  assert.deepEqual(v1.self.sightings.map((x) => [x.target, x.seen, x.kind]), [['u2', g.suits.u2, 'mutual']], '对视：1 号同时看到 2 号的');
+  assert.deepEqual(v1.self.sightings, [], '被看的人看不到对方的');
   assert.deepEqual(v1.self.seenBy.map((x) => [x.by, x.kind]), [['u2', 'peek']]);
-  assert.ok(v1.self.inbox.some((m) => /对视/.test(m.text)));
+  assert.ok(v1.self.inbox.some((m) => /看了一眼你的后颈/.test(m.text)));
   // u2 是手下：调包 u1
   assert.deepEqual(v2.self.swapTargets, { u1: null });
   const old = g.suits.u1;
@@ -507,6 +502,20 @@ test('房间：房主关掉调包和遗言后，开局的规则跟着关，界�
   room.mk.dawn();
   assert.equal(room.viewFor('u1').self.lastWord, false, '炸死了也不能留遗言');
   assert.ok(!room.log.some((l) => /被调包了|留一句遗言/.test(l.text)), '天亮不公布调包人数、不提遗言');
+  await room.teardown();
+});
+
+test('机器人看人不急，先看看过自己的人，再看真人', async () => {
+  const room = await markRoom(5, { ...FAST, roam: 60 });
+  const g = await started(room, [T, T, T, T, B, H]);
+  const [b1, b2, b3] = g.players.slice(1, 4).map((p) => p.id);
+  const h = room.roam.houses[0];
+  for (const id of ['u1', b1, b2, b3]) putIn(room, id, h.id);
+  g.peek(b2, b1);                 // b2 先看了 b1
+  for (let i = 0; i < 40 && g.peeked(b1).length === 0; i++) room.mk.botStep(b1);
+  assert.deepEqual(g.peeked(b1), [b2], '先看看过自己的人');
+  for (let i = 0; i < 40 && g.peeked(b3).length === 0; i++) room.mk.botStep(b3);
+  assert.deepEqual(g.peeked(b3), ['u1'], '再看真人');
   await room.teardown();
 });
 

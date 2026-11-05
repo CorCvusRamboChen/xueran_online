@@ -182,8 +182,8 @@ export class MarkTable {
     if (!r.roam || g.stage !== 'roam') throw new Error('只有白天自由活动时能看别人的后颈');
     if (!this.together(uid, target)) throw new Error('得和他在同一栋房子里才能绕到他身后');
     const again = g.peeked(uid).includes(target);
-    const { mutual } = g.peek(uid, target);
-    if (!again && !r.isFake(target)) r.tell(target, `**${g.name(uid)}** 绕到你身后看了你的后颈——你们对视了一眼，你也看到了他的：**${suitText(mutual)}**。`);
+    g.peek(uid, target);
+    if (!again && !r.isFake(target)) r.tell(target, `**${g.name(uid)}** 绕到你身后，看了一眼你的后颈。`);
   }
 
   swap(uid, target, suit) {
@@ -236,7 +236,7 @@ export class MarkTable {
     if (g.stage !== 'dusk') return;
     if (r.roam) r.endRoam();
     g.startNight();
-    r.announce(`第 ${g.night} 夜。关上门，在自己家里写下后颈的印记（${this.secs('night')} 秒，鬼牌就写鬼牌）。`, 'night');
+    r.announce(`第 ${g.night} 夜。关上门，在自己家里写下后颈的印记（${this.secs('night')} 秒）。`, 'night');
     this.arm('night');
     for (const p of g.alive()) if (r.isFake(p.id)) this.after(this.wait(1500, 6000), () => { if (g.stage === 'night' && !g.blast && !(p.id in g.guesses)) this.guess(p.id, this.botGuess(p.id)); });
     r.changed();
@@ -398,7 +398,13 @@ export class MarkTable {
     const owes = (t) => g.saw(id, t) && !allies.has(t) && !told(t);
     // 塞一封匿名信（每天一封，随机某个时候）
     if (!g.letters.some((x) => x.day === g.day && x.from === id) && Math.random() < 0.08) this.botLetter(id);
-    for (const m of mates) if (!g.saw(id, m) && g.peeksLeft(id) > 0) { this.peek(id, m); return; }
+    // 看人：不急（一天只能看两个），先看看过自己的人（礼尚往来），再看真人，最后随便挑一个
+    const fresh = mates.filter((m) => !g.saw(id, m));
+    if (fresh.length && g.peeksLeft(id) > 0 && Math.random() < 0.5) {
+      const lookedAtMe = new Set(g.sightings.filter((x) => x.day === g.day && x.target === id && x.kind === 'peek').map((x) => x.by));
+      this.peek(id, fresh.find((m) => lookedAtMe.has(m)) ?? fresh.find((m) => !r.isFake(m)) ?? pick(fresh));
+      return;
+    }
     if (g.get(id).role === 'mk_hand' && g.rules.swap) { // 调包是手下的本事
       const target = mates.filter((m) => !g.swapBlock(id, m)).sort((a, b) => g.viewers(b).length - g.viewers(a).length)[0];
       if (target && Math.random() < 0.12 + 0.12 * g.viewers(target).length) { this.swap(id, target, pick(SUITS.filter((s) => s !== g.suits[target]))); return; }
@@ -568,8 +574,8 @@ export class MarkTable {
         suit: me.alive || r.ended ? known : null, // 自己知道的今天的印记（头头看过 / 终局）
         reveals: me.role === 'mk_boss' ? { left: g.revealsLeft(uid), used: g.reveals.filter((x) => x.by === uid) } : null,
         peeksLeft: g.stage === 'roam' ? g.peeksLeft(uid) : g.rules.peeksPerDay,
-        sightings: g.sightings.filter((x) => x.by === uid), // 我看到过谁的背后、看到了什么（主动看 / 对视 / 路上瞟到）
-        seenBy: g.sightings.filter((x) => x.target === uid && x.kind !== 'mutual').map(({ day, by, kind, at }) => (kind === 'glimpse' ? { day, kind, at } : { day, by, kind, at })), // 谁看过我（瞟到的不知道是谁）
+        sightings: g.sightings.filter((x) => x.by === uid), // 我看到过谁的背后、看到了什么（屋里看 / 路上瞟到）
+        seenBy: g.sightings.filter((x) => x.target === uid).map(({ day, by, kind, at }) => (kind === 'glimpse' ? { day, kind, at } : { day, by, kind, at })), // 谁看过我（瞟到的不知道是谁）
         told: g.tells.filter((x) => x.from === uid).map(({ lie, ...x }) => x), // 是不是假话不给（没看过就随口说的人也不该知道真相）
         heard: g.tells.filter((x) => x.to === uid).map(({ lie, ...x }) => x),
         mail: g.mail(uid),                         // 收到的匿名信（不知道是谁写的）

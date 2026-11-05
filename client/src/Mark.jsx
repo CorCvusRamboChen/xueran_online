@@ -1,5 +1,5 @@
 // 娱乐模式「暗印」（原创）的界面。规则在 src/engine/mark.js，房间流程在 src/server/mark.js。
-// · 白天自由活动：沿用小镇地图（TownMap）和私聊房子。在屋里点一个人「看后颈」：他转过身，露出后颈的印记——对视，他也同时看到你的。
+// · 白天自由活动：沿用小镇地图（TownMap）和私聊房子。在屋里点一个人「看后颈」：他转过身，露出后颈的印记（只有你看得到，他知道是你看的）。
 //   坏人在这一刻可以调包；路上从别人身后经过可能瞟到；每人每天一封匿名信。
 // · 回到广场圆桌讨论：没有提名，也没有投票。
 // · 夜里：在自己家的小屋（Cottage）里写下自己的印记。写错的人在屋里看到印记炸开（闪光、冲击、烟尘、震屏、音效），别人天亮只看到死讯。
@@ -15,9 +15,9 @@ import { SUITS, MARKS, SUIT_INFO, MARK_ROLES, MARK_RULES, evilCount, roleAbility
 import './mark.css';
 
 const STAGE_NAME = { setup: '天亮', morning: '天亮', roam: '自由活动', table: '圆桌讨论', dusk: '回家', night: '写下印记', ended: '终局' };
-const KIND = { peek: '看了', mutual: '对视时看到', glimpse: '路上瞟到' };
+const KIND = { peek: '看了', glimpse: '路上瞟到' };
 
-/** 一个印记：红心方块红色，黑桃梅花奶白，鬼牌紫色；雾天看到的「红色 / 黑色」画成一个色块。 */
+/** 一个印记：红心方块红色，黑桃梅花奶白；雾天看到的「红色 / 黑色」画成一个色块。 */
 export function Suit({ suit, big = false, name = false }) {
   const s = SUIT_INFO[suit];
   if (!s) return <span className="mk-suit unknown">?</span>;
@@ -95,7 +95,7 @@ export function MarkGame({ s, act, ask, parts: { History, SoundToggles, Watchers
   const me = s.self;
   const stage = m.stage;
   const [tab, setTab] = useState(null);
-  const [card, setCard] = useState(null); // 翻转卡：{ who, mode: 'peek' 我看他 | 'mutual' 他看我（对视） }
+  const [card, setCard] = useState(null); // 翻转卡：{ who } 我在看谁
   const [quit, setQuit] = useState(false);
   const g = (id) => s.players.find((p) => p.id === id);
   const name = (id) => { const p = g(id); return p ? `${p.seat}号 ${p.name}` : '?'; };
@@ -104,9 +104,7 @@ export function MarkGame({ s, act, ask, parts: { History, SoundToggles, Watchers
   const roaming = stage === 'roam' && !!s.roam;
   useEffect(() => { if (!roaming) setCard(null); }, [roaming]);
 
-  const peek = async (id) => { if (await mk('peek', { target: id })) setCard({ who: id, mode: 'peek', at: Date.now() }); };
-  // 别人看了我：同时翻一张卡，露出他的后颈（对视）
-  const onMutual = (by) => { if (!card) setCard({ who: by, mode: 'mutual', at: Date.now() }); };
+  const peek = async (id) => { if (await mk('peek', { target: id })) setCard({ who: id, at: Date.now() }); };
 
   const ring = { ...s, players: s.players.map((p) => ({ ...p, tags: tagsOf(p, m, s) })) };
   const secs = useCountdown(roaming ? s.roam.until : s.deadline);
@@ -142,7 +140,7 @@ export function MarkGame({ s, act, ask, parts: { History, SoundToggles, Watchers
         {m.foggy && roaming && <div className="mk-fogbar">今天起雾 · 看背后只看得出红黑</div>}
         {night && me?.alive && !me.exploded && <NightBoard me={me} m={m} />}
         {card && roaming && <PeekCard s={s} me={me} card={card} g={g} mk={mk} onClose={() => setCard(null)} />}
-        <Notices s={s} me={me} g={g} onMutual={onMutual} />
+        <Notices s={s} me={me} g={g} />
         <SoundToggles onFixVoice={me && s.phase !== 'ended' ? () => act('fixVoice') : null} />
         <HudBar items={items} active={tab} onPick={(id) => setTab((cur) => (cur === id ? null : id))} label={STAGE_NAME[stage]} timer={timer} />
       </section>
@@ -265,13 +263,13 @@ function BrandWriter({ s, me, m, mk, name }) {
   }
   return (
     <Panel title="写下你后颈的印记" tone="mot" className="choose-pnl mk-writer">
-      <p className="lead">写错或者没写，午夜钟响时印记就会炸开。抽到鬼牌的人要写「鬼牌」。</p>
+      <p className="lead">写错或者没写，午夜钟响时印记就会炸开。</p>
       {me.suit && <p className="mk-own">你知道自己今天是 <Suit suit={me.suit} name /></p>}
       {!me.suit && me.reveals?.left > 0 && (
         <p className="mk-own">{peeking ? <><Btn kind="primary" onClick={() => mk('reveal')}>确定用掉一次</Btn> <Btn kind="ghost" onClick={() => setPeeking(false)}>算了</Btn></>
           : <Btn onClick={() => setPeeking(true)}>头头：看自己的印记（剩 {me.reveals.left} 次）</Btn>}</p>
       )}
-      <div className="mk-suits five">
+      <div className="mk-suits">
         {MARKS.map((x) => (
           <button key={x} type="button" className={`mk-suit-btn ${pick === x ? 'on' : ''} ${SUIT_INFO[x].color}`} onClick={() => setPick(x)}>
             <span>{SUIT_INFO[x].ch}</span><small>{SUIT_INFO[x].name}</small>
@@ -311,7 +309,7 @@ function Heard({ s, me, name }) {
   );
 }
 
-/** 自由活动：在屋里能看同屋人的后颈（对视）、悄悄告诉他、坏人调包；门、敲门、邀请和血染一样。 */
+/** 自由活动：在屋里能看同屋人的后颈、悄悄告诉他、手下调包；门、敲门、邀请和血染一样。 */
 function RoamPanel({ s, me, act, mk, g, name, peek }) {
   const r = s.roam;
   const house = r.houses.find((h) => h.id === r.myHouse);
@@ -354,7 +352,7 @@ function RoamPanel({ s, me, act, mk, g, name, peek }) {
       {house ? (
         <Panel title={house.name} tone={house.locked ? 'mot' : 'light'} className="room-pnl"
           extra={<span className={`room-state ${house.locked ? 'locked' : ''}`}>{house.locked ? '锁门私聊中' : '门开着'} · 今天还能看 {left} 个</span>}>
-          {house.members.length > 1 && <p className="muted">点一个人「看后颈」：你们<b>对视</b>——你看到他的，他也同时看到你的。每天最多看 {MARK_RULES.peeksPerDay} 个人。</p>}
+          {house.members.length > 1 && <p className="muted">点一个人「看后颈」：<b>只有你看得到</b>他的印记，他只知道你看了他。每天最多看 {MARK_RULES.peeksPerDay} 个人。</p>}
           <div className="mk-mates">
             {house.members.filter((id) => id !== s.me).map((id) => {
               const p = g(id);
@@ -400,7 +398,7 @@ function RoamPanel({ s, me, act, mk, g, name, peek }) {
         </Panel>
       ) : (
         <Panel title="街上" tone="light" className="room-pnl">
-          <p className="muted">广场上大家面对面，谁也看不到谁的后颈。<b>走进一栋房子</b>，和别人关在一起才能互相看。走路时从别人身后经过，偶尔能瞟到一眼。</p>
+          <p className="muted">广场上大家面对面，谁也看不到谁的后颈。<b>走进一栋房子</b>，和别人关在一起才能看他的后颈。走路时从别人身后经过，偶尔能瞟到一眼。</p>
           <div className="stats">
             <Stat value={left} label="今天还能看" color="var(--mot)" />
             <Stat value={today(me?.sightings).length} label="今天看到过" color="var(--int)" />
@@ -414,7 +412,7 @@ function RoamPanel({ s, me, act, mk, g, name, peek }) {
   );
 }
 
-/** 悄悄告诉他：四个花色加鬼牌，真话那个标出来。 */
+/** 悄悄告诉他：四个花色，真话那个标出来。 */
 function TellRow({ seen, onPick, label = '悄悄告诉他后颈是（真话假话由你）：' }) {
   const fogColor = SUIT_INFO[seen]?.fog ? SUIT_INFO[seen].color : null;
   return (
@@ -532,13 +530,13 @@ function MeBar({ s, me, mk, name }) {
   );
 }
 
-// ───────────── 看后颈：他转过身（对视） ─────────────
+// ───────────── 看后颈：他转过身 ─────────────
 /** 后颈的样子：后脑勺、头发、脖子、衣领，中间一枚发着暗光的印记（雾天糊成一片红 / 黑）。 */
 function Nape({ p, suit }) {
   const h = hue(p?.id ?? 'x');
   const info = SUIT_INFO[suit];
   const fog = info?.fog;
-  const ink = info?.color === 'red' ? '#8e0f06' : info?.color === 'joker' ? '#3b0d5c' : '#1a0b06';
+  const ink = info?.color === 'red' ? '#8e0f06' : '#1a0b06';
   return (
     <svg className="mk-nape" viewBox="0 0 200 240" aria-hidden="true">
       <defs>
@@ -560,21 +558,17 @@ function Nape({ p, suit }) {
         <circle cx="100" cy="158" r="17" fill="none" stroke="#5a1a10" strokeWidth="2" opacity=".7" />
         {info && (fog
           ? <circle cx="100" cy="158" r="12" fill={ink} filter="url(#mkFog)" />
-          : <text x="100" y="167" textAnchor="middle" fontSize={suit === 'joker' ? 22 : 28} fontWeight="900" fill={ink} stroke="#ffd79a" strokeWidth="1">{info.ch}</text>)}
+          : <text x="100" y="167" textAnchor="middle" fontSize="28" fontWeight="900" fill={ink} stroke="#ffd79a" strokeWidth="1">{info.ch}</text>)}
       </g>
       {fog && <rect x="0" y="0" width="200" height="240" fill="rgba(200,205,210,.28)" />}
     </svg>
   );
 }
 
-/**
- * 翻转卡：mode 'peek' 是我看他（他转过身，露出后颈；我可以告诉他、坏人可以调包）；
- * mode 'mutual' 是他看了我——对视，我同时看到他的后颈。卡正面是他的脸，翻过来是他的后颈。
- */
+/** 翻转卡：我看他——他转过身，露出后颈；我可以告诉他，手下可以调包。卡正面是他的脸，翻过来是他的后颈。 */
 function PeekCard({ s, me, card, g, mk, onClose }) {
   const target = g(card.who);
-  const kind = card.mode === 'peek' ? 'peek' : 'mutual';
-  const sight = (me?.sightings ?? []).filter((x) => x.day === s.day && x.target === card.who && x.kind === kind).at(-1);
+  const sight = (me?.sightings ?? []).filter((x) => x.day === s.day && x.target === card.who && x.kind === 'peek').at(-1);
   const seen = sight?.seen;
   const [turned, setTurned] = useState(false);
   useEffect(() => {
@@ -588,7 +582,6 @@ function PeekCard({ s, me, card, g, mk, onClose }) {
   const info = SUIT_INFO[seen];
   return (
     <div className="mk-peek" onPointerDown={(e) => e.stopPropagation()}>
-      {card.mode === 'mutual' && <div className="mk-burn" aria-hidden="true" />}
       <div className="mk-peek-stage">
         <div className={`mk-peek-card ${turned ? 'turned' : ''}`}>
           <div className="mk-face front"><Portrait p={target} size={150} prefer="avatar" frame="#f4f4f0" speak={false} /></div>
@@ -596,12 +589,12 @@ function PeekCard({ s, me, card, g, mk, onClose }) {
         </div>
       </div>
       <div className="mk-peek-text">
-        {!turned ? <p>{card.mode === 'peek' ? `${target.seat}号 ${target.name} 转过身，撩起后颈的头发……` : `${target.seat}号 ${target.name} 绕到了你身后——你们对视了一眼……`}</p> : (
+        {!turned ? <p>{`${target.seat}号 ${target.name} 转过身，撩起后颈的头发……`}</p> : (
           <>
-            <p className="mk-peek-result">{card.mode === 'peek' ? '他后颈是' : '你也看到了他的：'} <Suit suit={seen} big name />{info?.fog && <small className="mk-fognote">（起雾了，只看得出颜色）</small>}</p>
-            <p className="muted">{card.mode === 'peek' ? '你们对视了：他也同时看到了你的印记。他看到了什么，只有他知道。' : '他看到了你的印记，你也看到了他的。谁说真话，各凭良心。'}</p>
-            {card.mode === 'peek' && <TellRow seen={seen} label={said ? `你告诉过他 ${SUIT_INFO[said.suit]?.ch ?? ''}，改口：` : '要不要悄悄告诉他（真话假话由你）：'} onPick={(x) => mk('tell', { target: card.who, suit: x })} />}
-            {card.mode === 'peek' && swapWhy !== undefined && <SwapRow why={swapWhy} onSwap={(x) => mk('swap', { target: card.who, suit: x })} />}
+            <p className="mk-peek-result">他后颈是 <Suit suit={seen} big name />{info?.fog && <small className="mk-fognote">（起雾了，只看得出颜色）</small>}</p>
+            <p className="muted">只有你看到了。他知道是你看的，但不知道你看到了什么。</p>
+            {<TellRow seen={seen} label={said ? `你告诉过他 ${SUIT_INFO[said.suit]?.ch ?? ''}，改口：` : '要不要悄悄告诉他（真话假话由你）：'} onPick={(x) => mk('tell', { target: card.who, suit: x })} />}
+            {swapWhy !== undefined && <SwapRow why={swapWhy} onSwap={(x) => mk('swap', { target: card.who, suit: x })} />}
           </>
         )}
         <div className="btn-row"><Btn kind="ghost" onClick={onClose}>{turned ? '好了' : '算了'}</Btn></div>
@@ -611,10 +604,10 @@ function PeekCard({ s, me, card, g, mk, onClose }) {
 }
 
 /**
- * 别人对我做的事：看了我的后颈（翻一张对视卡）、从我背后经过（屏幕边缘一凉）、我路上瞟到了谁（一条提示）。
+ * 别人对我做的事：看了我的后颈（后颈一阵发烫，上面一条「x 号看了你一眼」）、从我背后经过（屏幕边缘一凉）、我路上瞟到了谁（一条提示）。
  * 刚连上 / 刷新时以前的不提醒。
  */
-function Notices({ s, me, g, onMutual }) {
+function Notices({ s, me, g }) {
   const seenBy = me?.seenBy ?? [];
   const mine = (me?.sightings ?? []).filter((x) => x.kind === 'glimpse');
   const counts = useRef(null);
@@ -627,7 +620,7 @@ function Notices({ s, me, g, onMutual }) {
     if (seenBy.length > counts.current.by) {
       const fresh = seenBy.slice(counts.current.by);
       const peek = fresh.findLast((x) => x.kind === 'peek');
-      if (peek) onMutual(peek.by);
+      if (peek) show({ kind: 'peeked', who: peek.by });
       else show({ kind: 'behind' });
     }
     if (mine.length > counts.current.gl) { const x = mine.at(-1); show({ kind: 'glimpse', who: x.target, seen: x.seen }); }
@@ -639,10 +632,13 @@ function Notices({ s, me, g, onMutual }) {
   return (
     <>
       {note.kind === 'behind' && <div className="mk-burn cold" aria-hidden="true" />}
+      {note.kind === 'peeked' && <div className="mk-burn" aria-hidden="true" />}
       <div className="mk-peeked" key={`${note.kind}-${note.who ?? ''}`}>
         {note.kind === 'behind'
           ? <span><b>有人从你背后经过。</b><small>后颈凉了一下。是谁？你没看见。</small></span>
-          : <><Portrait p={p} size={34} prefer="avatar" frame="#f4f4f0" speak={false} /><span>你从 <b>{p?.seat}号 {p?.name}</b> 身后经过，瞟到了他的后颈：<Suit suit={note.seen} /><small>他只知道有人从背后经过。</small></span></>}
+          : note.kind === 'peeked'
+            ? <><Portrait p={p} size={34} prefer="avatar" frame="#f4f4f0" speak={false} /><span><b>{p?.seat}号 {p?.name}</b> 绕到你身后，看了一眼你的后颈。<small>后颈一阵发烫。他看到了什么，只有他知道。</small></span></>
+            : <><Portrait p={p} size={34} prefer="avatar" frame="#f4f4f0" speak={false} /><span>你从 <b>{p?.seat}号 {p?.name}</b> 身后经过，瞟到了他的后颈：<Suit suit={note.seen} /><small>他只知道有人从背后经过。</small></span></>}
       </div>
     </>
   );
@@ -777,11 +773,11 @@ export function Rules({ n, rules = {} }) {
       <h4>暗印 · 规则</h4>
       <ol>
         <li><b>身份</b>：好人，和藏在里面的坏人（人数照血染：5–9 人 2 个、10–12 人 3 个、13–15 人 4 个{e ? `，这局 ${e} 个` : ''}）。坏人里 1 个头头，其余是手下；7 人及以上坏人互相认识。</li>
-        <li><b>天亮</b>：钟声响过，每个活人后颈换上一个新的随机印记 ♠♥♦♣，极少数是<b>鬼牌</b>，自己看不到。{swap && '说书人公布「昨天有 N 个人被调包」（只说人数）。'}有些白天会<b>起雾</b>：看背后只看得出红色还是黑色。</li>
-        <li><b>自由活动</b>：只有和别人进了<b>同一栋房子</b>才能看后颈，每天最多看两个人，而且是<b>对视</b>——你看他的同时他也看到你的。路上从别人身后经过，偶尔能<b>瞟到</b>一眼（他只知道有人从背后经过）。说真话还是说谎由你；每人每天还能塞一封只写一个花色的<b>匿名信</b>。</li>
+        <li><b>天亮</b>：钟声响过，每个活人后颈换上一个新的随机印记 ♠♥♦♣，自己看不到。{swap && '说书人公布「昨天有 N 个人被调包」（只说人数）。'}有些白天会<b>起雾</b>：看背后只看得出红色还是黑色。</li>
+        <li><b>自由活动</b>：只有和别人进了<b>同一栋房子</b>才能看后颈，每天最多看两个人；只有你看得到，他只知道你看了他。路上从别人身后经过，偶尔能<b>瞟到</b>一眼（他只知道有人从背后经过）。说真话还是说谎由你；每人每天还能塞一封只写一个花色的<b>匿名信</b>。</li>
         <li><b>坏人</b>：头头整局有 2 次机会，自己挑哪天看自己当天的印记；手下看不到自己，{swap ? <>但会<b>调包</b>：看某人背后的那一刻，把他今天的印记换掉（每个手下每两天最多一次，同一个人整局只被调包一次，不能调包自己人，被调包的人不知道）。头头不会调包。</> : '这局关掉了调包。'}</li>
         <li><b>圆桌</b>：回到广场讨论，没有提名，也没有投票。说完了各自回家。</li>
-        <li><b>夜里</b>：每人在自己家写下自己的印记（鬼牌就写鬼牌），有时限。写错或者没写，午夜钟响时印记在屋里炸开。天亮只公布谁死了。{words ? <>炸死的人第二天白天可以留一句<b>遗言</b>，或者公开一个他看过的人的印记。</> : '（这局关掉了遗言。）'}</li>
+        <li><b>夜里</b>：每人在自己家写下自己的印记，有时限。写错或者没写，午夜钟响时印记在屋里炸开。天亮只公布谁死了。{words ? <>炸死的人第二天白天可以留一句<b>遗言</b>，或者公开一个他看过的人的印记。</> : '（这局关掉了遗言。）'}</li>
         <li><b>胜负</b>：坏人全死，好人赢；活着的坏人人数追平活着的好人，坏人赢。</li>
       </ol>
     </section>

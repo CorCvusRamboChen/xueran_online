@@ -1,5 +1,5 @@
-// 娱乐模式「暗印」（原创）：每天天亮，钟声响过，每个活着的人后颈烙上一个新的印记（♠♥♦♣，极少数是鬼牌），自己看不到。
-// 白天只有和别人关在同一栋房子里，才能绕到他身后看（每天最多看两个人），而且是「对视」：你看他的同时他也看到你的。
+// 娱乐模式「暗印」（原创）：每天天亮，钟声响过，每个活着的人后颈烙上一个新的印记（♠♥♦♣ 之一），自己看不到。
+// 白天只有和别人关在同一栋房子里，才能绕到他身后看（每天最多看两个人）；他知道你看了他，但看不到你的。
 // 路上从别人身后经过，有一定概率瞟到他的印记。别人怎么告诉你、是真是假，由他；每人每天还能塞一封只写一个花色的匿名信。
 // 回到广场圆桌讨论（没有提名，也没有投票），然后各自回家。夜里在家写下自己的印记：写错或者没写，印记在屋里炸开。
 //
@@ -13,21 +13,19 @@
 import { DISTRIBUTION } from './roles.js';
 
 export const SUITS = ['spade', 'heart', 'diamond', 'club'];
-export const JOKER = 'joker';
-export const MARKS = [...SUITS, JOKER]; // 夜里能写的：四个花色 + 鬼牌
+export const MARKS = SUITS; // 能写的、能说的：四个花色
 export const SUIT_INFO = {
   spade: { ch: '♠', name: '黑桃', color: 'black' },
   heart: { ch: '♥', name: '红心', color: 'red' },
   diamond: { ch: '♦', name: '方块', color: 'red' },
   club: { ch: '♣', name: '梅花', color: 'black' },
-  joker: { ch: '鬼', name: '鬼牌', color: 'joker' },
   // 雾天看到的只是颜色
   red: { ch: '红', name: '红色', color: 'red', fog: true },
   black: { ch: '黑', name: '黑色', color: 'black', fog: true },
 };
 export const suitText = (s) => (SUIT_INFO[s] ? (SUIT_INFO[s].fog ? SUIT_INFO[s].name : `${SUIT_INFO[s].ch}${SUIT_INFO[s].name}`) : '?');
-/** 一个印记的颜色：red / black；鬼牌就是 joker。 */
-export const colorOf = (s) => (s === JOKER ? JOKER : SUIT_INFO[s]?.color ?? null);
+/** 一个印记的颜色：red / black。 */
+export const colorOf = (s) => SUIT_INFO[s]?.color ?? null;
 
 export const MARK_ROLES = {
   mk_town: { name: '好人', good: true,
@@ -58,7 +56,6 @@ export const MARK_RULES = {
   peeksPerDay: 2,    // 每天最多主动看几个人的背后
   bossReveals: 2,    // 头头整局能看自己几次
   swapGap: 2,        // 调包后隔几天才能再调（2 = 每两天最多一次）
-  jokerChance: 0.04, // 每人每天抽到鬼牌的概率
   fogChance: 0.25,   // 第 2 天起每天起雾的概率
   lastWordMax: 60,   // 遗言最多几个字
   swap: true,        // 坏人能调包（房主可以关）
@@ -96,7 +93,7 @@ export class MarkGame {
     this.dealt = {};        // 每天天亮发的：day → { id: mark }
     this.suitLog = {};      // 每天入夜时的（算上调包）：day → { id: mark }
     this.fog = {};          // 哪天起雾：day → true
-    this.sightings = [];    // 看到谁的背后：{ day, by, target, seen, kind: 'peek' 主动看 | 'mutual' 对视 | 'glimpse' 路上瞟到, at }
+    this.sightings = [];    // 看到谁的背后：{ day, by, target, seen, kind: 'peek' 在屋里看 | 'glimpse' 路上瞟到, at }
     this.glimpsed = [];     // 已经掷过「瞟到」的：`${day}:${by}:${target}`（同一天同一对只掷一次）
     this.tells = [];        // 当面告诉：{ day, from, to, suit, at }
     this.letters = [];      // 匿名信：{ day, from, to, suit, at }（收信人不知道是谁写的）
@@ -154,17 +151,17 @@ export class MarkGame {
     this.note(`开局：${this.players.map((p) => `${p.seat}号 ${p.name}（${MARK_ROLES[p.role].name}）`).join('；')}`);
   }
 
-  /** 每个活人换一个新的随机印记（极少数是鬼牌）；第 2 天起有时起雾。 */
+  /** 每个活人换一个新的随机印记；第 2 天起有时起雾。 */
   deal(rng = Math.random) {
-    this.suits = Object.fromEntries(this.alive().map((p) => [p.id, rng() < this.rules.jokerChance ? JOKER : SUITS[Math.floor(rng() * SUITS.length)]]));
+    this.suits = Object.fromEntries(this.alive().map((p) => [p.id, SUITS[Math.floor(rng() * SUITS.length)]]));
     this.dealt[this.day] = { ...this.suits };
     this.suitLog[this.day] = { ...this.suits };
     if (this.day >= 2 && rng() < this.rules.fogChance) this.fog[this.day] = true;
     this.done = [];
   }
 
-  /** 看到的样子：雾天只看得出红黑（鬼牌一眼就认得出）。 */
-  look(mark) { return this.foggy && mark !== JOKER ? colorOf(mark) : mark; }
+  /** 看到的样子：雾天只看得出红黑。 */
+  look(mark) { return this.foggy ? colorOf(mark) : mark; }
 
   // ───────────── 白天：自由活动 ─────────────
   openRoam() { if (this.stage === 'morning') this.stage = 'roam'; }
@@ -172,14 +169,14 @@ export class MarkGame {
   /** 今天这个人主动看过的人。 */
   peeked(by) { return [...new Set(this.sightings.filter((x) => x.day === this.day && x.by === by && x.kind === 'peek').map((x) => x.target))]; }
   peeksLeft(by) { return Math.max(0, this.rules.peeksPerDay - this.peeked(by).length); }
-  /** 那天看到过 target 背后的人（主动看、对视、路上瞟到都算）。 */
+  /** 那天看到过 target 背后的人（屋里看、路上瞟到都算）。 */
   viewers(target, day = this.day) { return [...new Set(this.sightings.filter((x) => x.day === day && x.target === target).map((x) => x.by))]; }
-  /** 今天在屋里看过 target 的背后（主动看或对视）。 */
+  /** 今天在屋里看过 target 的背后。 */
   saw(by, target) { return this.sightings.some((x) => x.day === this.day && x.by === by && x.target === target && x.kind !== 'glimpse'); }
 
   /**
-   * 看后颈（房间负责检查两人在同一栋房子里）：对视——你看到他的，他同时看到你的。每天最多主动看两个人，
-   * 同一个人再看一次不算次数（看到的是现在的，可能已经被调包了）。返回 { seen, mutual }。
+   * 看后颈（房间负责检查两人在同一栋房子里）：只看到他的，他看不到你的（他只知道你看了他）。每天最多看两个人，
+   * 同一个人再看一次不算次数（看到的是现在的，可能已经被调包了）。返回 { seen }。
    */
   peek(by, target, at = Date.now()) {
     this.require('roam');
@@ -189,11 +186,9 @@ export class MarkGame {
     const again = this.peeked(by).includes(target);
     if (!again && this.peeksLeft(by) <= 0) throw new Error(`今天已经看过 ${this.rules.peeksPerDay} 个人了`);
     const seen = this.look(this.suits[target]);
-    const mutual = this.look(this.suits[by]);
     this.sightings.push({ day: this.day, by, target, seen, kind: 'peek', at });
-    this.sightings.push({ day: this.day, by: target, target: by, seen: mutual, kind: 'mutual', at });
-    if (!again) this.note(`${this.name(by)} 看了 ${this.name(target)} 的后颈（${suitText(seen)}），同时被他看到（${suitText(mutual)}）`);
-    return { seen, mutual };
+    if (!again) this.note(`${this.name(by)} 看了 ${this.name(target)} 的后颈（${suitText(seen)}）`);
+    return { seen };
   }
 
   /** 路上从 target 身后经过：同一天同一对只掷一次，命中（rng() < chance）就瞟到。返回看到的样子；没瞟到 / 掷过了返回 null。 */
@@ -209,7 +204,7 @@ export class MarkGame {
     return seen;
   }
 
-  /** 当面告诉别人他的印记（真假由自己定，可以说鬼牌）。一天里对同一个人说第二次，以最后一次为准。 */
+  /** 当面告诉别人他的印记（真假由自己定）。一天里对同一个人说第二次，以最后一次为准。 */
   tell(from, to, suit) {
     this.require('roam');
     this.requireAlive(from);
@@ -310,7 +305,7 @@ export class MarkGame {
     this.require('night');
     if (this.blast) throw new Error('太晚了，钟已经敲过了');
     this.requireAlive(id);
-    if (!MARKS.includes(suit)) throw new Error('选一个花色（或鬼牌）');
+    if (!MARKS.includes(suit)) throw new Error('选一个花色');
     if (id in this.guesses) throw new Error('你已经写下了');
     this.guesses[id] = suit;
     return this.missingGuesses().length === 0;
