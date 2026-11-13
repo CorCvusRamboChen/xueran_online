@@ -169,3 +169,78 @@ test('标记日志满了也要更新最新状态', () => {
   assert.equal(s.log.length, 2000);
   assert.equal(s.now.a.tags.b.tag, 'demon');
 });
+
+test('大家猜的恶魔不一致：只算善良玩家在小魔典里猜的恶魔种类，两种以上才算分歧', () => {
+  const BMR = ['gossip', 'sailor', 'fool', 'exorcist', 'tinker', 'assassin', 'po'];
+  const g = new Game(players(7), { roles: BMR, rng: makeRng(1), script: 'bmr' });
+  const r = room(g);
+  r.beliefs = noteMarks(null, g, 'p1', { tags: { p7: { role: 'po' } } });
+  assert.equal(r.signals().demonSplit, 0, '只有一种猜法');
+  r.beliefs = noteMarks(r.beliefs, g, 'p6', { tags: { p2: { role: 'zombuul' } } }); // 刺客（邪恶）的标记不算
+  assert.equal(r.signals().demonSplit, 0);
+  r.beliefs = noteMarks(r.beliefs, g, 'p2', { tags: { p3: { role: 'shabaloth' } } });
+  assert.equal(r.signals().demonKinds, 2);
+  assert.equal(r.signals().demonSplit, 1);
+});
+
+// ───────── 2026-11-09 按官方说书人建议补的局势判断 ─────────
+const TB8 = ['imp', 'spy', 'virgin', 'recluse', 'chef', 'empath', 'washerwoman', 'fortuneteller'];
+
+test('误登记看帮谁：间谍被贞洁者当镇民（帮善良）在邪恶领先时更常发生，误导类的相反', () => {
+  const rate = (help, b) => {
+    let yes = 0; const N = 1500;
+    for (let s = 1; s <= N; s++) {
+      const g = new Game(players(8), { roles: TB8, rng: makeRng(s) });
+      g.st.balance = () => b;
+      if (g.st.misregister(g.get('p2'), '测试', help)) yes++;
+    }
+    return yes / N;
+  };
+  assert.ok(rate('good', -0.6) > rate('good', 0.6) + 0.15, '帮善良的：邪恶领先时多');
+  assert.ok(rate('evil', 0.6) > rate('evil', -0.6) + 0.15, '帮邪恶的：善良领先时多');
+});
+
+test('间谍误登记成什么：同一局前后一致；声明过的角色优先；否则挑不在场的', () => {
+  const g = new Game(players(8), { roles: TB8, rng: makeRng(3) });
+  const spy = g.get('p2');
+  const first = g.st.misregRole(spy);
+  assert.ok(!g.players.some((q) => q.role === first), `不在场：${first}`);
+  for (let k = 0; k < 5; k++) assert.equal(g.st.misregRole(spy), first, '前后一致');
+  const h = new Game(players(8), { roles: TB8, rng: makeRng(4) });
+  h.claims = { p2: 'ravenkeeper' };
+  assert.equal(h.st.misregRole(h.get('p2')), 'ravenkeeper', '配合公开声明的伪装');
+});
+
+test('酒鬼：邪恶明显领先时偶尔拿真信息，势均力敌时一定是假的；中毒的不走这里', () => {
+  const roles = ['imp', 'poisoner', 'drunk', 'chef', 'empath', 'washerwoman', 'monk', 'slayer'];
+  let truth = 0; const N = 800;
+  for (let s = 1; s <= N; s++) {
+    const g = new Game(players(8), { roles, rng: makeRng(s) });
+    g.night = 1;
+    g.st.balance = () => 0;
+    assert.equal(g.lies(g.get('p3')), true);
+    g.night = 2;
+    g.st.balance = () => -0.8;
+    if (!g.lies(g.get('p3'))) truth++;
+    assert.equal(g.lies(g.get('p3')), g.lies(g.get('p3')), '同一晚只判一次');
+  }
+  assert.ok(truth / N > 0.2 && truth / N < 0.6, `邪恶领先时拿真信息 ${truth}/${N}`);
+});
+
+test('小局占卜师有时自己当红鲱鱼；新手占卜师不会；7 人以上不会', () => {
+  const roles6 = ['imp', 'poisoner', 'fortuneteller', 'chef', 'empath', 'washerwoman'];
+  let self = 0; const N = 400;
+  for (let s = 1; s <= N; s++) if (new Game(players(6), { roles: roles6, rng: makeRng(s) }).redHerring === 'p3') self++;
+  assert.ok(self / N > 0.2 && self / N < 0.5, `6 人局自己当红鲱鱼 ${self}/${N}`);
+  for (let s = 1; s <= 100; s++) assert.notEqual(new Game(players(6), { roles: roles6, rng: makeRng(s), newbies: ['p3'] }).redHerring, 'p3');
+  for (let s = 1; s <= 100; s++) assert.notEqual(new Game(players(8), { roles: TB8, rng: makeRng(s) }).redHerring, 'p8');
+});
+
+test('提前结束：活着的全是邪恶就判邪恶胜；还有善良活着照常', () => {
+  const g = new Game(players(8), { roles: ['imp', 'spy', 'poisoner', 'recluse', 'chef', 'empath', 'washerwoman', 'fortuneteller'], rng: makeRng(1) });
+  for (const id of ['p4', 'p5', 'p6', 'p7']) g.get(id).alive = false;
+  assert.equal(g.checkWinner(), null, '还有一个善良活着');
+  g.get('p8').alive = false;
+  assert.equal(g.checkWinner(), 'evil');
+  assert.match(g.winReason, /全是邪恶/);
+});

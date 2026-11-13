@@ -18,3 +18,7 @@ Thumbs.db
 
 # 官网首屏宣传片：由 scripts/site-trailer.sh 从 design/trailer 转出，只留本地
 site/media/trailer/*.mp4
+
+# Mixamo 原始下载（许可不允许再分发，只留本地）
+design/avatar3d/mixamo/raw/
+design/avatar3d/*/raw/

@@ -144,7 +144,6 @@ test('博学者、艺术家、公开声明、公开猜测都走得通；别人�
   assert.match(asked[0].facts, /梦殒春宵/);
   assert.equal(room.viewFor('u2').self.canArtist, false);
 
-  await room.act('u2', 'declare', { role: 'sage' });
   await room.act('u2', 'juggle', { guesses: [{ target: 'u1', role: 'savant' }] });
   assert.equal(room.viewFor('u2').self.canJuggle, false);
   await room.teardown();
@@ -168,7 +167,7 @@ test('疯狂：AI 说书黄昏判定；声明过的放过，没声明的处决',
   await untilDay(room);
   await until(() => g.phase === 'day');
   g.madness = { u2: { role: 'oracle', night: g.night, claimed: false, by: 'u1' } };
-  await room.act('u2', 'declare', { role: 'oracle' });
+  g.declare('u2', 'oracle');
   await room.judgeMadness();
   assert.ok(g.get('u2').alive, '声明过了');
   g.madness.u2.claimed = false;
@@ -230,7 +229,7 @@ test('杂耍艺人只声明不猜：公告说清楚，不算猜测', async () =>
   await room.teardown();
 });
 
-test('今晚的死亡天亮才公开：别的玩家看到还活着，死者本人和说书人看到真实状态；夜里的处决当场公开', async () => {
+test('今晚的死亡天亮才公开：别的玩家和死者本人都看到还活着，说书人看到真实状态；夜里的处决当场公开', async () => {
   const room = await snvRoom({ u1: 'cerenovus', u2: 'sage', 'bot-1': 'nodashii' });
   const g = room.game;
   await untilDay(room);
@@ -240,7 +239,7 @@ test('今晚的死亡天亮才公开：别的玩家看到还活着，死者本�
   const seen = (uid, id) => room.viewFor(uid).players.find((p) => p.id === id).alive;
   assert.equal(seen('u1', 'u2'), true, '别的玩家还看不到');
   assert.equal(room.viewFor('u1').aliveCount, 8);
-  assert.equal(seen('u2', 'u2'), false, '死者自己知道');
+  assert.equal(seen('u2', 'u2'), true, '死者自己也要等天亮（不然赌徒能分出是赌死的还是被刀的）');
   g.madExecute('bot-2', '测试', { night: true });
   assert.equal(seen('u1', 'bot-2'), false, '处决当场公开');
   room.settings.mode = 'human';
@@ -475,7 +474,7 @@ test('审核回归：判定等大模型时不能提名、不能声明，不会�
   const first = room.dusk();
   await until(() => room.dusking);
   assert.throws(() => room.nominate('u1', 'u2'), /黄昏/);
-  assert.throws(() => room.declare('u1', 'sage'), /黄昏/);
+  assert.throws(() => room.declare('u1', 'sage'), /没有公开声明/);
   await room.dusk(); // 第二次什么都不做
   release();
   await first;
@@ -580,5 +579,24 @@ test('审查回归：真人说书时，艺术家的问题到说书台，说书�
   await room.act('u1', 'st', { action: 'artistAnswer', target: 'u2', text: 'false' });
   assert.equal(room.viewFor('u1').st.artistAsks.length, 0);
   assert.match(room.viewFor('u2').self.inbox.map((m) => m.text).join('\n'), /回答：\*\*不是\*\*/);
+  await room.teardown();
+});
+
+test('艺术家：问得有歧义（「1-5」）不答、不算用掉，让他重新问；问清楚了照常回答', async () => {
+  const room = await snvRoom({ u2: 'artist', 'bot-1': 'nodashii' });
+  const g = room.game;
+  await untilDay(room);
+  await until(() => g.phase === 'day');
+  room.judgeReady = () => true;
+  let next = { verdict: 'unknown', reason: '歧义：1-5 可能是 1 到 5 号，也可能是 1 号和 5 号' };
+  room.judge = async () => next;
+  await room.act('u2', 'artist', { text: '1-5有坏人吗' });
+  await until(() => room.viewFor('u2').self.inbox.some((m) => m.text.includes('有歧义')));
+  assert.equal(room.viewFor('u2').self.canArtist, true, '不算用掉');
+  assert.ok(!room.viewFor('u2').self.inbox.some((m) => m.text.includes('1 号和 5 号')), '模型的理由不给玩家看');
+  next = { verdict: 'true', reason: '1 到 5 号里有邪恶玩家' };
+  await room.act('u2', 'artist', { text: '1到5号有坏人吗' });
+  await until(() => room.viewFor('u2').self.inbox.some((m) => m.text.includes('说书人的回答')));
+  assert.equal(room.viewFor('u2').self.canArtist, false, '问清楚了才算用掉');
   await room.teardown();
 });

@@ -37,8 +37,10 @@ export function buildRoles(seatIds, assigned, script, rng = Math.random, { noBar
   if (script === 'tb' && minions.includes('baron')) { t -= 2; o += 2; }
   // 小剧本只有两个外来者：男爵已有一个外来者时只加一个
   if (SCRIPTS[script]?.roles && minions.includes('baron')) { const add = Math.max(0, Math.min(2, rolesOf(script, 'outsider').length - o)); t -= add; o += add; }
-  if (script === 'bmr' && minions.includes('godfather')) {
-    if (o === 0 || rng() < 0.5) { t -= 1; o += 1; } else { t += 1; o -= 1; }
+  // 教父 ±1 外来者：黯月初升和带教父的自选剧本（冒名钓鱼、生死未卜）都要调；以前只写了黯月初升，房主在这两个剧本里指定角色时外来者人数不对
+  if (minions.includes('godfather')) {
+    const most = rolesOf(script, 'outsider').length;
+    if (o === 0 || (o < most && rng() < 0.5)) { t -= 1; o += 1; } else { t += 1; o -= 1; }
   }
   if (script === 'snv' || (SCRIPTS[script]?.roles && SCRIPTS[script].engine === 'snv')) [t, o] = demonShift(demons[0], t, o);
 

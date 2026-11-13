@@ -115,7 +115,7 @@ export function EmpathDemo() {
   const hannah = t > 0.54;
   const lao = t > 0.76;
   const c = path(t, [[0, 120, 104], [0.44, 120, 104], [0.52, pts[6].x + 4, pts[6].y + 4], [0.62, pts[6].x + 4, pts[6].y + 4], [0.72, pts[1].x + 4, pts[1].y + 4], [1, pts[1].x + 4, pts[1].y + 4]]);
-  const cap = t < 0.1 ? '夜里，说书人唤醒你' : t < 0.42 ? '你得知：两侧的邻座（2 号、7 号）里有 1 个邪恶' : t < 0.66 ? '汉娜说自己是士兵，而且已经证实——她是好人' : '那邪恶的就是 2 号老格。右键他，在小魔典里标上「恶魔」';
+  const cap = t < 0.1 ? '夜里，说书人唤醒你' : t < 0.42 ? '你得知：两侧的邻座（2 号、7 号）里有 1 个邪恶' : t < 0.66 ? '汉娜说自己是士兵，而且已经证实——她是好人' : '那邪恶的就是 2 号老格。右键他，在小魔典里把他涂成红色';
   return (
     <div className="demo night">
       <svg className="dm-svg" viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
@@ -127,7 +127,7 @@ export function EmpathDemo() {
         <Seat key={p.seat} p={p} {...pts[i]} glow={i === 0 && t < 0.3}
           dim={t < 0.3 && i !== 0 && i !== 1 && i !== 6}
           ring={i === 0 ? 'var(--mot)' : i === 6 && hannah ? ATTR.townsfolk.color : i === 1 && lao ? ATTR.demon.color : undefined}
-          badge={i === 6 && hannah ? '士兵' : i === 1 && lao ? '恶魔' : null}
+          badge={i === 6 && hannah ? '士兵' : null}
           badgeColor={i === 6 ? ATTR.townsfolk.color : ATTR.demon.color} />
       ))}
       {num > 0 && t < 0.5 && <div className="dm-num" style={{ left: px(CX), top: py(CY), transform: `translate(-50%, -50%) scale(${0.6 + 0.4 * ease(num)})`, opacity: num }}><b>1</b><small>个邪恶</small></div>}

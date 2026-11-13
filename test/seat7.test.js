@@ -6,7 +6,7 @@ import { Game, makeRng } from '../src/engine/game.js';
 import { rollMixed, BOFFIN_POOL } from '../src/engine/snv.js';
 import { buildRoles } from '../src/engine/assign.js';
 import { ROLES, rolesOf, SCRIPTS, engineOf } from '../src/engine/roles.js';
-import { MIX_STEPS, NIGHT_ORDER, STEP_NAMES } from '../src/shared/nightOrder.js';
+import { MIX_STEPS, NIGHT_ORDER, STEP_NAMES, NOT_STEPS } from '../src/shared/nightOrder.js';
 import { Room } from '../src/server/room.js';
 
 const players = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, name: `玩家${i + 1}` }));
@@ -32,7 +32,7 @@ test('七步成诗：剧本表、引擎、人数；夜晚顺序里每个会醒�
   assert.ok(SCRIPTS.bs7.seat7);
   const steps = [...MIX_STEPS.first, ...MIX_STEPS.other];
   for (const [id] of [...NIGHT_ORDER.bs7.first, ...NIGHT_ORDER.bs7.other]) {
-    if (STEP_NAMES[id] || ['scarletwoman', 'boffin', 'damsel'].includes(id)) continue;
+    if (STEP_NAMES[id] || NOT_STEPS.has(id)) continue;
     assert.ok(steps.includes(id), id);
   }
   // 暗流涌动的角色也都在结算表里（引擎统一）
@@ -61,6 +61,16 @@ test('多个村夫：其中一个整局醉酒；村夫每晚得知一名玩家�
   const healthy = g.players.find((p) => p.role === 'villageidiot' && !g.broken(p));
   const { messages } = night(g, { [healthy.id]: ['p7'], p6: ['p4', 'p5'] });
   assert.match(text(messages, healthy.id), /7号 玩家7 是 \*\*邪恶\*\* 的/);
+});
+
+test('多个村夫：死了一个，另一个的醉酒不变；醉酒的村夫变成别的角色就不再醉', () => {
+  const g = mk(['villageidiot', 'villageidiot', 'noble', 'saint', 'virgin', 'harpy', 'imp']);
+  const drunk = g.players.find((p) => p.role === 'villageidiot' && g.broken(p));
+  const sober = g.players.find((p) => p.role === 'villageidiot' && !g.broken(p));
+  sober.alive = false;
+  assert.ok(g.broken(drunk), '清醒的村夫死了，醉酒的那个还是醉');
+  g.changeRole(drunk, 'farmer');
+  assert.ok(!g.broken(drunk), '不再是村夫，醉酒结束');
 });
 
 test('贵族：三个人里恰好一个邪恶；修行者：最近的邪恶在哪一边；图书管理员：外来者', () => {

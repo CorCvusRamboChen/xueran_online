@@ -3,6 +3,7 @@
 // start / act / viewFor / resume / restore / teardown / pause。
 import { Werewolf, rollWerewolf, wwSetup, STAGE_NAME, WW_ROLES, SPEECH_STAGES, VOTE_STAGES, ELECTION_STAGES, BOOM_STAGES } from '../engine/werewolf.js';
 import { ttsUrl } from './tts.js';
+import { abilityIn } from '../engine/werewolf-roles.js';
 
 // 狼人杀专用的操作（act 的 type）
 export const WW_ACTIONS = new Set(['wwGuard', 'wwWolf', 'wwWitch', 'wwSeer', 'wwShoot', 'wwDone', 'wwVote', 'wwSkip', 'wwSignup', 'wwWithdraw', 'wwOrder', 'wwBadge', 'wwBoom']);
@@ -32,9 +33,10 @@ export const WW_ROOM = {
   },
 
   /** 开局：按人数表发身份，找语音频道，入夜。 */
-  async wwStart(seats) {
-    const roles = rollWerewolf(seats.length, Math.random);
-    this.game = new Werewolf(seats.map(({ id, name }) => ({ id, name })), { roles });
+  async wwStart(seats, script = 'ww') {
+    const roles = rollWerewolf(seats.length, Math.random, script);
+    this.game = new Werewolf(seats.map(({ id, name }) => ({ id, name })), { roles, script });
+    const rag = script === 'rag'; // 诸神黄昏：狼人杀的板子，只有狼人和猎人
     this.wwDevRoles();
     this.homes = null;
     this.duskDay = null;
@@ -42,13 +44,14 @@ export const WW_ROOM = {
     const square = await this.safeVoice((v) => v.findSquare(this.hostId, seats.map((p) => p.id)));
     try { await this.claimSquare(square); } catch (e) { this.game = null; this.stLog = []; throw e; }
     this.square = square;
-    const setup = wwSetup(seats.length).map(({ role, count }) => `${WW_ROLES[role].name}${count > 1 ? ` ${count}` : ''}`).join(' · ');
-    this.announce(`游戏开始！《狼人杀》${seats.length} 人：${setup}。屠边：狼人全部出局好人胜，神职或平民全部出局狼人胜。`, 'start');
-    this.wwSay(`${seats.length} 人狼人杀，现在开始。请确认自己的身份。`, '狼人杀');
+    const setup = wwSetup(seats.length, script).map(({ role, count }) => `${WW_ROLES[role].name}${count > 1 ? ` ${count}` : ''}`).join(' · ');
+    if (rag) this.announce(`游戏开始！《诸神黄昏》${seats.length} 人：${setup}。猎人出局可以开一枪，被带走的猎人接着开。狼人全部出局好人胜，猎人全部出局狼人胜。`, 'start');
+    else this.announce(`游戏开始！《狼人杀》${seats.length} 人：${setup}。屠边：狼人全部出局好人胜，神职或平民全部出局狼人胜。`, 'start');
+    this.wwSay(`${seats.length} 人${rag ? '诸神黄昏' : '狼人杀'}，现在开始。请确认自己的身份。`, rag ? '诸神黄昏' : '狼人杀');
     if (!this.square) this.announce('没检测到大家所在的语音频道，发言闭麦和死人闭麦不会生效（房主先进语音再开局即可）。');
     this.syncWatchMute();
     this.watchVoice();
-    this.stNote(`狼人杀：${setup}`);
+    this.stNote(`${rag ? '诸神黄昏' : '狼人杀'}：${setup}`);
     await this.wwNight();
   },
 
@@ -397,7 +400,7 @@ export const WW_ROOM = {
     Object.assign(view, {
       phase: this.ended ? 'ended' : g.phase === 'setup' ? 'night' : g.phase,
       spectator,
-      script: 'ww',
+      script: g.script ?? 'ww',
       night: Math.max(1, g.night),
       day: g.day,
       deadline: this.wwDeadlineFor(uid),
@@ -437,7 +440,7 @@ export const WW_ROOM = {
       const r = WW_ROLES[me.role];
       view.self = {
         seat: me.seat, alive: me.alive, ghostVote: false,
-        role: { id: me.role, name: r.name, team: r.team, teamName: SIDE_NAME[r.side], side: r.side, evil: wolf, ability: r.ability },
+        role: { id: me.role, name: r.name, team: r.team, teamName: SIDE_NAME[r.side], side: r.side, evil: wolf, ability: abilityIn(me.role, g.script) },
         inbox: this.inbox.get(uid) ?? [],
         allies: wolf ? g.evilKnown[uid] ?? [] : null,
         prompt: this.wwPrompt(uid),

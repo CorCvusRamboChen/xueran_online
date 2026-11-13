@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { openMic, login, openSocket, report, listenSpeaking, fromKook } from './connect.js';
+import { openMic, login, openSocket, report, listenSpeaking, fromKook, fromBrowserLink } from './connect.js';
 import { Town, PaintFilters } from './Town.jsx';
 import { TownMap, AliveStrip } from './TownMap.jsx';
 import { CheatSheet, useSheetMode } from './CheatSheet.jsx';
@@ -28,17 +28,33 @@ import { savedOutfit } from './Wardrobe.jsx';
 import { DISTRIBUTION, ROLES as ROLE_DEFS, SCRIPTS, engineOf, inScript, rolesOf, ragnarokWolves } from '../../src/engine/roles.js';
 const ROLE_ABILITY = Object.fromEntries(Object.entries(ROLE_DEFS).map(([id, r]) => [id, r.ability]));
 
+/**
+ * 顶栏的人数修正说明：[悬停全文, 常显短句]。每个剧本都要写——以前没写的剧本落到暗流涌动的「男爵 +2」，
+ * 生死未卜没有男爵也显示了（11-11 用户报的）。没写的剧本宁可不显示，也不显示别的剧本的规则。
+ */
+const BOARD_NOTE = {
+  tb: ['男爵在场时：外来者 +2、镇民 −2', '男爵在场 外来者+2'],
+  bmr: ['教父在场时：外来者 +1 或 −1（说书人决定）', '教父在场 外来者±1'],
+  snv: ['方古在场时外来者 +1；亡骨魔在场时外来者 −1', '方古 +1 · 亡骨魔 −1'],
+  ngj: ['男爵在场时外来者加到两个（这个剧本只有两个外来者）', '男爵在场 外来者补到 2'],
+  luf: ['气球驾驶员在场时，说书人可以多放一个外来者', '气球驾驶员 外来者+0~1'],
+  rag: ['镇民全是猎手（死了可以开一枪，打谁谁死），恶魔全是小恶魔（狼人）', '猎手 vs 狼人'],
+  bs7: ['男爵 +2、亡骨魔 −1、气球驾驶员 +0~1 外来者；村夫可以有 1–3 个。7 号空座也算一个座位', '7 号空座 · 男爵+2 · 亡骨魔−1'],
+  cat: ['教父在场外来者 ±1，方古 +1，亡骨魔 −1，气球驾驶员 +0~1', '教父±1 · 方古+1 · 亡骨魔−1'],
+  ucd: ['教父在场时：外来者 +1 或 −1（说书人决定）；提线木偶坐在恶魔旁边', '教父在场 外来者±1'],
+  ecp: ['男爵在场时：外来者 +2、镇民 −2', '男爵在场 外来者+2'],
+};
 /** 顶部常驻：这局的板子配置（几个镇民、外来者、爪牙、恶魔）。 */
 function BoardBar({ n, script }) {
   const d = script === 'rag' && DISTRIBUTION[n] ? [n - ragnarokWolves(n), 0, 0, ragnarokWolves(n)] : DISTRIBUTION[n]; // 诸神黄昏：猎手和狼人
   if (!d) return null;
   const parts = [['镇民', d[0], 'var(--int)'], ['外来者', d[1], 'var(--psy)'], ['爪牙', d[2], '#c9762e'], ['恶魔', d[3], 'var(--phy)']];
   return (
-    <div className="board-bar" title={{ bmr: '教父在场时：外来者 +1 或 −1（说书人决定）', snv: '方古在场时外来者 +1；亡骨魔在场时外来者 −1', ngj: '男爵在场时外来者加到两个（这个剧本只有两个外来者）', luf: '气球驾驶员在场时，说书人可以多放一个外来者', rag: '镇民全是猎手（死了可以开一枪，打谁谁死），恶魔全是小恶魔（狼人）', bs7: '男爵 +2、亡骨魔 −1、气球驾驶员 +0~1 外来者；村夫可以有 1–3 个。7 号空座也算一个座位', cat: '教父在场外来者 ±1，方古 +1，亡骨魔 −1，气球驾驶员 +0~1' }[script] ?? '男爵在场时：外来者 +2、镇民 −2'}>
+    <div className="board-bar" title={BOARD_NOTE[script]?.[0] ?? ''}>
       <span className="bb-script">{SCRIPTS[script]?.name ?? SCRIPTS.tb.name}</span>
       <span className="bb-n">{n} 人局</span>
       {parts.map(([k, v, c]) => <span key={k} className="bb-item"><b style={{ color: c }}>{v}</b>{k}</span>)}
-      <span className="bb-note">{{ bmr: '教父在场 外来者±1', snv: '方古 +1 · 亡骨魔 −1', ngj: '男爵在场 外来者补到 2', luf: '气球驾驶员 外来者+0~1', rag: '猎手 vs 狼人', bs7: '7 号空座 · 男爵+2 · 亡骨魔−1', cat: '教父±1 · 方古+1 · 亡骨魔−1' }[script] ?? '男爵在场 外来者+2'}</span>
+      <span className="bb-note">{BOARD_NOTE[script]?.[1] ?? ''}</span>
     </div>
   );
 }
@@ -77,7 +93,8 @@ function VoteStats({ s }) {
   );
 }
 
-import { getMap, pathLength, positionAt, houseAt, SPEED } from '../../src/shared/map.js';
+import { getMap, pathLength, positionAt, houseAt, speedOf } from '../../src/shared/map.js';
+import { useDockSheet, DockHandle } from './DockSheet.jsx';
 
 /**
  * 走路预测：点了地图就先在本地按同一套寻路开始走，不等服务器回话（一来一回要几百毫秒，走路会"慢半拍"）。
@@ -86,7 +103,7 @@ import { getMap, pathLength, positionAt, houseAt, SPEED } from '../../src/shared
  */
 const recentEnds = []; // 最近几次本地预测的终点
 
-function predictMove(s, x, y) {
+function predictMove(s, x, y, run = false) {
   const r = s.roam; const m = r?.pos?.[s.me];
   if (!r || !m) return;
   const now = serverNow();
@@ -98,7 +115,7 @@ function predictMove(s, x, y) {
   if ((target && target.id !== r.myHouse && target.locked) || (mine?.locked && target?.id !== mine.id)) return;
   const path = town.route(r.houses, from, to);
   const end = path[path.length - 1];
-  r.pos[s.me] = { fx: from.x, fy: from.y, x: end.x, y: end.y, start: now, dur: (pathLength(path) / SPEED) * 1000, path, predicted: true };
+  r.pos[s.me] = { fx: from.x, fy: from.y, x: end.x, y: end.y, start: now, dur: (pathLength(path) / speedOf(run)) * 1000, path, predicted: true, ...(run ? { run: true } : {}) };
   recentEnds.push(end);
   if (recentEnds.length > 16) recentEnds.shift();
 }
@@ -197,7 +214,7 @@ export default function App() {
         )}
         {!wrongPlace && (slow || status.kind === 'error') && (
           <div className="splash-help">
-            <p>{status.kind === 'error' ? '进不去？' : '等太久了？'}点下面重新进入；{fromKook ? '还不行就回 KOOK 频道重新领一次进入链接。' : '还不行就关掉活动，再从文字频道打开一次。'}</p>
+            <p>{status.kind === 'error' ? '进不去？' : '等太久了？'}点下面重新进入；{fromKook ? '还不行就回 KOOK 频道重新领一次进入链接。' : fromBrowserLink ? '还不行就回 Discord 活动里，在「设置」里再点一次「在浏览器打开」。' : '还不行就关掉活动，再从文字频道打开一次。'}</p>
             <button type="button" className="splash-retry" onClick={() => location.reload()}>重新进入</button>
           </div>
         )}
@@ -215,7 +232,7 @@ export default function App() {
       {s.phase === 'lobby' ? <Lobby s={s} act={act} ask={ask} toast={showToast} onTutorial={() => api.current.tutorial(true)} />
         : s.ww ? <WerewolfGame s={s} act={act} ask={ask} />
           : s.script === 'avalon' ? <AvalonGame s={s} act={act} ask={ask} parts={{ History, SoundToggles, Watchers }} /> // 娱乐模式阿瓦隆：另一套界面，见 Avalon.jsx
-            : s.script === 'mark' ? <MarkGame s={s} act={act} ask={ask} parts={{ History, SoundToggles, Watchers, onMove: (x, y) => { predictMove(s, x, y); return act('move', { x, y }); } }} /> // 娱乐模式暗印：见 Mark.jsx
+            : s.script === 'mark' ? <MarkGame s={s} act={act} ask={ask} parts={{ History, SoundToggles, Watchers, onMove: (x, y, run) => { predictMove(s, x, y, run); return act('move', { x, y, run }); } }} /> // 娱乐模式暗印：见 Mark.jsx
             : <Game s={s} act={act} ask={ask} />}
       {s.tutorial && <Tutorial s={s} onExit={() => api.current.tutorial(false)} />}
       {toast && <div className="toast">{toast}</div>}
@@ -279,7 +296,7 @@ function Game({ s, act, ask }) {
       ok = await act('choose', { night: prompt.night, targets: picked, role: pickedRole });
       // 恶魔选好了人（不是自己）：播变身 + 冲去他家的过场（只有自己看得到）
       const t = picked[0];
-      if (ok && ROLES_DEMON.has(prompt.roleId) && t && t !== s.me && g(t)?.alive && s.homes?.[s.me] && s.homes?.[t]) setDash({ target: t, roleId: prompt.roleId }); // 选了死人（空刀）不冲过去
+      if (ok && ROLES_DEMON.has(prompt.roleId) && t && t !== s.me && g(t)?.alive && s.killScene && s.homes?.[s.me] && s.homes?.[t]) setDash({ target: t, roleId: prompt.roleId }); // 选了死人（空刀）不冲过去
     }
     else if (mode === 'nominate') ok = await act('nominate', { target: picked[0] });
     else if (mode === 'slay') ok = await act('slay', { target: picked[0] });
@@ -364,7 +381,10 @@ function Game({ s, act, ask }) {
   ].filter(Boolean);
   const myVoteOpen = !!s.vote && !!me && (me.alive || me.ghostVote) && !s.vote.locked.includes(s.me);
   const mySpeech = !!s.pendingNom && ((s.pendingNom.stage === 'accuse' && s.pendingNom.nominator === s.me) || (s.pendingNom.stage === 'defend' && s.pendingNom.nominee === s.me));
-  const dockHot = !!(prompt || rk) || myVoteOpen || mySpeech;
+  // 提名阶段大家在等我表态（提名或不提名）；点了「提名」「开枪」「拉进密室」正在选人，也算轮到我
+  const myNomOpen = !!s.noms && !s.noms.timeUp && !!me?.alive && !meP?.nominator && !s.noms.skipped && !s.executedToday && !s.vote && !s.pendingNom;
+  const dockHot = !!(prompt || rk) || myVoteOpen || mySpeech || myNomOpen || !!mode;
+  const [dockMin, toggleDock, dockRef] = useDockSheet(dockHot);
   const pick = (id) => { if (id === 'journal') tutEvent('journal'); return id === 'menu' ? setMenu(true) : setTab((cur) => (cur === id ? null : id)); };
   const shown = tab ?? (s.isST ? 'grim' : me ? 'role' : 'log'); // 电脑上右栏默认显示的面板
 
@@ -378,7 +398,7 @@ function Game({ s, act, ask }) {
         <BoardBar n={s.players.length} script={s.script} />
         <VoteStats s={s} />
         {roaming ? (
-          <TownMap s={s} onMove={me ? (x, y) => { predictMove(s, x, y); return act('move', { x, y }); } : () => null} />
+          <TownMap s={s} onMove={me ? (x, y, run) => { predictMove(s, x, y, run); return act('move', { x, y, run }); } : () => null} />
         ) : dash && night ? (
           <DemonDash s={s} target={dash.target} roleId={dash.roleId} onDone={() => setDash(null)} />
         ) : night && me && meP ? (
@@ -394,6 +414,8 @@ function Game({ s, act, ask }) {
         {!roaming && !dash && me && meP && (night || s.transit === 'dawn') && <AliveStrip s={s} />}
         {night && me?.killedTonight && <DoorKick />}
         {!roaming && skills && <CheatSheet s={s} onClose={() => setSkills(false)} />}
+        {/* 夜里、广场上也在右上角放一个「技能表」按钮（地图上的在小地图左边，由 TownMap 自己放） */}
+        {!roaming && !skills && s.script !== 'mark' && <button type="button" className="mm-sheet-btn scene-sheet-btn" onClick={() => setSkills(true)} title="所有角色的技能">技能表</button>}
         <SoundToggles onFixVoice={me && s.phase !== 'ended' ? () => act('fixVoice') : null} onSheet={!roaming && !skills ? () => setSkills(true) : null} />
         <SkillCheck check={check} onClose={closeCheck} />
         <MicDemand me={me} />
@@ -403,10 +425,11 @@ function Game({ s, act, ask }) {
       </section>
 
       {/* 操作面板：电脑上在右栏上方（标签页上面）；手机上排在画面下面 */}
-      <section className={`dock ${dockHot ? 'dock-hot' : ''}`}>
+      <section ref={dockRef} className={`dock ${dockHot ? 'dock-hot' : ''} ${dockHot && dockMin ? 'dock-min' : ''}`}>
+        {dockHot && <DockHandle min={dockMin} onToggle={toggleDock} />}
         {me?.moonchild && <MoonchildPanel s={s} act={act} fake={me.moonchild === 'fake'} />}
         {me?.klutz && <KlutzPanel s={s} act={act} />}
-        {me?.madness && (!me.madness.claimed || (me.mic && !me.micOn)) && <MadnessPanel me={me} />}
+        {(me?.madness && (!me.madness.claimed || (me.mic && !me.micOn)) || (me?.mutant && me.mic && !me.micOn)) && <MadnessPanel me={me} />}
         <Actions s={s} act={act} me={me} name={name} g={g} mode={mode} setMode={setMode} picked={picked} onTap={onTap}
           prompt={prompt} rk={rk} pickSpec={pickSpec} confirm={confirm} pickedRole={pickedRole} setPickedRole={setPickedRole}
           skip={() => act('choose', { night: prompt.night, targets: [], role: null })} />
@@ -426,7 +449,7 @@ function Game({ s, act, ask }) {
           {shown === 'role' && me?.bluffs && <BluffCards me={me} act={act} />}
           {shown === 'role' && me && !me.bluffs && <EvilNote me={me} />}
           {shown === 'log' && <History log={s.log} players={s.players} ask={ask} epoch={s.logEpoch} />}
-          {shown === 'votes' && <KeyInfo votes={s.votes} knives={s.knives} execs={s.execs} g={g} name={name} />}
+          {shown === 'votes' && <KeyInfo votes={s.votes} knives={s.knives} execs={s.execs} pubs={s.pubs} g={g} name={name} />}
           {shown === 'roster' && <Roster s={s} onTap={s.isST ? (p) => setSheet(p.id) : null} />}
           {shown === 'roster' && <Watchers s={s} />}
           {shown === 'roles' && <RoleIndex s={s} />}
@@ -580,11 +603,12 @@ function GossipButton({ s, act }) {
   );
 }
 
-/** 猎手按钮（暗流涌动）：白天任何时候谁都能声称猎手开一枪，每人每局一次；真猎手自己看到的是醒目的主按钮。 */
+/** 猎手按钮（有猎手的剧本）：白天任何时候谁都能声称猎手开一枪，每人每局一次；真猎手自己看到的是醒目的主按钮。 */
 function SlayButton({ s, setMode }) {
   const me = s.self;
-  // 暗流涌动和诸神黄昏谁都能声称开枪（死人也行，没有效果）；两个小剧本里只有猜中了猎手能力的失忆者有这把枪（canSlay）
-  if ((engineOf(s.script) !== 'tb' && !me?.canSlay) || s.script === 'rag' || s.phase !== 'day' || !me || s.players.find((p) => p.id === s.me)?.shot) return null; // 诸神黄昏的猎手死了才开枪（RagShotPanel）
+  // 有猎手的剧本（暗流涌动、生死未卜……）谁都能声称开枪（死人也行，没有效果）；只给真猎手显示等于把身份亮给了全场。
+  // 没有猎手的剧本里只有猜中了猎手能力的失忆者有这把枪（canSlay）。诸神黄昏的猎手死了才开枪（RagShotPanel）
+  if ((engineOf(s.script) !== 'tb' && !inScript('slayer', s.script) && !me?.canSlay) || s.script === 'rag' || s.phase !== 'day' || !me || s.players.find((p) => p.id === s.me)?.shot) return null; // 诸神黄昏的猎手死了才开枪（RagShotPanel）
   return (
     <div className="btn-row gossip-row">
       <Btn kind={me.role?.id === 'slayer' || me.canSlay ? 'primary' : 'secondary'} onClick={() => setMode('slay')}
@@ -600,7 +624,7 @@ function SlayButton({ s, setMode }) {
 function SnvButtons({ s, act }) {
   const [open, setOpen] = useState(null);
   const me = s.self;
-  if (engineOf(s.script) !== 'snv' || s.phase !== 'day' || !me) return null;
+  if (s.phase !== 'day' || !me || engineOf(s.script) !== 'snv') return null; // 通用的公开声明 11-11 去掉了（只留造谣者的「发表声明」）
   const close = () => setOpen(null);
   return (
     <div className="btn-row gossip-row snv-row">
@@ -609,7 +633,6 @@ function SnvButtons({ s, act }) {
       {me.canFisherman && <Btn kind="primary" onClick={() => setOpen('fisherman')} title="每局一次：请说书人给一条帮你的阵营获胜的建议">请教说书人</Btn>}
       {me.canAmnesiac && <Btn kind="primary" onClick={() => setOpen('amnesiac')} title="每个白天一次：猜自己的能力，说书人告诉你猜得多准">猜我的能力</Btn>}
       {me.canPardon && <Btn kind="primary" onClick={() => setOpen('pardon')} title="每局一次：台上的人走下来，今天不再处决任何人">特赦</Btn>}
-      {me.canDeclare && <Btn kind={me.madness && !me.madness.claimed ? 'primary' : 'secondary'} onClick={() => setOpen('declare')} title="公开说自己是某个角色，全场都看得到">公开声明</Btn>}
       {me.canJuggle && <Btn kind={me.role?.id === 'juggler' ? 'primary' : 'secondary'} onClick={() => setOpen('juggle')} title="公开猜最多五次玩家的角色；只有真杂耍艺人当晚会得知猜对几个">公开猜测</Btn>}
       {me.harpy && !me.harpy.claimed && <Btn kind="primary" onClick={() => setOpen('harpy')} title={`鹰身女妖要你疯狂地证明 ${me.harpy.name} 是邪恶的`}>公开指认</Btn>}
       {me.canDamsel && <Btn kind="secondary" onClick={() => setOpen('damsel')} title="爪牙合计有一次机会：公开猜谁是落难少女，猜中了邪恶获胜。谁都可以这么说">猜落难少女</Btn>}
@@ -753,17 +776,23 @@ function ArtistForm({ act, onClose }) {
   );
 }
 
+/** 这个人今天要做的疯狂：被洗脑的要证明自己是某个角色；畸形秀演员不能让人相信自己是外来者。 */
+const madnessGoal = (me) => (me.madness
+  ? <>今天你要<b>真心实意</b>地让大家相信你是<b>{me.madness.role}</b>，不然可能被处决。暗示自己是被逼的、敷衍、故意聊爆，都算没有疯狂。</>
+  : <>你是畸形秀演员：<b>不能让大家相信你是外来者</b>，不然可能被处决。暗示、故意说漏也算。</>);
+
 function MadnessPanel({ me }) {
-  const plain = me.hearing ? '可以用「公开声明」，也可以在广场上说。' : '用下面的「公开声明」说出来才算数：说书人听不到语音。';
+  // 2026-11-11 起没有通用的「公开声明」了：疯狂只靠后台听语音（广场机器人、收音页）
+  const plain = me.hearing ? '在广场上说，说书人听得到。' : '说书人现在听不到语音，会按局势判定你够不够疯狂。';
   return (
     <Panel title="疯狂" tone="psy" className="moonchild-pnl">
-      <p className="lead">今天你要努力让大家相信你是<b>{me.madness.role}</b>，不然可能被处决。{!me.mic ? plain : me.micOn ? '收音开着，说书人听得到你。' : '要打开收音，说书人才听得到你，只点「公开声明」不够。别人不知道你开了。'}</p>
+      <p className="lead">{madnessGoal(me)}{!me.mic ? plain : me.micOn ? '收音开着，说书人听得到你。' : '要打开收音，说书人才听得到你。别人不知道你开了。'}</p>
       {me.mic && !me.micOn && <div className="btn-row"><Btn kind="primary" onClick={() => openMic(me.mic)}>打开收音</Btn></div>}
     </Panel>
   );
 }
 
-/** 被洗脑时屏幕中间要求开收音：传上来第一句话就自己消失。可以先收起来，右边的「疯狂」面板还能打开。 */
+/** 被洗脑、或者是畸形秀演员时，屏幕中间要求开收音：传上来第一句话就自己消失。可以先收起来，右边的「疯狂」面板还能打开。 */
 function MicDemand({ me }) {
   const [later, setLater] = useState(null); // 这个令牌（当天）点过「等会儿再开」
   const [opened, setOpened] = useState(false);
@@ -771,8 +800,8 @@ function MicDemand({ me }) {
   return createPortal(
     <div className="sheet-bg gossip-bg" role="presentation">
       <div className="gossip-modal mic-demand" role="alertdialog" aria-label="打开收音">
-        <h3>你被洗脑了</h3>
-        <p className="lead">今天你要努力让大家相信你是<b>{me.madness?.role}</b>。说书人只听得到收音，只点「公开声明」不够，不开收音很可能被处决。</p>
+        <h3>{me.madness ? '你被洗脑了' : '说书人要听你说话'}</h3>
+        <p className="lead">{madnessGoal(me)}说书人只听得到收音{me.madness ? '，不开收音很可能被处决' : ''}。</p>
         <p className="muted">{opened ? '在打开的页面里点「开始收音」，然后说话。说书人听到第一句，这里就会关掉。' : '别人不知道你开了。音频不保存，转成文字后发给 AI 说书人判断。'}</p>
         <div className="btn-row">
           <Btn kind="primary" onClick={() => { setOpened(true); openMic(me.mic); }}>{opened ? '再打开一次' : '打开收音'}</Btn>
@@ -842,7 +871,7 @@ function MoonchildPanel({ s, act, fake }) {
   return (
     <Panel title={fake ? '公开选人' : '月之子'} tone="psy" className="moonchild-pnl">
       <p className="lead">{fake
-        ? <>你死了。想让大家以为你是{engineOf(s.script) === 'snv' ? '呆瓜' : '月之子'}的话，可以<b>公开选择一名存活的玩家</b>，大家看到的和真的一样，但不会有任何效果。不想选就点「不选」。</>
+        ? <>你死了。想让大家以为你是{inScript('klutz', s.script) && inScript('moonchild', s.script) ? '月之子或呆瓜' : inScript('klutz', s.script) ? '呆瓜' : '月之子'}的话，可以<b>公开选择一名存活的玩家</b>，大家看到的和真的一样，但不会有任何效果。不想选就点「不选」。</>
         : <>你得知了自己的死亡。<b>公开选择一名存活的玩家</b>——如果他是善良的，今晚他会死。别人也可能假装选人，所以大家不能确定你的身份。</>}</p>
       <Picker s={s} options={alive} picked={t ? [t] : []} onTap={(p) => setT(p.id)} />
       <div className="btn-row"><Btn kind="primary" disabled={!t} onClick={() => act('moonchild', { target: t })}>公开选择</Btn>{fake && <Btn onClick={() => act('moonchildSkip')}>不选</Btn>}</div>
@@ -939,6 +968,8 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
     return (
       <Panel title={M.title} tone="mot">
         <p className="lead">{M.hint}</p>
+        {/* 手机上面板盖住了广场：直接在名单里点人（电脑上点广场上的肖像） */}
+        <div className="dock-picker"><Picker s={s} options={pickSpec.options} picked={picked} onTap={onTap} /></div>
         <Picked picked={picked} name={name} need={1} />
         <div className="btn-row">
           <Btn kind="primary" disabled={!picked.length} onClick={confirm}>{M.confirm}</Btn>
@@ -977,9 +1008,11 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
         {me && (locked
           ? <p className="lead">{raised ? '你举了手。票已锁定。' : '你没有举手。票已锁定。'}</p>
           : !can ? <p className="lead">你的幽灵票已经用掉了。</p>
-            : (
-              <p className="muted">{raised ? '你举着手（在画面中间可以放下）。' : '赞成处决就点画面中间的「举手」。'}</p>
-            ))}
+            : (<>
+              <p className="muted dock-hand-hint">{raised ? '你举着手（在画面中间可以放下）。' : '赞成处决就点画面中间的「举手」。'}</p>
+              {/* 手机上面板盖住了画面中间：在这里也能举手、放下（电脑上不显示） */}
+              <div className="btn-row dock-hand"><Btn kind={raised ? 'secondary' : 'primary'} onClick={() => act('hand', { up: !raised })}>{raised ? '放下手' : '举手 ✋'}</Btn></div>
+            </>))}
         <VoteTrack s={s} />
         {me && !me.alive && me.ghostVote && !locked && <p className="muted">你是鬼魂，只剩一张幽灵票。</p>}
       </Panel>
@@ -1369,25 +1402,29 @@ function CardBack() {
 }
 
 /** 身份页最上面：夜里（和白天）私下得到的所有信息，最新的在最上面。 */
+// 身份页的记录 = 说书人告诉你的信息 + 你自己夜里选了谁（旅店老板、僧侣这类不收信息的角色也能回看自己护了谁），按时间排
 export function InfoBox({ me }) {
   useEffect(() => { if (!me.inbox.length) return undefined; const t = setTimeout(() => tutEvent('journal'), 2500); return () => clearTimeout(t); }, [me.inbox.length]);
+  const list = [...me.inbox, ...(me.acts ?? [])].sort((a, b) => a.id - b.id);
   return (
     <section className="info-box">
-      <header><b>你得到的信息</b><small>{me.inbox.length ? `${me.inbox.length} 条 · 最新的在最上面` : ''}</small></header>
-      {me.inbox.length ? <Journal me={me} /> : <p className="muted">还没有。夜里说书人告诉你的信息会出现在这里。</p>}
+      <header><b>你的记录</b><small>{list.length ? `${list.length} 条 · 最新的在最上面` : ''}</small></header>
+      {list.length ? <Journal list={list} /> : <p className="muted">还没有。夜里你选了谁、说书人告诉你的信息都会记在这里。</p>}
     </section>
   );
 }
 
-function Journal({ me }) {
+function Journal({ list }) {
   return (
     <ul className="journal">
-      {[...me.inbox].reverse().map((m) => {
+      {[...list].reverse().map((m) => {
         const v = voiceOf(m.voice, ROLE_NAMES);
         return (
-          <li key={m.id}>
+          <li key={m.id} className={m.mine ? 'j-mine' : ''}>
             <span className="stamp-time">{m.phase}</span>
-            <Line who={v.who} color={v.color} chip={v.skill ? `${v.skill} · 成功` : null} flavor={v.flavor?.hear} text={m.text} />
+            {m.mine
+              ? <Line who="你的行动" color={v.color} text={m.text} />
+              : <Line who={v.who} color={v.color} chip={v.skill ? `${v.skill} · 成功` : null} flavor={v.flavor?.hear} text={m.text} />}
           </li>
         );
       })}
@@ -1450,7 +1487,7 @@ export function History({ log: recent, players = [], ask, epoch }) {
 
 /**
  * 镇民面板（小魔典）：大家按座位围成一圈。左键依次点两个人连一条线（先选上面的连线类型；再点一次起点取消），
- * 右键（手机长按）一个人打标签、猜角色、写笔记。只存在自己设备上，别人看不到。说书人点人还是打开这个人的详情。
+ * 右键（手机长按）一个人涂颜色、贴角标、猜角色、写笔记。只存在自己设备上，别人看不到。说书人点人还是打开这个人的详情。
  */
 export function Roster({ s, onTap }) {
   const marks = useMarks(s);
@@ -1489,7 +1526,7 @@ export function Roster({ s, onTap }) {
   return (
     <div className="mini-grim">
       {!onTap && <LinkKinds />}
-      <p className="mg-hint muted">{onTap ? '点一个人看详情。' : from ? `从 ${seat(from)}号 连「${LINKS[kind].label}」到谁？（再点一次 ${seat(from)}号 取消）` : '左键依次点两个人连线；右键（手机长按）一个人打标签、猜角色、写笔记。'}</p>
+      <p className="mg-hint muted">{onTap ? '点一个人看详情。' : from ? `从 ${seat(from)}号 连「${LINKS[kind].label}」到谁？（再点一次 ${seat(from)}号 取消）` : '左键依次点两个人连线；右键（手机长按）一个人涂颜色、贴角标、猜角色、写笔记。'}</p>
       <div className="mg-circle" ref={ref} style={{ height: w }}>
         <LinkLines marks={marks} posOf={posOf} w={w} h={w} gap={tk * 0.62} />
         {s.players.map((p, i) => {
@@ -1622,8 +1659,10 @@ function PlayerSheet({ s, p, act, name, onClose }) {
 function HostMenu({ s, act, onClose, setMode }) {
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [confirmRelease, setConfirmRelease] = useState(false);
+  const [madPick, setMadPick] = useState(null); // 疯狂处决：null 没打开，'' 在选人，id 选好了等确认
   const run = (fn) => async () => { await fn(); onClose(); };
   const day = s.phase === 'day';
+  const canMad = day && !s.isST && engineOf(s.script) === 'snv' && !s.executedToday;
   return (
     <div className="sheet-bg" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
@@ -1634,6 +1673,19 @@ function HostMenu({ s, act, onClose, setMode }) {
             {day && <Btn onClick={run(() => setMode('pull'))}>把人拉进密室</Btn>}
             {day && <Btn onClick={run(() => act('dusk'))}>结束这一天</Btn>}
             {s.phase === 'night' && !s.isST && <Btn onClick={run(() => act('dawn'))}>立刻天亮</Btn>}
+            {canMad && madPick === null && <Btn kind="ghost" onClick={() => setMadPick('')}>疯狂处决……</Btn>}
+            {canMad && madPick === '' && (
+              <div className="host-mad">
+                <p className="muted">选一名破坏了疯狂的玩家：当场处决，算今天的处决。</p>
+                <div className="btn-row">
+                  {s.players.map((p) => <Btn key={p.id} kind="ghost" onClick={() => setMadPick(p.id)}>{p.seat}号 {p.name}{p.alive ? '' : '（死）'}</Btn>)}
+                </div>
+              </div>
+            )}
+            {canMad && madPick && (() => {
+              const p = s.players.find((q) => q.id === madPick);
+              return <Btn kind="primary" onClick={run(() => act('hostMadExecute', { target: madPick }))}>确定处决 {p?.seat}号 {p?.name}（因为疯狂）</Btn>;
+            })()}
             {!s.isST && (!confirmRelease
               ? <Btn kind="ghost" onClick={() => setConfirmRelease(true)}>让出房主……</Btn>
               : <Btn kind="primary" onClick={run(() => act('releaseHost'))}>确定让出房主（交给在线的玩家）</Btn>)}

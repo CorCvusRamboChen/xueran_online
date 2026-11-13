@@ -18,11 +18,16 @@ const idOf = (x) => x?.id ?? x;
 const upTo = (n) => Array.from({ length: n + 1 }, (_, i) => i);
 
 // 算不算"这个人又被说书人挑中了"：同一个人身上别压太多（看决策日志就知道）
-const HARM = new Set(['mayorVictim', 'gossipVictim', 'sweetheartDrunk', 'innkeeperDrunk']);
+const HARM = new Set(['mayorVictim', 'gossipVictim', 'sweetheartDrunk', 'innkeeperDrunk', 'pitVictim']);
 const trim = (x) => (typeof x === 'number' ? Math.round(x * 1000) / 1000 : x);
 const tidy = (features) => Object.fromEntries(Object.entries(features).filter(([, v]) => v != null && v !== false && v !== 0).map(([k, v]) => [k, trim(v)]));
 // 梦殒春宵拿信息的镇民：亡骨魔的毒下在这些人身上，影响的是全镇的判断
-const SNV_INFO = new Set(['clockmaker', 'dreamer', 'mathematician', 'flowergirl', 'towncrier', 'oracle', 'savant', 'seamstress', 'juggler', 'sage']);
+/** 善良玩家自己通常不公开的角色：筑梦师替邪恶打掩护时可以拿来用（官方筑梦师页举的例子）。 */
+const HIDDEN_GOOD = ['snakecharmer', 'sage', 'mutant', 'klutz'];
+// 拿信息的镇民（亡骨魔毒谁时看）。混合剧本里也有暗流涌动、黯月初升、七步成诗的信息角色，以前只列了梦殒春宵的，占卜师、气球驾驶员被当成不拿信息
+const SNV_INFO = new Set(['clockmaker', 'dreamer', 'mathematician', 'flowergirl', 'towncrier', 'oracle', 'savant', 'seamstress', 'juggler', 'sage',
+  'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'undertaker', 'ravenkeeper', 'grandmother', 'chambermaid',
+  'balloonist', 'noble', 'shugenja', 'villageidiot']); // 艺术家、渔夫是每局一次的提问/建议，不算
 const shuffled = (arr, rng) => {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
@@ -30,6 +35,9 @@ const shuffled = (arr, rng) => {
 };
 
 /** 局势的文字描述。 */
+/** 看不出谁领先时偏向邪恶多少（见 balance）。 */
+export const EVIL_LEAN = 0.1;
+
 export function balanceLabel(b) {
   if (b > 0.4) return '善良明显领先';
   if (b > 0.15) return '善良略占上风';
@@ -82,6 +90,16 @@ export class Storyteller {
     return { ...signals, ...(who && g.newbies?.includes(who) ? { newbie: 1 } : {}), ...extra };
   }
 
+  /**
+   * 这个人报的身份：公开声明过就用声明，没有就看大家在小魔典里把他标成什么（多半是他语音里报的）。
+   * 说书人配合邪恶伪装时用（官方《给说书人的建议》第 7 条）。
+   */
+  claimOf(id) {
+    const g = this.g;
+    if (g.claims?.[id]) return g.claims[id];
+    try { return g.markedRole?.(id) ?? null; } catch { return null; }
+  }
+
   /** 掷骰子决定要不要做（dice.js 的 DICE），并记下来。情况和加减值都进日志。 */
   roll(kind, extra = {}, ctx = {}) {
     const features = this.features(ctx.who, extra);
@@ -126,13 +144,17 @@ export class Storyteller {
     const evil = g.players.filter(isEvil);
     const good = g.players.filter((p) => !isEvil(p));
     const minions = evil.filter((p) => ROLES[p.role].team === 'minion');
-    const minionDead = minions.length ? minions.filter((p) => !p.alive).length / minions.length : 0;
+    // 亡骨魔杀死的爪牙保留能力，不算死（以前算死：亡骨魔一刀杀了唯一的爪牙，局势直接跳到「善良明显领先」）
+    const minionDead = minions.length ? minions.filter((p) => !p.alive && !g.kept?.(p)).length / minions.length : 0;
     const goodDead = good.length ? good.filter((p) => !p.alive).length / good.length : 0;
     const demon = g.demon();
     const heat = Object.values(g.suspicion);
     const maxHeat = Math.max(1, ...heat);
     const demonHeat = demon ? (g.suspicion[demon.id] ?? 0) / maxHeat : 1;
-    return clamp(1.0 * minionDead + 0.4 * demonHeat - 0.8 * goodDead, -1, 1);
+    const raw = clamp(1.0 * minionDead + 0.4 * demonHeat - 0.8 * goodDead, -1, 1);
+    // 官方《给说书人的建议》：「如果你不知道你应该帮助哪个阵营，要么哪个阵营都不帮，要么就帮助邪恶阵营」。
+    // 看不出谁领先时，当作善良略好一点（所有骰子都是往落后的一方偏，这就等于稍微帮邪恶），但不越过「略占上风」的线
+    return Math.abs(raw) < 0.15 ? Math.min(0.149, raw + EVIL_LEAN) : raw;
   }
 
   // ───────────── 存档 ─────────────
@@ -156,8 +178,17 @@ export class Storyteller {
 
   // ───────────── 开局 ─────────────
 
-  /** 红鲱鱼：一名善良玩家。偏向镇民（被怀疑更有戏剧性），不选占卜师自己。 */
+  /**
+   * 红鲱鱼：一名善良玩家。偏向镇民（被怀疑更有戏剧性），一般不选占卜师自己。
+   * 例外：官方占卜师页「在小型游戏中…我们建议你在某些情况下将占卜师本人作为"干扰项"」——5–6 人局有时让占卜师自己当，
+   * 这样他不查自己时的结果都是干净的；新手占卜师不这么做（他想不到）。
+   */
   redHerring() {
+    const ft = this.g.players.find((p) => p.role === 'fortuneteller');
+    if (ft && this.g.players.length <= 6 && !this.g.newbies?.includes(ft.id) && this.roll('ftSelfHerring', {}, { who: ft.id })) {
+      this.note(`小局：把占卜师 ${this.g.name(ft.id)} 自己定为红鲱鱼`);
+      return ft.id;
+    }
     const good = this.g.players.filter((p) => !isEvilRole(p.role));
     const townsfolk = good.filter((p) => ROLES[p.role].team === 'townsfolk' && p.role !== 'fortuneteller');
     const pool = townsfolk.length ? townsfolk : good;
@@ -170,15 +201,17 @@ export class Storyteller {
 
   /**
    * 健康的陌客/间谍被检测时，要不要登记成另一个阵营。
-   * 两种错误登记都对邪恶有利，所以善良领先时更常发生，邪恶领先时几乎不发生。
+   * help：这次误登记帮哪边。大多数帮邪恶（误导信息、陌客被当恶魔挨枪），善良领先时更常发生；
+   * 有几种帮善良：间谍被贞洁者当成镇民（间谍被处决）、陌客被厨师算成邪恶（官方陌客页的范例：厨师看到「2」
+   * 过于暴露邪恶，说书人改给「0」）——这些反过来，邪恶领先时更常发生。
    * 同一个人一晚上最多错误登记两次，免得一个人身上压太多误导。
    */
-  misregister(p, by) {
+  misregister(p, by, help = 'evil') {
     const key = `${this.g.night}:${p.id}`;
     const used = this.misCount.get(key) ?? 0;
     if (used >= 2) return false;
     const b = this.balance();
-    const yes = this.roll('misregister', { balance: b }, { who: p.id, b });
+    const yes = this.roll('misregister', { balance: help === 'good' ? -b : b }, { who: p.id, b, help });
     if (yes) {
       this.misCount.set(key, used + 1);
       const as = p.role === 'recluse' ? '邪恶' : '善良';
@@ -187,9 +220,22 @@ export class Storyteller {
     return yes;
   }
 
-  /** 陌客/间谍被看角色时错误登记成什么。 */
-  misregRole(p) {
-    return this.choose('misregRole', p.role === 'recluse' ? [...MINIONS, 'imp'] : [...TOWNSFOLK, ...OUTSIDERS], { who: p.id });
+  /**
+   * 陌客/间谍被看角色时错误登记成什么。官方陌客页「由说书人来选择最有趣的结果」，《给说书人的建议》举例：
+   * 间谍声称自己是占卜师，被守鸦人选中时就让他被当作占卜师。所以按这个顺序：
+   *   1. 这局之前已经给他登记过的角色（前后一致：洗衣妇看到守鸦人，送葬者也看到守鸦人）
+   *   2. 间谍公开声明过的角色（配合邪恶的伪装；暗流涌动、黯月初升没记声明时跳过）
+   *   3. 间谍优先不在场的善良角色（报成在场的角色等于当场撞身份，帮不了邪恶）
+   * pool：可以登记成的角色（通用引擎按剧本给）。
+   */
+  misregRole(p, pool = p.role === 'recluse' ? [...MINIONS, 'imp'] : [...TOWNSFOLK, ...OUTSIDERS]) {
+    const g = this.g;
+    const before = this.decisions.findLast?.((d) => d.kind === 'misregRole' && d.who === p.id)?.chosen;
+    if (before && pool.includes(before)) { this.decide('misregRole', { who: p.id, options: pool, chosen: before, prob: 1, why: 'same' }); return before; }
+    const said = this.claimOf(p.id);
+    if (p.role === 'spy' && said && pool.includes(said)) { this.decide('misregRole', { who: p.id, options: pool, chosen: said, prob: 1, why: 'claim' }); return said; }
+    const out = p.role === 'spy' ? pool.filter((r) => !g.players.some((q) => q.role === r)) : pool;
+    return this.choose('misregRole', out.length ? out : pool, { who: p.id });
   }
 
   // ───────────── 酒鬼 / 中毒：假世界 ─────────────
@@ -208,10 +254,12 @@ export class Storyteller {
     const nMinions = g.players.filter((q) => ROLES[q.role].team === 'minion').length;
     const b = this.balance();
     const keep = b < -0.15 && evil.length && rng() < 0.5 ? pick(evil, rng) : null;
+    // 配合邪恶的伪装（官方《给说书人的建议》第 7 条）：和邪恶公开声明撞了身份的真好人排最前，假世界里由他当邪恶
+    const taken = new Set(evil.map((q) => this.claimOf(q.id)).filter(Boolean));
 
     let demon = null; const minions = [];
     if (keep?.role === 'imp') demon = keep; else if (keep) minions.push(keep);
-    const pool = good.filter((q) => q !== keep);
+    const pool = good.filter((q) => q !== keep).sort((x, y) => (taken.has(y.role) ? 1 : 0) - (taken.has(x.role) ? 1 : 0));
     if (!demon) demon = pool.shift() ?? keep;
     while (minions.length < nMinions && pool.length) minions.push(pool.shift());
 
@@ -225,7 +273,10 @@ export class Storyteller {
     for (const q of g.players) {
       if (roles.has(q.id)) continue;
       if (q.id === p.id) roles.set(q.id, p.shownRole);
-      else if (isEvilRole(q.role)) roles.set(q.id, spare.pop() ?? 'soldier');
+      else if (isEvilRole(q.role)) {
+        const said = this.claimOf(q.id);
+        roles.set(q.id, said && ROLES[said] && !isEvilRole(said) && said !== 'drunk' ? said : spare.pop() ?? 'soldier'); // 假世界里他就是他声称的角色
+      }
       else roles.set(q.id, q.role === 'drunk' ? q.shownRole : q.role);
     }
     return { demon: demon.id, evil: new Set([demon.id, ...minions.map((q) => q.id)]), roles, keep: keep?.id ?? null, b };
@@ -349,6 +400,30 @@ export class Storyteller {
     return lie;
   }
 
+  /**
+   * 真酒鬼这一晚要不要拿真信息。官方《给说书人的建议》第 6 条：邪恶已经碾压善良时，可以在一些夜晚给酒鬼正确的信息。
+   * 只在邪恶明显领先（局势 < -0.4）时掷；中毒的人不走这里（那是投毒者的意图，照给假的）。同一个人同一晚只判一次。
+   */
+  drunkTruth(p) {
+    const done = this.decisions.find((d) => d.kind === 'drunkTruth' && d.night === this.g.night && d.who === p.id);
+    if (done) return done.chosen;
+    const b = this.balance();
+    if (b >= -0.4) return false;
+    const yes = this.roll('drunkTruth', { balance: b }, { who: p.id, b });
+    if (yes) this.note(`邪恶明显领先：酒鬼 ${this.g.name(p.id)} 今晚拿到真信息`, b);
+    return yes;
+  }
+
+  /** 醉酒的村夫这晚拿不拿真信息（官方村夫页：可以给，免得几个村夫一对就知道谁醉了）。同一晚只掷一次。 */
+  idiotTruth(p) {
+    const done = this.decisions.find((d) => d.kind === 'idiotTruth' && d.night === this.g.night && d.who === p.id);
+    if (done) return done.chosen;
+    const b = this.balance();
+    const yes = this.roll('idiotTruth', { balance: b }, { who: p.id, b });
+    if (yes) this.note(`醉酒的村夫 ${this.g.name(p.id)} 今晚拿到真信息`, b);
+    return yes;
+  }
+
   /** 和平主义者：被处决的善良玩家要不要活下来。邪恶领先时更常救；每局别救太多次。 */
   pacifistSaves(p) {
     const b = this.balance();
@@ -357,18 +432,33 @@ export class Storyteller {
     return save;
   }
 
-  /** 水手选了人：谁醉酒。惯例：选了镇民就让镇民醉，选了外来者/邪恶就让水手自己醉。 */
+  /**
+   * 水手选了人：谁醉酒。惯例：选了镇民就让镇民醉，选了外来者/邪恶就让水手自己醉。
+   * 选了镇民时偶尔（约 10%，善良领先时多一点）反过来让水手自己醉；邪恶领先时不反，免得雪上加霜。
+   */
   sailorDrunk(sailor, target) {
-    const who = ROLES[target.role].team === "townsfolk" ? target : sailor;
+    const townsfolk = ROLES[target.role].team === "townsfolk";
+    let who = townsfolk ? target : sailor;
+    if (townsfolk) {
+      const b = this.balance();
+      if (b >= -0.15 && this.roll('sailorFlip', { balance: b }, { who: sailor.id, b })) who = sailor;
+    }
     this.note(`水手 ${this.g.name(sailor.id)} 选了 ${this.g.name(target.id)}，${who === sailor ? "水手自己" : "对方"}醉酒`);
     return who;
   }
 
   /** 旅店老板保护的两人里谁醉酒：通常是更需要准确信息/能力的善良玩家。 */
+  /**
+   * 旅店老板保护的两人里谁醉。官方：「该玩家可以是善良的或邪恶的，但几乎总会是善良的，这取决于你的游戏走向」。
+   * 两人里有邪恶时掷一次（innkeeperEvil）：多半醉善良，善良落后时偶尔醉邪恶。
+   */
   innkeeperDrunk(pair) {
     const g = this.g;
     const good = pair.filter((q) => !g.evilOf(q));
-    const who = this.draw('innkeeperDrunk', good.length ? good : pair, (q) => ({ hits: this.hits(q.id) }));
+    const evil = pair.filter((q) => g.evilOf(q));
+    const b = this.balance();
+    const pool = good.length && evil.length && this.roll('innkeeperEvil', { balance: b }, { b }) ? evil : good.length ? good : pair;
+    const who = this.draw('innkeeperDrunk', pool, (q) => ({ hits: this.hits(q.id) }));
     this.note(`旅店老板保护了 ${pair.map((q) => g.name(q.id)).join("、")}，让 ${g.name(who.id)} 醉酒`);
     return who;
   }
@@ -415,7 +505,11 @@ export class Storyteller {
     const g = this.g;
     if (g.aliveCount() <= 4) return false;
     const b = this.balance();
-    const die = this.roll('tinker', { balance: b }, { who: p.id, b });
+    // 制造混乱的时机（权重见 dice.js）：今晚已经死了几个（最多算 2）、恶魔被驱魔人挡住、今天有人发表过造谣式声明；
+    // 大家猜的恶魔不一致（demonSplit）由房间的信号给
+    const crowd = Math.min(2, (g.nightDeaths ?? []).filter((id) => id !== p.id).length);
+    const extra = { balance: b, crowd, blocked: g.blocked ? 1 : 0, gossip: Object.keys(g.gossipSaid ?? {}).length ? 1 : 0 };
+    const die = this.roll('tinker', extra, { who: p.id, b });
     if (die) this.note(`修补匠 ${g.name(p.id)} 突然死亡`, b);
     return die;
   }
@@ -469,7 +563,7 @@ export class Storyteller {
     const b = this.balance();
     const real = others.filter((q) => g.evilOf(q));
     const keep = b < -0.15 && real.length && rng() < 0.5 ? pick(real, rng) : null;
-    const taken = new Set(real.map((q) => g.claims?.[q.id]).filter(Boolean));
+    const taken = new Set(real.map((q) => this.claimOf(q.id)).filter(Boolean));
     const rank = (q) => (taken.has(q.role) ? 4 : 0) + (q.alive ? 2 : 0) + ((g.suspicion[q.id] ?? 0) > 0 ? 1 : 0);
     const pool = others.filter((q) => !g.evilOf(q)).sort((x, y) => rank(y) - rank(x));
     const demon = keep && ROLES[keep.role].team === 'demon' ? keep : pool.shift() ?? keep ?? others[0];
@@ -481,7 +575,10 @@ export class Storyteller {
 
   /** 假数字：和真的不一样，尽量只差一点（差太多一眼就能看穿）。数学家通常是 0 或 1（官方给伪装者的建议，借来用）。 */
   fakeNumber(p, truth, { min = 0, max = 15 } = {}) {
-    const small = p.role === 'mathematician' ? [0, 1].filter((n) => n !== truth && n >= min && n <= max) : [];
+    // 涡流下的数学家：官方范例六人异常得知 3。不总是 0、1，从 0 到真相之间挑（离得远，又不至于离谱）
+    const far = p.role === 'mathematician' && this.g.vortoxOn?.() && truth >= 3 && this.roll('mathFar', {}, { who: p.id })
+      ? Array.from({ length: truth - 1 }, (_, i) => i + 1).filter((n) => n >= min && n <= max) : [];
+    const small = far.length ? far : p.role === 'mathematician' ? [0, 1].filter((n) => n !== truth && n >= min && n <= max) : [];
     const near = small.length ? small : [truth - 1, truth + 1].filter((n) => n >= min && n <= max);
     const pool = near.length ? near : [min, max].filter((n) => n !== truth);
     const v = pool.length ? this.choose('fakeNumber', pool, { who: p.id, truth }) : truth;
@@ -489,10 +586,21 @@ export class Storyteller {
     return v;
   }
 
-  /** 镜像双子的对立双子：对立阵营的一人，优先活着的镇民。 */
-  twinFor(a) {
+  /**
+   * 镜像双子的对立双子：对立阵营的一人，优先活着的镇民。
+   * late：麻脸巫婆在最后几夜（剩 4 人以下）造出的双子。官方：这时「可以选择恶魔或一名死亡的玩家作为对立双子，这样善良玩家仍然有机会获胜」。
+   */
+  twinFor(a, late = false) {
     const g = this.g;
     const opp = g.players.filter((q) => q.id !== a.id && g.evilOf(q) !== g.evilOf(a));
+    if (late) {
+      const fair = opp.filter((q) => !q.alive || ROLES[q.role].team === 'demon');
+      if (fair.length) {
+        const t = this.choose('twin', fair, { who: a.id, late: true });
+        this.note(`麻脸巫婆在最后几夜造出镜像双子：对立双子选 ${g.name(t.id)}（${t.alive ? '恶魔' : '死人'}），善良还有机会赢`);
+        return t;
+      }
+    }
     const alive = opp.filter((q) => q.alive);
     const list = alive.length ? alive : opp;
     const tf = list.filter((q) => ROLES[q.role].team === 'townsfolk');
@@ -527,11 +635,24 @@ export class Storyteller {
   /** 理发师：有几个恶魔时选哪个来换。 */
   barberDemon(demons) { return demons.length ? this.choose('barberDemon', demons) : null; }
 
-  /** 贤者得知的两个人：lie 时两个都不是恶魔，有假世界就指假世界的恶魔。前期指活人（给邪恶留机会），最后一夜可以指死人。 */
+  /**
+   * 贤者得知的两个人：lie 时两个都不是恶魔，有假世界就指假世界的恶魔。前期指活人（给邪恶留机会）。
+   * 最后一夜（只剩三个活人）官方说可以指一个活人和一个死人：健康时等于点出恶魔，善良落后时多给；
+   * 失效时等于把善良推向错的活人（官方范例就是醉酒贤者最后一夜看到一个死人和一个善良活人），善良领先时多给。
+   */
   sagePair(sage, demon, lie, w = null) {
     const g = this.g;
     const fake = g.players.filter((q) => q.id !== sage.id && ROLES[q.role].team !== 'demon');
     const live = fake.filter((q) => q.alive);
+    const dead = fake.filter((q) => !q.alive);
+    const b = this.balance();
+    if (g.aliveCount() <= 3 && dead.length && live.length && this.roll('sageDead', { balance: lie ? -b : b }, { who: sage.id, lie: !!lie })) {
+      const ghost = this.choose('sageOther', dead, { who: sage.id, dead: true });
+      if (!lie) return shuffled([demon, ghost], this.rng);
+      const one = live.find((q) => q.id === w?.demon) ?? this.choose('sageAlive', live, { who: sage.id });
+      this.decide('sagePair', { who: sage.id, options: fake.map(idOf), chosen: [one.id, ghost.id], truth: demon?.id });
+      return shuffled([one, ghost], this.rng);
+    }
     const pool = live.length >= 2 ? live : fake;
     if (lie) {
       const fakeDemon = pool.find((q) => q.id === w?.demon);
@@ -553,8 +674,10 @@ export class Storyteller {
     if (this.covers[t.id]) return this.covers[t.id];
     if (this.balance() < -0.15) return null;
     const good = (r) => !!ROLES[r] && inScript(r, g.script) && ['townsfolk', 'outsider'].includes(ROLES[r].team) && r !== t.role;
-    const said = g.claims?.[t.id];
-    const cover = good(said) ? said : this.choose('dreamerCover', (g.bluffs ?? []).filter(good), { who: t.id }) ?? null;
+    const said = this.claimOf(t.id);
+    // 官方筑梦师页：帮邪恶时展示他正在伪装的角色，或者一个本来就要藏着的角色（舞蛇人、贤者、畸形秀演员、呆瓜），没人能当面对质
+    const hidden = HIDDEN_GOOD.filter(good);
+    const cover = good(said) ? said : this.choose('dreamerCover', [...new Set([...(g.bluffs ?? []).filter(good), ...hidden])], { who: t.id }) ?? null;
     if (cover) this.covers[t.id] = cover;
     return cover;
   }
@@ -581,15 +704,47 @@ export class Storyteller {
     return trueGood ? [t.role, fakeEvil] : [fakeGood, t.role];
   }
 
-  /** 麻脸巫婆造出恶魔，当晚的死亡怎么安排（官方给的建议）。 */
+  /**
+   * 麻脸巫婆造出恶魔，当晚的死亡怎么安排（官方麻脸巫婆页的建议）：
+   * - 恶魔换成别的恶魔：今晚没人死，提示恶魔变了。
+   * - 造出邪恶的新恶魔：老恶魔死，新恶魔照常刀一个（「最好杀死老恶魔和一名其他玩家」）。
+   * - 造出善良的恶魔：不是最后几夜就两个恶魔一起杀；最后几夜只留一个恶魔。官方范例杀的是邪恶的老恶魔，
+   *   善良落后时多照范例做，善良领先时杀新造的善良恶魔。老恶魔死了以后场上得还有邪恶活着，不然等于把胜利送给善良。
+   * - 不是最后几夜、局势一边倒时（官方：「你能在当晚杀死任意数量的玩家或阻止被恶魔攻击的玩家死亡来平衡游戏」）：
+   *   善良大优多死一名善良，邪恶大优让恶魔这一刀落空。
+   */
   pitPlan(t, wasDemon, old) {
     const g = this.g;
     if (!t.alive) { this.note(`麻脸巫婆把死人变成了${ROLES[t.role].name}：死人不杀人，今晚照常`); return { suppress: false, kill: [] }; }
     if (wasDemon) { this.note(`麻脸巫婆把恶魔换成了${ROLES[t.role].name}：今晚没有人死，提示大家恶魔变了`); return { suppress: true, kill: [] }; }
-    if (g.evilOf(t)) { this.note(`麻脸巫婆造出了邪恶的${ROLES[t.role].name}：老恶魔今晚死亡`); return { suppress: false, kill: old }; }
-    if (g.aliveCount() <= 4) { this.note(`麻脸巫婆造出了善良的${ROLES[t.role].name}，已是最后几夜：让它死去，只留一个恶魔`); return { suppress: false, kill: [t] }; }
-    this.note(`麻脸巫婆造出了善良的${ROLES[t.role].name}：两个恶魔一起杀人`);
-    return { suppress: false, kill: [] };
+    const b = this.balance();
+    const late = g.aliveCount() <= 4;
+    if (g.evilOf(t)) {
+      this.note(`麻脸巫婆造出了邪恶的${ROLES[t.role].name}：老恶魔今晚死亡`, b);
+      return this.pitBalance({ suppress: false, kill: [...old] }, t, late, b);
+    }
+    if (late) {
+      const evilLeft = g.alive().some((q) => g.evilOf(q) && !old.includes(q));
+      if (old.length && evilLeft && this.roll('pitOldDies', { balance: b }, { who: t.id, b })) {
+        this.note(`麻脸巫婆造出了善良的${ROLES[t.role].name}，已是最后几夜：照官方范例杀死邪恶的老恶魔，只留善良的恶魔`, b);
+        return { suppress: false, kill: [...old] };
+      }
+      this.note(`麻脸巫婆造出了善良的${ROLES[t.role].name}，已是最后几夜：让它死去，只留一个恶魔`, b);
+      return { suppress: false, kill: [t] };
+    }
+    this.note(`麻脸巫婆造出了善良的${ROLES[t.role].name}：两个恶魔一起杀人`, b);
+    return this.pitBalance({ suppress: false, kill: [] }, t, late, b);
+  }
+
+  /** 麻脸巫婆当晚的死亡由说书人定：局势一边倒时拉回来一点（最后几夜不动，别让说书人决定结局）。 */
+  pitBalance(plan, t, late, b) {
+    const g = this.g;
+    if (late || Math.abs(b) <= 0.4 || !this.roll('pitBalance', {}, { who: t.id, b })) return plan;
+    if (b < 0) { plan.suppress = true; this.note('邪恶明显领先：今晚恶魔的刀落空', b); return plan; }
+    const pool = g.alive().filter((q) => !g.evilOf(q) && q.id !== t.id && !plan.kill.includes(q) && ROLES[q.role].team !== 'demon');
+    const v = this.draw('pitVictim', pool, (q) => ({ hits: this.hits(q.id) }), { b });
+    if (v) { plan.kill.push(v); this.note(`善良明显领先：今晚多死一人（${g.name(v.id)}）`, b); }
+    return plan;
   }
 
   /** 处决这个人会不会当场定胜负：疯狂的处决是"可能"，官方说可以放过，别让这种判定决定一局。 */
@@ -632,9 +787,12 @@ export class Storyteller {
     const ps = g.players; const n = ps.length;
     const evilIn = (list) => list.filter((q) => g.evilOf(q)).length;
     const num = (v, lo, hi) => { const o = [v - 1, v + 1].filter((x) => x >= lo && x <= hi); return o.length ? pick(o, rng) : v + 1; };
-    const two = shuffled(ps, rng).slice(0, 2);
-    const one = pick(ps, rng);
     const demons = ps.filter((q) => ROLES[q.role].team === 'demon');
+    // 官方：「避免提供恶魔是谁这种信息」。点名一两个人的那几条不点恶魔，善良明显落后时才偶尔放开
+    const open = !demons.length || this.roll('savantDemon', { balance: this.balance() }, {});
+    const named = open ? ps : ps.filter((q) => !demons.includes(q));
+    const two = shuffled(named, rng).slice(0, 2);
+    const one = pick(named, rng);
     const dead = ps.filter((q) => !q.alive);
     const alive = ps.filter((q) => q.alive);
     const outs = ps.filter((q) => ROLES[q.role].team === 'outsider').length;
@@ -701,7 +859,7 @@ export class Storyteller {
       const real = others.filter((q) => (q.role === 'spy' ? !g.misregSNV(q, '调查员') : ROLES[q.role].team === 'minion' || (q.role === 'recluse' && g.misregSNV(q, '调查员'))));
       if (!real.length) return null;
       target = this.choose('pairTarget', real, { who: p.id });
-      role = ROLES[target.role].team === 'minion' ? target.role : this.choose('pairRole', minionRoles, { who: p.id });
+      role = ROLES[target.role].team === 'minion' ? target.role : this.misregRole(target, minionRoles); // 陌客：前后一致
     }
     const decoy = this.choose('pairDecoy', others.filter((q) => q.id !== target.id), { who: p.id });
     return { pair: shuffled([target, decoy], this.rng), role };
@@ -774,7 +932,7 @@ export class Storyteller {
       const real = others.filter((q) => (kind === 'townsfolk' ? g.seenTownsfolk(q, by) : ROLES[q.role].team === 'outsider' || (q.role === 'spy' && g.misregSNV(q, by))));
       if (!real.length) return null;
       target = this.choose('pairTarget', real, { who: p.id });
-      role = ROLES[target.role].team === kind ? target.role : this.choose('pairRole', pool, { who: p.id });
+      role = ROLES[target.role].team === kind ? target.role : this.misregRole(target, pool); // 间谍：前后一致、配合伪装
     }
     const decoy = this.choose('pairDecoy', others.filter((q) => q.id !== target.id), { who: p.id });
     return { pair: shuffled([target, decoy], this.rng), role };
@@ -807,30 +965,53 @@ export class Storyteller {
       good = others.filter((q) => !seen.get(q.id));
     }
     if (!evil.length || good.length < 2) return null;
-    const e = this.choose('nobleEvil', live(evil), { who: p.id, lie: !!lie });
+    // 官方：「说书人很可能向你展示了一名爪牙玩家而非恶魔玩家」。失效时假世界里的"恶魔"同样少给
+    const demonId = lie ? this.snvWorld(p, lie).demon : null;
+    const isDemon = (q) => (lie ? q.id === demonId : ROLES[q.role].team === 'demon');
+    const minions = live(evil).filter((q) => !isDemon(q));
+    const pool = minions.length && minions.length < live(evil).length && this.roll('nobleMinion', { balance: this.balance() }, { who: p.id, lie: !!lie }) ? minions : live(evil);
+    const e = this.choose('nobleEvil', pool, { who: p.id, lie: !!lie });
     const gs = shuffled(live(good), this.rng).slice(0, 2);
     if (gs.length < 2) gs.push(...shuffled(good.filter((q) => !gs.includes(q)), this.rng).slice(0, 2 - gs.length));
     this.decide('nobleGood', { who: p.id, options: good.map(idOf), chosen: gs.map(idOf) });
     return shuffled([e, ...gs], this.rng);
   }
 
-  /** 修行者：最近的邪恶玩家在顺时针（+1）还是逆时针（-1）。一样近时说书人定（往落后的一方偏：善良落后就指对的那一边……两边都对，随机）。 */
+  /**
+   * 修行者：最近的邪恶玩家在顺时针（+1）还是逆时针（-1）。两边一样近时说书人定（官方），往落后的一方偏：
+   * 善良落后多指恶魔那一侧，善良领先多指爪牙那一侧。失效时按假世界算，假世界里的"恶魔"一样对待。
+   */
   shugenjaSide(p, lie) {
     const g = this.g; const n = g.players.length;
-    const isEvil = lie ? ((w) => (q) => w.evil.has(q.id))(this.snvWorld(p, lie)) : (q) => g.seenEvil(q, '修行者');
-    const dist = (dir) => { for (let k = 1; k < n; k++) { const q = g.players[(p.seat - 1 + dir * k + n * k) % n]; if (q.id !== p.id && isEvil(q)) return k; } return Infinity; };
-    const cw = dist(1); const ccw = dist(-1);
-    const side = cw === ccw ? this.choose('shugenjaTie', [1, -1], { who: p.id }) : cw < ccw ? 1 : -1;
+    const w = lie ? this.snvWorld(p, lie) : null;
+    const isEvil = w ? (q) => w.evil.has(q.id) : (q) => g.seenEvil(q, '修行者');
+    const isDemon = w ? (q) => q.id === w.demon : (q) => ROLES[q.role].team === 'demon';
+    const near = (dir) => { for (let k = 1; k < n; k++) { const q = g.players[(p.seat - 1 + dir * k + n * k) % n]; if (q.id !== p.id && isEvil(q)) return { k, q }; } return { k: Infinity, q: null }; };
+    const cw = near(1); const ccw = near(-1);
+    const b = this.balance();
+    const side = cw.k === ccw.k
+      ? this.draw('shugenjaTie', [1, -1], (dir) => ({ pressure: (dir === 1 ? cw : ccw).q && isDemon((dir === 1 ? cw : ccw).q) ? -b : b }), { who: p.id, b, lie: !!lie })
+      : cw.k < ccw.k ? 1 : -1;
     if (lie) g.flag(p, '修行者按假世界得到了方向');
     return side;
   }
 
-  /** 农夫夜里死了，谁接班：存活的善良玩家（新手稍微优先：多一个有能力的人）。 */
+  /**
+   * 农夫夜里死了，谁接班：存活的善良玩家（新手稍微优先：多一个有能力的人）。按局势挑（官方农夫页）：
+   * 善良落后多给外来者（白得一个能力），其次能力已经用完的人；善良领先多给还有持续能力的强力角色（换掉等于削弱善良）。
+   */
   farmerHeir(farmer) {
     const g = this.g;
     const good = g.players.filter((q) => q.alive && q.id !== farmer.id && !g.evilOf(q));
     if (!good.length) return null;
-    const who = this.draw('farmerHeir', good, () => ({}));
+    const b = this.balance();
+    const gain = (q) => {
+      const r = ROLES[g.abilityOf?.(q) ?? q.role] ?? ROLES[q.role];
+      if (r.team === 'outsider') return 1;
+      const spent = g.used?.[q.id] || (r.firstNight && !r.otherNight && !r.day);
+      return spent ? 0.5 : -0.5;
+    };
+    const who = this.draw('farmerHeir', good, (q) => ({ lift: gain(q) * -b }), { b });
     this.note(`农夫 ${g.name(farmer.id)} 夜里死了，${g.name(who.id)} 变成农夫`);
     return who;
   }
@@ -841,7 +1022,9 @@ export class Storyteller {
    */
   harpyVictims(mad, second) {
     const g = this.g;
-    const live = [mad, second].filter((q) => q?.alive);
+    // 官方：「说书人不太可能会通过你的能力杀死恶魔」。恶魔没做到疯狂就整个放过（别反过来杀被他指认的善良玩家）
+    if (ROLES[mad.role].team === 'demon') { this.note(`${g.name(mad.id)} 没有疯狂地证明，但他是恶魔：鹰身女妖的能力不杀恶魔，放过`); return []; }
+    const live = [mad, second].filter((q) => q?.alive && ROLES[q.role].team !== 'demon');
     if (!live.length) return [];
     if (live.some((q) => this.decidesGame(q)) && g.aliveCount() <= 4) { this.note(`${g.name(mad.id)} 没有疯狂地证明，但现在杀人可能直接定胜负：放过`); return []; }
     if (!this.roll('harpyKill', { evil: g.evilOf(mad) }, { who: mad.id })) { this.note(`${g.name(mad.id)} 没有疯狂地证明 ${g.name(second.id)} 是邪恶的：这次放过`); return []; }

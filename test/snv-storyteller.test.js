@@ -45,12 +45,13 @@ test('会直接定胜负的放过，也记进日志，并说明是强制的', ()
   assert.equal(d.prob, 1);
 });
 
+const HIDDEN = ['snakecharmer', 'sage', 'mutant', 'klutz'];
 test('筑梦师看邪恶玩家：善良那一项展示他的伪装，每晚一样', () => {
   const g = mk();
   g.bluffs = ['clockmaker', 'juggler', 'barber'];
   g.st.balance = () => 0;
   const [good, evil] = g.st.dreamerRoles(g.get('p3'), false);
-  assert.ok(g.bluffs.includes(good), good);
+  assert.ok([...g.bluffs, ...HIDDEN].includes(good), good); // 伪装，或者舞蛇人这类本来就藏着的角色（官方筑梦师页）
   assert.equal(evil, 'cerenovus');
   for (let i = 0; i < 20; i++) assert.equal(g.st.dreamerRoles(g.get('p3'), false)[0], good);
 });
@@ -68,7 +69,7 @@ test('筑梦师看邪恶玩家：声称了自己真实的角色不能拿来当�
   g.bluffs = ['clockmaker'];
   g.claims = { p3: 'cerenovus' };
   g.st.balance = () => 0;
-  assert.equal(g.st.dreamerRoles(g.get('p3'), false)[0], 'clockmaker');
+  assert.ok(['clockmaker', ...HIDDEN].includes(g.st.dreamerRoles(g.get('p3'), false)[0]));
   const h = mk();
   h.bluffs = ['clockmaker'];
   h.st.balance = () => -0.5;

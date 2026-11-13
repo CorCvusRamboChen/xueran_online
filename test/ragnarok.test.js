@@ -1,101 +1,122 @@
-// 诸神黄昏（娱乐模式）：好人全是猎手，坏人全是小恶魔（狼人）。
+// 诸神黄昏（娱乐模式）：狼人杀的板子，只有狼人和猎人，走狼人杀的引擎（2026-11-11 用户：它是狼人杀的板子，猎人和狼人都是狼人杀的）。
+// 玩法沿用 2026-11-04 用户定的：猎人出局开一枪打谁谁死，被带走的猎人接着开。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Game, makeRng, rollRagnarok } from '../src/engine/game.js';
-import { ragnarokWolves, rolesOf, engineOf } from '../src/engine/roles.js';
+import { Werewolf, rollWerewolf, wwSetup } from '../src/engine/werewolf.js';
+import { ragnarokWolves, rolesOf, engineOf, playersOf, SCRIPTS } from '../src/engine/roles.js';
+import { makeRng } from '../src/engine/game.js';
 
 const players = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, name: `玩家${i + 1}` }));
-const mk = (roles) => new Game(players(roles.length), { roles, rng: makeRng(5), script: 'rag' });
+// 7 人：1-5 猎人，6、7 狼人
+const BOARD = ['ww_hunter', 'ww_hunter', 'ww_hunter', 'ww_hunter', 'ww_hunter', 'ww_wolf', 'ww_wolf'];
+const mk = (roles = BOARD) => new Werewolf(players(roles.length), { roles, rng: makeRng(5), script: 'rag' });
 
-test('诸神黄昏：按人数定狼人数量，其余全是猎手', () => {
-  assert.deepEqual(rolesOf('rag'), ['slayer', 'imp']);
-  assert.equal(engineOf('rag'), 'tb');
+/** 走一整夜：只有狼人这一步。 */
+function night(g, knife = null) {
+  g.startNight();
+  assert.equal(g.stage, 'wolf', '没有守卫、女巫、预言家，直接到狼人');
+  for (const w of g.alive().filter((p) => p.role === 'ww_wolf')) g.wolfVote(w.id, knife);
+  g.settleKnife();
+  assert.equal(g.stage, 'dawn');
+  g.resolveNight();
+  return g.dawn().deaths;
+}
+
+test('诸神黄昏：狼人杀的板子——狼人杀引擎，狼人杀的猎人和狼人；按人数定狼人，其余全是猎人', () => {
+  assert.equal(engineOf('rag'), 'ww');
+  assert.ok(SCRIPTS.rag.werewolf);
+  assert.deepEqual(rolesOf('rag'), ['ww_hunter', 'ww_wolf']);
+  assert.deepEqual(playersOf('rag'), [5, 15]);
   for (let n = 5; n <= 15; n++) {
-    const roles = rollRagnarok(n, makeRng(n));
-    assert.equal(roles.filter((r) => r === 'imp').length, ragnarokWolves(n));
-    assert.equal(roles.filter((r) => r === 'slayer').length, n - ragnarokWolves(n));
+    const roles = rollWerewolf(n, makeRng(n), 'rag');
+    assert.equal(roles.length, n);
+    assert.equal(roles.filter((r) => r === 'ww_wolf').length, ragnarokWolves(n));
+    assert.equal(roles.filter((r) => r === 'ww_hunter').length, n - ragnarokWolves(n));
+    assert.equal(wwSetup(n, 'rag').reduce((a, x) => a + x.count, 0), n);
   }
   assert.deepEqual([5, 6, 7, 9, 10, 12, 13, 15].map(ragnarokWolves), [1, 1, 2, 2, 3, 3, 4, 4]);
+  assert.throws(() => rollWerewolf(4, makeRng(1), 'rag'), /5–15/);
 });
 
-test('诸神黄昏：狼人人少也互相认识；每只狼人各刀一人', () => {
-  const g = mk(['imp', 'imp', 'slayer', 'slayer', 'slayer', 'slayer', 'slayer']);
+test('诸神黄昏：狼人互相认识，一起刀一人；被刀的猎人开枪，被带走的猎人接着开', () => {
+  const g = mk();
   g.startNight();
-  assert.match(g.evilMessages.find((m) => m.playerId === 'p1').text, /2号/);
-  g.resolveNight(); g.dawn(); g.endDay();
-  g.startNight();
-  g.submitChoice('p1', ['p3']); g.submitChoice('p2', ['p4']);
+  assert.deepEqual(g.evilKnown.p6.map((a) => a.id), ['p7']);
+  g.drain();
+  for (const w of ['p6', 'p7']) g.wolfVote(w, 'p1');
+  g.settleKnife();
   g.resolveNight();
-  assert.deepEqual([g.get('p3').alive, g.get('p4').alive], [false, false]);
+  assert.deepEqual(g.dawn().deaths, ['p1']);
+  assert.equal(g.stage, 'hunter');
+  assert.equal(g.hunterId, 'p1');
+  g.hunterShoot('p1', 'p2'); // 带走另一个猎人
+  assert.equal(g.get('p2').alive, false);
+  for (let k = 0; k < 5 && g.stage !== 'hunter'; k++) g.timeout(); // 先走完 p1 的遗言
+  assert.equal(g.stage, 'hunter', '被带走的猎人也有发动技能的时间');
+  assert.equal(g.hunterId, 'p2', '被带走的猎人接着开枪');
+  g.hunterShoot('p2', 'p6');
+  assert.equal(g.get('p6').alive, false);
+  assert.equal(g.winner, null);
 });
 
-test('诸神黄昏：狼人追平好人狼人赢', () => {
-  const h = mk(['imp', 'imp', 'slayer', 'slayer', 'slayer']);
-  h.startNight(); h.resolveNight(); h.dawn();
-  h.block = 'p3'; h.endDay(); // 剩 2 狼 2 好人
-  assert.equal(h.winner, 'evil');
-  assert.match(h.winReason, /狼人/);
+test('诸神黄昏：狼人全部出局好人胜；猎人全部出局狼人胜', () => {
+  const g = mk(['ww_hunter', 'ww_hunter', 'ww_wolf', 'ww_hunter', 'ww_hunter']);
+  for (const id of ['p1', 'p2', 'p4']) g.get(id).alive = false;
+  assert.equal(g.checkWinner(), null, '还有一个猎人');
+  g.get('p5').alive = false;
+  assert.equal(g.checkWinner(), 'evil');
+  assert.match(g.winReason, /猎人全部出局/);
+  const h = mk(['ww_hunter', 'ww_hunter', 'ww_wolf', 'ww_hunter', 'ww_hunter']);
+  h.get('p3').alive = false;
+  assert.equal(h.checkWinner(), 'good');
 });
 
-test('诸神黄昏：房间里整局能跑完', async () => {
+test('诸神黄昏：夜里只有狼人这一步，白天照狼人杀放逐', () => {
+  const g = mk();
+  assert.deepEqual(night(g, 'p3'), ['p3']);
+  for (let k = 0; k < 40 && !['vote', 'ended', 'dusk'].includes(g.stage); k++) g.timeout();
+  assert.equal(g.stage, 'vote');
+});
+
+const FAST = { chooseSeconds: 0.05, speechSeconds: 0.02, voteSeconds: 0.002, voteCountdown: 0.005, pauseMs: 5, killSceneMs: 0, mode: 'auto', shuffle: false, script: 'rag' };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function mockVoice() {
+  return {
+    async findSquare() { return 'sq'; }, async setAsleep() {}, async openRoom() { return 'r'; }, async closeRoom() {}, async addToRoom() {}, async removeFromRoom() {}, async moveAll() {},
+    async setMuted() {},
+  };
+}
+
+test('诸神黄昏：房间里机器人跑完一局，用的是狼人杀的流程', async (t) => {
   const { Room } = await import('../src/server/room.js');
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const voice = { async findSquare() { return 'sq'; }, async setAsleep() {}, async openRoom() { return 'r'; }, async closeRoom() {}, async addToRoom() {}, async removeFromRoom() {}, async moveAll() {}, async setMuted() {} };
-  const room = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice, settings: { chooseSeconds: 0.05, voteSeconds: 0.002, voteCountdown: 0.005, pauseMs: 5, killSceneMs: 0, accuseSeconds: 0.005, defendSeconds: 0.005, mode: 'auto', shuffle: false, script: 'rag' } });
-  room.moonchildWaitMs = 5;
-  room.ragShotMs = 5;
+  const room = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: FAST });
   room.users.set('u1', { id: 'u1', name: 'A', avatar: null });
   await room.act('u1', 'join');
-  await room.act('u1', 'addBots', { count: 8 });
+  await room.act('u1', 'addBots', { count: 7 });
   await room.act('u1', 'start');
+  t.after(() => room.teardown());
   const g = room.game;
-  assert.equal(g.players.filter((p) => p.role === 'imp').length, 2);
-  assert.ok(room.log.some((l) => /7 名猎手 · 2 只狼人/.test(l.text)));
-  for (let day = 0; day < 15 && !g.winner; day++) {
-    for (let k = 0; k < 400 && g.phase === 'night'; k++) {
-      for (const pr of g.nightPrompts()) if (!g.choices[pr.playerId] && pr.playerId === 'u1') await room.act('u1', 'choose', { night: g.night, targets: pr.options.slice(0, 1) }).catch(() => {});
-      await sleep(3);
+  assert.ok(g.werewolf && g.ragnarok);
+  assert.equal(g.players.filter((p) => p.role === 'ww_wolf').length, ragnarokWolves(8));
+  assert.ok(g.players.every((p) => ['ww_wolf', 'ww_hunter'].includes(p.role)));
+  assert.ok(room.log.some((l) => /游戏开始！《诸神黄昏》/.test(l.text)));
+  assert.equal(room.viewFor('u1').script, 'rag');
+  await assert.rejects(room.act('u1', 'nominate', { target: 'bot-1' }), /没有这个操作/);
+  const end = Date.now() + 60_000;
+  while (!room.ended && Date.now() < end) {
+    const pr = room.wwPrompt('u1');
+    if (pr && Math.random() < 0.7) {
+      const tg = pr.options?.[0] ?? null;
+      const type = { wolf: 'wwWolf', hunter: 'wwShoot', vote: 'wwVote', speak: 'wwDone', badge: 'wwBadge', withdraw: 'wwWithdraw' }[pr.kind];
+      if (type) await room.act('u1', type, { target: tg }).catch(() => {});
+      if (pr.kind === 'signup' && pr.mine === undefined) await room.act('u1', 'wwSignup', { yes: Math.random() < 0.5 }).catch(() => {});
+      if (pr.kind === 'order') await room.act('u1', 'wwOrder', { dir: 'down' }).catch(() => {});
     }
-    if (g.winner) break;
-    await until(() => room.roam || room.ended, 300, sleep);
-    if (room.ended) break;
-    await room.act('u1', 'gather').catch(() => {});
-    if (g.phase === 'day' && !g.block && !g.executedToday) g.block = g.alive()[day % g.aliveCount()].id;
-    if (g.phase === 'day' && !g.winner) await room.dusk().catch(() => {});
-    await until(() => g.phase !== 'day' || g.winner, 500, sleep);
+    await sleep(2);
   }
-  assert.ok(g.winner, '分出了胜负');
-  await room.teardown();
-});
-
-async function until(cond, ms, sleep) { const end = Date.now() + ms; while (!cond() && Date.now() < end) await sleep(5); }
-
-test('诸神黄昏：猎手活着不能开枪；死了（被处决）开一枪打谁谁死，被打死的猎手接着开', async () => {
-  const { Room } = await import('../src/server/room.js');
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const voice = { async findSquare() { return 'sq'; }, async setAsleep() {}, async openRoom() { return 'r'; }, async closeRoom() {}, async addToRoom() {}, async removeFromRoom() {}, async moveAll() {}, async setMuted() {} };
-  const room = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice, settings: { chooseSeconds: 0.05, voteSeconds: 0.002, voteCountdown: 0.005, pauseMs: 5, killSceneMs: 0, accuseSeconds: 0.005, defendSeconds: 0.005, mode: 'auto', shuffle: false, script: 'rag' } });
-  room.ragShotMs = 60;
-  for (const id of ['u1', 'u2', 'u3']) room.users.set(id, { id, name: id, avatar: null });
-  for (const id of ['u1', 'u2', 'u3']) await room.act(id, 'join');
-  await room.act('u1', 'addBots', { count: 6 });
-  await room.act('u1', 'start');
-  const g = room.game;
-  // 定好角色：u1、u2、u3 是猎手，两只狼人是机器人
-  for (const id of ['u1', 'u2', 'u3']) if (g.get(id).role !== 'slayer') { const s = g.players.find((p) => p.role === 'slayer' && !['u1', 'u2', 'u3'].includes(p.id)); s.role = 'imp'; s.shownRole = 'imp'; g.get(id).role = 'slayer'; g.get(id).shownRole = 'slayer'; }
-  const wolf = g.players.find((p) => p.role === 'imp');
-  for (let k = 0; k < 400 && g.phase === 'night'; k++) await sleep(3);
-  await room.act('u1', 'gather').catch(() => {});
-  await assert.rejects(room.act('u1', 'slay', { target: wolf.id }), /死了才能开枪/);
-  // 处决 u1：他开枪打 u2，u2 也是猎手，接着开枪打狼人
-  if (g.phase === 'day') { g.block = 'u1'; await room.dusk(); }
-  assert.equal(room.ragShot?.id ?? room.ragCur?.id, 'u1');
-  await room.act('u1', 'ragShoot', { target: 'u2' });
-  for (let k = 0; k < 100 && room.ragCur?.id !== 'u2'; k++) await sleep(5);
-  assert.equal(g.get('u2').alive, false, 'u1 一枪打死了 u2');
-  await room.act('u2', 'ragShoot', { target: wolf.id });
-  for (let k = 0; k < 100 && g.get(wolf.id).alive; k++) await sleep(5);
-  assert.equal(g.get(wolf.id).alive, false, 'u2 接着开枪打死了狼人');
-  assert.ok(room.log.some((l) => /开枪带走了/.test(l.text)));
+  assert.ok(room.ended, '分出了胜负');
+  assert.ok(['good', 'evil'].includes(g.winner));
+  const back = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: FAST }).restore(JSON.parse(JSON.stringify(room.snapshot())));
+  assert.ok(back.game.werewolf && back.game.ragnarok, '存档读回来还是诸神黄昏');
   await room.teardown();
 });

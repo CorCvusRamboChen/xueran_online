@@ -1,7 +1,12 @@
-// 三个剧本的夜晚顺序（照官方的夜晚顺序表）：前端「角色」页的夜间顺序说明用，黯月初升和梦殒春宵的结算顺序（engine/bmr.js、engine/snv.js）也读这里。
+// 三个剧本的夜晚顺序（照官方英文 App 的夜晚总表 nightsheet.json；2026-11-11 用户定：和集石百科不一样的地方以英文新表为准）：前端「角色」页的夜间顺序说明用，黯月初升和梦殒春宵的结算顺序（engine/bmr.js、engine/snv.js）也读这里。
 // 每一步：[角色 id 或步骤 id, 这一步做什么]。不是角色的步骤（爪牙信息、恶魔信息）在 STEP_NAMES 里起名字。
 
 export const STEP_NAMES = { minioninfo: '爪牙信息', demoninfo: '恶魔信息', seat7: '7 号空座' };
+/**
+ * 技能表里列出来、但不在结算步骤表（MIX_STEPS）里的角色：在别处结算或只是给说书人的提醒——
+ * 疯子跟着恶魔、红唇女郎在死亡时、失忆者和食人族按隐藏能力的位置、提线木偶 / 魔术师 / 科学怪人 / 落难少女在开局信息里、利维坦在天亮。
+ */
+export const NOT_STEPS = new Set(['lunatic', 'scarletwoman', 'amnesiac', 'cannibal', 'marionette', 'magician', 'boffin', 'damsel', 'leviathan']);
 
 export const NIGHT_ORDER = {
   tb: {
@@ -39,20 +44,20 @@ export const NIGHT_ORDER = {
   bmr: {
     first: [
       ['minioninfo', '7 人及以上：爪牙睁眼互认，并得知谁是恶魔'],
-      ['demoninfo', '7 人及以上：恶魔得知爪牙，拿 3 个伪装；疯子也以为自己在这一步'],
+      ['lunatic', '以为自己是恶魔：7 人及以上拿到假的爪牙和伪装；以为自己是普卡的话像普卡一样选一人（没有效果，真恶魔会知道他选了谁）'],
+      ['demoninfo', '7 人及以上：恶魔得知爪牙，拿 3 个伪装；也得知谁是疯子、疯子选了谁'],
       ['sailor', '选一名存活玩家：你或他醉酒到明天黄昏'],
       ['courtier', '（每局一次）选一个角色：他醉酒三天三夜'],
       ['godfather', '得知场上有哪些外来者'],
       ['devilsadvocate', '选一名存活玩家：明天他被处决也不会死'],
-      ['lunatic', '以为自己是普卡的疯子：像普卡一样选一人（没有效果，真恶魔会知道他选了谁）'],
       ['pukka', '选一人中毒（下一晚毒发死亡）'],
       ['grandmother', '得知一名善良玩家（孙子）和他的角色'],
       ['chambermaid', '选两人，得知今晚其中几人因自己的能力醒过'],
     ],
     other: [
       ['sailor', '选一名存活玩家：你或他醉酒'],
-      ['innkeeper', '选两人：今晚不会死，其中一人醉酒'],
       ['courtier', '（每局一次）选一个角色：他醉酒三天三夜'],
+      ['innkeeper', '选两人：今晚不会死，其中一人醉酒'],
       ['gambler', '选一人猜他的角色：猜错自己死'],
       ['devilsadvocate', '选一名存活玩家（和上一晚不同）：明天他被处决也不会死'],
       ['lunatic', '以为自己是恶魔，照着恶魔的样子选人（没有效果）；真恶魔会得知他选了谁'],
@@ -63,16 +68,18 @@ export const NIGHT_ORDER = {
       ['po', '选一人杀死，或者不选（下一晚就选三人）'],
       ['assassin', '（每局一次）选一人：他死亡，无视一切保护'],
       ['godfather', '今天白天有外来者死了才醒：选一人杀死'],
-      ['professor', '（每局一次）选一名死亡的玩家：是镇民就起死回生'],
       ['gossip', '今天的声明为真：今晚有一人死亡'],
+      ['professor', '（每局一次）选一名死亡的玩家：是镇民就起死回生'],
       ['tinker', '可能在任何时候死亡（说书人决定）'],
       ['moonchild', '月之子白天公开选的人如果是善良的，今晚死亡'],
+      ['grandmother', '孙子今晚被恶魔杀死：祖母也死（不醒）'],
       ['chambermaid', '选两人，得知今晚其中几人因自己的能力醒过'],
     ],
     why: [
       '水手、旅店老板、侍臣排在最前面：醉酒和保护当晚就生效，能挡住后面的恶魔。',
       '疯子在恶魔之前：真恶魔要先知道疯子选了谁。驱魔人也在恶魔之前：选中恶魔，恶魔今晚就醒不来。',
-      '杀人集中在中间（恶魔 → 刺客 → 教父 → 造谣者 → 修补匠 → 月之子），教授排在杀人之后，才救得回今晚死的人。',
+      '侍臣在旅店老板前面：侍臣今晚灌醉旅店老板，旅店老板的保护当晚就没了。',
+      '杀人集中在中间（恶魔 → 刺客 → 教父 → 造谣者），教授排在这些之后选人复活；修补匠、月之子的死在教授之后。',
       '侍女最后：等所有人都醒过，她数的才准。',
     ],
   },
@@ -92,10 +99,10 @@ export const NIGHT_ORDER = {
     ],
     other: [
       ['philosopher', '（每局一次）选一个善良角色，获得它的能力'],
-      ['pithag', '选一名玩家和一个不在场的角色：他变成它'],
       ['snakecharmer', '选一名存活玩家：选中恶魔就互换角色和阵营'],
       ['witch', '选一名玩家：他明天发起提名就会死'],
       ['cerenovus', '选一名玩家和一个善良角色：他明天要疯狂证明自己是这个角色'],
+      ['pithag', '选一名玩家和一个不在场的角色：他变成它'],
       ['fanggu', '选一人杀死；第一个被杀的外来者改为变成方古，老方古死亡'],
       ['nodashii', '选一人杀死'],
       ['vortox', '选一人杀死'],
@@ -113,7 +120,7 @@ export const NIGHT_ORDER = {
       ['mathematician', '得知有几个人的能力没有正常生效'],
     ],
     why: [
-      '哲学家最先：选完能力当晚就能用。麻脸巫婆在舞蛇人之前：她造出的爪牙当晚就能行动。',
+      '哲学家最先：选完能力当晚就能用。麻脸巫婆在舞蛇人、女巫、洗脑师之后：她今晚变出来的爪牙要明晚才行动；她造出的恶魔今晚照样杀人。',
       '恶魔之后才是理发师：恶魔这晚杀的如果是理发师，当晚就能换角色。',
       '信息角色都在杀人之后，数学家最后：等当晚所有能力都结算完，他数的才准。',
     ],
@@ -142,14 +149,18 @@ NIGHT_ORDER.ngj = {
 };
 NIGHT_ORDER.luf = {
   first: [
-    ['amnesiac', '按说书人给他定的能力，在那个能力该醒的时候醒（他自己不知道是什么能力）'],
+    ['lunatic', '以为自己是恶魔（利维坦）：利维坦夜里不醒，疯子也不用选人'],
     ['widow', '看魔典，选一人中毒；之后一名善良玩家得知寡妇在场'],
+    ['amnesiac', '按说书人给他定的能力，在那个能力该醒的时候醒（他自己不知道是什么能力）'],
     ['balloonist', '得知一名玩家'],
+    ['leviathan', '天亮时：说书人宣布利维坦在场'],
   ],
   other: [
+    ['lunatic', '以为自己是利维坦：利维坦夜里不醒，疯子也不醒'],
     ['amnesiac', '按说书人给他定的能力，在那个能力该醒的时候醒'],
     ['cannibal', '有了被处决的人的能力：在那个能力该醒的时候醒（他自己不知道是什么能力）'],
     ['balloonist', '得知一名玩家，和上一晚得知的人角色类型不同'],
+    ['leviathan', '天亮时：说书人宣布现在是第几天'],
   ],
   why: [
     '利维坦不杀人：夜里没有人死，一切都靠白天的处决。',
@@ -158,11 +169,82 @@ NIGHT_ORDER.luf = {
   ],
 };
 
-// 诸神黄昏（娱乐模式）：只有猎手和小恶魔
-NIGHT_ORDER.rag = {
-  first: [['minioninfo', '狼人睁眼互认（人少也认）']],
-  other: [['imp', '每只狼人各选一个人杀死；选自己就是自杀（没有爪牙接任）']],
-  why: ['猎手没有夜里的能力：死了（被狼刀或被处决）才开一枪，打谁谁死；被打死的猎手接着开。', '每个死掉的人都等一样长的时间才公布开没开枪，看不出谁是狼。', '狼人全死好人赢；存活的狼人追平好人，狼人赢。'],
+// 诸神黄昏 2026-11-11 起是狼人杀的板子（engine/werewolf.js），夜里只有狼人这一步，不用这张表
+
+// 生死未卜（Uncertain Death，作者 Matt）：照官方总表的顺序，只列这个剧本里的角色
+NIGHT_ORDER.ucd = {
+  first: [
+    ['minioninfo', '7 人及以上：爪牙互认、得知恶魔（提线木偶不醒，别的爪牙也不知道他）'],
+    ['lunatic', '以为自己是恶魔：拿到假的爪牙和伪装（真恶魔知道他是疯子）'],
+    ['demoninfo', '7 人及以上：恶魔得知爪牙和 3 个伪装'],
+    ['marionette', '恶魔得知谁是提线木偶（人少没有恶魔信息时也告诉）；提线木偶自己不醒，按他以为的镇民被叫醒，能力不生效'],
+    ['godfather', '得知在场的外来者'],
+    ['pukka', '选一人中毒'],
+    ['librarian', '得知两人之一是某个外来者（或场上没有外来者）'],
+    ['empath', '得知两侧存活邻座里有几个邪恶'],
+    ['fortuneteller', '选两人，得知其中有没有恶魔'],
+    ['grandmother', '得知一名善良玩家和他的角色（孙子）'],
+    ['clockmaker', '得知恶魔和最近的爪牙隔了几个座位'],
+    ['seamstress', '每局一次：选两人，得知是不是同一阵营'],
+  ],
+  other: [
+    ['monk', '选一人：他今晚不会被恶魔杀死'],
+    ['scarletwoman', '恶魔今天死了：她在这时成为新的恶魔'],
+    ['lunatic', '以为自己是恶魔，照样选人（没有效果，恶魔知道他选了谁）'],
+    ['exorcist', '选一人：选中恶魔的话，恶魔今晚不能行动'],
+    ['pukka', '选一人中毒；上一个被毒的人死亡并恢复健康'],
+    ['nodashii', '选一人杀死；两侧最近的镇民一直中毒'],
+    ['assassin', '每局一次：选一人杀死，什么都保护不了他'],
+    ['godfather', '今天白天有外来者死了才醒：选一人杀死'],
+    ['sweetheart', '今晚死了：一名玩家从此醉酒'],
+    ['grandmother', '孙子今晚被恶魔杀死：祖母也死'],
+    ['empath', '得知两侧存活邻座里有几个邪恶'],
+    ['fortuneteller', '选两人，得知其中有没有恶魔'],
+    ['undertaker', '得知今天被处决的人的角色'],
+    ['flowergirl', '得知今天恶魔有没有投票'],
+    ['oracle', '得知死人里有几个邪恶'],
+    ['seamstress', '每局一次：选两人，得知是不是同一阵营'],
+  ],
+  why: [
+    '这本讲的是「谁会死、怎么死都说不准」：刺客无视保护、教父在外来者死后加刀、普卡隔一晚才毒死人、诺-达鲺让邻座镇民一直中毒、心上人死了有人醉酒。',
+    '提线木偶以为自己是镇民（他的能力从来不生效，说书人假装生效），其实是坐在恶魔旁边的爪牙；只有恶魔知道他是谁。',
+    '僧侣、驱魔人排在恶魔前面：保护和挡住恶魔要先放好。信息排在死亡之后，数到的死人才准。',
+  ],
+};
+
+// 人人可玩（Everyone Can Play，作者 Ben Burns）：照官方总表的顺序，只列这个剧本里的角色
+NIGHT_ORDER.ecp = {
+  first: [
+    ['minioninfo', '7 人及以上：爪牙互认、得知恶魔'],
+    ['demoninfo', '7 人及以上：恶魔得知爪牙和 3 个伪装'],
+    ['poisoner', '选一人中毒到明天黄昏'],
+    ['devilsadvocate', '选一人：他明天被处决也不会死（不能连续两晚选同一人）'],
+    ['librarian', '得知两人之一是某个外来者（或场上没有外来者）'],
+    ['chef', '得知有几对相邻的邪恶玩家'],
+    ['empath', '得知两侧存活邻座里有几个邪恶'],
+    ['fortuneteller', '选两人，得知其中有没有恶魔'],
+    ['grandmother', '得知一名善良玩家和他的角色（孙子）'],
+    ['clockmaker', '得知恶魔和最近的爪牙隔了几个座位'],
+  ],
+  other: [
+    ['poisoner', '选一人中毒到明天黄昏'],
+    ['gambler', '选一人并猜他的角色：猜错自己死'],
+    ['monk', '选一人：他今晚不会被恶魔杀死'],
+    ['devilsadvocate', '选一人：他明天被处决也不会死'],
+    ['imp', '选一人杀死；选自己就是自杀传位'],
+    ['assassin', '每局一次：选一人杀死，什么都保护不了他'],
+    ['moonchild', '月之子死了：他白天选的人如果是善良的，今晚死亡'],
+    ['grandmother', '孙子今晚被恶魔杀死：祖母也死'],
+    ['ravenkeeper', '今晚死了才醒：选一人，得知他的角色'],
+    ['empath', '得知两侧存活邻座里有几个邪恶'],
+    ['fortuneteller', '选两人，得知其中有没有恶魔'],
+    ['undertaker', '得知今天被处决的人的角色'],
+  ],
+  why: [
+    '大部分是暗流涌动的老面孔，再加几个基础剧本里的角色：夜里多死人（赌徒、刺客、月之子），白天有人处决不死（弄臣、魔鬼代言人）。新手照常玩，老手当成解谜。',
+    '投毒者、魔鬼代言人排在最前：毒和保护先放好。信息排在死亡之后，数到的死人才准。',
+    '镇长：只剩三人且当天没人被处决，善良获胜；他夜里被刀时，说书人可能让别人替他死。',
+  ],
 };
 
 // 七步成诗（2025 剧本世界杯冠军）：按官方剧本页的夜晚顺序
@@ -170,6 +252,7 @@ NIGHT_ORDER.bs7 = {
   first: [
     ['seat7', '7 号座位没有人坐：轮到它的角色时，由说书人替它选'],
     ['boffin', '恶魔和科学怪人得知恶魔拿到了哪个不在场的善良角色的能力'],
+    ['magician', '不醒：爪牙信息和恶魔信息里会混进魔术师'],
     ['minioninfo', '7 人及以上：爪牙互认、得知恶魔；有魔术师时爪牙会看到两个「恶魔」'],
     ['demoninfo', '7 人及以上：恶魔得知爪牙（魔术师也混在里面）和 3 个伪装'],
     ['harpy', '选两人：明天第一人要疯狂地证明第二人是邪恶的'],
@@ -190,6 +273,7 @@ NIGHT_ORDER.bs7 = {
     ['imp', '选一人杀死；选自己就是自杀传位'],
     ['pukka', '选一人中毒；上一个被毒的人死亡并恢复健康'],
     ['vigormortis', '选一人杀死；杀死的爪牙保留能力'],
+    ['damsel', '落难少女变了角色：爪牙重新得知她在场'],
     ['farmer', '农夫今晚死了：一名存活的善良玩家醒来，变成农夫'],
     ['dreamer', '选一人，得知一善一恶两个角色'],
     ['oracle', '得知死人里有几个邪恶'],
@@ -215,6 +299,7 @@ NIGHT_ORDER.cat = {
     ['snakecharmer', '选一人：选中恶魔就互换角色和阵营'],
     ['godfather', '得知在场的外来者'],
     ['cerenovus', '选一人和一个角色：他明天要疯狂地证明自己是那个角色'],
+    ['amnesiac', '按说书人给他定的能力，在那个能力该醒的时候醒（他自己不知道是什么能力）'],
     ['investigator', '得知两人之一是某个爪牙'],
     ['chef', '得知有几对相邻的邪恶玩家'],
     ['fortuneteller', '选两人，得知其中有没有恶魔'],
@@ -234,6 +319,7 @@ NIGHT_ORDER.cat = {
     ['vigormortis', '选一人杀死；杀死的爪牙保留能力'],
     ['godfather', '今天白天有外来者死了才醒：选一人杀死'],
     ['sweetheart', '今晚死了：一名玩家从此醉酒'],
+    ['amnesiac', '按说书人给他定的能力，在那个能力该醒的时候醒'],
     ['grandmother', '孙子今晚被恶魔杀死：祖母也死'],
     ['ravenkeeper', '今晚死了才醒：选一人，得知他的角色'],
     ['fortuneteller', '选两人，得知其中有没有恶魔'],
@@ -255,9 +341,9 @@ export const MIX_STEPS = {
   first: ['philosopher', 'sailor', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'pukka',
     'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'grandmother', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress', 'noble', 'balloonist', 'shugenja', 'villageidiot',
     'butler', 'spy', 'chambermaid', 'mathematician'],
-  other: ['philosopher', 'sailor', 'poisoner', 'innkeeper', 'courtier', 'gambler', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'exorcist',
+  other: ['philosopher', 'sailor', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'exorcist',
     'imp', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'assassin', 'godfather', 'gossip',
-    'barber', 'sweetheart', 'sage', 'farmer', 'tinker', 'moonchild', 'grandmother', 'ravenkeeper', 'professor',
+    'barber', 'sweetheart', 'sage', 'professor', 'farmer', 'tinker', 'moonchild', 'grandmother', 'ravenkeeper', // 照官方英文总表（11-11 用户定：和集石百科不一样时以英文新表为准）
     'washerwoman', 'librarian', 'investigator', 'chef', 'clockmaker', 'noble', 'shugenja', 'empath', 'fortuneteller', 'undertaker', 'dreamer', 'amn_detect', 'amn_echo', 'flowergirl', 'towncrier', 'oracle', 'seamstress',
     'juggler', 'balloonist', 'villageidiot', 'butler', 'spy', 'chambermaid', 'mathematician'],
 };
@@ -265,7 +351,7 @@ export const MIX_STEPS = {
 /** 黯月初升的结算步骤（engine/bmr.js 用）：去掉不是角色的信息步骤；教父首夜那一步是"得知外来者"。 */
 export const BMR_STEPS = {
   first: NIGHT_ORDER.bmr.first.map(([id]) => id).filter((id) => !STEP_NAMES[id]).map((id) => (id === 'godfather' ? 'godfatherInfo' : id)),
-  other: NIGHT_ORDER.bmr.other.map(([id]) => id),
+  other: NIGHT_ORDER.bmr.other.map(([id]) => id).filter((id) => id !== 'grandmother'), // 其他夜的祖母只是提醒（孙子被恶魔杀死时祖母也死，在死亡结算里）；引擎的 grandmother 步骤是首夜信息
 };
 
 /** 梦殒春宵的结算步骤（engine/snv.js 用）。 */

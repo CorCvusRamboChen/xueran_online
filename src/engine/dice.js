@@ -20,10 +20,36 @@ export const DICE = {
   misregister: { base: 0.3, balance: 1.3 },         // 两种错误登记都帮邪恶：善良领先时多发生
   mayorBounce: { base: 0.5, balance: -1.7 },        // 替死保护镇长，帮善良：善良领先时少替
   mayorBounceMinion: { base: 0.5 },                 // 邪恶大优时让爪牙替死
-  deadLies: { base: 0.5, balance: 1 },              // 房规：死了还拿信息，这次给假的
+  deadLies: { base: 0.5, balance: 1 },
+  // 官方《给说书人的建议》：邪恶碾压时「你可以在一些夜晚给一名酒鬼共情者提供正确的信息」。只在邪恶明显领先时掷（storyteller.drunkTruth）
+  drunkTruth: { base: 0.25, balance: -1 },              // 房规：死了还拿信息，这次给假的
   pacifist: { base: 0.45, balance: -1.5, used: -0.9 }, // 每局别救太多次
   shabaloth: { base: 0.25, balance: -1.4 },
-  tinker: { base: 0.12, balance: 1.1 },
+  // 修补匠：官方百科建议死在能制造混乱的夜里——恶魔被驱魔人挡住时假装恶魔还在杀、多死一个让人以为是沙巴洛斯 / 珀。
+  // 用户 2026-11-09：当晚死人多、大家猜的恶魔不一致、白天有人造谣时都多死一点。base 从 0.12 降到 0.08，
+  // 大多数夜里本来就有一个人死（crowd=1 → 约 15%），平均下来和原来差不多，只是死在更乱的夜里
+  tinker: { base: 0.08, balance: 1.1, crowd: 0.7, blocked: 1.2, gossip: 0.8, demonSplit: 0.8 },
+  // 水手选了镇民：官方惯例让那个镇民醉，「通常」而已。用户 2026-11-09 要 10% 反过来让水手自己醉（当晚可能被杀，更刺激）；
+  // 邪恶领先时 storyteller.sailorDrunk 不掷
+  sailorFlip: { base: 0.1, balance: 1.0 },
+  ftSelfHerring: { base: 0.35 },                    // 5–6 人局占卜师自己当红鲱鱼（官方占卜师页的小局建议）
+  // 官方村夫页：「说书人仍然有可能向醉酒的村夫提供正确信息，以防止村夫的能力过于强大」。邪恶领先时多给一点（storyteller.idiotTruth）
+  idiotTruth: { base: 0.25, balance: -0.8 },
+  // 官方贵族页：「说书人很可能向你展示了一名爪牙玩家而非恶魔玩家」。善良落后时才多放出恶魔
+  nobleMinion: { base: 0.85, balance: 1.0 },
+  // 官方贤者页：最后一夜「可以指向一名存活玩家和一名已死亡的玩家」，前期指两个活人给邪恶留机会。
+  // 健康时等于直接点出恶魔，善良落后时多给；失效时等于把善良往错的人身上推，反过来掷（storyteller.sagePair）
+  sageDead: { base: 0.5, balance: -1.5 },
+  // 官方博学者页：「避免提供恶魔是谁这种信息，否则可能导致游戏快速结束」。善良明显落后时才偶尔放开（storyteller.savantFacts）
+  savantDemon: { base: 0.2, balance: -1.5 },
+  mathFar: { base: 0.5 },
+  boffinProof: { base: 0.75 },
+  // 官方麻脸巫婆页范例：最后一夜造出善良恶魔，「说书人只杀死了邪恶的恶魔」。善良落后时多照做（storyteller.pitPlan）
+  pitOldDies: { base: 0.5, balance: -1.5 },
+  // 官方麻脸巫婆页：造出恶魔那晚「你能在当晚杀死任意数量的玩家或阻止被恶魔攻击的玩家死亡来平衡游戏」。只在局势一边倒时掷
+  pitBalance: { base: 0.5 },
+  // 官方旅店老板页：醉的那个「可以是善良的或邪恶的，但几乎总会是善良的，这取决于你的游戏走向」。两人里有邪恶时掷（storyteller.innkeeperDrunk）
+  innkeeperEvil: { base: 0.1, balance: -1.5 },                      // 官方科学怪人页：「说书人通常会给恶魔一个可验证的能力」。开局定，不看局势                           // 涡流下数学家的数字离真相远一点（官方范例：六人异常，得知 3）
   gossipEvil: { base: 0.5 },
   sweetheartEvil: { base: 0.5 },
   dreamerSeen: { base: 0.85 },                      // 官方：邪恶项几乎都用在场爪牙
@@ -58,8 +84,12 @@ export const DRAW = {
   innkeeperDrunk: { newbie: -2, hits: -0.5 },
   starpassHeir: { heat: -2 },                 // 被怀疑最少的最值得接任
   vigSide: { pressure: 1.5 },                 // 善良领先毒拿信息的，邪恶领先毒不拿信息的
-  farmerHeir: { newbie: 0.5 },                // 新手接农夫：多一个有能力的活人，不受罪
+  // 新手接农夫：多一个有能力的活人，不受罪。lift：接班对善良的好处 ×（-局势），官方农夫页：
+  // 接班的是外来者说明说书人在帮善良，是能力已经用掉的人说明势均力敌，是强力角色说明善良快赢了
+  farmerHeir: { newbie: 0.5, lift: 1.5 },
   boomSurvivor: { pressure: 1.5 },            // 炸弹人引爆后留谁：往落后的一方偏（善良落后多留善良）
+  shugenjaTie: { pressure: 1.5 },
+  pitVictim: { newbie: -2, hits: -0.5 },      // 麻脸巫婆那晚说书人多杀的人：别总挑新手、同一个人             // 修行者两边一样近：善良落后多指恶魔那一侧，领先多指爪牙那一侧（官方：说书人决定）
 };
 
 const logit = (p) => Math.log(p / (1 - p));

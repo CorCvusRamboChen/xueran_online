@@ -67,14 +67,14 @@ test('决策日志：三个剧本都有记录，每条都说得清选了什么',
 
 test('决策日志：掷出去的概率是抽中这一面的概率', () => {
   const g = new Game(players(7), { roles: ['imp', 'empath', 'scarletwoman', 'chef', 'washerwoman', 'monk', 'undertaker'], rng: () => 0.5 });
-  g.st.roll('tinker');  // 12%：0.5 掷不中
+  g.st.roll('tinker');  // 8%：0.5 掷不中
   g.st.roll('dreamerSeen'); // 85%：0.5 掷中
   const [no, yes] = g.st.decisions.slice(-2);
   assert.equal(no.chosen, false);
-  assert.ok(Math.abs(no.prob - 0.88) < 1e-9);
+  assert.ok(Math.abs(no.prob - 0.92) < 1e-9);
   assert.equal(yes.chosen, true);
   assert.ok(Math.abs(yes.prob - 0.85) < 1e-9);
-  assert.equal(no.base, 0.12);
+  assert.equal(no.base, 0.08);
 });
 
 test('决策日志：说书人的随机只能在记日志的地方，或者结果整体记下来的组合判定里', () => {
@@ -110,7 +110,7 @@ test('骰子：没权重的信号只记录，不影响概率', () => {
   g.signals = () => ({ marksHeat: 0.5 });
   g.st.roll('tinker', { balance: 0 });
   assert.equal(g.st.decisions.at(-1).features.marksHeat, 0.5);
-  assert.ok(Math.abs((g.st.decisions.at(-1).chosen ? g.st.decisions.at(-1).prob : 1 - g.st.decisions.at(-1).prob) - 0.12) < 1e-9);
+  assert.ok(Math.abs((g.st.decisions.at(-1).chosen ? g.st.decisions.at(-1).prob : 1 - g.st.decisions.at(-1).prob) - 0.08) < 1e-9);
 });
 
 test('骰子：信号读取出错不能打断结算', () => {

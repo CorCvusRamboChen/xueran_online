@@ -5,7 +5,7 @@ import { Game, makeRng } from '../src/engine/game.js';
 import { rollTeensy, AMNESIAC_POOL } from '../src/engine/snv.js';
 import { buildRoles } from '../src/engine/assign.js';
 import { ROLES, rolesOf, SCRIPTS, inScript, engineOf } from '../src/engine/roles.js';
-import { MIX_STEPS, NIGHT_ORDER } from '../src/shared/nightOrder.js';
+import { MIX_STEPS, NIGHT_ORDER, NOT_STEPS } from '../src/shared/nightOrder.js';
 import { getMap } from '../src/shared/map.js';
 import { guessLevel } from '../src/server/room.js';
 
@@ -41,7 +41,7 @@ test('小剧本：角色表、人数、规则引擎和地图', () => {
   assert.notEqual(getMap('ngj').place, getMap('tb').place);
   assert.notEqual(getMap('luf').weather, getMap('bmr').weather);
   // 夜晚顺序：结算表里有每个会醒的角色
-  for (const s of ['ngj', 'luf']) for (const [id] of [...NIGHT_ORDER[s].first, ...NIGHT_ORDER[s].other]) if (!['amnesiac', 'cannibal', 'scarletwoman'].includes(id)) assert.ok([...MIX_STEPS.first, ...MIX_STEPS.other].includes(id), id);
+  for (const s of ['ngj', 'luf']) for (const [id] of [...NIGHT_ORDER[s].first, ...NIGHT_ORDER[s].other]) if (!NOT_STEPS.has(id)) assert.ok([...MIX_STEPS.first, ...MIX_STEPS.other].includes(id), id);
 });
 
 test('无上愉悦：男爵只多一个外来者时就只加一个（这个剧本只有两个外来者）', () => {

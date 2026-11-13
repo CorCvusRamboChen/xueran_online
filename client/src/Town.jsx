@@ -75,7 +75,7 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
   const pr = Math.min(Rx, Ry * tall) / 100 * VW + 22;
 
   return (
-    <div className={`town ${night ? 'night' : ''} ${PAINT_DAY ? 'painted' : ''}`} ref={ref} style={{ '--tk': `${tk}px`, aspectRatio: `1 / ${tall}`, maxWidth: tall > 1 ? `min(100%, calc((100vh - 200px) / ${tall}))` : undefined }}>
+    <div className={`town ${night ? 'night' : ''} ${PAINT_DAY ? 'painted' : ''}`} ref={ref} style={{ '--tk': `${tk}px`, aspectRatio: `1 / ${tall}`, maxWidth: tall > 1 ? `min(100%, calc((var(--vh) - 200px) / ${tall}))` : undefined }}>
       {PAINT_DAY ? (
         <div className="town-paint" aria-hidden="true">
           <img src={PAINT_DAY} alt="" style={{ filter: paintTone }} />
@@ -161,7 +161,7 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
               <Portrait p={p} size={tk} frame={frameOf(p)} />
               {!p.alive && <span className="stamp">{p.ghostVote ? '亡 · 余一票' : '亡'}</span>}
               <span className="seat">{p.seat}</span>
-              {!p.roleName && <MarkBadge mark={marks[p.id]} />}
+              {!p.roleName && <MarkBadge mark={marks[p.id]} part="chips" />}
               {marks[p.id]?.note && <i className="token-note" title={marks[p.id].note}>记</i>}
               {vote && yes.has(p.id) && <span className={`raised ${locked.has(p.id) ? 'locked' : ''}`}>举</span>}
               {inRoom.has(p.id) && <span className="mark whisper">密谈</span>}
@@ -176,6 +176,8 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
               </span>
             </div>
             <div className="token-name">{p.id === s.me ? '你' : p.name}</div>
+            {/* 猜的角色放在名字下面，一个角色一个方块 */}
+            {!p.roleName && <div className="token-guess"><MarkBadge mark={marks[p.id]} part="roles" /></div>}
             {p.roleName && <div className="token-role" style={{ background: p.evil ? 'var(--phy)' : 'var(--int)' }}>{p.roleName}</div>}
             {!p.roleName && (p.tags?.length > 0 || p.nominated || p.nominator) && (
               <div className="token-tags">{(p.tags ?? [p.nominator && '已提名', p.nominated && '被提名']).filter(Boolean).join(' · ')}</div>

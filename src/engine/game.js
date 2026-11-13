@@ -10,7 +10,7 @@
 // 白天：nominate → voteOrder / recordVote → endDay
 
 import {
-  ROLES, TOWNSFOLK, OUTSIDERS, MINIONS, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, SCRIPTS, engineOf, ragnarokWolves,
+  ROLES, TOWNSFOLK, OUTSIDERS, MINIONS, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, SCRIPTS, engineOf, ragnarokWolves, inScript,
 } from './roles.js';
 import { Storyteller } from './storyteller.js';
 import { BMR_METHODS } from './bmr.js';
@@ -107,6 +107,8 @@ export function rollRoles(n, rng, { noBaron = false } = {}) {
   if (minions.includes('baron')) { t -= 2; o += 2; }
   return shuffle([...sample(TOWNSFOLK, t, rng), ...sample(OUTSIDERS, o, rng), ...minions, 'imp'], rng);
 }
+
+export const ALL_EVIL = '存活的玩家全是邪恶，善良已经无法获胜';
 
 export class Game {
   /**
@@ -208,7 +210,7 @@ export class Game {
       'moonchildPick', 'pendingMoonchild', 'diedToday', 'outsiderDiedToday', 'mastermindDay', 'demonExecuted', 'nightRevived', 'newbies', 'deadDrunk', 'lunaticGhost', 'evilMessages', 'midNight', 'lunaticFake', 'goonHit', 'pendingGoonNews', 'blocked', 'lunaticPicks',
       'firstDone', 'twin', 'fangUsed', 'vigKept', 'abnormal', 'demonVoted', 'minionNominated', 'dayVoters', 'jugglerDay', 'juggled', 'juggleLog', 'madness', 'savantDay', 'declared', 'claims', 'records', 'sageHit', 'barberDue', 'pendingKlutz', 'klutzQueue', 'klutzNow', 'madNight', 'curseFail', 'pitNight',
       'balloon', 'leviGood', 'goblinMark', 'amnesiacDay', 'amnesiacKnown', 'woke', 'pardonDay',
-      'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7', 'lunaticTold', 'lunaticTellTo'];
+      'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7', 'lunaticTold', 'lunaticTellTo', 'heard'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -241,7 +243,9 @@ export class Game {
   /** 恶魔和爪牙互相知道谁是谁（按现在的角色）：id → [{id, team:'恶魔'|'爪牙'}] */
   knownMap() {
     const evil = this.players.filter((p) => ['minion', 'demon'].includes(ROLES[p.role].team));
-    return Object.fromEntries(evil.map((p) => [p.id, evil.filter((x) => x.id !== p.id).map((x) => ({ id: x.id, team: ROLES[x.role].team === 'demon' ? '恶魔' : '爪牙' }))]));
+    // 提线木偶不知道自己是邪恶的，别的爪牙也不知道他；只有恶魔知道
+    const sees = (p, x) => x.id !== p.id && (x.role !== 'marionette' || ROLES[p.role].team === 'demon');
+    return Object.fromEntries(evil.filter((p) => p.role !== 'marionette').map((p) => [p.id, evil.filter((x) => sees(p, x)).map((x) => ({ id: x.id, team: ROLES[x.role].team === 'demon' ? '恶魔' : '爪牙' }))]));
   }
 
   /** 开局的恶魔把 3 个伪装告诉爪牙（现实里是私聊，这里一键分享）。 */
@@ -256,6 +260,22 @@ export class Game {
 
   // ───────────────────────── 查询 ─────────────────────────
   get(id) { return this.players.find((p) => p.id === id); }
+  /**
+   * 暗流涌动、黯月初升的公开声明：只记下来，说书人编假信息、间谍误登记时配合他的伪装（官方《给说书人的建议》第 7 条）。
+   * 梦殒春宵引擎有自己的 declare（还管疯狂）。
+   */
+  claimRole(uid, role, max = 2) {
+    if (this.phase !== 'day') throw new Error('只能在白天声明');
+    if (!this.get(uid)) throw new Error('你不是这局的玩家');
+    if (!ROLES[role] || !inScript(role, this.script)) throw new Error('选一个这个剧本里的角色');
+    this.declared ??= {}; this.claims ??= {};
+    const d = this.declared[uid]?.day === this.day ? this.declared[uid] : { day: this.day, n: 0 };
+    if (d.n >= max) throw new Error(`每天最多声明 ${max} 次`);
+    d.n += 1; this.declared[uid] = d;
+    this.claims[uid] = role;
+    return { text: `我是${ROLES[role].name}`, mutant: false };
+  }
+
   alive() { return this.players.filter((p) => p.alive); }
   aliveCount() { return this.alive().length; }
   byRole(role) { return this.players.find((p) => p.role === role); }
@@ -295,21 +315,27 @@ export class Game {
   }
 
   // 陌客/间谍的"登记"。健康的陌客可能被当作邪恶，健康的间谍可能被当作善良。by：谁在检测（写进说书人手记）。
-  misreg(p, by = '检测') {
+  // help：这次误登记帮哪边（见 storyteller.misregister），默认帮邪恶。
+  misreg(p, by = '检测', help = 'evil') {
     if ((p.role !== 'recluse' && p.role !== 'spy') || this.isPoisoned(p)) return false;
     if (this.misregister != null) return this.rng() < this.misregister;
-    return this.st.misregister(p, by);
+    return this.st.misregister(p, by, help);
   }
-  regEvil(p, by) { const evil = isEvilRole(p.role); return this.misreg(p, by) ? !evil : evil; }
+  regEvil(p, by, help) { const evil = isEvilRole(p.role); return this.misreg(p, by, help) ? !evil : evil; }
   regDemon(p, by) { return p.role === 'imp' || (p.role === 'recluse' && this.misreg(p, by)); }
-  regTownsfolk(p, by) { return ROLES[p.role].team === 'townsfolk' || (p.role === 'spy' && this.misreg(p, by)); }
+  regTownsfolk(p, by, help) { return ROLES[p.role].team === 'townsfolk' || (p.role === 'spy' && this.misreg(p, by, help)); }
   /** 被送葬者/守鸦人看到的角色。 */
   regRole(p, by) {
     if (this.misreg(p, by)) return this.st.misregRole(p);
     return p.role;
   }
   /** 能力失效的人拿假信息：按说书人给他编的那套假世界回答（前后一致，见 storyteller.js）。 */
-  lies(p) { return this.broken(p); }
+  lies(p) {
+    if (!this.broken(p)) return false;
+    // 邪恶碾压时，真酒鬼偶尔拿真信息（官方《给说书人的建议》）；中毒的照给假的
+    if (p.role === 'drunk' && !this.isPoisoned(p) && this.st.drunkTruth(p)) return false;
+    return true;
+  }
 
   // ───────────────────────── 夜晚 ─────────────────────────
   startNight() {
@@ -581,7 +607,7 @@ export class Game {
       if (!cands.length && team === 'townsfolk' && p.role === p.shownRole && TOWNSFOLK.includes(p.role)) cands.push(p);
       if (!cands.length) { this.fact({ kind: 'none', by: p.id, team }); return { outsider: '场上**没有**外来者。', minion: '场上**没有**爪牙。' }[team] ?? '没有可以告诉你的信息。'; }
       target = this.st.choose('pairTarget', cands, { who: p.id, team });
-      role = ROLES[target.role].team === team ? target.role : this.st.choose('pairRole', pool, { who: p.id });
+      role = ROLES[target.role].team === team ? target.role : this.st.misregRole(target, pool); // 间谍/陌客：前后一致、配合伪装
     }
     const decoy = this.st.choose('pairDecoy', others.filter((q) => q.id !== target.id), { who: p.id, team });
     this.fact({ kind: 'pair', by: p.id, team, a: target.id, b: decoy.id, role });
@@ -592,7 +618,7 @@ export class Game {
   chefInfo(p, lies) {
     const n = this.players.length;
     // 拿假信息时只需要真相作对照，不用掷陌客/间谍的错误登记
-    const evil = this.players.map((q) => (lies ? isEvilRole(q.role) : this.regEvil(q, '厨师检测')));
+    const evil = this.players.map((q) => (lies ? isEvilRole(q.role) : this.regEvil(q, '厨师检测', q.role === 'recluse' ? 'good' : 'evil'))); // 陌客被算成邪恶会多出一对、指向他身边的真邪恶
     let pairs = 0;
     for (let i = 0; i < n; i++) if (evil[i] && evil[(i + 1) % n]) pairs++;
     const value = lies ? this.st.fakeChef(p, pairs) : pairs;
@@ -651,7 +677,7 @@ export class Game {
 
     if (b.role === 'virgin' && b.alive && !this.virginUsed) {
       this.virginUsed = true;
-      if (!this.broken(b) && this.regTownsfolk(a, '贞洁者被提名')) {
+      if (!this.broken(b) && this.regTownsfolk(a, '贞洁者被提名', 'good')) { // 间谍被当成镇民 = 间谍被处决：帮善良
         this.record('nominate', '贞洁者能力触发：提名者是镇民，立即被处决');
         this.execute(a);
         return { virgin: true, executed: a.id };
@@ -765,7 +791,16 @@ export class Game {
     if (!this.demon()) this.setWinner('good', SCRIPTS[this.script].ragnarok ? '狼人全部死亡' : '恶魔已经死亡');
     else if (SCRIPTS[this.script].ragnarok && this.alive().filter((p) => p.role === 'imp').length * 2 >= this.aliveCount()) this.setWinner('evil', '存活的狼人追平了好人');
     else if (this.aliveCount() <= 2) this.setWinner('evil', '只剩两名存活玩家，恶魔获胜');
+    else if (this.allAliveEvil()) this.setWinner('evil', ALL_EVIL);
     return this.winner;
+  }
+  /**
+   * 活着的全是邪恶：善良已经赢不了，提前结束（官方《给说书人的建议》第 1 条：一个阵营已经能确定获胜时可以提前结束）。
+   * 被当作死亡的僵怖算活着（他真的活着）。
+   */
+  allAliveEvil() {
+    const live = this.alive();
+    return live.length > 0 && live.every((p) => this.evilOf(p));
   }
 
   // ───────────────────────── 说书人工具 ─────────────────────────

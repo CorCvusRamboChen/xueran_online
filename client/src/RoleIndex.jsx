@@ -7,7 +7,7 @@ import { ROLES, SCRIPTS, TEAM_NAME, rolesOf } from '../../src/engine/roles.js';
 import { ROLE_ART } from './art.js';
 import { ATTR } from './flavor.js';
 import { Glossed } from './terms.jsx';
-import { useMarks } from './marks.jsx';
+import { useMarks, rolesOfMark } from './marks.jsx';
 import { AbilityCard } from './AbilityCard.jsx';
 import { NightOrder, TEAMS } from './Lobby.jsx';
 
@@ -22,8 +22,8 @@ export function RoleIndex({ s }) {
   const marks = useMarks(s);
   const guessed = new Map(); // 角色 → 你猜是它的座位号
   for (const p of s.players) {
-    const r = marks[p.id]?.role;
-    if (r && p.id !== s.me) guessed.set(r, [...(guessed.get(r) ?? []), p.seat]);
+    if (p.id === s.me) continue;
+    for (const r of rolesOfMark(marks[p.id])) guessed.set(r, [...(guessed.get(r) ?? []), p.seat]);
   }
   const [q, setQ] = useState('');
   const [multi, setMultiState] = useState(() => { try { return localStorage.getItem(MULTI_KEY) === '1'; } catch { return false; } });

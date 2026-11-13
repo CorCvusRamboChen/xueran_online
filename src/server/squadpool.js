@@ -6,11 +6,16 @@
 //   POST /api/discord-sync/rooms/:id/close    收卡
 // 只报公开信息：身份、谁死了都不出服务器，存活数按 visAlive 算（僵怖装死不露馅）。
 // 定时比对、有变化才发，外加 30 分钟一次心跳：网站连不上时下一轮自然重试，服务器重启后建卡的 409 也当成功。
+import fs from 'node:fs';
+import path from 'node:path';
 import { SCRIPTS } from '../engine/roles.js';
 
 const TICK_MS = 8_000;
 const CLOSE_AFTER_MS = 60_000; // 断线重连别把卡收了：连续没人一分钟才收
 const HEARTBEAT_MS = 30 * 60_000; // 网站 12 小时没收到同步会收卡，内容没变也要定时报一声
+// 没开局的桌子：在线的人两小时没任何操作、也没人进出，就当是挂着活动忘了关，收卡。
+// 之前只看「有没有连接」，有人把 Discord 挂一夜，卡就带着早走光的座位一直留在网站上。
+const LOBBY_IDLE_MS = 2 * 60 * 60_000;
 const CDN = 'https://cdn.discordapp.com/';
 const isDiscordId = (id) => /^\d{5,25}$/.test(String(id ?? ''));
 
@@ -21,17 +26,20 @@ function avatarUrl(avatar) {
   return avatar.startsWith('https://') ? avatar : '';
 }
 
+// 大厅里入座的人走了座位还留着（开局前的名单），卡上只算还在线的；机器人座位照算
+const lobbySeats = (room) => room.lobby.filter((p) => p.fake || room.online.has(p.id));
+
 function roomPhase(room) {
   const g = room.game;
   const script = SCRIPTS[g?.script ?? room.settings.script ?? 'tb']?.name ?? '';
-  if (!g) return { phase: 'lobby', round: 0, seats: room.lobby.length, alive: 0, script };
+  if (!g) return { phase: 'lobby', round: 0, seats: lobbySeats(room).length, alive: 0, script };
   const alive = g.players.filter((p) => g.visAlive(p)).length;
   const round = g.phase === 'night' ? g.night : g.day;
   return { phase: room.ended ? 'ended' : g.phase, round, seats: g.players.length, alive, script };
 }
 
 function roomMembers(room) {
-  const seated = room.game ? room.game.players : room.lobby;
+  const seated = room.game ? room.game.players : lobbySeats(room);
   const ids = seated.length ? seated.map((p) => p.id) : [...room.online];
   return ids.filter(isDiscordId).slice(0, 50).map((id) => {
     const u = room.users.get(id) ?? seated.find((p) => p.id === id);
@@ -39,12 +47,21 @@ function roomMembers(room) {
   });
 }
 
-/** 这一桌该不该有卡、卡上是什么；不该有就返回 null。 */
-export function tableCard(room) {
-  const channelId = room.square ?? room.gameSquare ?? room.partnerSquare;
+const tableChannel = (room) => room.square ?? room.gameSquare ?? room.partnerSquare;
+
+/**
+ * 这一桌该不该有卡、卡上是什么；不该有就返回 null。
+ * activeAt：在线名单最后一次变化的时间（同步那边记），和在线的人最后操作的时间一起算挂机。
+ */
+export function tableCard(room, { now = Date.now(), activeAt = now } = {}) {
+  const channelId = tableChannel(room);
   // 真人全走了的局会暂停并留在存档里，重启后读回来也还是暂停：这种不算进行中，否则全是幽灵卡
   const live = !!room.game && !room.ended && !room.paused;
   if (room.tutorial || !channelId || (!live && room.online.size === 0)) return null;
+  if (!live) {
+    const acted = Math.max(activeAt, ...[...room.online].map((id) => room.lastSeen?.get(id) ?? 0));
+    if (now - acted > LOBBY_IDLE_MS) return null;
+  }
   const members = roomMembers(room);
   const host = members.find((m) => m.discordUserId === room.hostId) ?? members[0];
   if (!host) return null;
@@ -64,9 +81,45 @@ async function voiceCard(voice, channelId, guildId) {
   return { channelId, guildId, host: members[0], members, state: { phase: 'lobby', round: 0, seats: members.length, alive: 0, script: '' } };
 }
 
-export function squadpoolSync({ baseUrl, token, rooms, guildIds, guildName = '', voice = null, fetch: f = globalThis.fetch, log = console, now = Date.now }) {
+/** 上次进程发过、还没收掉的卡（频道 id 列表）。读不到就当没有。 */
+function loadPosted(file) {
+  if (!file) return [];
+  try {
+    const ids = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : [];
+  } catch { return []; }
+}
+
+/**
+ * file：把网站上现有哪些卡记到盘上。服务器重启后内存里的记录没了，不记的话旧卡没人去收，
+ * 只能等网站 12 小时没收到同步才过期，期间新开的桌子和旧卡并排两张。
+ */
+export function squadpoolSync({ baseUrl, token, rooms, guildIds, guildName = '', voice = null, file = null, fetch: f = globalThis.fetch, log = console, now = Date.now }) {
   const base = baseUrl.replace(/\/$/, '');
   const cards = new Map(); // channelId → { members, state, seenAt }：网站上现有的卡，存上次发过的内容
+  // 重启前发过的卡：先当成「很久没见」，这一轮还该有就接着报（成员、状态会重发一遍），不该有就马上收
+  for (const id of loadPosted(file)) cards.set(id, { seenAt: -Infinity });
+  let savedIds = JSON.stringify([...cards.keys()].sort());
+
+  function savePosted() {
+    const ids = JSON.stringify([...cards.keys()].sort());
+    if (!file || ids === savedIds) return;
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, ids);
+      savedIds = ids;
+    } catch (e) { log.warn?.(`[squadpool] 记录卡片失败：${e.message}`); }
+  }
+  const presence = new Map(); // channelId → { sig, at }：在线名单和它上次变化的时间
+
+  function activeAt(room, seen) {
+    const id = tableChannel(room);
+    const sig = [...room.online].sort().join(',');
+    let p = presence.get(id);
+    if (!p || p.sig !== sig) presence.set(id, (p = { sig, at: now() }));
+    seen.add(id);
+    return p.at;
+  }
 
   async function post(pathname, body) {
     const r = await f(`${base}${pathname}`, {
@@ -138,19 +191,22 @@ export function squadpoolSync({ baseUrl, token, rooms, guildIds, guildName = '',
 
   async function tick() {
     const wanted = new Set();
+    const seen = new Set();
     for (const room of rooms.values()) {
       if (!guildIds.has(room.guildId)) continue;
-      const card = tableCard(room);
+      const card = tableCard(room, { now: now(), activeAt: activeAt(room, seen) });
       if (!card) continue;
       wanted.add(card.channelId);
       await push(card).catch((e) => log.warn?.(`[squadpool] 同步 ${card.channelId} 失败：${e.message}`));
     }
+    for (const id of presence.keys()) if (!seen.has(id)) presence.delete(id);
     if (voice) await pushVoiceCards(wanted);
     for (const [channelId, sent] of cards) {
       if (wanted.has(channelId) || now() - sent.seenAt < CLOSE_AFTER_MS) continue;
       const status = await post(`/api/discord-sync/rooms/${encodeURIComponent(channelId)}/close`).catch(() => 0);
       if (status === 200 || status === 404) cards.delete(channelId);
     }
+    savePosted();
   }
 
   return {

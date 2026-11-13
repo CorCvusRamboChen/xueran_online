@@ -1,6 +1,6 @@
 // 收音页（语音判定疯狂的另一条路）：被洗脑的玩家自己在普通浏览器里打开麦克风，一句一句传上来转成文字。
 // 不靠机器人，所以走到哪个语音频道都听得到，旺财的服务器和 KOOK 也能用；别人看不出谁开了。
-// 畸形秀演员不给这个入口：他开了只会害自己，语音只有机器人那条路（房主打开、全场知情）才算。
+// 畸形秀演员也给（2026-11-12 用户要的，以前不给）：说服别人自己是外来者会被当场判。
 // 隐私：音频不落盘，文字只留到当天黄昏判完。凭一次性的令牌上传，令牌只发给本人，换一天就作废。
 import crypto from 'node:crypto';
 import { transcribeWav, wavSamples } from './stt.js';
@@ -71,6 +71,15 @@ export class MicInbox {
 /** 令牌还有效吗（收音页打开时先问一下）。 */
 export const micValid = (token) => tokens.has(token);
 
+/**
+ * 这个令牌的人是哪种疯狂（收音页按这个显示疯狂的定义）：{ kind: 'madness', role } 被洗脑要证明自己是某个角色，
+ * { kind: 'mutant' } 畸形秀演员；不知道就是 {}。只回给拿着令牌的本人。
+ */
+export function micAbout(token) {
+  const t = tokens.get(token);
+  return (t && t.inbox.about?.(t.id)) || {};
+}
+
 /** 上传一段音频。令牌不对或者过期了返回 410。 */
 export function micIngest(token, wav) {
   const t = tokens.get(token);
@@ -80,6 +89,7 @@ export function micIngest(token, wav) {
 /** 本地测试用：?mic=demo 不用开局就能试麦克风和转写。 */
 export function micDemo() {
   const inbox = new MicInbox();
-  tokens.set('demo', { inbox, id: 'demo' });
-  inbox.ids.set('demo', 'demo');
+  // demo-mutant / demo-madness：看两种疯狂的定义长什么样
+  inbox.about = (id) => ({ 'demo-mutant': { kind: 'mutant' }, 'demo-madness': { kind: 'madness', role: '神谕者' } }[id] ?? {});
+  for (const t of ['demo', 'demo-mutant', 'demo-madness']) { tokens.set(t, { inbox, id: t }); inbox.ids.set(t, t); }
 }

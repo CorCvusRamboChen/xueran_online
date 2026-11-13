@@ -54,9 +54,9 @@ const VOTE_OUTCOME = { block: '送上处决台', tie: '平票（台上清空）'
  * 关键信息：按天倒着列——那天早上的刀口（昨晚谁死了 / 平安夜 / 谁复活了）、当天每一次投票的票型、黄昏的处决结果。
  * knives / execs / votes 都是公开信息（天亮、投票时大家都看到了），这里只是整理在一起方便盘。
  */
-export function KeyInfo({ votes = [], knives = [], execs = [], g, name }) {
-  const days = [...new Set([...knives.map((k) => k.day), ...votes.map((v) => v.day), ...execs.map((e) => e.day)])].sort((a, b) => b - a);
-  if (!days.length) return <p className="muted">还没有关键信息。每晚的刀口、每次投票的票型、每天的处决都会整理在这里。</p>;
+export function KeyInfo({ votes = [], knives = [], execs = [], pubs = [], g, name }) {
+  const days = [...new Set([...knives.map((k) => k.day), ...votes.map((v) => v.day), ...execs.map((e) => e.day), ...pubs.map((e) => e.day)])].sort((a, b) => b - a);
+  if (!days.length) return <p className="muted">还没有关键信息。每晚的刀口、公开声明和开枪、每次投票的票型、每天的处决都会整理在这里。</p>;
   const who = (id) => (g(id) ? `${g(id).seat}号 ${name(id).replace(/^\d+号 /, '')}` : '?');
   return (
     <div className="vote-history key-info">
@@ -64,6 +64,7 @@ export function KeyInfo({ votes = [], knives = [], execs = [], g, name }) {
         const k = knives.find((x) => x.day === day);
         const ex = execs.find((x) => x.day === day);
         const list = votes.filter((v) => v.day === day);
+        const said = pubs.filter((e) => e.day === day);
         return (
           <section key={day} className="vh-day">
             <h4>第 {cnNum(day)} 天</h4>
@@ -73,7 +74,10 @@ export function KeyInfo({ votes = [], knives = [], execs = [], g, name }) {
                 <span>{k.deaths.length ? k.deaths.map(who).join('、') + ' 死亡' : '平安夜'}{k.revived?.length ? `；${k.revived.map(who).join('、')} 复活` : ''}</span>
               </div>
             )}
-            {list.map((v, i) => <VoteCard key={i} v={v} g={g} name={name} />)}
+            {/* 公开事件和投票按发生的先后排（旧存档的投票没有时间：排在最后） */}
+            {[...said.map((e, i) => ({ at: e.night ? 0 : e.at, el: <PubRow key={`p${i}`} e={e} /> })),
+              ...list.map((v, i) => ({ at: v.at ?? Infinity, el: <VoteCard key={`v${i}`} v={v} g={g} name={name} /> }))]
+              .sort((x, y) => x.at - y.at).map((x) => x.el)}
             {ex && (
               <div className={`ki-row ki-exec ${ex.id ? '' : 'none'}`}>
                 <span className="ki-tag">处决</span>
@@ -83,6 +87,17 @@ export function KeyInfo({ votes = [], knives = [], execs = [], g, name }) {
           </section>
         );
       })}
+    </div>
+  );
+}
+
+/** 一条公开事件（公开声明、开枪、公开选人、突然死亡）。白天的按发生顺序排在投票前面。 */
+function PubRow({ e }) {
+  const tag = e.night ? `第${cnNum(e.night)}夜` : /开.{0,2}枪|举起枪/.test(e.text) ? '开枪' : /声明|猜|说：/.test(e.text) ? '公开声明' : '公开';
+  return (
+    <div className="ki-row ki-pub">
+      <span className="ki-tag">{tag}</span>
+      <span>{e.text.replace(/\*\*/g, '')}</span>
     </div>
   );
 }

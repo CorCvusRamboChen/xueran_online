@@ -308,7 +308,9 @@ test('僵怖：白天有人死就不醒；第一次死亡后仍活着但被当�
 });
 
 test('普卡：首夜就下毒；下一夜上一个中毒者死亡；驱魔人挡住时上一个照样死；旅店老板保护则不死', () => {
-  const g = mk(['exorcist', 'sailor', 'chambermaid', 'innkeeper', 'fool', 'assassin', 'pukka', 'gambler'], QUIET);
+  // 旅店老板让谁醉定死：别让驱魔人（p1）醉了挡不住普卡，也别让上一个中毒者（p8）醉
+  const g = mk(['exorcist', 'sailor', 'chambermaid', 'innkeeper', 'fool', 'assassin', 'pukka', 'gambler'],
+    { ...QUIET, innkeeperDrunk: (pair) => pair.find((q) => q.id === 'p2') ?? pair.find((q) => q.id === 'p1') ?? pair[0] });
   night(g, { p2: ['p2'], p3: ['p4', 'p2'], p7: ['p3'] });
   assert.ok(g.isPoisoned(g.get('p3')));
   day(g); g.endDay();
@@ -385,7 +387,7 @@ test('房规「夜里死了仍拿信息」：被珀杀死的侍女照样拿到�
   }
 });
 
-test('恶魔的伪装：3 个不在场的善良角色，以镇民为主，外来者最多 1 个（大约三分之一的局有）', () => {
+test('恶魔的伪装：3 个不在场的善良角色，按官方给两个镇民一个外来者（没有不在场的外来者才给三个镇民）', () => {
   let withOut = 0; const N = 300;
   for (let s = 1; s <= N; s++) {
     const g = new Game(players(7), { rng: makeRng(s), script: 'bmr' });
@@ -396,7 +398,7 @@ test('恶魔的伪装：3 个不在场的善良角色，以镇民为主，外来
     assert.ok(outs <= 1, `外来者伪装 ${outs} 个`);
     if (outs) withOut++;
   }
-  assert.ok(withOut > N * 0.2 && withOut < N * 0.5, `有外来者伪装的局 ${withOut} / ${N}`);
+  assert.ok(withOut > N * 0.9, `有外来者伪装的局 ${withOut} / ${N}`);
 });
 
 test('AI 配板：12 人及以下保护角色（水手、旅店老板、茶艺师、弄臣、和平主义者）很少 3 个以上同时出现', () => {
@@ -527,4 +529,45 @@ test('官方规则复查（黯月初升）：普卡毒发时还中着毒——�
     k.resolveNight();
     assert.ok(!k.used.p1, '指了活人：教授的能力还在');
   }
+});
+
+test('修补匠的 AI 判定：死人多、恶魔被挡、有人造谣、大家猜的恶魔不一致时更容易死；剩 4 人不掷', async () => {
+  const { chanceOf } = await import('../src/engine/dice.js');
+  const p = (f) => chanceOf('tinker', f);
+  assert.ok(p({}) < p({ crowd: 1 }) && p({ crowd: 1 }) < p({ crowd: 2 }), '当晚死的人越多越容易死');
+  for (const k of ['blocked', 'gossip', 'demonSplit']) assert.ok(p({ crowd: 1, [k]: 1 }) > p({ crowd: 1 }), k);
+  assert.ok(p({ crowd: 1, balance: -1 }) < p({ crowd: 1 }), '邪恶领先时少死');
+  // 结算时把情况记进决策日志
+  const g = mk(['gossip', 'sailor', 'fool', 'exorcist', 'tinker', 'assassin', 'po']);
+  g.startNight();
+  g.nightDeaths = ['p1', 'p2'];
+  g.blocked = 'p7';
+  g.gossipSaid = { p3: true };
+  g.st.tinkerDies(g.get('p5'));
+  const d = g.st.decisions.at(-1);
+  assert.equal(d.kind, 'tinker');
+  assert.equal(d.features.crowd, 2);
+  assert.equal(d.features.blocked, 1);
+  assert.equal(d.features.gossip, 1);
+  // 剩 4 人：绝不让修补匠的死结束游戏，不掷
+  for (const id of ['p1', 'p2', 'p3']) g.get(id).alive = false;
+  const n = g.st.decisions.length;
+  assert.equal(g.st.tinkerDies(g.get('p5')), false);
+  assert.equal(g.st.decisions.length, n);
+});
+
+test('水手选了镇民：大约 10% 反过来让水手自己醉；邪恶领先时不反；选外来者照旧水手醉', () => {
+  let flip = 0; const N = 2000;
+  for (let seed = 1; seed <= N; seed++) {
+    const g = mk(['sailor', 'gambler', 'chef', 'fool', 'tinker', 'assassin', 'zombuul'].map((r) => (r === 'chef' ? 'grandmother' : r)));
+    g.st.balance = () => 0;
+    g.st.rng = makeRng(seed);
+    if (g.st.sailorDrunk(g.get('p1'), g.get('p2')) === g.get('p1')) flip++;
+  }
+  assert.ok(flip / N > 0.07 && flip / N < 0.13, `反过来 ${flip}/${N}`);
+  const g = mk(['sailor', 'gambler', 'chef', 'fool', 'tinker', 'assassin', 'zombuul'].map((r) => (r === 'chef' ? 'grandmother' : r)));
+  g.st.balance = () => -0.5;
+  g.st.rng = () => 0; // 掷的话一定反
+  assert.equal(g.st.sailorDrunk(g.get('p1'), g.get('p2')), g.get('p2'), '邪恶领先时不反');
+  assert.equal(g.st.sailorDrunk(g.get('p1'), g.get('p5')), g.get('p1'), '选外来者：水手自己醉');
 });

@@ -3,6 +3,7 @@ import 'dotenv/config';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 import express from 'express';
 import { WebSocketServer } from 'ws';
@@ -13,13 +14,13 @@ import { ttsHandler, ttsEnabled } from './tts.js';
 import { saveSoon, flushAll, loadAll, archiveGame, listGames, getGame, statsFor, archiveMark, markStatsFor } from './store.js';
 import { startTutorial } from './tutorial.js';
 import { KookBot, KOOK_PREFIX } from './kook.js';
-import { verifyTicket } from './tickets.js';
+import { signTicket, verifyTicket } from './tickets.js';
 import { partnerPlatform } from './partner.js';
 import { squadpoolSync } from './squadpool.js';
 import { voiceLaunchBlocked } from './launch.js';
 import { discordHearing, hearingReady } from './hearing.js';
 import { sttReady } from './stt.js';
-import { MicInbox, micDemo, micIngest, micValid } from './mic.js';
+import { MicInbox, micDemo, micIngest, micValid, micAbout } from './mic.js';
 import { timingSafeEqual } from 'node:crypto';
 
 const { DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_TOKEN } = process.env;
@@ -30,6 +31,10 @@ const PUBLIC_URL = process.env.PUBLIC_URL ?? 'https://botc.rambooo.com'; // KOOK
 // KOOK 进入链接的签名密钥：没单独配就从机器人 token 派生（换 token 旧链接就作废）；本地测试用固定值
 const TICKET_SECRET = process.env.KOOK_TICKET_SECRET
   || (KOOK_TOKEN ? createHash('sha256').update(`botc-ticket|${KOOK_TOKEN}`).digest('hex') : DEV_LOGIN ? 'dev-ticket-secret' : null);
+// Discord 活动里「在浏览器打开」的链接：同一套门票（tickets.js），另一把钥匙，从应用密钥派生
+const BROWSER_SECRET = process.env.BROWSER_TICKET_SECRET
+  || (DISCORD_CLIENT_SECRET ? createHash('sha256').update(`botc-browser|${DISCORD_CLIENT_SECRET}`).digest('hex') : DEV_LOGIN ? 'dev-browser-secret' : null);
+const BROWSER_STALE = '浏览器链接失效了：回到 Discord 活动里，在「设置」里再点一次「在浏览器打开」';
 
 // ───────────── 机器人（管语音） ─────────────
 let hub = null;
@@ -97,15 +102,41 @@ app.post('/api/partner/voice', (req, res) => {
 
 // 本地测试 KOOK 进入链接（不连 KOOK）：/api/dev/kook-ticket?g=服务器&c=频道&u=用户&n=名字 → 跳到带门票的页面
 if (DEV_LOGIN && TICKET_SECRET) {
-  const { signTicket } = await import('./tickets.js');
   app.get('/api/dev/kook-ticket', (req, res) => {
     const q = (k, d) => String(req.query[k] ?? d).slice(0, 40);
     res.redirect(`/?kt=${signTicket(TICKET_SECRET, { g: q('g', 'devguild'), c: q('c', 'devchannel'), u: q('u', 'devuser'), n: q('n', 'KOOK测试'), a: null })}`);
   });
 }
+// 本地测试「在浏览器打开」的链接：/api/dev/browser-ticket?g=服务器&c=频道&u=用户&n=名字
+if (DEV_LOGIN && BROWSER_SECRET) {
+  app.get('/api/dev/browser-ticket', (req, res) => {
+    const q = (k, d) => String(req.query[k] ?? d).slice(0, 40);
+    res.redirect(`/?bt=${signTicket(BROWSER_SECRET, { p: 'dc', g: q('g', 'devguild'), c: q('c', 'devchannel'), u: q('u', 'devuser'), n: q('n', '浏览器测试'), a: null })}`);
+  });
+}
 
 // 开发用：小镇底稿页把导出的底稿直接存进 design/guides/（只在 DEV_LOGIN 下开放）
 if (DEV_LOGIN) {
+  // 门的位置编辑器（?preview=doors）：写回 src/shared/maps/doors.js 里这套美术的那一项
+  app.post('/api/dev/doors/:set', express.json({ limit: '16kb' }), async (req, res) => {
+    const set = String(req.params.set);
+    if (!['tb', 'bmr', 'snv'].includes(set)) return res.status(400).json({ error: '没有这套地图美术' });
+    const clean = {};
+    for (const [id, o] of Object.entries(req.body ?? {})) {
+      if (!/^[a-z]+$/.test(id) || !['bottom', 'right', 'left', 'top'].includes(o?.side) || typeof o.t !== 'number' || !(o.t >= 0 && o.t <= 1)) return res.status(400).json({ error: `${id} 不对` });
+      clean[id] = { side: o.side, t: Math.round(o.t * 100) / 100 };
+      if (o.in != null) { if (typeof o.in !== 'number' || !(o.in >= 0 && o.in <= 120)) return res.status(400).json({ error: `${id} 缩进不对` }); if (o.in) clean[id].in = Math.round(o.in); }
+    }
+    const file = 'src/shared/maps/doors.js';
+    const { readFile, writeFile } = await import('node:fs/promises');
+    const { default: cur } = await import(`${pathToFileURL(path.resolve(file)).href}?t=${Date.now()}`);
+    const all = { ...cur, [set]: clean };
+    const old = await readFile(path.resolve(file), 'utf8');
+    const head = old.slice(0, old.indexOf('export default'));
+    await writeFile(path.resolve(file), `${head}export default ${JSON.stringify(all, null, 2)};
+`);
+    res.json({ ok: true, path: file });
+  });
   // 色调编辑器（?preview=layout 的「色调」）：写回 src/shared/maps/<地图>-tone.js
   app.post('/api/dev/tone/:map', express.json({ limit: '16kb' }), async (req, res) => {
     const map = String(req.params.map);
@@ -201,7 +232,7 @@ app.get('/api/config', (_req, res) => res.json({ clientId: DISCORD_CLIENT_ID ?? 
 
 // 收音页：令牌就是身份，只发给被洗脑的本人
 if (DEV_LOGIN) micDemo();
-app.get('/api/mic/:token', (req, res) => res.status(micValid(req.params.token) ? 204 : 410).end());
+app.get('/api/mic/:token', (req, res) => (micValid(req.params.token) ? res.json(micAbout(req.params.token)) : res.status(410).end()));
 app.post('/api/mic/:token', express.raw({ type: 'audio/wav', limit: '2mb' }), async (req, res) => {
   const { status, text } = await micIngest(req.params.token, req.body);
   res.status(status).json({ text: text ?? '' });
@@ -359,22 +390,34 @@ wss.on('connection', (ws) => {
       if (msg.type === 'hello') {
         let user;
         let ticket = null;
-        if (msg.kook) {
+        let via = 'discord';
+        if (msg.browser) {
+          // Discord 活动里签的浏览器链接：身份、服务器、频道都和 Discord 里一样
+          if (!BROWSER_SECRET) throw new UserError(BROWSER_STALE);
+          let t;
+          try { t = verifyTicket(BROWSER_SECRET, msg.browser); } catch { throw new UserError(BROWSER_STALE); }
+          if (t.p !== 'dc') throw new UserError(BROWSER_STALE);
+          user = { id: String(t.u), name: String(t.n || 'Discord 玩家').slice(0, 24), avatar: t.a || null };
+          msg.guildId = String(t.g); msg.channelId = String(t.c);
+          via = 'browser';
+        } else if (msg.kook) {
           // KOOK：机器人发的进入链接（见 tickets.js）
           if (!TICKET_SECRET) throw new UserError('服务器没接 KOOK');
           try { ticket = verifyTicket(TICKET_SECRET, msg.kook); } catch (e) { throw new UserError(e.message); }
           user = { id: `${KOOK_PREFIX}${ticket.u}`, name: String(ticket.n || 'KOOK 玩家').slice(0, 24), avatar: ticket.a || null };
+          via = 'kook';
         } else if (msg.dev) {
           if (!DEV_LOGIN) throw new UserError('服务器没开 DEV_LOGIN');
           user = { id: `dev-${String(msg.dev.id).slice(0, 12)}`, name: String(msg.dev.name || '测试玩家').slice(0, 24), avatar: null };
           if (msg.dev.role) user.devRole = String(msg.dev.role).slice(0, 20); // 测试：开局把这个角色换给自己
+          via = 'dev';
         } else {
           user = await discordUser(msg.accessToken, msg.guildId);
         }
         const guildId = ticket ? `${KOOK_PREFIX}${ticket.g}` : msg.dev ? 'dev' : msg.guildId;
         const channelId = ticket ? String(ticket.c) : msg.dev ? String(msg.dev.table || 'table') : msg.channelId;
         if (!guildId || !channelId) throw new UserError('请在服务器频道里打开（私信里玩不了）');
-        if (!msg.dev && !ticket) { // Discord 活动才有这个问题；KOOK 是浏览器里玩的
+        if (via === 'discord') { // Discord 活动才有这个问题；KOOK 和浏览器链接都是浏览器里玩的
           const key = `${guildId}:${channelId}`;
           if (await voiceLaunchBlocked({ room: rooms.get(key), voice: voiceFor(guildId, key), channelId })) {
             throw new UserError(PARTNER_GUILDS.has(guildId) ? '请从钟楼专区的开局文字频道进入' : '请从文字频道进入');
@@ -382,6 +425,7 @@ wss.on('connection', (ws) => {
         }
         const room = roomFor(guildId, channelId, user.id);
         ws.uid = user.id;
+        ws.via = via; ws.gid = guildId; ws.cid = channelId;
         ws.room = room;
         sockets.get(room).add(ws);
         room.users.set(user.id, user);
@@ -398,6 +442,14 @@ wss.on('connection', (ws) => {
         return;
       }
       // 新手教程：把这个连接切到一个只有自己和机器人的练习局；退出时切回原来的房间
+      // Discord 活动里：签一条只属于这个人的浏览器链接（见 connect.js openInBrowser）
+      if (msg.type === 'browserLink') {
+        if (!ws.uid || ws.via !== 'discord') throw new UserError('只有在 Discord 活动里才需要这个');
+        if (!BROWSER_SECRET) throw new UserError('服务器没配置 Discord 应用密钥');
+        const u = ws.room?.users.get(ws.uid);
+        reply({ ok: true, ticket: signTicket(BROWSER_SECRET, { p: 'dc', g: ws.gid, c: ws.cid, u: ws.uid, n: u?.name ?? null, a: u?.avatar ?? null }) });
+        return;
+      }
       if (msg.type === 'tutorial') {
         if (!ws.uid) throw new UserError('还没连上房间');
         const leave = (room) => { sockets.get(room)?.delete(ws); if (![...(sockets.get(room) ?? [])].some((x) => x.uid === ws.uid)) room.online.delete(ws.uid); };
@@ -508,7 +560,7 @@ if (process.env.SQUADPOOL_BASE_URL && process.env.SQUADPOOL_SYNC_TOKEN && PARTNE
     forget: (channelId) => zoneChannels.delete(channelId),
     profile,
   };
-  squadpoolSync({ baseUrl: process.env.SQUADPOOL_BASE_URL, token: process.env.SQUADPOOL_SYNC_TOKEN, rooms, guildIds: PARTNER_GUILDS, guildName: process.env.SQUADPOOL_GUILD_NAME ?? '', voice }).start();
+  squadpoolSync({ baseUrl: process.env.SQUADPOOL_BASE_URL, token: process.env.SQUADPOOL_SYNC_TOKEN, rooms, guildIds: PARTNER_GUILDS, guildName: process.env.SQUADPOOL_GUILD_NAME ?? '', voice, file: 'data/squadpool-cards.json' }).start();
   console.log('🗂️ 钟楼房间同步到组队大厅已开启');
 }
 

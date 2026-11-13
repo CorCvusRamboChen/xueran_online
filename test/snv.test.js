@@ -91,7 +91,7 @@ test('夜晚顺序：有选人的角色都排进了步骤；首夜不动的角�
     if (r.choose && r.firstNight) assert.ok(SNV_STEPS.first.includes(id), id);
   }
   assert.ok(!SNV_STEPS.first.includes('pithag'));
-  assert.ok(SNV_STEPS.other.indexOf('pithag') < SNV_STEPS.other.indexOf('snakecharmer'), '麻脸巫婆在舞蛇人之前（百科后来调过）');
+  assert.ok(SNV_STEPS.other.indexOf('pithag') > SNV_STEPS.other.indexOf('cerenovus'), '麻脸巫婆在舞蛇人、女巫、洗脑师之后（官方英文总表；11-11 用户定）');
   assert.equal(NIGHT_ORDER.snv.other.at(-1)[0], 'mathematician');
 });
 
@@ -562,7 +562,9 @@ test('麻脸巫婆：角色不在场才变，阵营不变；首夜不行动', ()
   assert.equal(g.get('p2').role, 'witch');
   assert.equal(g.evilOf(g.get('p2')), false);
   assert.match(text(r.messages, 'p2'), /善良/);
-  assert.ok(g.fx.some((f) => f.kind === 'curse' && f.target === 'p1'), '造出的爪牙当晚就能行动');
+  // 官方英文总表：麻脸巫婆在女巫之后，今晚变出来的女巫要明晚才下咒（11-11 用户定以英文表为准）
+  assert.ok(!g.fx.some((f) => f.kind === 'curse'), '造出的爪牙今晚不行动');
+  assert.ok(!r.pause, '没有为新女巫停下来等选人');
 });
 
 test('麻脸巫婆：死人的角色也算在场', () => {

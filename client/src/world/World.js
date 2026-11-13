@@ -6,8 +6,8 @@
 // 头像、名字、地名是 HTML，由 TownMap 按 onFrame 给的屏幕坐标摆放。
 import 'pixi.js/unsafe-eval';
 import { tonedCanvas } from './tone.js'; // Discord 的内容安全策略不允许 eval，Pixi 需要这个补丁
-import { Application, Container, Sprite, Graphics, Texture, ImageSource, Matrix, Rectangle, ColorMatrixFilter, TilingSprite } from 'pixi.js';
-import { positionAt, houseAt, distToLine } from '../../../src/shared/map.js';
+import { Application, Container, Sprite, Graphics, Texture, ImageSource, CanvasSource, Matrix, Rectangle, ColorMatrixFilter, TilingSprite } from 'pixi.js';
+import { positionAt, houseAt, distToLine, pathLength, pointAt } from '../../../src/shared/map.js';
 import { TILE, TILE_PX, TILESET_COLS, COBBLE } from '../../../src/shared/tiles.js';
 import { footstep, knock } from './footsteps.js';
 import { setLake, setWind } from '../ambience.js';
@@ -15,9 +15,17 @@ import { setZoneNow } from './ambience.js';
 import { loadTileset } from './tileset.js';
 import { PROPS, RASTER_SCALE, raster, houseFloor } from './sprites.jsx';
 import { serverNow, hue } from '../util.jsx';
-// 3D 小人（avatar3d.js）先不用：地图上还是 2D 小人。要打开就把 USE_3D 改成 true
-const USE_3D = false;
-const DIRS = 8; const WALK_FRAMES = 8; const FRAME_W = 96; const FRAME_H = 128;
+import { onDisplay, avatarMode } from '../display.js';
+import { MODEL_CHARS } from './models.js';
+// 3D 小人（avatar3d.js）先不用：地图上还是 2D 小人。网址带 ?avatar3d（程序搭的）或 ?avatar3d=glb（AI 模型打样）时打开
+const HAT = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('hat') : null; // 打样：所有 AI 模型戴同一顶帽子
+const DEBUG = typeof location !== 'undefined' && location.search.includes('debug');
+const PERF = typeof location !== 'undefined' && new URLSearchParams(location.search).has('perf'); // 左上角显示帧率和每帧耗时
+const LIVE_PX_PER_M = 128 / (2 * 1.22);
+// 3D 小人的衣服颜色（按座位，一人一色）：极乐迪斯科那种旧、灰但分得开的颜色，相邻座位色相差得远
+const CLOTH = ['#8a3b33', '#3f6f78', '#b5913f', '#5a4a74', '#6f7a3a', '#a2582f', '#3c5a86', '#d0c4a2',
+  '#2f5a45', '#7a4a5e', '#7d8a90', '#9a6b2f', '#3a3f4a', '#b46a6a', '#4f7f6a']; // 实时渲染一格（缩放 1）里 1 米多少像素，和 avatar3d.js 的 FRAME_H / (2·CAM_HALF) 一样
+const DIRS = 8; const FRAME_W = 96; const FRAME_H = 128;
 
 const INK = 0x1d2524;
 // Codex 画的斜视角小镇大图（和 ?preview=town 导出的底稿对齐；尺寸不同会拉伸到底稿大小）。有它就不画程序占位的地面和建筑。
@@ -195,6 +203,16 @@ const STEP = 0.34;          // 走一步多少秒
 const GROUND_PX = 1.6;      // 地面贴图每个逻辑单位几个像素
 const PERSON = 0.79;        // 小人缩放（画框 40×52；原来 0.72，放大了 1.1 倍）
 const SPRITE3D = 0.62;      // 3D 小人贴图的缩放（烘焙时 128px 高 → 地图上约 50px；原来 0.56，放大了 1.1 倍）
+// 3D 小人的动作播放（图集按动作分段，见 avatar3d.js 的 bakeSheet）
+const START_T = 0.3;        // 从站着起步：开头这几秒播起步动作
+const RUN_START_T = 0.36;   // 从站着直接跑：开头这几秒播「冲出去」
+const FIDGETS = ['shift', 'rub', 'look']; // 站着时偶尔做的小动作
+const FIDGET_GAP = [6, 9];  // 两次小动作之间隔几秒：6 + 随机 0–9
+const FIDGET_SPEED = 1.4;   // 小动作播快一点（原片 6–9 秒太长，看着像卡住）
+const STOP_T = 0.42;        // 停下来用几秒：最后半段开始减速，比服务器晚 STOP_T/2 秒停稳，这段播停步动作
+const MAX_RATE = { walk: 2, run: 1.6 }; // 地图上走得比动作本身快时，步频最多加快到几倍，再快就让脚滑一点（不然腿抡成风车）
+const HEAD_PAD = 0.12;      // 头像比 3D 小人的头顶（模型身高）再高几米
+const TURN_T = 0.06;        // 转身：每转 45° 用几秒（不再一帧掉头）
 const bits = (n) => (n & 1) + ((n >> 1) & 1) + ((n >> 2) & 1) + ((n >> 3) & 1);
 
 /** 斜视角投影：逻辑 (x, y, 高度 z) → 世界像素。 */
@@ -629,7 +647,7 @@ function tentTop(g, b, seed) {
 
 /** 门（和锁）：画在门所在的那面墙上。 */
 function door(g, hs, locked) {
-  const { door: d } = hs;
+  const d = { x: hs.door.vx ?? hs.door.x, y: hs.door.vy ?? hs.door.y }; // 画在画里那扇门上（可能比边线往里缩）
   const col = locked ? 0x5a3f2a : 0x3a2e26;
   const W = 13; const Hd = 32;
   if (hs.side === 'bottom') face(g, [[d.x - W, d.y, 0], [d.x + W, d.y, 0], [d.x + W, d.y, Hd], [d.x - W, d.y, Hd]], col);
@@ -643,6 +661,25 @@ function door(g, hs, locked) {
     g.rect(px - 6, py - 1, 12, 10).fill(0xc9a24a).stroke({ width: 1.2, color: INK });
     g.rect(px - 1, py + 2, 2, 4).fill(INK);
   }
+}
+
+/**
+ * 有人走过门口时门往里推开：门洞变黑、门板绕门轴转进屋里（k：0 关着，1 全开）。
+ * 门的位置按 maps/doors.js 对到手绘图上的门；露天的（墓园、地窖）没有门板。
+ */
+function doorSwing(g, hs, k) {
+  g.clear();
+  if (k < 0.02 || !hs.height) return;
+  const d = { x: hs.door.vx ?? hs.door.x, y: hs.door.vy ?? hs.door.y, nx: hs.door.nx, ny: hs.door.ny };
+  const W = 13; const Hd = 32;
+  const ax = hs.side === 'right' || hs.side === 'left' ? 0 : 1; const ay = 1 - ax; // 沿墙的方向
+  const ix = -d.nx; const iy = -d.ny;                                                 // 往屋里
+  const at = (u, z) => [d.x + ax * u, d.y + ay * u, z];
+  face(g, [at(-W, 0), at(W, 0), at(W, Hd), at(-W, Hd)], 0x120d0a, { width: 0 });     // 黑洞洞的门洞
+  const a = k * 1.45; const L = 2 * W;
+  const hx = d.x - ax * W; const hy = d.y - ay * W;                                   // 门轴在门洞西 / 北边
+  const ex = hx + (ax * Math.cos(a) + ix * Math.sin(a)) * L; const ey = hy + (ay * Math.cos(a) + iy * Math.sin(a)) * L;
+  face(g, [[hx, hy, 0], [ex, ey, 0], [ex, ey, Hd], [hx, hy, Hd]], shade(0x5a4030, -0.25 * k), { width: 1.2, color: INK });
 }
 
 /** 房子的后墙（从屋里看得到的两面：北墙、西墙）。 */
@@ -1112,7 +1149,8 @@ function makePerson(id) {
   const body = new Container();
   body.pivot.set(20, 49);
   body.scale.set(PERSON);
-  root.addChild(new Graphics().ellipse(0, 0, 11 * PERSON, 3.5 * PERSON).fill({ color: 0x000000, alpha: 0.22 }), body);
+  const shadow = new Graphics().ellipse(0, 0, 11 * PERSON, 3.5 * PERSON).fill({ color: 0x000000, alpha: 0.22 });
+  root.addChild(shadow, body);
   const leg = (x) => { const g = new Graphics().rect(-2.75, 0, 5.5, 12).fill(0x3a3f3e).stroke(line); g.position.set(x, 35); return g; };
   const legL = leg(16.25); const legR = leg(23.75);
   const torso = new Graphics().moveTo(10, 38).lineTo(11, 19).quadraticCurveTo(20, 13, 29, 19).lineTo(30, 38).closePath().fill(coat).stroke(line);
@@ -1126,24 +1164,137 @@ function makePerson(id) {
   sprite.scale.set(SPRITE3D);
   sprite.visible = false;
   root.addChild(sprite);
-  return { root, body, legL, legR, arm, facing: 1, sprite, sheet: null, outfitKey: null, dir: 1, offset: Math.random() };
+  return { root, body, legL, legR, arm, shadow, facing: 1, sprite, sheet: null, outfitKey: null, dir: 1, offset: Math.random() };
 }
 
-/** 给小人换上（或换掉）3D 搭配：烘焙图集 → 切成 [朝向][帧] 的贴图。 */
-function dressPerson(w, outfit) {
-  if (!USE_3D) return;
-  const key = JSON.stringify(outfit);
+/**
+ * 给小人换上（或换掉）3D 搭配：烘焙图集 → 每段动作切成 [朝向][帧] 的贴图。
+ * 图集的贴图每个地图（World）自己建一份（world.sheetSources）：换一天地图会整个销毁连贴图一起，
+ * 用 Pixi 的全局缓存（Texture.from）的话第二天拿到的是销毁了的贴图，一画就报错、整个地图卡住不动。
+ * 贴图顺便套上这张地图的色调（和房子一样），再按地图的雾色压一点，人和手绘背景融在一起。
+ */
+function dressPerson(w, outfit, char, world) {
+  const glb = avatarMode() === 'baked'; // 否则是程序搭的小人（?avatar3d，开发用）
+  const key = glb ? `char:${char}` : JSON.stringify(outfit);
   if (w.outfitKey === key) return;
   w.outfitKey = key;
-  import('./avatar3d.js').then((m) => m.bakeSheet(outfit)).then((sheet) => {
-    if (!sheet || w.outfitKey !== key || w.root.destroyed) return;
-    const source = Texture.from(sheet.canvas).source;
-    w.sheet = Array.from({ length: DIRS }, (_, d) => Array.from({ length: 1 + WALK_FRAMES }, (__, f) =>
-      new Texture({ source, frame: new Rectangle(f * FRAME_W, d * FRAME_H, FRAME_W, FRAME_H) })));
+  import('./avatar3d.js').then((m) => m.bakeSheet(outfit, char, glb)).then((sheet) => {
+    if (!sheet || w.outfitKey !== key || w.root.destroyed || world.destroyed) return;
+    const sourceOf = (cv) => {
+      let src = world.sheetSources.get(cv);
+      if (!src) { src = new CanvasSource({ resource: tonedCanvas(cv, world.town.tone?.houses), scaleMode: 'linear' }); world.sheetSources.set(cv, src); }
+      return src;
+    };
+    w.anims = {};
+    for (const [name, a] of Object.entries(sheet.anims)) {
+      const source = sourceOf((sheet.canvases ?? [sheet.canvas])[a.band ?? 0]);
+      w.anims[name] = { ...a, tex: Array.from({ length: DIRS }, (_, d) => Array.from({ length: a.n }, (__, i) =>
+        new Texture({ source, frame: new Rectangle((a.col + i) * FRAME_W, d * FRAME_H, FRAME_W, FRAME_H) }))) };
+    }
+    // 地图上 1 米多少单位：烘焙图里 1 米的像素 × 贴图缩放；地面上的 1 米在斜视角里横向缩成 cos45°，而地图 1 单位横向正好 1 像素
+    w.upm = sheet.pxPerMeter * SPRITE3D * Math.SQRT1_2;
+    w.headPx = sheet.pxPerMeter * SPRITE3D * (sheet.height + HEAD_PAD); // 缩放 1 时头顶离脚底几像素
+    w.sheet = true;
     w.sprite.anchor.set(sheet.anchor.x, sheet.anchor.y);
+    w.sprite.tint = world.charTint;
     w.sprite.visible = true;
     w.body.visible = false;
+    // 影子：3D 小人比线稿小人宽，换一块大一点、软一点的（两层叠出虚边），宽度按人的肩宽
+    const r = sheet.pxPerMeter * SPRITE3D * 0.34;
+    w.shadow.clear()
+      .ellipse(0, 0, r * 1.35, r * 0.48).fill({ color: 0x0a0c10, alpha: 0.16 })
+      .ellipse(0, 0, r * 0.95, r * 0.32).fill({ color: 0x0a0c10, alpha: 0.24 });
   }).catch(() => {});
+}
+
+/**
+ * 实时渲染（设置里「人物：实时 3D」）：在 world.live 的画布上占一格，小人的贴图就是那一格；每帧在 frame() 里推进动画、画一遍。
+ */
+function dressLive(w, id, char, world, cloth) {
+  const key = `live:${char}:${cloth}`;
+  if (w.outfitKey === key) return;
+  if (w.live) world.live?.remove(id); // 换了形象 / 颜色：先把旧的那格让出来
+  w.outfitKey = key;
+  world.ensureLive().then((live) => live?.add(id, char, { hat: HAT, cloth })).then((info) => {
+    if (!info || w.outfitKey !== key || w.root.destroyed || world.destroyed) return;
+    const { rect, anchor, meta } = info;
+    w.anims = null; w.live = true;
+    // 换一个新的 Sprite：旧的那个（建的时候是空贴图）直接换成这张贴图，Pixi 不会重画，人就看不见
+    const old = w.sprite;
+    w.sprite = new Sprite(new Texture({ source: world.liveSource, frame: new Rectangle(rect.x, rect.y, rect.w, rect.h) }));
+    w.root.addChildAt(w.sprite, w.root.getChildIndex(old));
+    old.destroy();
+    w.sprite.anchor.set(anchor.x, anchor.y);
+    w.sprite.scale.set(SPRITE3D / world.live.rs);
+    w.upm = LIVE_PX_PER_M * SPRITE3D * Math.SQRT1_2;
+    w.headPx = LIVE_PX_PER_M * SPRITE3D * ((meta.height ?? 1.85) + HEAD_PAD);
+    w.sheet = true;
+    w.sprite.tint = world.charTint;
+    w.sprite.visible = true;
+    w.body.visible = false;
+    const r = LIVE_PX_PER_M * SPRITE3D * 0.34;
+    w.shadow.clear()
+      .ellipse(0, 0, r * 1.35, r * 0.48).fill({ color: 0x0a0c10, alpha: 0.16 })
+      .ellipse(0, 0, r * 0.95, r * 0.32).fill({ color: 0x0a0c10, alpha: 0.24 });
+  }).catch((e) => console.warn('[botc] 实时 3D 小人载入失败：', e));
+}
+
+/**
+ * 3D 小人显示用的位置：服务器的路线是匀速的，这里只改结尾——最后 STOP_T/2 秒开始减速，
+ * 比服务器晚 STOP_T/2 秒停稳（走的总路程一样）。中途接上下一段移动时最多差几个单位，看不出来。
+ */
+function easedAt(m, now) {
+  const pts = m.path ?? [{ x: m.fx, y: m.fy }, { x: m.x, y: m.y }];
+  const L = pathLength(pts);
+  const T = m.dur / 1000; const v = L / (T || 1);
+  const b = Math.min(STOP_T, T); const ts = T - b / 2;
+  const e = Math.max(0, now - m.start) / 1000;
+  const u = Math.min(b, Math.max(0, e - ts));
+  const d = e < ts ? v * e : v * ts + v * (u - (u * u) / (2 * b));
+  return { at: pointAt(pts, Math.min(L, d)), d, ahead: pointAt(pts, Math.min(L, d + 12)), L, T, e, ts, b, v };
+}
+/** 3D 小人这段移动还没播完（包括结尾多出来的减速）。 */
+const moving3d = (m, now) => m.dur && now < m.start + m.dur + (Math.min(STOP_T, m.dur / 1000) / 2) * 1000;
+
+/**
+ * 这一帧该显示哪一段动作的第几帧，以及走过的步数（踩脚步声用）。m.run：这段是跑。
+ * 走 / 跑的相位（w.phase，单位：周期）一直累加、跨段移动不清零：走着双击改成跑、连按方向键一段接一段，腿都不会跳帧。
+ */
+function pickFrame(w, mv, run, t, dt) {
+  const A = w.anims;
+  if (mv) {
+    w.fidget = null; w.nextFidget = null; // 一走动就不做小动作，停下来以后重新计时
+    const { e, ts, b, v } = mv;
+    const kind = run && A.run ? 'run' : 'walk';
+    const stop = A.stop; // 跑着停也用普通的停步：Mixamo 的跑步急停是急刹，整个人会蹲下去
+    const start = kind === 'run' && A.runStart ? A.runStart : A.start;
+    if (e >= ts && stop) return { anim: stop, i: Math.min(stop.n - 1, Math.floor(((e - ts) / b) * stop.n)) };
+    const startT = kind === 'run' ? RUN_START_T : START_T;
+    if (w.fromRest && e < startT && start) {
+      w.phase = 0; // 起步完正好从周期开头接上
+      return { anim: start, i: Math.min(start.n - 1, Math.floor((e / startT) * start.n)) };
+    }
+    // 走 / 跑：步频按地图上的速度换算（脚和地面对得上），太快时封顶，多出来的让脚滑
+    const g = A[kind];
+    const ms = v / w.upm;
+    const rate = Math.min(ms / g.stride, (g.speed / g.stride) * (MAX_RATE[kind] ?? 1.5));
+    w.phase = (w.phase ?? 0) + rate * dt;
+    return { anim: g, i: Math.floor((w.phase % 1) * g.n), steps: Math.floor(w.phase * 2) };
+  }
+  // 站着：平时播待机，隔一阵随机做一个小动作（倒换重心、搓肩、四处看），做完回到待机
+  if (w.fidget) {
+    const a = A[w.fidget.name]; const T = a.dur / FIDGET_SPEED; const e = t - w.fidget.t0;
+    if (e < T) return { anim: a, i: Math.min(a.n - 1, Math.floor((e / T) * a.n)) };
+    w.fidget = null; w.nextFidget = t + FIDGET_GAP[0] + Math.random() * FIDGET_GAP[1];
+  }
+  w.nextFidget ??= t + 3 + Math.random() * FIDGET_GAP[1];
+  const opts = FIDGETS.filter((k) => A[k]);
+  if (t >= w.nextFidget && opts.length) {
+    w.fidget = { name: opts[Math.floor(Math.random() * opts.length)], t0: t };
+    return pickFrame(w, null, run, t, dt);
+  }
+  const idle = A.idle;
+  return { anim: idle, i: Math.floor(((t / (idle.dur || 1) + w.offset) % 1) * idle.n) };
 }
 
 // ───────────── 前后遮挡排序 ─────────────
@@ -1195,7 +1346,40 @@ export class World {
   data = null;       // TownMap 每次渲染塞进来：{ players, roam, me }
   onFrame = null;    // 每帧回调：屏幕坐标，TownMap 用它摆 HTML
   walkers = new Map();
+  sheetSources = new Map(); // 3D 小人图集的每张图（canvas）→ 这张地图自己的贴图（见 dressPerson）
+  live = null;              // 实时渲染的 3D 小人（live3d.js 的 LiveAvatars），用到才建
+  liveSource = null;        // 它那张画布在 Pixi 里的贴图
+  /** 3D 小人是不是实时渲染（设置里「模型」选 3D 实时）。 */
+  get liveMode() { return avatarMode() === 'live'; }
+  ensureLive() {
+    this.livePromise ??= import('./live3d.js').then(({ LiveAvatars }) => {
+      if (this.destroyed) return null;
+      // 每格的分辨率跟着屏幕像素密度：高清屏画大一点（不糊），普通屏小一点（省显卡）
+      const dpr = this.app?.renderer.resolution ?? 1;
+      const live = new LiveAvatars({ scale: Math.min(1.6, Math.max(0.8, SPRITE3D * dpr * 1.3)) });
+      live.setTone(this.town.tone?.houses);
+      this.live = live;
+      this.liveSource = new CanvasSource({ resource: live.canvas, scaleMode: 'linear' });
+      return live;
+    });
+    return this.livePromise;
+  }
+  /** 设置里换了「人物」的画法：所有小人卸掉，下一帧按新的画法重新穿上。 */
+  resetAvatars() {
+    for (const [id, w] of this.walkers) {
+      if (w.live) this.live?.remove(id);
+      w.outfitKey = null; w.anims = null; w.live = false; w.sheet = null; w.headPx = null;
+      w.sprite.visible = false; w.body.visible = true;
+      w.shadow.clear().ellipse(0, 0, 11 * PERSON, 3.5 * PERSON).fill({ color: 0x000000, alpha: 0.22 }); // 换回线稿小人的影子
+    }
+  }
   houses = new Map();
+  /** 3D 小人的整体色：往这张地图的雾色压一点（雪夜偏冷、黄昏偏暖），和手绘背景的光一致；压多了人发灰像僵尸。 */
+  get charTint() {
+    const f = this.town?.fog?.color ?? 0xffffff; const k = 0.12;
+    const mix = (sh) => Math.round(255 * (1 - k) + ((f >> sh) & 255) * k);
+    return (mix(16) << 16) | (mix(8) << 8) | mix(0);
+  }
   statics = [];      // 不会动的立体物件（建筑、摆设）
   cam = null;
   zoomMul = 1;
@@ -1216,6 +1400,13 @@ export class World {
     this.app = app;
     this.map = map;
     if (location.search.includes('debug')) window.__botcWorld = this; // 调试用
+    // 设置里换了「人物」的画法就整批换
+    let lastAvatars = avatarMode();
+    this.offDisplay = onDisplay(() => { const a = avatarMode(); if (a !== lastAvatars) { lastAvatars = a; this.resetAvatars(); } });
+    if (PERF) {
+      this.perfEl = Object.assign(document.createElement('div'), { className: 'perf-hud' });
+      el.appendChild(this.perfEl);
+    }
     this.ground = map?.layers.find((l) => l.type === 'tilelayer') ?? null;
     app.canvas.className = 'map-canvas';
     el.prepend(app.canvas);
@@ -1750,9 +1941,10 @@ export class World {
         door(doorOpen, hs, false); door(doorLocked, hs, true);
       }
       front.addChild(shell);
-      if (hs.height) front.addChild(doorOpen, doorLocked);
+      const swing = new Graphics();
+      if (hs.height) front.addChild(doorOpen, doorLocked, swing);
       const bounds = boxBounds(hs.x, hs.y, hs.w, hs.h, top);
-      const entry = { hs, shell, doorOpen, doorLocked, labelZ: top + 14 };
+      const entry = { hs, shell, doorOpen, doorLocked, swing, doorK: 0, labelZ: top + 14 };
       entry.back = this.addStatic(back, box, bounds, { house: hs, kind: 'back' });
       entry.front = this.addStatic(front, box, bounds, { house: hs, kind: 'front', poly: hexOf(hs.x, hs.y, hs.w, hs.h, (hs.height + top) / 2) });
       // 遗迹地窖的断柱
@@ -1812,8 +2004,9 @@ export class World {
     }
     const doorOpen = new Graphics(); const doorLocked = new Graphics();
     door(doorLocked, hs, true);
-    front.addChild(shell, doorLocked);
-    const entry = { hs, shell, doorOpen, doorLocked, labelZ: top + 14, painted: true, single: !closedImg, hitTest }; // single：只有一张图（墓园），没有外观可关
+    const swing = new Graphics();
+    front.addChild(shell, doorLocked, swing);
+    const entry = { hs, shell, doorOpen, doorLocked, swing, doorK: 0, labelZ: top + 14, painted: true, single: !closedImg, hitTest }; // single：只有一张图（墓园），没有外观可关
     entry.back = this.addStatic(back, box, screenBounds(backPoly), { house: hs, kind: 'back' });
     entry.front = this.addStatic(front, box, screenBounds(frontPoly), { house: hs, kind: 'front', poly: frontPoly });
     this.houses.set(hs.id, entry);
@@ -1991,6 +2184,7 @@ export class World {
   // ───────────── 每帧 ─────────────
 
   frame() {
+    if (DEBUG) window.__botcWorld = this; // 调试用：指向正在画的那张地图（页面上可能同时有好几张）
     const d = this.data;
     if (!d?.roam) return;
     const r = d.roam;
@@ -2004,6 +2198,8 @@ export class World {
     const list = [];
     const spots = {};
     const sounds = [];
+    const movers = []; // 这一帧在走动的人（开门用）
+    const liveIds = [];  // 这一帧要实时画的 3D 小人
     let mine = null;
     // 别人在一间我不在的房子里就看不见他；墓园这种露天的（只有一张图）照样看得见
     const hiddenIn = new Set(r.houses.filter((h) => h.id !== r.myHouse && !this.houses.get(h.id)?.single).flatMap((h) => h.members));
@@ -2013,16 +2209,39 @@ export class World {
       seen.add(p.id);
       let w = this.walkers.get(p.id);
       if (!w) { w = makePerson(p.id); this.walkers.set(p.id, w); this.sorted.addChild(w.root); }
-      if (USE_3D && p.outfit) dressPerson(w, p.outfit);
-      const at = positionAt(m, now);
-      const walking = m.dur && now < m.start + m.dur;
+      const mode = avatarMode();
+      // 实时渲染 AI 模型（按大厅里挑的形象）。没挑形象（或挑的还没有模型）的都是镇民，衣服按座位染色分开；挑了的保留人物自己的配色（认得出是谁）
+      if (mode === 'live') dressLive(w, p.id, p.char, this, MODEL_CHARS.has(p.char) ? null : CLOTH[d.players.indexOf(p) % CLOTH.length]);
+      else if (mode === 'baked' || (mode === 'proc' && p.outfit)) dressPerson(w, p.outfit || {}, p.char, this); // 预渲染的图集
+      const is3d = !!(w.anims || w.live);
+      // 3D 小人停下来要多减速一小会儿，「在走」也多算这一会儿
+      const walking = is3d ? moving3d(m, now) : m.dur && now < m.start + m.dur;
+      // 3D 小人：新的一段移动开始时记下是不是从站着起步（上一段早就走完了），决定要不要播起步
+      if (is3d && walking && w.moveStart !== m.start) { w.fromRest = !(w.moveEnd > m.start - 150); w.moveStart = m.start; }
+      if (walking) w.moveEnd = m.start + m.dur;
+      const mv = is3d && walking ? easedAt(m, now) : null;
+      const at = mv ? mv.at : positionAt(m, now);
       // 朝向：按屏幕上的左右
       const prev = w.last;
       if (prev && walking) {
         const dx = (at.x - at.y) - (prev.x - prev.y); if (Math.abs(dx) > 0.2) w.facing = dx < 0 ? -1 : 1;
-        // 3D 小人：按地图上的移动方向选 8 个朝向里最近的
-        const mx = at.x - prev.x; const my = at.y - prev.y;
-        if (Math.hypot(mx, my) > 0.15) w.dir = ((Math.round(Math.atan2(my, mx) / (Math.PI / 4)) % DIRS) + DIRS) % DIRS;
+      }
+      if (w.live && mv) { // 实时渲染：朝向是连续的角度（地图上的方向），LiveChar 自己慢慢转过去
+        const mx = mv.ahead.x - at.x; const my = mv.ahead.y - at.y;
+        if (Math.hypot(mx, my) > 0.5) w.angle = Math.atan2(my, mx);
+      }
+      if (w.anims) {
+        // 3D 小人：按路线前方一点的方向选 8 个朝向里最近的，一格一格转过去
+        if (mv) {
+          const mx = mv.ahead.x - at.x; const my = mv.ahead.y - at.y;
+          if (Math.hypot(mx, my) > 0.5) w.dirGoal = ((Math.round(Math.atan2(my, mx) / (Math.PI / 4)) % DIRS) + DIRS) % DIRS;
+        }
+        const goal = w.dirGoal ?? w.dir;
+        if (goal !== w.dir && t - (w.turnAt ?? 0) >= TURN_T) {
+          const diff = (goal - w.dir + DIRS) % DIRS;
+          w.dir = (w.dir + (diff <= DIRS / 2 ? 1 : -1) + DIRS) % DIRS;
+          w.turnAt = t;
+        }
       }
       w.last = at;
       const [sx, sy] = P(at.x, at.y);
@@ -2035,13 +2254,28 @@ export class World {
       w.body.y = walking ? -Math.abs(phase) * 1.5 : 0;
       const knock = knocking.has(p.id) && !walking;
       w.body.x = knock ? Math.sin(t * 20) * 0.9 : 0;
-      if (w.sheet) {
-        const f = walking ? 1 + (Math.floor((((t + w.offset * STEP) / STEP) % 1) * WALK_FRAMES) % WALK_FRAMES) : 0;
-        w.sprite.texture = w.sheet[w.dir][f];
+      let steps = null;
+      if (w.anims) {
+        const fr = pickFrame(w, mv, m.run, t, dt);
+        w.sprite.texture = fr.anim.tex[w.dir][fr.i];
         w.sprite.x = w.body.x;
+        steps = fr.steps;
+      } else if (w.live && this.live) {
+        steps = this.live.drive(p.id, dt, { mv, run: m.run, fromRest: w.fromRest, upm: w.upm, angle: w.angle ?? null });
+        w.sprite.x = w.body.x;
+        // 画面外、藏在别人屋里的不画（省显卡）
+        if (w.root.visible && !p.vanish) {
+          const sp = this.toScreen(at.x, at.y);
+          if (sp.x > -120 && sp.x < this.app.screen.width + 120 && sp.y > -60 && sp.y < this.app.screen.height + 260) liveIds.push(p.id);
+        }
       }
-      // 脚步：跟着迈腿的节奏，每半个周期一步（鬼魂没有脚步声）
-      if (walking && p.alive) {
+      // 脚步：跟着迈腿的节奏，每半个周期一步（鬼魂没有脚步声）；3D 小人按动作里实际落脚
+      if (is3d) {
+        if (walking && p.alive && steps != null) {
+          if (w.stepIdx != null && steps !== w.stepIdx) sounds.push({ kind: 'step', at, me: p.id === d.me });
+          w.stepIdx = steps;
+        } else w.stepIdx = null;
+      } else if (walking && p.alive) {
         w.offset ??= Math.random();
         const idx = Math.floor(((t + w.offset) * 2) / STEP);
         if (w.stepIdx != null && idx !== w.stepIdx) sounds.push({ kind: 'step', at, me: p.id === d.me });
@@ -2063,12 +2297,20 @@ export class World {
         w.root.filters = w.ghost ? [gray] : null;
         w.root.alpha = w.ghost ? 0.5 : 1;
       }
-      const item = { node: w.root, box: { x0: at.x - 3, y0: at.y - 3, x1: at.x + 3, y1: at.y + 3 }, cx: at.x, cy: at.y, l: sx - 13, r: sx + 13, t: sy - 46, b: sy + 4 };
+      const item = { node: w.root, box: { x0: at.x - 3, y0: at.y - 3, x1: at.x + 3, y1: at.y + 3 }, cx: at.x, cy: at.y, l: sx - 13, r: sx + 13, t: sy - Math.max(46, w.headPx ?? 0), b: sy + 4 };
       list.push(item);
       if (p.id === d.me) { mine = { item, at, walking, m }; }
-      spots[p.id] = { x: at.x, y: at.y, knock, hidden: hiddenIn.has(p.id) };
+      if (walking) movers.push(at);
+      spots[p.id] = { x: at.x, y: at.y, knock, hidden: hiddenIn.has(p.id), head: w.headPx ? w.headPx * (w.monster ? 1.45 : 1) : 0 };
     }
-    for (const [id, w] of this.walkers) if (!seen.has(id)) { w.root.destroy({ children: true }); this.walkers.delete(id); }
+    for (const [id, w] of this.walkers) if (!seen.has(id)) { if (w.live) this.live?.remove(id); w.root.destroy({ children: true }); this.walkers.delete(id); }
+    // 实时 3D 小人：画面里的每个人画一遍，再让 Pixi 重新上传那张画布
+    if (this.live) {
+      const t1 = performance.now();
+      this.live.render(liveIds);
+      this.liveSource.update();
+      this.perfLive = performance.now() - t1;
+    }
     const G = this.town.gather;
     this.playSounds(sounds, mine?.at ?? { x: G.x, y: G.y }, r.houses);
     // 水边的声音：离海 / 溪越近越响（码头、桥上最响）
@@ -2103,6 +2345,15 @@ export class World {
         node.visible = node.alpha > 0.01;
       }
       e.doorOpen.visible = !h.locked; e.doorLocked.visible = h.locked;
+      // 有人在门口走过：门推开，人过去了再慢慢合上（锁着的门不开）
+      if (e.swing) {
+        const dv = e.hs.door; const dx = dv.vx ?? dv.x; const dy = dv.vy ?? dv.y;
+        const near = !h.locked && movers.some((q) => Math.hypot(q.x - dx, q.y - dy) < 34);
+        const k = e.doorK + ((near ? 1 : 0) - e.doorK) * Math.min(1, dt * (near ? 9 : 3));
+        if (Math.abs(k - e.doorK) > 0.004 || (k < 0.02) !== (e.doorK < 0.02)) doorSwing(e.swing, e.hs, k);
+        e.doorK = k;
+        e.swing.alpha = e.shell.alpha;
+      }
     }
     for (const s of this.statics) {
       if (s.house) continue;
@@ -2125,9 +2376,13 @@ export class World {
 
     // 给 HTML 层的屏幕坐标
     const screen = { walkers: {}, houses: {}, zoom: this.zoom, project: (x, y, z) => this.toScreen(x, y, z) };
-    for (const [id, p] of Object.entries(spots)) screen.walkers[id] = { ...this.toScreen(p.x, p.y), knock: p.knock, hidden: p.hidden, map: p };
+    for (const [id, p] of Object.entries(spots)) screen.walkers[id] = { ...this.toScreen(p.x, p.y), knock: p.knock, hidden: p.hidden, head: p.head ? Math.round(p.head * this.zoom) : 0, map: p };
     for (const { hs, labelZ } of this.houses.values()) screen.houses[hs.id] = this.toScreen(hs.x + hs.w / 2, hs.y + hs.h / 2, labelZ);
     this.onFrame?.(screen);
+    if (this.perfEl && t - (this.perfAt ?? 0) > 0.5) {
+      this.perfAt = t;
+      this.perfEl.textContent = `${Math.round(this.app.ticker.FPS)} fps · 小人实时 ${(this.perfLive ?? 0).toFixed(1)}ms · ${this.live ? '实时' : '预渲染'}`;
+    }
   }
 
   /** 脚下是什么地面。 */
@@ -2163,6 +2418,9 @@ export class World {
 
   destroy() {
     this.destroyed = true;
+    this.offDisplay?.();
+    this.perfEl?.remove();
+    this.live?.dispose(); // 每天换地图都会建一个新的：旧的显卡上下文要释放，不然攒多了浏览器会丢掉最早的
     this.app?.destroy(true, { children: true, texture: true, textureSource: true });
   }
 }

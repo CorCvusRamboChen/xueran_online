@@ -21,6 +21,20 @@
       "port": 3011
     },
     {
+      "name": "botc-debug",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "src/server/index.js"
+      ],
+      "env": {
+        "PORT": "3021",
+        "DEV_LOGIN": "1",
+        "DISCORD_TOKEN": "",
+        "KOOK_TOKEN": ""
+      },
+      "port": 3021
+    },
+    {
       "name": "site",
       "runtimeExecutable": "python",
       "runtimeArgs": [
@@ -31,6 +45,33 @@
         "site"
       ],
       "port": 4321
+    },
+    {
+      "name": "cards-server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "C:/Users/12424/OneDrive/文档/wangcai-cards", "run", "dev:server"],
+      "env": { "DEV_AUTH": "1" },
+      "port": 2567
+    },
+    {
+      "name": "cards",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "C:/Users/12424/OneDrive/文档/wangcai-cards", "run", "dev:client"],
+      "port": 5173
+    },
+    {
+      "name": "cards-shanghai",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:/Users/12424/OneDrive/文档/wc-shanghai/server/index.js"],
+      "env": { "DEV_AUTH": "1", "PORT": "2577", "CARDS_DIST": "C:/Users/12424/AppData/Local/Temp/claude/b9c7d1e50f496d1b/6b404fc4-4347-434f-9a3b-e1e563ebe523/scratchpad/dist-shanghai" },
+      "port": 2577
+    },
+    {
+      "name": "cards-dongbei",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:/Users/12424/OneDrive/文档/wc-dongbei/server/index.js"],
+      "env": { "DEV_AUTH": "1", "PORT": "2587", "CARDS_DIST": "C:/Users/12424/AppData/Local/Temp/claude/b9c7d1e50f496d1b/6b404fc4-4347-434f-9a3b-e1e563ebe523/scratchpad/dist-dongbei" },
+      "port": 2587
     }
   ]
 }

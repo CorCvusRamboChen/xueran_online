@@ -27,6 +27,14 @@ test('指定男爵：自动 +2 外来者；指定教父（黯月初升）：外�
     const [tt, oo] = teams(buildRoles(ids(9), { p3: 'godfather' }, 'bmr', rng));
     assert.ok((tt === t - 1 && oo === o + 1) || (tt === t + 1 && oo === o - 1));
   }
+  // 自选剧本里的教父也要调（以前只写了黯月初升）：生死未卜的普卡不改外来者，只看教父
+  const seen = new Set();
+  for (let k = 0; k < 50; k++) {
+    const [tt, oo] = teams(buildRoles(ids(9), { p3: 'godfather', p4: 'pukka' }, 'ucd', rng));
+    assert.ok((tt === t - 1 && oo === o + 1) || (tt === t + 1 && oo === o - 1), `生死未卜指定教父：${tt}/${oo}`);
+    seen.add(oo);
+  }
+  assert.equal(seen.size, 2, '+1 和 −1 都会出现');
 });
 
 test('房主指定得比人数表多（两个爪牙进 7 人局）：以房主为准，少补镇民；别的剧本的角色、重复的角色不认', () => {

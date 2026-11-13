@@ -2,7 +2,7 @@
 // 头像、名字、敲门气泡、地名和小地图是 HTML，每帧按画布给的屏幕坐标摆放。
 // 点哪儿走到哪儿（点房子就走进去），拖动可以看别处，滚轮缩放；走进房子就进那间的私聊语音。
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getMap, positionAt, pathLength, SPEED } from '../../src/shared/map.js';
+import { getMap, positionAt, pathLength, SPEED, speedOf } from '../../src/shared/map.js';
 import { Portrait, serverNow } from './util.jsx';
 import { useMarks, MarkMenu, MarkBadge, TAGS } from './marks.jsx';
 import { CheatSheet, useSheetMode } from './CheatSheet.jsx';
@@ -143,7 +143,11 @@ export function TownMap({ s, onMove, night = false }) {
       wd.onFrame = ({ walkers, houses }) => {
         for (const [id, p] of Object.entries(walkers)) {
           const el = tags.current.get(id);
-          if (el) { el.style.transform = `translate3d(${p.x}px, ${p.y}px, 0)`; el.style.zIndex = 10 + Math.round(p.y); el.style.visibility = p.hidden ? 'hidden' : ''; }
+          if (el) {
+            el.style.transform = `translate3d(${p.x}px, ${p.y}px, 0)`; el.style.zIndex = 10 + Math.round(p.y); el.style.visibility = p.hidden ? 'hidden' : '';
+            if (p.head) el.style.setProperty('--head', `${p.head}px`); // 3D 小人比 2D 的高：头像挂在它头顶上
+            else el.style.removeProperty('--head');
+          }
           const dot = dots.current.get(id);
           if (dot) { dot.setAttribute('cx', p.map.x); dot.setAttribute('cy', p.map.y); }
         }
@@ -165,19 +169,21 @@ export function TownMap({ s, onMove, night = false }) {
     return () => { dead = true; made?.destroy(); world.current = null; };
   }, [town.id]);
 
-  // 键盘：WASD / 方向键，按住连续走，可以两个键斜着走。方向按屏幕算（W 就是往屏幕上方走）。
+  // 键盘：WASD / 方向键，按住连续跑，可以两个键斜着跑；同时按住 Shift 是慢慢走（2026-11-12 用户：按一下就是跑）。方向按屏幕算（W 就是往屏幕上方走）。
   const live = useRef({ s, onMove });
   live.current = { s, onMove };
   useEffect(() => {
     const dirs = { w: [0, -1], arrowup: [0, -1], s: [0, 1], arrowdown: [0, 1], a: [-1, 0], arrowleft: [-1, 0], d: [1, 0], arrowright: [1, 0] };
     const held = new Set();
+    let shift = false;
+    let heading = null; // 最后一次往哪个方向走（松手时顺着再滑一小段停下）
     const typing = (e) => e.target.closest?.('input, textarea, select');
     const here = () => {
       const { s: cur } = live.current;
       const m = cur.roam?.pos[cur.me];
       return m ? positionAt(m, serverNow()) : null;
     };
-    // 每 90ms 往按住的方向预约一小段（50 单位 ≈ 0.2 秒的路）；本地立刻开始走（见 App 的走路预测）
+    // 每 90ms 往按住的方向预约一小段（约 0.45 秒的路：比下一拍远，3D 小人不会每一段都播停步）；本地立刻开始走（见 App 的走路预测）
     const step = () => {
       if (!held.size) return;
       let sx = 0; let sy = 0;
@@ -186,9 +192,12 @@ export function TownMap({ s, onMove, night = false }) {
       // 屏幕方向 → 俯视平面：屏幕右 = (1, -1)，屏幕下 = (1, 1)
       const lx = sx + sy; const ly = sy - sx; const n = Math.hypot(lx, ly);
       const at = here();
-      if (at) live.current.onMove(at.x + (lx / n) * 50, at.y + (ly / n) * 50);
+      const ahead = speedOf(!shift) * 0.45;
+      heading = { x: lx / n, y: ly / n, speed: speedOf(!shift), run: !shift };
+      if (at) live.current.onMove(at.x + (lx / n) * ahead, at.y + (ly / n) * ahead, !shift);
     };
     const down = (e) => {
+      if (e.key === 'Shift') { if (!shift) { shift = true; step(); } return; }
       const k = e.key.toLowerCase();
       if (!dirs[k] || typing(e)) return;
       e.preventDefault();
@@ -196,14 +205,20 @@ export function TownMap({ s, onMove, night = false }) {
       held.add(k);
       step(); // 按下立刻走，不等下一拍
     };
-    // 松开所有方向键就原地停下，不再往前滑
-    const stop = () => { const at = here(); if (at) live.current.onMove(at.x, at.y); };
+    // 松开所有方向键：顺着刚才的方向再走 0.25 秒的路停下（够播停步动作），不再一直往前滑
+    const stop = () => {
+      const at = here(); if (!at) return;
+      const h = heading; heading = null;
+      if (h) live.current.onMove(at.x + h.x * h.speed * 0.25, at.y + h.y * h.speed * 0.25, h.run);
+      else live.current.onMove(at.x, at.y);
+    };
     const up = (e) => {
+      if (e.key === 'Shift') { shift = false; step(); return; }
       const k = e.key.toLowerCase();
       if (!held.delete(k)) return;
       if (!held.size) stop(); else step();
     };
-    const clear = () => { if (held.size) { held.clear(); stop(); } };
+    const clear = () => { shift = false; if (held.size) { held.clear(); stop(); } };
     const timer = setInterval(step, 90);
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
@@ -239,11 +254,13 @@ export function TownMap({ s, onMove, night = false }) {
     drag.current = null;
     if (!d || d.moved || !world.current) return;
     const t = world.current.pick(...local(e));
-    if (t) onMove(t.x, t.y);
+    if (!t) return;
+    // 点一下就是跑（2026-11-12 用户：以前单击走、双击跑）；按住 Shift 点是慢慢走
+    onMove(t.x, t.y, !e.shiftKey);
   };
   const miniTap = (e) => {
     const svg = e.currentTarget.getBoundingClientRect();
-    onMove(((e.clientX - svg.left) / svg.width) * town.w, ((e.clientY - svg.top) / svg.height) * town.h);
+    onMove(((e.clientX - svg.left) / svg.width) * town.w, ((e.clientY - svg.top) / svg.height) * town.h, true);
     world.current?.follow();
   };
 
@@ -281,10 +298,11 @@ export function TownMap({ s, onMove, night = false }) {
                 onContextMenu={(e) => { e.preventDefault(); setWalkerMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}>
                 <Portrait p={p} size={24} prefer="avatar" frame={p.id === s.me ? 'var(--mot)' : TAGS[marks[p.id]?.tag]?.color ?? '#f4f4f0'} />
                 <i className="walker-seat">{p.seat}</i>
-                <MarkBadge mark={marks[p.id]} />
+                <MarkBadge mark={marks[p.id]} part="chips" />
               </div>
             </div>
             <div className="walker-name">{p.id === s.me ? '你' : p.name}</div>
+            <div className="walker-guess"><MarkBadge mark={marks[p.id]} part="roles" /></div>
           </div>
         );
       })}

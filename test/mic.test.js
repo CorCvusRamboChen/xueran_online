@@ -1,7 +1,7 @@
 // 收音页：令牌只给本人、当天作废、不保留音频和文字；音频切句和 WAV 格式；判定时算上收音的话。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MicInbox, micIngest, micValid } from '../src/server/mic.js';
+import { MicInbox, micIngest, micValid, micAbout } from '../src/server/mic.js';
 import { wavSamples } from '../src/server/stt.js';
 import { Segmenter, downsample, encodeWav, RATE } from '../client/src/micAudio.js';
 import { Room } from '../src/server/room.js';
@@ -56,6 +56,22 @@ test('切句：一下咳嗽不算一句；一直说到 25 秒也切开', () => {
   seg.push(new Float32Array(RATE * 26).fill(0.3));
   assert.equal(got.length, 1);
   assert.ok(got[0].length <= RATE * 25.1);
+});
+
+test('切句：比他自己说话小很多的句子当成扬声器里别人的声音，不上传；他很久没说话后参照会回落', () => {
+  const got = []; const far = [];
+  const seg = new Segmenter((s) => got.push(s), { onFar: (l) => far.push(l) });
+  const say = (level, seconds = 1) => { seg.push(new Float32Array(Math.round(seconds * RATE)).fill(level)); seg.push(new Float32Array(RATE).fill(0)); };
+  say(0.3);
+  assert.equal(got.length, 1, '他自己凑近说的');
+  say(0.05);
+  assert.equal(got.length, 1, '远处扬声器的声音没上传');
+  assert.equal(far.length, 1);
+  say(0.25);
+  assert.equal(got.length, 2, '他自己小声一点也照收');
+  seg.push(new Float32Array(RATE * 60).fill(0));
+  say(0.1);
+  assert.equal(got.length, 3, '一分钟没说话，参照降下来了');
 });
 
 test('令牌：名单里的人才有；换一天旧令牌作废、文字清掉', async () => {
@@ -174,7 +190,7 @@ test('房间：有收音时声明不算数，不开收音更容易被罚；开�
   const room = await dayRoom();
   const g = room.game;
   room.online.add('u2');
-  await room.act('u2', 'declare', { role: 'oracle' });
+  g.declare('u2', 'oracle'); // 玩家已经没有声明按钮（11-11）；引擎里的「声明过」照样能走这条判定
   assert.equal(g.madness.u2.claimed, true);
   const seen = [];
   g.st.madnessPenalty = (p, how) => { seen.push(how); return false; };
@@ -210,7 +226,7 @@ async function breakRoom(verdict = 'true') {
   return { room, g: room.game, asked };
 }
 
-test('破坏疯狂：第一次只警告本人；第二次当场处决、直接入夜；模型说没破功就没事', async () => {
+test('破坏疯狂：第一次就当场处决、直接入夜（官方：等于情愿接受惩罚）；模型说没破功就没事', async () => {
   const { room, g, asked } = await breakRoom();
   g.st.madnessPenalty = () => true;
   await room.hearBreak('u2', '随便聊聊今天的情况');
@@ -219,18 +235,14 @@ test('破坏疯狂：第一次只警告本人；第二次当场处决、直接�
   assert.equal(asked.length, 1);
   assert.equal(asked[0].claim, '神谕者');
   assert.equal(asked[0].real, '贤者');
-  assert.ok(g.get('u2').alive, '第一次只警告');
-  assert.ok(room.viewFor('u2').self.inbox.at(-1).text.includes('破坏了疯狂'), '只告诉本人');
-  assert.ok(!room.log.some((l) => l.text.includes('破坏')), '公开记录里没有');
-  await room.hearBreak('u2', '真的是被逼的');
-  assert.ok(!g.get('u2').alive, '第二次处决');
+  // 官方：明确破坏疯狂就像在说「我情愿接受惩罚」，第一次就掷骰子处决（2026-11-11 前是先警告）
+  assert.ok(!g.get('u2').alive, '第一次破坏就处决');
   assert.ok(g.executedToday);
   await until(() => g.phase === 'night');
   assert.equal(g.phase, 'night', '今天结束');
   await room.teardown();
 
   const safe = await breakRoom('false');
-  safe.g.madness.u2.warned = true;
   await safe.room.hearBreak('u2', '他说他被洗脑了');
   assert.ok(safe.g.get('u2').alive);
   await safe.room.teardown();
@@ -239,7 +251,6 @@ test('破坏疯狂：第一次只警告本人；第二次当场处决、直接�
 test('破坏疯狂：投票中或今天已有处决就留到入夜；一天最多问 6 次；拿不准不算', async () => {
   const { room, g, asked } = await breakRoom();
   g.st.madnessPenalty = () => true;
-  g.madness.u2.warned = true;
   room.pendingNom = { nominator: 'u1', nominee: 'bot-1' };
   await room.hearBreak('u2', '我是被逼的');
   assert.ok(g.get('u2').alive);
@@ -250,7 +261,7 @@ test('破坏疯狂：投票中或今天已有处决就留到入夜；一天最�
   const many = await breakRoom('unknown');
   for (let i = 0; i < 10; i++) await many.room.hearBreak('u2', '我是被逼的');
   assert.equal(many.asked.length, 6);
-  assert.ok(!many.g.madness.u2.warned, '拿不准不算破功');
+  assert.ok(!many.g.madness.u2.broke && many.g.get('u2').alive, '拿不准不算破功');
   await many.room.teardown();
   assert.equal(asked.length, 1);
 });
@@ -275,4 +286,118 @@ test('房间：真人说书、或者服务器没有转写服务时没有收音�
   room.micFor = null;
   room.hearToday();
   assert.equal(room.viewFor('u2').self.mic, null, '没有转写服务');
+});
+
+test('破坏疯狂：疯子说出他以为的角色也算；放过一次就不再反复掷', async () => {
+  const { room, g, asked } = await breakRoom();
+  const p = g.get('u2');
+  p.shownRole = 'fanggu';
+  let rolls = 0;
+  g.st.madnessPenalty = () => { rolls++; return false; };
+  await room.hearBreak('u2', '其实我是方古');
+  assert.equal(asked.length, 1, '他以为的角色名也送去判');
+  assert.match(asked[0].real, /以为自己是方古/);
+  await room.hearBreak('u2', '我是被逼的');
+  assert.equal(rolls, 1, '这次疯狂只掷一次');
+  assert.ok(p.alive);
+  await room.teardown();
+});
+
+test('疯狂判定听到的话存进 g.heard（只进存档，不进时间线和复盘）', async () => {
+  const { room, g } = await breakRoom('false');
+  await room.hearBreak('u2', '我是被逼的');
+  assert.equal(g.heard?.length, 1);
+  assert.equal(g.heard[0].kind, 'break');
+  assert.ok(g.heard[0].lines.some((l) => l.includes('被逼')));
+  assert.ok(!g.timeline.some((e) => e.text.includes('被逼')), '时间线（会进复盘）里没有原话');
+  await room.teardown();
+});
+
+test('房间：畸形秀演员也拿到收音令牌（以前只发给被洗脑的人，没有弹窗）；以为自己是畸形秀演员的酒鬼也有', async () => {
+  const room = await dayRoom();
+  const g = room.game;
+  const u1 = g.get('u1');
+  u1.role = 'mutant'; u1.shownRole = 'mutant';
+  room.hearToday();
+  const me = room.viewFor('u1').self;
+  assert.ok(me.mic, '畸形秀演员有收音链接');
+  assert.equal(me.mutant, true);
+  assert.equal(me.madness, null, '不是被洗脑');
+  assert.ok(room.viewFor('u2').self.mic, '被洗脑的照样有');
+  assert.notEqual(me.mic, room.viewFor('u2').self.mic);
+  u1.role = 'drunk'; u1.shownRole = 'mutant';
+  room.hearToday();
+  assert.ok(room.viewFor('u1').self.mic, '酒鬼也有：不然没弹窗就知道自己不是畸形秀演员');
+  await room.teardown();
+});
+
+test('房间：畸形秀演员当场判——收音里说到外来者（或者紫色、不是三原色），模型判是在说服别人，就掷骰子当场处决；没说到不问模型', async () => {
+  const room = await dayRoom();
+  const g = room.game;
+  const u1 = g.get('u1');
+  u1.role = 'mutant'; u1.shownRole = 'mutant';
+  g.madness = {};
+  room.hearToday();
+  const asked = [];
+  room.madnessJudge = async (claim, lines) => { asked.push({ claim, lines }); return { verdict: 'true', reason: '在说服别人', by: '假的' }; };
+  g.st.mutantExecuted = () => true;
+  await room.hearBreak('u1', '今天我验了三号，他是好人');
+  assert.equal(asked.length, 0, '没说到外来者：不问模型');
+  assert.ok(u1.alive);
+  await room.hearBreak('u1', '我不是三原色，我是紫色');
+  assert.equal(asked.length, 1, '颜色代称：紫色就是外来者');
+  assert.match(asked[0].claim, /外来者.*紫色/, '告诉模型颜色代称');
+  assert.ok(g.executedToday, '当场处决');
+  assert.ok(!u1.alive || g.lastExecuted === 'u1');
+  assert.ok(g.heard.some((h) => h.kind === 'mutant' && h.id === 'u1'), '记下听到的话和结论');
+  await room.hearBreak('u1', '我真的是外来者');
+  assert.equal(asked.length, 1, '今天已经判过，不再问');
+  await room.teardown();
+});
+
+test('房间：畸形秀演员自己说出「畸形秀」就直接处决，不问模型、不掷骰子；醉了中毒的不算', async () => {
+  const room = await dayRoom();
+  const g = room.game;
+  const u1 = g.get('u1');
+  u1.role = 'mutant'; u1.shownRole = 'mutant';
+  g.madness = {};
+  room.hearToday();
+  let asked = 0, rolled = 0;
+  room.madnessJudge = async () => { asked++; return { verdict: 'false', reason: '', by: '假的' }; };
+  g.st.mutantExecuted = () => { rolled++; return false; };
+  const broken = g.broken;
+  g.broken = (p) => p.id === 'u1' || broken.call(g, p);
+  await room.hearBreak('u1', '我其实是畸形秀');
+  assert.ok(u1.alive, '醉了中毒的能力失效，不罚');
+  g.broken = broken;
+  await room.hearBreak('u1', '好吧我是奇形秀演员');
+  assert.equal(asked, 0, '不问模型');
+  assert.equal(rolled, 0, '不掷骰子');
+  assert.ok(g.executedToday && (!u1.alive || g.lastExecuted === 'u1'), '当场处决');
+  assert.ok(g.heard.some((h) => h.kind === 'mutant' && h.verdict === 'true'));
+  await room.teardown();
+});
+
+test('房间：AI 说书时房主可以「疯狂处决」一个人（白天、算今天的处决）；别人不行；处决过了不行', async () => {
+  const room = await dayRoom();
+  const g = room.game;
+  const other = g.players.find((p) => p.id !== room.hostId);
+  await assert.rejects(room.act(other.id, 'hostMadExecute', { target: other.id }));
+  await room.act(room.hostId, 'hostMadExecute', { target: other.id });
+  assert.ok(g.executedToday);
+  assert.ok(!other.alive || g.lastExecuted === other.id);
+  await assert.rejects(room.act(room.hostId, 'hostMadExecute', { target: room.hostId }), /已经处决/);
+  await room.teardown();
+});
+
+test('收音页的疯狂定义：被洗脑的拿到要证明的角色，畸形秀演员拿到 mutant，过期的令牌什么都没有', async () => {
+  const room = await dayRoom();
+  const g = room.game;
+  const u1 = g.get('u1');
+  u1.role = 'mutant'; u1.shownRole = 'mutant';
+  room.hearToday();
+  assert.deepEqual(micAbout(room.viewFor('u2').self.mic), { kind: 'madness', role: '神谕者' });
+  assert.deepEqual(micAbout(room.viewFor('u1').self.mic), { kind: 'mutant' });
+  assert.deepEqual(micAbout('没有这个令牌'), {});
+  await room.teardown();
 });

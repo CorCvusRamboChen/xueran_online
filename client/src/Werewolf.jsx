@@ -9,7 +9,8 @@ import { Replay } from './replay.jsx';
 import { History, InfoBox, Roster, Picker } from './App.jsx';
 import { Watchers } from './Lobby.jsx';
 import { ROLES } from '../../src/engine/roles.js';
-import { WW_SETUPS } from '../../src/engine/werewolf-roles.js';
+import { WW_SETUPS, ragnarokWolves, abilityIn } from '../../src/engine/werewolf-roles.js';
+import { useDockSheet, DockHandle } from './DockSheet.jsx';
 
 const SIDE = { wolf: ['狼人', 'var(--phy)'], god: ['神职', 'var(--int)'], villager: ['平民', 'var(--psy)'] };
 const SIDE_OF = (id) => ROLES[id]?.side ?? 'villager';
@@ -32,8 +33,31 @@ export const WW_RULES = [
   '屠边：狼人全部出局好人胜；所有神职或所有平民出局狼人胜。两边同时达成算狼人胜（狼刀在先）。出局的人不能说话、不能投票（语音里会被闭麦，说遗言时除外）。',
 ];
 
+/** 诸神黄昏（狼人杀的板子，只有狼人和猎人）的规则：没有守卫、女巫、预言家，其余照狼人杀。 */
+export const RAG_RULES = [
+  '只有狼人和猎人：按人数定狼人数量（5–6 人 1 只、7–9 人 2 只、10–12 人 3 只、13–15 人 4 只），其余全是猎人。',
+  '狼人互相认识，每晚一起刀一人：每人投一票，所有狼人选同一个人就立刻定下；时间到时按票数最多的定（可以空刀）。',
+  '猎人出局（被刀或被放逐）可以开一枪带走一人，打谁谁死；被带走的猎人接着开。每次有人出局都会留同样长的「发动技能」时间，看不出谁是猎人。',
+  '天亮只公布谁出局，不公布死因。首夜死者、被放逐的人、被猎人带走的人有遗言。',
+  '白天照狼人杀：第一天竞选警长（1.5 票、定发言方向），轮流发言，同时投票放逐，平票 PK；狼人可以自爆。',
+  '狼人全部出局好人胜；猎人全部出局狼人胜。两边同时达成算狼人胜（狼刀在先）。',
+];
+const rulesOf = (script) => (script === 'rag' ? RAG_RULES : WW_RULES);
+
 /** 人数配置表（大厅显示）。 */
-export function WwSetupTable({ n }) {
+export function WwSetupTable({ n, script = 'ww' }) {
+  if (script === 'rag') {
+    return (
+      <table className="ww-table">
+        <thead><tr><th>人数</th><th>狼人</th><th>猎人</th></tr></thead>
+        <tbody>
+          {[5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((k) => (
+            <tr key={k} className={k === n ? 'on' : ''}><td>{k}</td><td>{ragnarokWolves(k)}</td><td>{k - ragnarokWolves(k)}</td></tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
   const rows = Object.entries(WW_SETUPS);
   return (
     <table className="ww-table">
@@ -50,14 +74,15 @@ export function WwSetupTable({ n }) {
   );
 }
 
-/** 某人数的阵营构成：狼人 / 神职 / 平民。 */
-export function wwDist(n) {
+/** 某人数的阵营构成：狼人 / 神职 / 平民（诸神黄昏：狼人 / 猎人）。 */
+export function wwDist(n, script = 'ww') {
+  if (script === 'rag') return n >= 5 && n <= 15 ? [['狼人', ragnarokWolves(n), SIDE.wolf[1]], ['猎人', n - ragnarokWolves(n), SIDE.god[1]]] : null;
   const x = WW_SETUPS[n];
   return x ? [['狼人', x.wolves, SIDE.wolf[1]], ['神职', x.gods.length, SIDE.god[1]], ['平民', x.villagers, SIDE.villager[1]]] : null;
 }
 
 /** 一张狼人杀的身份牌（不用血染的能力牌：那上面写的是镇民 / 恶魔）。 */
-function WwCard({ id }) {
+function WwCard({ id, script = 'ww' }) {
   const r = ROLES[id];
   const [side, color] = SIDE[r.side];
   return (
@@ -66,29 +91,30 @@ function WwCard({ id }) {
       <header className="acard-name"><b>{r.name}</b><small>{r.en.toUpperCase()}</small></header>
       <div className="acard-body">
         <p className="acard-kicker">{side} · {r.side === 'wolf' ? '狼人阵营' : '好人阵营'}</p>
-        <p className="acard-text">{r.ability}</p>
+        <p className="acard-text">{abilityIn(id, script)}</p>
       </div>
     </article>
   );
 }
 
 /** 大厅：这个模式的全部角色、人数表和规则口径。 */
-export function WwShowcase({ n }) {
+export function WwShowcase({ n, script = 'ww' }) {
+  const rag = script === 'rag';
   return (
     <section className="lobby-roles glass pnl ww-showcase">
       <header className="roles-head">
         <div>
-          <h2>狼人杀 · 预女猎守</h2>
-          <p className="muted">经典网杀规则，不是血染：没有说书人的判断，法官（AI）只负责叫人、计时、唱票。</p>
+          <h2>{rag ? '诸神黄昏 · 狼人与猎人' : '狼人杀 · 预女猎守'}</h2>
+          <p className="muted">{rag ? '狼人杀的板子，不是血染：只有狼人和猎人，猎人倒下开枪、被带走的猎人接着开。法官（AI）只负责叫人、计时、唱票。' : '经典网杀规则，不是血染：没有说书人的判断，法官（AI）只负责叫人、计时、唱票。'}</p>
         </div>
       </header>
       <div className="roles-grid ww-roles">
-        {['ww_wolf', 'ww_seer', 'ww_witch', 'ww_hunter', 'ww_guard', 'ww_villager'].map((id) => <WwCard key={id} id={id} />)}
+        {(rag ? ['ww_wolf', 'ww_hunter'] : ['ww_wolf', 'ww_seer', 'ww_witch', 'ww_hunter', 'ww_guard', 'ww_villager']).map((id) => <WwCard key={id} id={id} script={script} />)}
       </div>
       <h3>人数配置</h3>
-      <WwSetupTable n={n} />
+      <WwSetupTable n={n} script={script} />
       <h3>规则口径</h3>
-      <ul className="no-why">{WW_RULES.map((t) => <li key={t}>{t}</li>)}</ul>
+      <ul className="no-why">{rulesOf(script).map((t) => <li key={t}>{t}</li>)}</ul>
     </section>
   );
 }
@@ -123,6 +149,7 @@ export function WerewolfGame({ s, act, ask }) {
   ].filter(Boolean);
   const shown = tab ?? (me ? 'role' : 'log');
   const dockHot = !!prompt && prompt.kind !== 'dying' && !(prompt.kind === 'vote' && prompt.mine !== undefined);
+  const [dockMin, toggleDock, dockRef] = useDockSheet(dockHot);
 
   return (
     <div className="game ww-game">
@@ -132,7 +159,7 @@ export function WerewolfGame({ s, act, ask }) {
         <div className="board-bar">
           <span className="bb-script">狼人杀</span>
           <span className="bb-n">{s.players.length} 人局</span>
-          {(wwDist(s.players.length) ?? []).map(([k, v, c]) => <span key={k} className="bb-item"><b style={{ color: c }}>{v}</b>{k}</span>)}
+          {(wwDist(s.players.length, s.script) ?? []).map(([k, v, c]) => <span key={k} className="bb-item"><b style={{ color: c }}>{v}</b>{k}</span>)}
           <span className="bb-note">屠边</span>
         </div>
         <Town s={s} picked={picked ? [picked] : []} pickable={options} onTap={onTap}>
@@ -143,7 +170,8 @@ export function WerewolfGame({ s, act, ask }) {
           timer={s.deadline && secs != null ? { label: timerLabel, secs, urgent: secs <= 10 } : null} />
       </section>
 
-      <section className={`dock ${dockHot ? 'dock-hot' : ''}`}>
+      <section ref={dockRef} className={`dock ${dockHot ? 'dock-hot' : ''} ${dockHot && dockMin ? 'dock-min' : ''}`}>
+        {dockHot && <DockHandle min={dockMin} onToggle={toggleDock} />}
         <WwActions s={s} act={act} me={me} prompt={prompt} name={name} g={g} picked={picked} setPicked={setPicked} poison={poison} setPoison={setPoison} />
       </section>
 
@@ -157,7 +185,7 @@ export function WerewolfGame({ s, act, ask }) {
           {shown === 'log' && <History log={s.log} players={s.players} ask={ask} epoch={s.logEpoch} />}
           {shown === 'votes' && <WwVotes votes={ww.votes} name={name} />}
           {shown === 'roster' && <><Roster s={s} /><Watchers s={s} /></>}
-          {shown === 'rules' && <><WwSetupTable n={s.players.length} /><ul className="no-why">{WW_RULES.map((t) => <li key={t}>{t}</li>)}</ul></>}
+          {shown === 'rules' && <><WwSetupTable n={s.players.length} script={s.script} /><ul className="no-why">{rulesOf(s.script).map((t) => <li key={t}>{t}</li>)}</ul></>}
           {shown === 'host' && s.isHost && <WwHost s={s} act={act} />}
         </div>
       </aside>
@@ -418,7 +446,7 @@ function WwSelf({ me, name }) {
         <button type="button" className={`idcard ${open ? 'open' : ''}`} onClick={() => setOpen((x) => !x)} aria-label={open ? '合上身份卡' : '翻开身份卡'}>
           <span className="idcard-inner">
             <span className="idface idback"><span className="id-art ww-back">?</span><span className="id-name">翻开身份</span></span>
-            <span className="idface idfront"><WwCard id={me.role.id} /></span>
+            <span className="idface idfront"><WwCard id={me.role.id} script={s.script} /></span>
           </span>
         </button>
         <p className="muted id-hint">{open ? `你坐在${cnNum(me.seat)}号${me.alive ? '' : '，已经出局'}。点卡片扣回去。` : '点卡片翻开。别让旁边的人看见。'}</p>

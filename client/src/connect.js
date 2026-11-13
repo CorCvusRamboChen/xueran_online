@@ -1,4 +1,5 @@
 // 登录 + WebSocket。在 Discord 里走 Embedded App SDK 授权；从 KOOK 机器人发的进入链接（?kt=门票）打开的走门票；
+// Discord 活动里点「在浏览器打开」拿到的链接（?bt=门票）在普通浏览器里以同一个 Discord 身份进同一个房间；
 // 普通浏览器里走 DEV_LOGIN 测试模式。
 import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { setSpeaking, clearSpeaking } from './speaking.js';
@@ -31,24 +32,47 @@ export async function listenSpeaking(channelId) {
 export const inDiscord = new URLSearchParams(location.search).has('frame_id');
 
 /**
- * KOOK 进入链接里的门票（?kt=…）：存进这个标签页（刷新还在），再从地址栏去掉（截图、分享地址时不会带出去）。
- * 返回门票；不是从 KOOK 进来的返回 null。
+ * 进入链接里的门票（KOOK 的 ?kt=…，浏览器链接的 ?bt=…）：存进这个标签页（刷新还在），再从地址栏去掉
+ * （截图、分享地址时不会带出去）。返回门票；不是这样进来的返回 null。
  */
-function kookTicket() {
-  const KEY = 'botc-kook-ticket';
+function linkTicket(param) {
+  const KEY = param === 'kt' ? 'botc-kook-ticket' : `botc-ticket-${param}`; // KOOK 沿用旧名字，免得上线后刷新掉线
   try {
     const url = new URL(location.href);
-    const kt = url.searchParams.get('kt');
-    if (kt) {
-      sessionStorage.setItem(KEY, kt);
-      url.searchParams.delete('kt');
+    const t = url.searchParams.get(param);
+    if (t) {
+      sessionStorage.setItem(KEY, t);
+      url.searchParams.delete(param);
       history.replaceState(null, '', url.pathname + url.search + url.hash);
-      return kt;
+      return t;
     }
     return sessionStorage.getItem(KEY);
   } catch { return null; }
 }
+const kookTicket = () => linkTicket('kt');
+const browserTicket = () => linkTicket('bt');
 export const fromKook = !inDiscord && !!kookTicket();
+/** 从 Discord 活动的「在浏览器打开」进来的：身份和房间跟 Discord 里一样，语音还在 Discord 里。 */
+export const fromBrowserLink = !inDiscord && !fromKook && !!browserTicket();
+
+/** 在 Discord 手机端里（坐下时提示「去浏览器里玩」）。?mobileHint 只是本地截图用。 */
+export const onDiscordMobile = () => sdkRef?.platform === 'mobile' || (!inDiscord && new URLSearchParams(location.search).has('mobileHint'));
+
+let sendRef = null;
+/**
+ * Discord 活动里：要一条只属于自己的浏览器链接，用系统浏览器打开（手机上屏幕更大、不卡）。
+ * Discord 会先弹一次「要离开 Discord 吗」的确认。返回要给用户看的提示，没有就是 null。
+ */
+export async function openInBrowser() {
+  if (!sdkRef || !sendRef) return '只有在 Discord 活动里才需要这个';
+  const r = await sendRef({ type: 'browserLink' });
+  if (!r.ok) return r.error ?? '拿不到链接，稍后再试';
+  const url = `${publicUrl}/?bt=${encodeURIComponent(r.ticket)}`;
+  try { await sdkRef.commands.openExternalLink({ url }); return '在浏览器里继续玩；语音还是在 Discord 里聊，别退出语音频道'; } catch (e) {
+    report('在浏览器打开', e?.message ?? e);
+    return '打不开浏览器，再点一次试试';
+  }
+}
 
 /** 打开收音页。Discord 活动在沙盒里，要走 SDK（会弹一次确认），地址也要用正式域名；浏览器里直接开新标签页。 */
 export function openMic(token) {
@@ -76,6 +100,7 @@ export async function inviteFriends() {
     }
   }
   if (fromKook) return '在 KOOK 文字频道发「/血染」，朋友点卡片上的按钮领自己的进入链接（语音在 KOOK 里聊）。';
+  if (fromBrowserLink) return '这个链接只属于你，别发给别人：让朋友在 Discord 里进同一个语音频道，从「活动」里打开就行。';
   const url = new URL(location.href);
   for (const k of ['id', 'name', 'devRole']) url.searchParams.delete(k); // 测试模式：别把自己的身份一起发出去
   try { await navigator.clipboard.writeText(url.href); return '进入链接已复制，发给朋友就行'; } catch { return `把这个链接发给朋友：${url.href}`; }
@@ -158,6 +183,8 @@ export async function login(onStep = () => {}) {
 
   const kt = !inDiscord && kookTicket();
   if (kt) { onStep('正在走进这座小镇……'); return { kook: kt }; }
+  const bt = !inDiscord && browserTicket();
+  if (bt) { onStep('正在走进这座小镇……'); return { browser: bt }; }
   if (!cfg.devLogin) throw new Error('请在 Discord 里打开这个活动；在 KOOK 里玩的话，在文字频道发「/血染」领取进入链接');
   // 测试模式：每个浏览器标签页是一个玩家（?name=小明&table=1）
   const q = new URLSearchParams(location.search);
@@ -210,6 +237,7 @@ export function openSocket(hello, { onState, onPos, onStatus, onUpdate }) {
     };
   };
   connect();
+  sendRef = send;
   return {
     act: (action, payload) => send({ type: 'act', action, payload }),
     tutorial: (on) => send({ type: 'tutorial', on }),

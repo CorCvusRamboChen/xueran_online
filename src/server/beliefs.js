@@ -1,6 +1,7 @@
 // 玩家的小魔典是一个隐形指标：不用打断游戏问大家怎么想，看他们给谁打了什么标签、猜了什么角色、连了什么线就大概知道。
 // 只收这几样：笔记正文不收，给自己的标记也不收（那是他打算冒充谁的计划，不是他对别人的看法）。
-// 这份数据只进存档和往期对局文件，不发给任何客户端，也不参与说书人的判定：先看它准不准，再说要不要用。
+// 这份数据只进存档和往期对局文件，不发给任何客户端。说书人只用两处：大家猜的恶魔不一致（修补匠的骰子）、
+// 大家把某人标成什么角色（markedRole：配合邪恶的伪装，2026-11-11 用户：不能只靠公开声明）。
 import { ROLES } from '../engine/roles.js';
 
 const TAGS = new Set(['townsfolk', 'outsider', 'minion', 'demon']);
@@ -46,6 +47,21 @@ export function diffMarks(prev, next) {
 }
 
 const blank = () => ({ tags: {}, links: [] });
+
+/**
+ * 大家在小魔典里把 id 标成什么角色：别人标得最多的那个善良角色（至少两个人这么标，而且比第二多的多）。
+ * 多半就是他嘴上报的身份（语音里说的，公开声明不一定点过）。说书人配合邪恶的伪装时，没有公开声明就看这个。
+ */
+export function markedRole(now, id, okRole = () => true) {
+  const count = {};
+  for (const [by, m] of Object.entries(now ?? {})) {
+    if (by === id) continue;
+    const r = m?.tags?.[id]?.role;
+    if (r && okRole(r)) count[r] = (count[r] ?? 0) + 1;
+  }
+  const [first, second] = Object.entries(count).sort((x, y) => y[1] - x[1]);
+  return first && first[1] >= 2 && (!second || first[1] > second[1]) ? first[0] : null;
+}
 
 /** 记下一个人最新的标记：只存变化，这样能看出谁在第几天改了主意。客户端每次发全量，重发不会多记。 */
 export function noteMarks(state, g, uid, raw, at = Date.now()) {

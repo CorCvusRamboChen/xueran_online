@@ -58,7 +58,8 @@ export function loadAll() {
 
 // ───────────── 往期对局 ─────────────
 // 每局结束写一份 data/games/<服务器 id>/<结束时间>_<频道>.json：所有人的身份、整局复盘时间线、票型、胜负。不会自动删。
-// decisions（说书人决策日志）、beliefs（玩家标记的变化）、meets（谁和谁进了同一间屋）、records（开局时的战绩）是给线下分析的，文件里有，getGame 不往外给。
+// decisions（说书人决策日志）、beliefs（玩家标记的变化）、meets（谁和谁进了同一间屋）、records（开局时的战绩）、
+// heard（疯狂判定时听到的话和结论）是给线下分析的，文件里有，getGame 不往外给。
 const GAMES = path.resolve('data/games');
 const safe = (x) => String(x).replace(/[^\w.-]/g, '_');
 
@@ -74,7 +75,7 @@ export function archiveGame(room) {
       id, endedAt, key: room.key, winner: g.winner, reason: g.winReason, days: g.day,
       players: g.players.map((p) => ({ id: p.id, seat: p.seat, name: p.name, avatar: room.users.get(p.id)?.avatar ?? null, role: p.role, evil: g.evilOf?.(p) ?? undefined, shownRole: p.shownRole, alive: p.alive, ...(p.role === 'amnesiac' && p.gained ? { gained: p.gained } : {}) })),
       timeline: g.timeline, votes: room.voteHistory ?? [],
-      decisions: g.st.decisions, beliefs: room.beliefs?.gameId === g.id ? room.beliefs.log : [], meets: room.meets ?? [], records: g.records ?? null,
+      decisions: g.st.decisions, beliefs: room.beliefs?.gameId === g.id ? room.beliefs.log : [], meets: room.meets ?? [], records: g.records ?? null, heard: g.heard ?? [],
     };
     fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify(data));
   } catch (e) {
@@ -121,7 +122,7 @@ export function listGames(guildId, limit = 20) {
 
 export function getGame(guildId, id) {
   try {
-    const { decisions, beliefs, meets, records, ...open } = JSON.parse(fs.readFileSync(path.join(GAMES, safe(guildId), `${safe(id)}.json`), 'utf8'));
+    const { decisions, beliefs, meets, records, heard, ...open } = JSON.parse(fs.readFileSync(path.join(GAMES, safe(guildId), `${safe(id)}.json`), 'utf8'));
     return open;
   } catch { return null; }
 }

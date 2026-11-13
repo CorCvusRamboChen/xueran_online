@@ -8,15 +8,22 @@ import NGJ from './maps/ngj.js';
 import LUF from './maps/luf.js';
 import BS7 from './maps/bs7.js';
 import CAT from './maps/cat.js';
+import UCD from './maps/ucd.js';
+import ECP from './maps/ecp.js';
+import DOORS from './maps/doors.js';
 
-export const SPEED = 240; // 每秒走多少单位
+export const SPEED = 240; // 跑步每秒多少单位（双击地面、按住 Shift；按人物比例约 10 米/秒）
+export const WALK_SPEED = 120; // 走路每秒多少单位（单击地面、方向键；默认）
+/** 一段移动的速度：m.run 是跑。 */
+export const speedOf = (run) => (run ? SPEED : WALK_SPEED);
 export const CELL = 20;   // 寻路网格每格 20 单位
 
+/** 门在房子哪面墙上的哪一点：[x, y, 法线 x, 法线 y]。t：沿这面墙从西 / 北起的比例（默认正中间）。 */
 export const DOOR = {
-  bottom: (h) => [h.x + h.w / 2, h.y + h.h, 0, 1],
-  top: (h) => [h.x + h.w / 2, h.y, 0, -1],
-  right: (h) => [h.x + h.w, h.y + h.h / 2, 1, 0],
-  left: (h) => [h.x, h.y + h.h / 2, -1, 0],
+  bottom: (h, t = 0.5) => [h.x + h.w * t, h.y + h.h, 0, 1],
+  top: (h, t = 0.5) => [h.x + h.w * t, h.y, 0, -1],
+  right: (h, t = 0.5) => [h.x + h.w, h.y + h.h * t, 1, 0],
+  left: (h, t = 0.5) => [h.x, h.y + h.h * t, -1, 0],
 };
 
 export const inRect = (r, x, y, pad = 0) => x >= r.x - pad && x <= r.x + r.w + pad && y >= r.y - pad && y <= r.y + r.h + pad;
@@ -81,11 +88,14 @@ export class TownMap {
     }
   }
 
-  /** 能进的房子：不管多少人都全开。 */
+  /** 能进的房子：不管多少人都全开。门的位置按 maps/doors.js 对齐手绘图（没写的在那面墙正中间）。 */
   housesFor() {
+    const fix = DOORS[this.art ?? this.id] ?? {};
     return this.houses.map((h) => {
-      const [x, y, nx, ny] = DOOR[h.side](h);
-      return { ...h, door: { x, y, nx, ny } };
+      const side = fix[h.id]?.side ?? h.side;
+      const [x, y, nx, ny] = DOOR[side](h, fix[h.id]?.t ?? 0.5);
+      const k = fix[h.id]?.in ?? 0; // 画里的门在 (vx, vy)：比边线往里缩 k
+      return { ...h, side, door: { x, y, nx, ny, vx: x - nx * k, vy: y - ny * k } };
     });
   }
 
@@ -323,7 +333,7 @@ export class TownMap {
 const round = (p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 });
 
 // 两个小剧本用前两张图的变体（同一套手绘图和布局，换色调、天气和点缀；art 记着用哪套手绘图）
-export const MAPS = { tb: new TownMap(TB), bmr: new TownMap(BMR), snv: new TownMap(SNV), ngj: new TownMap(NGJ), luf: new TownMap(LUF), bs7: new TownMap(BS7), cat: new TownMap(CAT) };
+export const MAPS = { tb: new TownMap(TB), bmr: new TownMap(BMR), snv: new TownMap(SNV), ngj: new TownMap(NGJ), luf: new TownMap(LUF), bs7: new TownMap(BS7), cat: new TownMap(CAT), ucd: new TownMap(UCD), ecp: new TownMap(ECP) };
 /** 剧本 → 地图（没有专属地图的剧本用暗流涌动的）。 */
 export const getMap = (script) => MAPS[script] ?? MAPS.tb;
 

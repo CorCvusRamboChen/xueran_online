@@ -37,3 +37,16 @@ export const WW_SETUPS = {
   15: { wolves: 5, villagers: 6, gods: WW_GODS },
 };
 export const WW_PLAYERS = [6, 15];
+
+/**
+ * 诸神黄昏（娱乐模式，script: 'rag'）：狼人杀的板子，只有狼人和猎人。按人数定几只狼，其余全是猎人。
+ * 用户 2026-11-04 定的玩法：猎人出局开一枪打谁谁死，被打死的猎人接着开。2026-11-11 用户：它是狼人杀的板子，走狼人杀的底层。
+ */
+export const ragnarokWolves = (n) => (n <= 6 ? 1 : n <= 9 ? 2 : n <= 12 ? 3 : 4);
+export const RAG_PLAYERS = [5, 15];
+/** 诸神黄昏里两个角色的能力说法（标准板子的说法提到神职、平民、女巫，这里都没有）。 */
+export const RAG_ABILITY = {
+  ww_wolf: '狼人互相认识。每晚和同伴一起刀一名玩家（可以空刀）。猎人全部出局，狼人获胜。',
+  ww_hunter: '出局时（被刀或被放逐）可以开枪带走一名存活玩家，也可以不开。被你带走的猎人也能接着开枪。狼人全部出局，好人获胜。',
+};
+export const abilityIn = (id, script) => (script === 'rag' && RAG_ABILITY[id]) || WW_ROLES[id]?.ability;

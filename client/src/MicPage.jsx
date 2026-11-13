@@ -23,10 +23,36 @@ const COPY = {
   checking: ['正在确认链接', ''],
 };
 
+/**
+ * 疯狂的定义（2026-11-12 用户：要写清楚是「真心实意」，不能暗示、不能故意聊爆）。官方：尽最大努力让别人相信，暗示自己疯狂了就等于没有疯狂。
+ * about：服务器说他是哪种疯狂。
+ */
+function MadnessRule({ about }) {
+  if (about.kind === 'mutant') {
+    return (
+      <section className="mic-rule" aria-label="疯狂是什么">
+        <h2>你的疯狂：不是外来者</h2>
+        <p>你是畸形秀演员。你要<b>真心实意地让大家相信你不是外来者</b>。</p>
+        <p>说自己是外来者（或者说自己是紫色、不是三原色）、暗示自己是外来者、故意说漏让别人猜到，都可能被当场处决。</p>
+      </section>
+    );
+  }
+  const who = about.kind === 'madness' ? <b>{about.role}</b> : '那个角色';
+  return (
+    <section className="mic-rule" aria-label="疯狂是什么">
+      <h2>{about.kind === 'madness' ? <>你的疯狂：你是{about.role}</> : '疯狂是什么'}</h2>
+      <p>你要<b>真心实意、尽最大努力</b>让大家相信你就是{who}：给理由、讲你拿到的信息和做过的事、回应别人的质疑、一直坚持这个说法。</p>
+      <p>下面这些都算没有疯狂，可能被处决：只干巴巴说一句就转去聊别的；阴阳怪气、敷衍、故意演砸、笑场；暗示自己是被逼的（「懂的都懂」「我只能说我是……」「你们自己理解」）；故意聊爆、说出自己真正的角色。</p>
+    </section>
+  );
+}
+
 export default function MicPage({ token }) {
   const [state, setState] = useState('checking');
+  const [about, setAbout] = useState({});
   const [lines, setLines] = useState([]);
   const [error, setError] = useState('');
+  const [far, setFar] = useState(0); // 比他自己说话小很多、当成远处扬声器的声音没上传的句数
   const live = useRef(null);
   const queue = useRef([]);
   const sending = useRef(false);
@@ -64,7 +90,8 @@ export default function MicPage({ token }) {
     if (!navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) { setState('unsupported'); return; }
     setState('starting');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      // 不开自动增益：要靠音量分出「他自己凑近麦克风说的」和「扬声器里放出来的别人的声音」，增益会把远处的也拉响（2026-11-12：没戴耳机会录到全场）
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: false } });
       const ctx = new AudioContext();
       const url = URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' }));
       await ctx.audioWorklet.addModule(url);
@@ -73,7 +100,7 @@ export default function MicPage({ token }) {
         queue.current.push(encodeWav(samples));
         if (queue.current.length > BACKLOG) queue.current.shift();
         pump();
-      });
+      }, { onFar: () => setFar((n) => n + 1) });
       const tap = new AudioWorkletNode(ctx, 'mic-tap');
       tap.port.onmessage = (e) => segmenter.push(downsample(e.data, ctx.sampleRate));
       ctx.createMediaStreamSource(stream).connect(tap);
@@ -89,7 +116,9 @@ export default function MicPage({ token }) {
   };
 
   useEffect(() => {
-    fetch(`/api/mic/${encodeURIComponent(token)}`).then((r) => setState(r.ok ? 'ready' : 'expired')).catch(() => setState('expired'));
+    fetch(`/api/mic/${encodeURIComponent(token)}`)
+      .then(async (r) => { setState(r.ok ? 'ready' : 'expired'); if (r.status === 200) setAbout(await r.json().catch(() => ({}))); })
+      .catch(() => setState('expired'));
     return shut;
   }, [token]);
 
@@ -103,12 +132,14 @@ export default function MicPage({ token }) {
       {canStart && <button type="button" className="mic-btn" onClick={start}>{state === 'ready' ? '开始收音' : '重新开始'}</button>}
       {state === 'on' && <button type="button" className="mic-btn mic-btn-off" onClick={() => { shut(); setState('stopped'); }}>停止收音</button>}
       {error && <p className="mic-error" role="alert">{error}</p>}
+      {state === 'on' && far > 0 && <p className="mic-lead">有 {far} 句声音比你说话小很多，当成别人的声音没有上传。没戴耳机的话，最好戴上。</p>}
+      {state !== 'expired' && state !== 'checking' && <MadnessRule about={about} />}
       {state !== 'expired' && (
         <ul className="mic-rules">
           <li>只收这台设备的麦克风，请戴耳机，不然会录到别人的声音。</li>
           <li>音频不保存，转成文字后发给 AI 说书人判断，当天黄昏清掉。</li>
-          <li>不开也能继续玩，但说书人听不到你，只点「公开声明」不够，很可能判你不够疯狂。</li>
-          <li>说书人一直在听：说漏嘴会先警告一次，再说漏就可能当场被处决。</li>
+          {about.kind !== 'mutant' && <li>不开也能继续玩，但说书人听不到你，很可能判你不够疯狂。</li>}
+          <li>说书人一直在听：说漏嘴（被洗脑的）、说服别人自己是外来者（畸形秀演员），都可能当场被处决。</li>
         </ul>
       )}
       {lines.length > 0 && (

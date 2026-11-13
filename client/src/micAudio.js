@@ -6,6 +6,10 @@ const END_FRAMES = 45; // 静音 0.9 秒算说完
 const MIN_VOICED = 12; // 有声音不到 0.24 秒的当成杂音
 const MAX_FRAMES = 1250; // 一句最长 25 秒
 const MIN_LEVEL = 0.012;
+// 近处的声音：记住他自己说话的音量（每帧慢慢回落，半分钟左右降一半），一句的平均音量不到它的 NEAR 倍就当成扬声器里别人的声音。
+// 第一句没有参照，照收。凑近麦克风说话一般比扬声器漏进来的响十几分贝，0.4 大约是 −8 分贝，留了余量
+const NEAR = 0.4;
+const OWN_DECAY = 0.9995;
 
 /** 浏览器的采样率（通常 48k）降到 16k：一段取平均，比直接抽点杂音少。 */
 export function downsample(input, fromRate) {
@@ -37,8 +41,11 @@ export function encodeWav(samples) {
 
 /** 按音量把连续的声音切成一句一句。没开口的时候什么都不留，所以静音不会上传。 */
 export class Segmenter {
-  constructor(onSegment) {
+  constructor(onSegment, { onFar = () => {} } = {}) {
     this.onSegment = onSegment;
+    this.onFar = onFar;
+    this.own = 0; // 他自己说话的音量
+    this.loudSum = 0; // 这句里响的帧的音量总和
     this.rest = new Float32Array(0);
     this.floor = MIN_LEVEL / 3;
     this.pre = [];
@@ -62,6 +69,7 @@ export class Segmenter {
     const level = Math.sqrt(sum / f.length);
     const loud = level > Math.max(MIN_LEVEL, this.floor * 3);
     if (!loud) this.floor += (level - this.floor) * 0.02; // 跟着环境噪音走
+    this.own *= OWN_DECAY;
     if (!this.frames) {
       this.pre.push(f);
       if (this.pre.length > PRE_ROLL) this.pre.shift();
@@ -69,11 +77,12 @@ export class Segmenter {
       this.frames = this.pre;
       this.pre = [];
       this.voiced = 1;
+      this.loudSum = level;
       this.silent = 0;
       return;
     }
     this.frames.push(f);
-    if (loud) { this.voiced += 1; this.silent = 0; } else this.silent += 1;
+    if (loud) { this.voiced += 1; this.loudSum += level; this.silent = 0; } else this.silent += 1;
     if (this.silent >= END_FRAMES || this.frames.length >= MAX_FRAMES) this.flush();
   }
 
@@ -81,10 +90,14 @@ export class Segmenter {
   flush() {
     const frames = this.frames;
     const voiced = this.voiced;
+    const level = voiced ? this.loudSum / voiced : 0;
     this.frames = null;
     this.voiced = 0;
+    this.loudSum = 0;
     this.silent = 0;
     if (!frames || voiced < MIN_VOICED) return;
+    if (this.own && level < this.own * NEAR) { this.onFar(level); return; } // 比他自己说话小很多：扬声器里别人的声音
+    this.own = Math.max(this.own, level);
     const out = new Float32Array(frames.length * FRAME);
     frames.forEach((f, i) => out.set(f, i * FRAME));
     this.onSegment(out);

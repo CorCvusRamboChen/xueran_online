@@ -13,6 +13,7 @@ import { audio, heartbeat, tick, sfxEnabled } from './world/footsteps.js';
 import { bus } from './mixer.js';
 import { SUITS, MARKS, SUIT_INFO, MARK_ROLES, MARK_RULES, evilCount, roleAbility } from '../../src/engine/mark.js';
 import './mark.css';
+import { useDockSheet, DockHandle } from './DockSheet.jsx';
 
 const STAGE_NAME = { setup: '天亮', morning: '天亮', roam: '自由活动', table: '圆桌讨论', dusk: '回家', night: '写下印记', ended: '终局' };
 const KIND = { peek: '看了', glimpse: '路上瞟到' };
@@ -121,6 +122,7 @@ export function MarkGame({ s, act, ask, parts: { History, SoundToggles, Watchers
   ].filter(Boolean);
   const shown = tab ?? (me ? 'role' : 'record');
   const hot = (night && me?.alive && !me.guess && !m.midnight) || !!me?.lastWord;
+  const [dockMin, toggleDock, dockRef] = useDockSheet(hot);
   const place = s.phase === 'ended' ? '钟楼镇 · 终局' : night || (stage === 'morning' && me) ? (me ? '你的家' : '钟楼镇 · 夜') : stage === 'dusk' ? '钟楼镇 · 黄昏' : `钟楼镇 · 第${cnNum(s.day)}天`;
 
   let scene;
@@ -145,7 +147,8 @@ export function MarkGame({ s, act, ask, parts: { History, SoundToggles, Watchers
         <HudBar items={items} active={tab} onPick={(id) => setTab((cur) => (cur === id ? null : id))} label={STAGE_NAME[stage]} timer={timer} />
       </section>
 
-      <section className={`dock ${hot ? 'dock-hot' : ''}`}>
+      <section ref={dockRef} className={`dock ${hot ? 'dock-hot' : ''} ${hot && dockMin ? 'dock-min' : ''}`}>
+        {hot && <DockHandle min={dockMin} onToggle={toggleDock} />}
         {me?.lastWord && <LastWordPanel s={s} me={me} mk={mk} name={name} />}
         <Dock s={s} m={m} me={me} mk={mk} act={act} g={g} name={name} peek={peek} />
         {me && s.phase !== 'ended' && <MeBar s={s} me={me} mk={mk} name={name} />}

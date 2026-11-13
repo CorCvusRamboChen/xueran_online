@@ -37,7 +37,8 @@ export const hue = (id) => {
 
 /** 方形油画肖像：先用挑的人物画像，再用 Discord 头像，都没有就是一块色彩 + 首字。 */
 /** prefer='avatar'：Discord 头像优先（小镇里头顶飘的那个），没有再用人物立绘。 */
-export function Portrait({ p, size, frame = 'var(--cream)', prefer = 'art', speak = true }) {
+// 头像一直用这个人自己的（Discord / KOOK 头像），挑了人物形象也不变；没有头像（机器人等）才用人物的画像
+export function Portrait({ p, size, frame = 'var(--cream)', prefer = 'avatar', speak = true }) {
   const speaking = useSpeaking(speak ? p?.id : null);
   const ch = p.char ? CHAR_BY_ID[p.char] : null;
   const art = ch && PEOPLE_ART[ch.id];

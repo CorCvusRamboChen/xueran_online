@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { tableCard, squadpoolSync } from '../src/server/squadpool.js';
 
 const HOST = '111111111111';
@@ -212,4 +215,47 @@ test('人走光一分钟才收卡，中途回来不收', async () => {
   assert.equal(site.calls.filter((c) => c.pathname.endsWith('/square-1/close')).length, 1);
   await sync.tick();
   assert.equal(site.calls.filter((c) => c.pathname.endsWith('/close')).length, 1);
+});
+
+test('大厅：入座后离线的人不算在卡上', () => {
+  const card = tableCard(lobbyRoom({ online: new Set([HOST]) }));
+  assert.deepEqual(card.members.map((m) => m.discordUserId), [HOST]);
+  assert.equal(card.state.seats, 2); // 房主 + 机器人
+});
+
+test('没开局的桌子挂机两小时收卡，有人一动就回来；对局中不受影响', async () => {
+  const site = fakeSite();
+  let clock = 1_000_000;
+  const room = lobbyRoom({ lastSeen: new Map() });
+  const rooms = new Map([['r', room]]);
+  const sync = squadpoolSync({ baseUrl: 'https://site.test', token: 't', rooms, guildIds: new Set(['g1']), fetch: site.fetch, log: {}, now: () => clock });
+  const creates = () => site.calls.filter((c) => c.pathname === '/api/discord-sync/rooms').length;
+  await sync.tick();
+  assert.equal(creates(), 1);
+  clock += 90 * 60_000;
+  room.lastSeen.set(GUEST, clock); // 有人走了两步：重新计时
+  await sync.tick();
+  clock += 2 * 60 * 60_000 + 1;
+  await sync.tick(); // 挂机满两小时：这一轮不要了
+  clock += 61_000;
+  await sync.tick();
+  assert.equal(site.calls.filter((c) => c.pathname.endsWith('/square-1/close')).length, 1);
+  room.lastSeen.set(HOST, clock);
+  await sync.tick();
+  assert.equal(creates(), 2);
+  // 对局中挂多久都留着
+  assert.notEqual(tableCard(gameRoom('night', { lastSeen: new Map() }), { now: 1e12, activeAt: 0 }), null);
+});
+
+test('重启后：上次发过、现在没人的卡马上收；还在的桌子接着报，不重复建卡', async () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sp-')), 'cards.json');
+  const site = fakeSite();
+  const opts = { baseUrl: 'https://site.test', token: 't', guildIds: new Set(['g1']), fetch: site.fetch, log: {}, file };
+  await squadpoolSync({ ...opts, rooms: new Map([['a', lobbyRoom()], ['b', lobbyRoom({ partnerSquare: 'square-2' })]]) }).tick();
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), ['square-1', 'square-2']);
+  site.calls.length = 0;
+  // 重启：只有 square-2 那桌还有人
+  await squadpoolSync({ ...opts, rooms: new Map([['b', lobbyRoom({ partnerSquare: 'square-2' })]]) }).tick();
+  assert.deepEqual(site.calls.map((c) => c.pathname), ['/api/discord-sync/rooms/square-2/members', '/api/discord-sync/rooms/square-2/state', '/api/discord-sync/rooms/square-1/close']);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), ['square-2']);
 });

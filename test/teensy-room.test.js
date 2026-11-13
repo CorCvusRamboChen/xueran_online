@@ -101,7 +101,7 @@ test('窃窃私语：天亮宣布利维坦在场和第几天；被提名的人�
   await room.teardown();
 });
 
-test('无上愉悦没有公开声明（没有畸形秀演员、洗脑师）；窃窃私语有（畸形秀演员）', async () => {
+test('通用的公开声明关掉了（11-11 用户：只留给造谣者，疯狂由后台听语音判）：无上愉悦、窃窃私语都没有', async () => {
   const room = await teensyRoom('ngj', {}, 4);
   await room.act('u1', 'start');
   for (let k = 0; k < 400 && room.game.phase === 'night'; k++) await untilDay(room);
@@ -111,24 +111,57 @@ test('无上愉悦没有公开声明（没有畸形秀演员、洗脑师）；�
   const luf = await teensyRoom('luf', {}, 4);
   await luf.act('u1', 'start');
   await untilDay(luf);
-  assert.equal(luf.viewFor('u1').self.canDeclare, true);
+  assert.equal(luf.viewFor('u1').self.canDeclare, false);
   await luf.teardown();
 });
 
-test('窃窃私语：失忆者拿到猎手的枪，猜中「完美」之前没有开枪按钮；猜中后能开，打中利维坦善良获胜', async () => {
+test('窃窃私语：失忆者拿到猎手的枪，猜中前也能开（官方：视作具有该能力），打中利维坦善良获胜', async () => {
   const room = await teensyRoom('luf', { u1: 'amnesiac', 'bot-1': 'leviathan', 'bot-2': 'goblin' }, 3); // 没有寡妇：失忆者不会中毒
   await room.act('u1', 'start');
   const g = room.game;
   g.get('u1').gained = 'slayer';
   await untilDay(room);
-  assert.equal(room.viewFor('u1').self.canSlay, false, '还不知道自己有枪');
-  await assert.rejects(room.act('u1', 'slay', { target: 'bot-1' }), /没有猎手/);
-  await room.act('u1', 'amnesiac', { text: '我是不是猎手，白天能开一枪' });
-  await until(() => (room.inbox.get('u1') ?? []).some((m) => /说书人的回答/.test(m.text)), 2000);
-  assert.ok((room.inbox.get('u1') ?? []).some((m) => /完美/.test(m.text) && /行动面板/.test(m.text)));
-  assert.equal(room.viewFor('u1').self.canSlay, true);
+  assert.equal(room.viewFor('u1').self.canSlay, true, '还没猜也能试着开枪');
   await room.act('u1', 'slay', { target: 'bot-1' });
   assert.equal(g.winner, 'good');
+  await room.teardown();
+});
+
+test('失忆者试一个不是自己的白天能力：开枪、特赦、找说书人都什么也没发生；猜中「完美」照样告诉他', async () => {
+  const room = await teensyRoom('luf', { u1: 'amnesiac', 'bot-1': 'leviathan', 'bot-2': 'goblin' }, 3);
+  await room.act('u1', 'start');
+  const g = room.game;
+  g.get('u1').gained = 'empath';
+  await untilDay(room);
+  const me = room.viewFor('u1').self;
+  assert.ok(me.canSlay && me.canSavant && me.canArtist && me.canFisherman, '白天的按钮都能试');
+  await room.act('u1', 'slay', { target: 'bot-1' });
+  assert.ok(g.get('bot-1').alive, '不是枪，打不死');
+  assert.equal(room.viewFor('u1').self.canSlay, false, '每局试一次');
+  await room.act('u1', 'savant');
+  assert.ok((room.inbox.get('u1') ?? []).some((m) => /摇了摇头/.test(m.text)));
+  await assert.rejects(room.act('u1', 'savant'), /试过/);
+  g.block = 'bot-2';
+  await room.act('u1', 'pardon');
+  assert.equal(g.block, 'bot-2', '特赦没有效果，台上的人还在');
+  assert.ok(room.log.some((l) => /特赦.*什么也没有发生/.test(l.text)));
+  await room.teardown();
+});
+
+test('失忆者听到「完美」就不再有试别的白天能力的按钮（猜中气球驾驶员的不该还能开枪）', async () => {
+  const room = await teensyRoom('luf', { u1: 'amnesiac', 'bot-1': 'leviathan', 'bot-2': 'goblin' }, 3);
+  room.judgeReady = () => true;
+  room.amnesiacJudge = async () => ({ level: '完美' });
+  await room.act('u1', 'start');
+  const g = room.game;
+  g.get('u1').gained = 'balloonist';
+  await untilDay(room);
+  assert.equal(room.viewFor('u1').self.canSlay, true, '猜之前能试');
+  await room.act('u1', 'amnesiac', { text: '我每晚得知不同类型的角色' });
+  await until(() => (room.inbox.get('u1') ?? []).some((m) => /说书人的回答/.test(m.text)), 2000);
+  const me = room.viewFor('u1').self;
+  assert.equal(me.canSlay, false, '弄清是气球驾驶员了：没有枪');
+  assert.ok(!me.canSavant && !me.canArtist && !me.canFisherman);
   await room.teardown();
 });
 

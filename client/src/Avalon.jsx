@@ -6,6 +6,7 @@ import { Tag, Panel, Btn, Stat, HudBar } from './ui.jsx';
 import { Portrait, useTick, useCountdown, cnNum } from './util.jsx';
 import { AVALON_ROLES, AVALON_TEAMS, QUEST_SIZES, failsNeeded, avalonRoles, isGood, DEFAULT_OPTIONS } from '../../src/engine/avalon.js';
 import './avalon.css';
+import { useDockSheet, DockHandle } from './DockSheet.jsx';
 
 const STAGE_NAME = { reveal: '确认身份', propose: '组队', vote: '投票', quest: '任务', lady: '湖中仙女', assassin: '刺杀', ended: '结束' };
 
@@ -77,6 +78,7 @@ export function AvalonGame({ s, act, ask, parts: { History, SoundToggles, Watche
   ].filter(Boolean);
   const shown = tab ?? (me ? 'role' : 'board');
   const hot = !!pickSpec || (a.stage === 'vote' && me && me.myVote == null) || (a.stage === 'quest' && a.team.includes(s.me) && me?.myCard == null) || (a.stage === 'reveal' && me && !me.ready);
+  const [dockMin, toggleDock, dockRef] = useDockSheet(hot);
 
   return (
     <div className="game avalon">
@@ -92,7 +94,8 @@ export function AvalonGame({ s, act, ask, parts: { History, SoundToggles, Watche
         <HudBar items={items} active={tab} onPick={(id) => setTab((cur) => (cur === id ? null : id))} label={STAGE_NAME[a.stage]} timer={timer} />
       </section>
 
-      <section className={`dock ${hot ? 'dock-hot' : ''}`}>
+      <section ref={dockRef} className={`dock ${hot ? 'dock-hot' : ''} ${hot && dockMin ? 'dock-min' : ''}`}>
+        {hot && <DockHandle min={dockMin} onToggle={toggleDock} />}
         {me && a.stage !== 'reveal' && s.phase !== 'ended' && <MeBar me={me} name={name} />}
         <Stage s={s} a={a} me={me} av={av} act={act} name={name} picked={picked} pickSpec={pickSpec} g={g} questNo={questNo} setPickQuest={setPickQuest} />
         {a.stage !== 'reveal' && <CarLog a={a} g={g} />}

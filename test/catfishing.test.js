@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { Game, makeRng } from '../src/engine/game.js';
 import { rollMixed } from '../src/engine/snv.js';
 import { ROLES, rolesOf, engineOf } from '../src/engine/roles.js';
-import { MIX_STEPS, NIGHT_ORDER, STEP_NAMES } from '../src/shared/nightOrder.js';
+import { MIX_STEPS, NIGHT_ORDER, STEP_NAMES, NOT_STEPS } from '../src/shared/nightOrder.js';
 import { getMap } from '../src/shared/map.js';
 import { Room } from '../src/server/room.js';
 
@@ -18,7 +18,7 @@ test('冒名钓鱼：25 个角色都在、用通用引擎、地图是钟楼广�
   assert.notEqual(getMap('cat').weather, getMap('tb').weather);
   const steps = [...MIX_STEPS.first, ...MIX_STEPS.other];
   for (const [id] of [...NIGHT_ORDER.cat.first, ...NIGHT_ORDER.cat.other]) {
-    if (STEP_NAMES[id] || id === 'lunatic') continue;
+    if (STEP_NAMES[id] || NOT_STEPS.has(id)) continue;
     assert.ok(steps.includes(id) || (id === 'godfather' && steps.includes('godfatherInfo')), id);
   }
 });

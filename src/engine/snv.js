@@ -27,24 +27,27 @@ const goodOf = (script) => { const l = listsOf(script); return [...l.tf, ...l.ou
 /**
  * 失忆者的隐藏能力从这里挑：这套引擎能结算的镇民能力（官方：可以是任何现有能力，最好慢慢猜得出来）。不在场的优先。
  * · 夜里有动静的：醒来拿到裸的结果，慢慢猜。调查员、钟表匠只有首夜一条，女裁缝每局一次，难猜一点。
- * · 白天要自己去用的（猎手的枪、博学者、艺术家、渔夫）：猜到「完美」以后行动面板才出现对应的按钮（AMNESIAC_DAY）。
+ * · 白天要自己去用的（猎手的枪、博学者、艺术家、渔夫、特赦）：猜中前也能去试（官方：「将那名玩家视作具有该能力一样」），
+ *   试中了照常生效，试错了什么也不发生（和食人族一样）。
+ * 官方要「让这一能力容易被猜测」，推荐夜里能察觉到的能力：白天的那几个难猜，抽中的机会压低（DAY_SHARE）。
  * 不放被动的（贤者、士兵）和会换角色的（舞蛇人、哲学家）。
  */
 export const AMNESIAC_POOL = ['empath', 'dreamer', 'chambermaid', 'flowergirl', 'towncrier', 'oracle', 'mathematician', 'investigator', 'clockmaker', 'seamstress', 'balloonist',
   'slayer', 'savant', 'artist', 'fisherman',
   'amn_gun', 'amn_judge', 'amn_pardon', 'amn_detect', 'amn_echo']; // 最后一行是失忆者专用的原创变种（roles.js 的 AMNESIAC_ONLY）
 export const AMNESIAC_DAY = new Set(['slayer', 'savant', 'artist', 'fisherman', 'amn_gun', 'amn_judge', 'amn_pardon']);
+const DAY_SHARE = 0.2; // 失忆者拿到白天能力的机会（以前按个数均分，20 个里 7 个是白天的，约 35%）
 /** 开枪类能力：打中什么人才会死。 */
 const GUNS = { slayer: 'demon', amn_gun: 'anyone', amn_judge: 'evil' };
 const JUGGLES = 5;
 export const MAX_DECLARES = 2; // 每人每天公开声明几次（免得刷屏）
 
-/** 恶魔的 3 个伪装：官方说"三个不在场的善良角色"；外来者在这个剧本里常常要藏，伪装以镇民为主。 */
+/** 恶魔的 3 个伪装：官方《规则概要》「最佳的方案通常是向恶魔展示两个镇民标记和一个外来者标记」，没有不在场的外来者时给三个镇民。 */
 export function pickBluffsSNV(exclude, rng, script = 'snv') {
   const L = listsOf(script);
   const tf = shuffle(L.tf.filter((r) => !exclude.has(r)), rng);
   const out = shuffle(L.out.filter((r) => !exclude.has(r)), rng);
-  const k = out.length && rng() < 0.35 ? 1 : 0;
+  const k = out.length && tf.length >= 2 ? 1 : 0;
   const pick = [...tf.slice(0, 3 - k), ...out.slice(0, k)];
   if (pick.length < 3) pick.push(...out.slice(k, k + 3 - pick.length));
   return shuffle(pick, rng);
@@ -124,17 +127,29 @@ export function rollMixed(script, n, rng, { exclude = null } = {}) {
  */
 export const BOFFIN_POOL = ['empath', 'oracle', 'noble', 'shugenja', 'librarian', 'washerwoman', 'investigator', 'chef', 'balloonist', 'undertaker',
   'clockmaker', 'flowergirl', 'towncrier', 'mathematician', 'soldier', 'mayor', 'slayer', 'savant', 'fisherman'];
+/** 恶魔拿到也能拿来证明自己的：信息具体、别人能核对（士兵、镇长、杀手、博学者、渔夫这类恶魔拿了也证明不了什么）。 */
+const BOFFIN_PROOF = new Set(['washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'noble', 'clockmaker', 'undertaker', 'oracle', 'flowergirl', 'towncrier']);
 
 // ───────────── AI 配板 ─────────────
 // 分数是经验估计（官方没有公式）：正数对善良有利，负数对邪恶有利，只用来比较同人数的几套配板。
-const DEMON_W = { vortox: 3.0, nodashii: 2.6, vigormortis: 2.4, fanggu: 2.2, imp: 2.3, pukka: 2.0 };
-const MINION_W = { pithag: 1.8, witch: 1.8, eviltwin: 1.6, cerenovus: 1.4, harpy: 1.5, boffin: 1.4, boomdandy: 1.0, scarletwoman: 1.2, baron: 0.8 };
+// 2026-11-11：混合剧本（冒名钓鱼、生死未卜、人人可玩）里暗流涌动、黯月初升的角色以前没有权重（按 0 算），AI 配板等于没在平衡，补上
+const DEMON_W = { vortox: 3.0, nodashii: 2.6, vigormortis: 2.4, fanggu: 2.2, imp: 2.3, pukka: 2.0, zombuul: 2.2, shabaloth: 2.3, po: 2.2, leviathan: 2.0 };
+const MINION_W = { pithag: 1.8, witch: 1.8, eviltwin: 1.6, cerenovus: 1.4, harpy: 1.5, boffin: 1.4, boomdandy: 1.0, scarletwoman: 1.2, baron: 0.8,
+  poisoner: 1.7, spy: 1.3, widow: 1.7, godfather: 1.6, assassin: 1.5, devilsadvocate: 1.2, mastermind: 1.0, marionette: 1.3, goblin: 0.9 };
 const GOOD_W = {
   clockmaker: 0.7, dreamer: 1.4, snakecharmer: 1.2, mathematician: 1.0, flowergirl: 1.1, towncrier: 1.1, oracle: 1.1,
   savant: 1.3, seamstress: 1.0, philosopher: 1.3, artist: 1.2, juggler: 0.9, sage: 0.6,
   mutant: -0.4, sweetheart: -0.6, barber: -0.4, klutz: -0.5,
   noble: 1.0, librarian: 0.8, shugenja: 0.7, balloonist: 0.9, villageidiot: 1.0, innkeeper: 1.3, fisherman: 0.8, farmer: 0.6, virgin: 0.8, magician: 0.7,
   drunk: -0.5, recluse: -0.3, saint: -0.6, damsel: -0.8,
+  // 暗流涌动
+  washerwoman: 0.8, investigator: 0.9, chef: 0.8, empath: 1.2, fortuneteller: 1.2, undertaker: 0.9, monk: 0.9, ravenkeeper: 0.8,
+  slayer: 0.7, soldier: 0.6, mayor: 0.8, butler: -0.3,
+  // 黯月初升
+  grandmother: 0.7, sailor: 0.9, chambermaid: 0.9, exorcist: 1.0, gambler: 0.5, gossip: 0.5, courtier: 1.0, professor: 1.1,
+  minstrel: 0.8, tealady: 0.7, pacifist: 0.9, fool: 0.6, goon: -0.3, lunatic: -0.4, tinker: -0.5, moonchild: -0.4,
+  // 窃窃私语
+  amnesiac: 0.8, cannibal: 0.6,
 };
 const NIGHT_INFO = ['dreamer', 'flowergirl', 'towncrier', 'oracle', 'mathematician'];
 
@@ -159,12 +174,34 @@ export function balancedMixed(script, n, rng, { tries = 60 } = {}) {
   return cands[lo + Math.floor(rng() * (hi - lo))].roles;
 }
 
+/**
+ * 提线木偶要和恶魔相邻（官方：「你与恶魔相邻」，设置时就这么坐）。座位按 assigned 的顺序，原地改 assigned。
+ * 不相邻就把提线木偶挪到恶魔旁边；fixed（房主指定了角色的座位下标）里的座位不动：
+ * 提线木偶是房主指定的就反过来把恶魔挪到他旁边，两个都指定了就照房主的（不挪）。
+ */
+export function seatMarionette(assigned, rng = Math.random, fixed = new Set()) {
+  const m = assigned.indexOf('marionette');
+  const d = assigned.findIndex((r) => ROLES[r]?.team === 'demon');
+  if (m < 0 || d < 0) return assigned;
+  const n = assigned.length;
+  const near = (i) => [(i + 1) % n, (i - 1 + n) % n];
+  if (near(d).includes(m)) return assigned;
+  const [mover, anchor] = !fixed.has(m) ? [m, d] : !fixed.has(d) ? [d, m] : [null, null];
+  if (mover == null) return assigned;
+  const spots = near(anchor).filter((i) => !fixed.has(i) && i !== mover);
+  if (!spots.length) return assigned;
+  const to = spots[Math.floor(rng() * spots.length)];
+  [assigned[mover], assigned[to]] = [assigned[to], assigned[mover]];
+  return assigned;
+}
+
 export const SNV_METHODS = {
   // ───────────────────────── 开局 ─────────────────────────
   setupSNV(players, roles, rng) {
     const S = SCRIPTS[this.script];
     const assigned = roles ?? (S.teensy ? rollTeensy(this.script, players.length, rng) : S.roles ? balancedMixed(this.script, players.length, rng) : balancedSNV(players.length, rng));
     if (assigned.length !== players.length) throw new Error('角色数量与玩家数量不符');
+    seatMarionette(assigned, rng);
     this.players = players.map((p, i) => ({
       id: p.id, name: p.name, seat: i + 1, role: assigned[i], shownRole: assigned[i],
       alive: true, ghostVote: true, evil: isEvilRole(assigned[i]), gained: null, gainedFake: false, kept: false,
@@ -174,8 +211,15 @@ export const SNV_METHODS = {
     const L = listsOf(this.script);
     for (const p of this.players) {
       if (p.role === 'drunk') p.shownRole = pickOne(L.tf.filter((r) => !inPlay.has(r) && !['amnesiac', 'cannibal'].includes(r)), rng); // 以为自己是失忆者/食人族的酒鬼永远不醒，等于露馅
+      // 提线木偶：以为自己是一个善良角色（官方：抽到的是镇民标记）。和酒鬼一样挑不在场的，别和酒鬼撞
+      if (p.role === 'marionette') p.shownRole = pickOne(L.tf.filter((r) => !inPlay.has(r) && !['amnesiac', 'cannibal'].includes(r) && !this.players.some((q) => q.shownRole === r)), rng) ?? 'chef';
       if (p.role === 'lunatic') p.shownRole = pickOne(L.dem, rng);
-      if (p.role === 'amnesiac') { const free = AMNESIAC_POOL.filter((r) => !inPlay.has(r)); p.gained = pickOne(free.length ? free : AMNESIAC_POOL, rng); }
+      if (p.role === 'amnesiac') {
+        const free = AMNESIAC_POOL.filter((r) => !inPlay.has(r));
+        const pool = free.length ? free : AMNESIAC_POOL;
+        const night = pool.filter((r) => !AMNESIAC_DAY.has(r)); const day = pool.filter((r) => AMNESIAC_DAY.has(r));
+        p.gained = pickOne(day.length && (!night.length || rng() < DAY_SHARE) ? day : night, rng);
+      }
     }
     this.bluffs = pickBluffsSNV(new Set([...inPlay, ...this.players.map((p) => p.shownRole)]), rng, this.script);
     this.fx = [];
@@ -235,13 +279,15 @@ export const SNV_METHODS = {
     // 科学怪人：恶魔拿到一个不在场的善良角色的能力
     if (inPlay.has('boffin')) {
       const free = BOFFIN_POOL.filter((r) => !inPlay.has(r) && !this.players.some((p) => p.shownRole === r));
-      this.boffin = free.length ? pickOne(free, rng) : null;
+      // 官方：「说书人通常会给恶魔一个可验证的能力」。池里能让恶魔坐实假身份的是具体、别人能交叉核对的信息
+      const proof = free.filter((r) => BOFFIN_PROOF.has(r));
+      this.boffin = proof.length && this.st.roll('boffinProof') ? this.st.choose('boffin', proof) : free.length ? this.st.choose('boffin', free) : null;
     }
     this.twinSync(null);
   },
 
   // ───────────────────────── 状态查询 ─────────────────────────
-  abilityOf(p) { return p.gained ?? (p.role === 'drunk' ? p.shownRole : p.role); },
+  abilityOf(p) { return p.gained ?? (p.role === 'drunk' || p.role === 'marionette' ? p.shownRole : p.role); }, // 酒鬼、提线木偶按他以为的角色行动
   /** 不知道自己是什么能力的人（失忆者、拿到能力的食人族）：信息只给裸的数字、人名，不说是哪个能力。 */
   hidden(p) { return !!p?.gained && (p.role === 'amnesiac' || p.role === 'cannibal'); },
   /** 利维坦在起作用。 */
@@ -264,22 +310,22 @@ export const SNV_METHODS = {
   holders(ability) { return this.players.filter((q) => this.has(q, ability) && this.active(q)); },
 
   // ── 陌客、间谍的误登记（暗流涌动的规则）：只对检测类能力生效，每次由说书人现定，可以前后不一致 ──
-  misregSNV(p, by) {
+  misregSNV(p, by, help = 'evil') { // help：这次误登记帮哪边（见 storyteller.misregister）
     if (!p || !['recluse', 'spy'].includes(p.role) || this.snvBroken(p)) return false;
     if (this.misregister != null) return this.rng() < this.misregister;
-    return this.st.misregister(p, by);
+    return this.st.misregister(p, by, help);
   },
   /** 被检测时登记成邪恶吗。 */
-  seenEvil(p, by) { const e = this.evilOf(p); return this.misregSNV(p, by) ? !e : e; },
+  seenEvil(p, by, help) { const e = this.evilOf(p); return this.misregSNV(p, by, help) ? !e : e; },
   /** 被检测时登记成恶魔吗（陌客可能）。 */
   seenDemon(p, by) { return team(p) === 'demon' || (p.role === 'recluse' && this.misregSNV(p, by)); },
   /** 被检测时登记成镇民吗（间谍可能）。 */
-  seenTownsfolk(p, by) { return team(p) === 'townsfolk' || (p.role === 'spy' && this.misregSNV(p, by)); },
+  seenTownsfolk(p, by, help) { return team(p) === 'townsfolk' || (p.role === 'spy' && this.misregSNV(p, by, help)); },
   /** 被看角色时看到的角色（送葬者、守鸦人）：陌客可能是爪牙或恶魔，间谍可能是善良角色。 */
   seenRole(p, by) {
     if (!this.misregSNV(p, by)) return p.role;
     const pool = p.role === 'recluse' ? [...rolesOf(this.script, 'minion'), ...rolesOf(this.script, 'demon')] : goodOf(this.script).filter((r) => r !== 'spy');
-    return this.st.choose('misregRole', pool, { who: p.id });
+    return this.st.misregRole(p, pool);
   },
   demonsAlive() { return this.players.filter((p) => p.alive && team(p) === 'demon'); },
   vigOn(seen = new Set()) { return this.players.some((q) => q.role === 'vigormortis' && q.alive && !this.snvBroken(q, seen)); },
@@ -316,7 +362,7 @@ export const SNV_METHODS = {
   snvBroken(p, seen = new Set()) {
     if (!p) return false;
     if (seen.has(p.id)) return false;
-    if (p.gainedFake || p.role === 'drunk') return true;
+    if (p.gainedFake || p.role === 'drunk' || p.role === 'marionette') return true; // 提线木偶的「能力」从来不生效，说书人假装生效（和酒鬼一样）
     const next = new Set(seen); next.add(p.id);
     return this.fx.some((f) => (f.kind === 'drunk' || f.kind === 'poison') && f.target === p.id && this.snvFxLive(f, next)) || this.seatPoisoned(p, next);
   },
@@ -337,7 +383,12 @@ export const SNV_METHODS = {
   lieMode(p) {
     if (team(p) === 'demon' && this.extraAbility(p)) return null; // 科学怪人给的能力：恶魔醉酒中毒也照样有（恶魔自己的能力不拿信息）
     if (this.isTownsfolk(p) && this.vortoxOn()) return 'must';
-    return this.snvBroken(p) ? 'fake' : null;
+    if (!this.snvBroken(p)) return null;
+    // 邪恶碾压时，真酒鬼偶尔拿真信息（官方《给说书人的建议》）
+    if (p.role === 'drunk' && this.st.drunkTruth(p)) return null;
+    // 醉酒的村夫偶尔拿真信息（官方村夫页）：只醉不毒时
+    if (p.role === 'villageidiot' && this.fx.some((f) => f.why === '村夫' && f.target === p.id) && !this.snvPoisoned(p) && this.st.idiotTruth(p)) return null;
+    return 'fake';
   },
   /**
    * 数字信息：lieMode 不为空就按假世界答，前后几晚对得上。假世界碰巧和真相一样时：
@@ -377,6 +428,7 @@ export const SNV_METHODS = {
     if (team(p) !== 'minion') { p.kept = false; this.vigKept = this.vigKept.filter((e) => e.minion !== p.id); }
     this.fx = this.fx.filter((f) => !(f.why === '舞蛇人' && f.target === p.id)); // 舞蛇人的毒到离场为止
     this.fx = this.fx.filter((f) => !(f.why === '哲学家' && f.source === p.id)); // 哲学家换了角色，被他弄醉的人恢复
+    if (role !== 'villageidiot') this.fx = this.fx.filter((f) => !(f.why === '村夫' && f.target === p.id)); // 醉酒的村夫不再是村夫，醉酒跟着结束
   },
   /** 两人互换角色（阵营不动）：哲学家拿到的能力跟着角色走。 */
   swapRoles(a, b) {
@@ -402,7 +454,7 @@ export const SNV_METHODS = {
     if (!a) { this.twin = null; return; }
     const b = this.twin?.a === a.id ? this.get(this.twin.b) : null;
     if (b && this.evilOf(b) !== this.evilOf(a)) return;
-    const opp = this.st.twinFor(a);
+    const opp = this.st.twinFor(a, !!say && this.aliveCount() <= 4); // 麻脸巫婆在最后几夜造出来的：对立双子可以是恶魔或死人
     if (!opp) { this.twin = null; return; }
     this.twin = { a: a.id, b: opp.id, told: false };
     this.record('st', `镜像双子 ${this.tag(a.id)} 的对立双子是 ${this.tag(opp.id)}`);
@@ -492,7 +544,7 @@ export const SNV_METHODS = {
     this.demonExecuted = false; // 有人接任：主谋的额外一天只看「恶魔死于处决导致没有恶魔」
     this.log.push(`${this.name(heir.id)} 成为了${ROLES[d.role].name}`);
     this.record('death', `${this.name(heir.id)} 接任，成为新的${ROLES[d.role].name}`);
-    messages.push({ playerId: heir.id, text: `恶魔死去了——**你现在是${ROLES[d.role].name}**。${ROLES[d.role].choose ? '从下一个夜晚开始，每晚选择一名玩家杀死。' : ''}` });
+    messages.push({ playerId: heir.id, text: `恶魔死去了——**你现在是${ROLES[d.role].name}**。${ROLES[d.role].ability ? `你的能力：${ROLES[d.role].ability}` : ''}` });
   },
 
   /**
@@ -652,7 +704,10 @@ export const SNV_METHODS = {
     const messages = [];
     const say = (p, text) => messages.push({ playerId: p.id, text });
     const demon = this.demonsAlive()[0];
-    const minions = this.players.filter((p) => team(p) === 'minion');
+    // 提线木偶：不知道自己是爪牙，首夜不醒，别的爪牙也不知道他；恶魔知道他是谁（人少没有恶魔信息时也告诉，这是他能力的一部分）
+    const marionette = this.players.find((p) => p.role === 'marionette');
+    const minions = this.players.filter((p) => team(p) === 'minion' && p.role !== 'marionette');
+    if (marionette && demon) say(demon, `**${this.name(marionette.id)}** 是提线木偶：他以为自己是${ROLES[marionette.shownRole].name}，不知道自己是爪牙。他就坐在你旁边。`);
     // 疯子：恶魔知道他是谁（这是疯子能力的一部分，人少没有恶魔信息时也告诉）
     const lunatic = this.players.find((p) => p.role === 'lunatic');
     if (lunatic && demon) this.tellLunatic(demon, say);
@@ -700,7 +755,7 @@ ${this.grimoire()}
       const mates = minions.filter((x) => x.id !== m.id).map((x) => this.name(x.id));
       say(m, `恶魔是 **${this.name(demon.id)}**。${mates.length ? `其他爪牙：${mates.join('、')}。` : ''}`);
     }
-    say(demon, `你的爪牙：${minions.map((x) => `**${this.name(x.id)}**`).join('、')}。\n不在场的角色（可用来伪装）：${this.bluffs.map((r) => ROLES[r].name).join('、')}。`);
+    say(demon, `你的爪牙：${[...minions, ...(marionette ? [marionette] : [])].map((x) => `**${this.name(x.id)}**${x === marionette ? '（提线木偶）' : ''}`).join('、')}。\n不在场的角色（可用来伪装）：${this.bluffs.map((r) => ROLES[r].name).join('、')}。`);
     return messages;
   },
 
@@ -1077,7 +1132,7 @@ ${this.grimoire()}
           if (this.firstDone[`chef-${p.id}`]) continue;
           this.firstDone[`chef-${p.id}`] = true;
           const n = this.players.length;
-          const evil = this.players.map((q) => this.seenEvil(q, '厨师'));
+          const evil = this.players.map((q) => this.seenEvil(q, '厨师', q.role === 'recluse' ? 'good' : 'evil')); // 陌客被算成邪恶会多出一对、指向真邪恶
           let pairs = 0;
           for (let i = 0; i < n; i++) if (evil[i] && evil[(i + 1) % n]) pairs++;
           const v = this.infoNumber(p, pairs, { min: 0, max: n }, (w) => this.players.reduce((k, q, i) => k + (w.evil.has(q.id) && w.evil.has(this.players[(i + 1) % n].id) ? 1 : 0), 0));
@@ -1249,7 +1304,12 @@ ${this.grimoire()}
           tell(p, `${ts.map((q) => this.name(q.id)).join(' 与 ')} ${yes ? '**是**' : '**不是**'}同一阵营。`, `你得知：**${yes ? '是' : '否'}**。`);
         } break;
         case 'juggler': for (const p of this.holders('juggler')) {
-          const j = this.juggled[p.id];
+          let j = this.juggled[p.id];
+          // 官方：新人杂耍艺人忘了公开猜，说书人可以宽容处理，当晚照样唤醒告诉他 0
+          if (!j && this.jugglerDay[p.id] === this.day && this.juggleLog?.[p.id] !== this.day && this.newbies?.includes(p.id)) {
+            j = { day: this.day, correct: 0, count: 0 };
+            this.record('st', `${this.tag(p.id)} 是新人杂耍艺人，今天忘了公开猜：宽容处理，今晚照样告诉他 0`);
+          }
           if (!j || j.day !== this.day) continue;
           delete this.juggled[p.id];
           const n = this.infoNumber(p, j.correct, { min: 0, max: j.count });
@@ -1324,7 +1384,7 @@ ${this.grimoire()}
   virginSNV(a, b) {
     if (!this.has(b, 'virgin') || !b.alive || this.used[`virgin-${b.id}`] || !a.alive) return null;
     this.used[`virgin-${b.id}`] = true;
-    if (!this.seenTownsfolk(a, '贞洁者被提名')) return null;
+    if (!this.seenTownsfolk(a, '贞洁者被提名', 'good')) return null; // 间谍被当成镇民 = 间谍被处决：帮善良
     if (this.snvBroken(b)) { this.flag(b, '贞洁者被镇民提名，但她失效了'); return null; }
     this.record('nominate', '贞洁者能力触发：提名者是镇民，立即被处决');
     this.executeSNV(a);
@@ -1693,6 +1753,7 @@ ${this.grimoire()}
     if (mm) { this.mastermindDay = this.day + 1; this.record('st', '恶魔死于处决，但主谋还活着：额外进行一个夜晚和一个白天'); return null; }
     if (noDemon && !this.twinBlocks()) this.setWinner('good', '恶魔已经死亡');
     else if (this.aliveCount() <= 2) this.setWinner('evil', noDemon ? '恶魔已死，但双子挡着善良，只剩两名存活玩家，邪恶获胜' : '只剩两名存活玩家，恶魔获胜'); // 官方：邪恶的胜利条件只看人数，不看恶魔死活
+    else if (!noDemon && this.allAliveEvil()) this.setWinner('evil', '存活的玩家全是邪恶，善良已经无法获胜');
     return this.winner;
   },
 

@@ -40,7 +40,7 @@
 // · 自爆立刻出局、有遗言（用户定的），当天剩下的发言和投票全部跳过，遗言说完直接入夜。自爆的警长照样可以移交警徽。
 // · 上警阶段自爆「吞警徽」：照网易口径，第一次吞警徽时警长竞选推迟到第二天（死讯和遗言之后重新上警）；
 //   第二天竞选时又有人自爆，警徽流失，本局没有警长。
-import { WW_ROLES, WW_SETUPS, WW_PLAYERS } from './werewolf-roles.js';
+import { WW_ROLES, WW_SETUPS, WW_PLAYERS, ragnarokWolves } from './werewolf-roles.js';
 
 export { WW_ROLES, WW_SETUPS, WW_PLAYERS };
 
@@ -53,17 +53,18 @@ const shuffle = (arr, rng) => {
   return a;
 };
 
-/** 某个人数的配置：[{role, count}]。 */
-export function wwSetup(n) {
+/** 某个人数的配置：[{role, count}]。诸神黄昏（'rag'）：几只狼人，其余全是猎人。 */
+export function wwSetup(n, script = 'ww') {
+  if (script === 'rag') return n >= 5 && n <= 15 ? [{ role: 'ww_wolf', count: ragnarokWolves(n) }, { role: 'ww_hunter', count: n - ragnarokWolves(n) }] : null;
   const s = WW_SETUPS[n];
   if (!s) return null;
   return [{ role: 'ww_wolf', count: s.wolves }, ...s.gods.map((role) => ({ role, count: 1 })), { role: 'ww_villager', count: s.villagers }];
 }
 
 /** 按人数发一套角色（打乱顺序，对应座位）。 */
-export function rollWerewolf(n, rng = Math.random) {
-  const s = wwSetup(n);
-  if (!s) throw new Error(`狼人杀要 ${WW_PLAYERS[0]}–${WW_PLAYERS[1]} 名玩家`);
+export function rollWerewolf(n, rng = Math.random, script = 'ww') {
+  const s = wwSetup(n, script);
+  if (!s) throw new Error(script === 'rag' ? '诸神黄昏要 5–15 名玩家' : `狼人杀要 ${WW_PLAYERS[0]}–${WW_PLAYERS[1]} 名玩家`);
   return shuffle(s.flatMap(({ role, count }) => Array(count).fill(role)), rng);
 }
 
@@ -82,11 +83,12 @@ export const SHERIFF_WEIGHT = 1.5;
 const SKIP = '空刀'; // 狼人投票里「空刀」的键
 
 export class Werewolf {
-  constructor(players, { rng = Math.random, roles } = {}) {
+  constructor(players, { rng = Math.random, roles, script = 'ww' } = {}) {
     this.rng = rng;
     this.werewolf = true;
-    this.script = 'ww';
-    const assigned = roles ?? rollWerewolf(players.length, rng);
+    this.script = script;
+    this.ragnarok = script === 'rag'; // 诸神黄昏：只有狼人和猎人，被猎人带走的猎人接着开枪
+    const assigned = roles ?? rollWerewolf(players.length, rng, script);
     if (assigned.length !== players.length) throw new Error('角色数量与玩家数量不符');
     this.id = Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
     this.players = players.map((p, i) => ({
@@ -446,7 +448,8 @@ export class Werewolf {
     if (this.checkWinner()) { this.setStage('ended'); return { shot: target }; }
     // 被带走的人死在白天：有遗言，排在这一串遗言的最后、发言之前
     const at = this.queue.findIndex((x) => x.stage !== 'words' && x.stage !== 'badge');
-    this.queue.splice(at < 0 ? this.queue.length : at, 0, ...this.deathItems([target], { hunter: false, words: true })); // 带走的是警长：先移交警徽
+    // 诸神黄昏：被带走的猎人接着开枪（用户 2026-11-04 定的）；标准板子只有一个猎人，带走的人不会再开
+    this.queue.splice(at < 0 ? this.queue.length : at, 0, ...this.deathItems([target], { hunter: !!this.ragnarok, words: true })); // 带走的是警长：先移交警徽
     this.next(); // 发言顺序进了发言阶段才排，被带走的人自然不在里面
     return { shot: target };
   }
@@ -667,7 +670,8 @@ export class Werewolf {
     const hadVillagers = this.players.some((p) => this.side(p) === 'villager');
     // 狼人的条件先判：和「狼人全部出局」同时达成时算狼人胜（狼刀在先）
     const both = wolves ? '' : '，和狼人全部出局同时发生，狼刀在先';
-    if (hadGods && !gods) this.setWinner('evil', `神职全部出局（屠神）${both}`);
+    if (this.ragnarok && !gods) this.setWinner('evil', `猎人全部出局${both}`); // 诸神黄昏只有猎人这一种好人
+    else if (hadGods && !gods) this.setWinner('evil', `神职全部出局（屠神）${both}`);
     else if (hadVillagers && !villagers) this.setWinner('evil', `平民全部出局（屠民）${both}`);
     else if (!wolves) this.setWinner('good', '狼人全部出局');
     return this.winner;

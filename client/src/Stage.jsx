@@ -9,6 +9,7 @@ import { voiceOf, ROLE_NAMES } from './flavor.js';
 import { sfxEnabled, setSfx, onSfx } from './world/footsteps.js';
 import { musicEnabled, setMusic, onMusic } from './ambience.js';
 import { VolumeButton } from './Volume.jsx';
+import { canFullscreen, enterFullscreen } from './fullscreen.js';
 
 /** 逐字打出来的一行字。 */
 function Typewriter({ text, speed = 55 }) {
@@ -174,14 +175,34 @@ export function SoundToggles({ onFixVoice = null, onSheet = null }) {
   useEffect(() => onTts(setT), []);
   useEffect(() => onSfx(setS), []);
   useEffect(() => onMusic(setM), []);
+  const [open, setOpen] = useState(false); // 手机上收在齿轮里
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (!ref.current?.contains(e.target) && !e.target.closest?.('.vol-panel')) setOpen(false); };
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [open]);
   return (
-    <div className="sound-toggles">
+    <div className="sound-toggles" ref={ref}>
+      <button type="button" className={`st-gear ${open ? 'on' : ''}`} onClick={() => setOpen((x) => !x)} aria-expanded={open} aria-label="声音和设置" title="声音和设置">⚙</button>
+      <div className={`st-items ${open ? 'open' : ''}`}>
       {ttsSupported && <button type="button" className={tts ? 'on' : ''} onClick={() => setTts(!tts)} title="AI 房主的语音播报">{tts ? '播报 开' : '播报 关'}</button>}
       <button type="button" className={sfx ? 'on' : ''} onClick={() => setSfx(!sfx)} title="脚步声、敲门声">{sfx ? '音效 开' : '音效 关'}</button>
       <button type="button" className={music ? 'on' : ''} onClick={() => setMusic(!music)} title="背景音乐和风雪声">{music ? '音乐 开' : '音乐 关'}</button>
       <VolumeButton />
       {onFixVoice && <button type="button" onClick={onFixVoice} title="语音卡在别的房间、回不到广场，或者一直被闭着麦时点这里">语音归位</button>}
-      {onSheet && <button type="button" onClick={onSheet} title="所有角色的技能">技能表</button>}
+      {onSheet && <button type="button" onClick={() => { setOpen(false); onSheet(); }} title="所有角色的技能">技能表</button>}
+      <FullscreenButton />
+      </div>
     </div>
   );
+}
+
+/** 全屏开关：只在手机浏览器里显示（Discord 活动本来就占满屏幕；iPhone 的 Safari 不支持网页全屏，就不显示）。 */
+function FullscreenButton() {
+  const [on, setOn] = useState(!!document.fullscreenElement);
+  useEffect(() => { const f = () => setOn(!!document.fullscreenElement); document.addEventListener('fullscreenchange', f); return () => document.removeEventListener('fullscreenchange', f); }, []);
+  if (!canFullscreen()) return null;
+  return <button type="button" className="st-fs" onClick={() => (on ? document.exitFullscreen() : enterFullscreen())}>{on ? '退出全屏' : '全屏'}</button>;
 }

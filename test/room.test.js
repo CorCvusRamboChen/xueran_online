@@ -667,11 +667,13 @@ test('真人说书：破门等说书人点「天亮」才播，播完才天亮�
     assert.ok(room.homes && room.game.script === 'tb', '暗流涌动有家');
     await room.act('u1', 'dawn');                 // 第一下：结算夜晚
     for (let k = 0; k < 200 && !room.resolving; k++) await sleep(3);
-    room.game.demonKills = ['bot-1'];             // 假装今晚恶魔杀了 bot-1
+    room.game.demonKills = ['bot-1'];             // 假装今晚恶魔杀了 bot-1，bot-2 死于别的原因（赌错、刺客……）
+    room.game.nightDeaths = ['bot-1', 'bot-2'];
+    room.game.get('bot-1').alive = false; room.game.get('bot-2').alive = false;
     await sleep(80);
     assert.equal(room.killScene, null, '说书人还没点天亮，受害者不会提前看到破门');
     await room.act('u1', 'dawn');                 // 第二下：天亮
-    assert.deepEqual(room.killScene?.victims, ['bot-1'], '点了天亮马上给受害者播');
+    assert.deepEqual(room.killScene?.victims, ['bot-1', 'bot-2'], '点了天亮马上播；不是恶魔杀的也播同一段，死人分不出死因');
     assert.equal(room.game.phase, 'night', '播完才天亮');
     await assert.rejects(room.act('u1', 'dawn'), /正在天亮/);
     for (let k = 0; k < 100 && room.game.phase === 'night'; k++) await sleep(5);
@@ -1049,6 +1051,40 @@ test('关键信息：天亮记下刀口（平安夜也记），记录里死讯�
   } finally { room.reset(); }
 });
 
+test('身份页记录：自己夜里选了谁只给自己看；开枪、公开声明按天进「关键信息」', async () => {
+  const { room } = setup('auto');
+  await room.act('u1', 'join');
+  await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 5 });
+  await room.act('u1', 'assignRole', { player: 'u2', role: 'poisoner' });
+  await room.act('u1', 'start');
+  try {
+    const g = room.game;
+    const pr = g.nightPrompts().find((x) => x.playerId === 'u2');
+    await room.act('u2', 'choose', { night: 1, targets: [pr.options[0]] });
+    await room.act('u2', 'choose', { night: 1, targets: [pr.options[1]] }); // 改主意：还是一条，内容跟着改
+    const mine = room.viewFor('u2').self.acts;
+    assert.equal(mine.length, 1);
+    assert.match(mine[0].text, new RegExp(`你用投毒者选择了 ${g.name(pr.options[1])}`));
+    assert.equal(mine[0].phase, '第1夜');
+    assert.deepEqual(room.viewFor('u1').self.acts, [], '别人看不到');
+    await untilDay(room);
+    for (let k = 0; k < 1000 && !room.roam; k++) await sleep(5); // 全套测试并发时机器忙，多等一会儿
+    await room.act('u1', 'slay', { target: 'bot-1' });
+    // 11-11 用户：通用的公开声明关掉了，只留造谣者的「发表声明」
+    assert.ok(!room.viewFor('u2').self.canDeclare, '暗流涌动没有通用的公开声明');
+    await assert.rejects(room.act('u2', 'declare', { role: 'empath' }), /没有公开声明/);
+    const v = room.viewFor('u2');
+    const shot = v.pubs.find((e) => /开了一枪/.test(e.text));
+    assert.equal(shot?.day, 1, '开枪记在第 1 天');
+    assert.equal(room.log.find((l) => /开了一枪/.test(l.text))?.key, true, '没打中的开枪也是关键信息');
+    const back = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: mockVoice() });
+    back.restore(JSON.parse(JSON.stringify(room.snapshot())));
+    assert.equal(back.acts.get('u2').length, 1, '存档读得回来');
+    assert.equal(back.pubLog.length, room.pubLog.length);
+  } finally { room.reset(); }
+});
+
 test('推荐预设：按人数挑，官方的权重高；这个人数没有就返回空', async () => {
   const { pickPreset, presetsFor } = await import('../src/shared/setups.js');
   assert.ok(presetsFor('tb', 8).length >= 3);
@@ -1078,7 +1114,7 @@ test('敲门：在门口松开方向键、原地挪一下不算走开，敲门�
   const st = room.roam.state.get('tavern');
   assert.ok(st.knocks.has('u3'), '走向锁着的门：敲门');
   // 到门口后松开方向键：客户端发一次「停在原地」，还有在门口挪一小步
-  for (let k = 0; k < 400 && room.roam.pos.get('u3') && Date.now() < room.roam.pos.get('u3').start + room.roam.pos.get('u3').dur; k++) await sleep(5);
+  for (let k = 0; k < 1500 && room.roam.pos.get('u3') && Date.now() < room.roam.pos.get('u3').start + room.roam.pos.get('u3').dur; k++) await sleep(5);
   const here = room.posNow('u3');
   await room.act('u3', 'move', here);
   assert.ok(st.knocks.has('u3'), '停在门口：敲门还在');
@@ -1107,6 +1143,34 @@ test('疯子（7 人及以上）：界面上和真恶魔一样看得到"爪牙"�
   await room.act('u2', 'shareBluffs');
   assert.equal(self().bluffsShared, true, '显示已经告诉爪牙');
   await room.teardown();
+});
+
+test('黯月初升也有家：早上从自家门口出门；房子不够时合住（同一个门口左右错开），没有破门过场', async () => {
+  const { room } = setup('auto');
+  await room.act('u1', 'join');
+  await room.act('u1', 'addBots', { count: 8 });
+  await room.act('u1', 'settings', { script: 'bmr' });
+  await room.act('u1', 'start');
+  try {
+    const n = room.game.players.length;
+    assert.equal(Object.keys(room.homes ?? {}).length, n, '每人都有家');
+    const counts = Object.values(room.homes).reduce((m, h) => ({ ...m, [h]: (m[h] ?? 0) + 1 }), {});
+    assert.ok(Math.max(...Object.values(counts)) <= Math.ceil(n / room.town.homes().length), '合住的人数摊匀');
+    assert.equal(room.hasKillScene(), false, '黯月初升没有冲到家门口破门的过场');
+    assert.equal(room.viewFor('u1').killScene, false);
+    await untilDayBMR(room);
+    for (let k = 0; k < 400 && !room.roam && !room.ended; k++) await sleep(5);
+    if (room.ended) return;
+    const spots = room.game.players.map((p) => room.roam.pos.get(p.id));
+    for (const p of room.game.players) {
+      const step = room.town.homeStep(room.homes[p.id]);
+      const m = room.roam.pos.get(p.id);
+      assert.ok(Math.hypot(m.x - step.x, m.y - step.y) < 60, `${p.id} 在自家门口出门`);
+    }
+    for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) {
+      assert.ok(Math.hypot(spots[i].x - spots[j].x, spots[i].y - spots[j].y) > 10, '合住的人不叠在一起');
+    }
+  } finally { await room.teardown(); }
 });
 
 test('告诉旺财谁能说话：开局发玩家名单（不含机器人和围观），内容不变不重发；结束发 active:false', async () => {
@@ -1372,4 +1436,53 @@ test('房主自己让出房主：交给在线的真人玩家（先找坐着的�
   await assert.rejects(h.act('u1', 'releaseHost'), /真人说书进行中/);
   await h.teardown();
   await room.teardown();
+});
+
+test('夜里死的人自己也要等天亮才知道（赌徒手快不能分出是赌死的还是被刀的）；破门只在暗流涌动', async () => {
+  const { room } = setup('auto');
+  await room.act('u1', 'join');
+  await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 5 });
+  await room.act('u1', 'start');
+  try {
+    const g = room.game;
+    assert.equal(g.phase === 'night' || g.phase === 'setup', true);
+    g.phase = 'night';
+    g.get('u2').alive = false;
+    g.nightDeaths = ['u2'];
+    const v = room.viewFor('u2');
+    assert.equal(v.self.alive, true, '本人也看不到自己今晚死了');
+    assert.equal(v.players.find((p) => p.id === 'u2').alive, true);
+    assert.equal(room.viewFor('u1').players.find((p) => p.id === 'u2').alive, true);
+    assert.equal(room.hasKillScene(), true, '暗流涌动有破门');
+    g.script = 'cat';
+    assert.equal(room.hasKillScene(), false, '冒名钓鱼没有破门');
+  } finally { room.reset(); }
+});
+
+test('最短夜晚：大家都选完了也要等到 25 秒才天亮；房主立刻天亮不等', async () => {
+  const { room } = setup('auto');
+  room.settings.script = 'ucd';
+  room.settings.chooseSeconds = 45;
+  await room.act('u1', 'join');
+  await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 5 });
+  await room.act('u1', 'start');
+  try {
+    const g = room.game;
+    const floor = room.nightMinAt - Date.now();
+    assert.ok(floor > 24_000 && floor <= 25_000, `最短夜晚 ${floor}ms`);
+    for (const id of g.missingChoices().filter((x) => !room.isFake(x))) {
+      const pr = g.nightPrompts().find((x) => x.playerId === id);
+      if (pr?.waiting) continue;
+      await room.act(id, 'choose', { night: g.night, targets: pr.options.slice(0, pr.count), role: pr.pickRole ? pr.roleOptions[0] : null });
+    }
+    await sleep(800);
+    assert.equal(g.phase, 'night', '都选完了还是夜里（以前 0.6 秒就天亮）');
+    assert.ok(!room.resolving, '还没开始结算');
+    room.nightMinAt = Date.now(); // 测试里不等那半分钟
+    await room.finishNight(g.night);
+    for (let k = 0; k < 400 && g.phase === 'night'; k++) await sleep(5);
+    assert.notEqual(g.phase, 'night', '到点就天亮');
+  } finally { room.reset(); }
 });

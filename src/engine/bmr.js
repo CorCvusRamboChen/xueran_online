@@ -20,15 +20,15 @@ const pickOne = (arr, rng) => arr[Math.floor(rng() * arr.length)];
 const T = { tf: rolesOf('bmr', 'townsfolk'), out: rolesOf('bmr', 'outsider'), min: rolesOf('bmr', 'minion'), dem: rolesOf('bmr', 'demon') };
 
 /**
- * 恶魔的 3 个伪装（不在场的善良角色）。官方只说"三个不在场的善良角色"，没规定镇民 / 外来者怎么配；
- * 说书人的常见做法是以镇民为主：外来者伪装最多一个（大约三分之一的局有）。7 人这种本来 0 外来者的局，
- * 冒充外来者只有在"教父多出一个外来者"时说得通，给两个就等于废掉两个伪装（爪牙也共用这三个，整队都被坑）。
+ * 恶魔的 3 个伪装（不在场的善良角色）。官方《规则概要》：「最佳的方案通常是向恶魔展示两个镇民标记和一个外来者标记」，
+ * 让他能选扮镇民还是扮外来者（用户 2026-11-09 要按官方来；原来只有约三分之一的局给外来者）。外来者最多一个：
+ * 给两个就等于废掉两个伪装（爪牙也共用这三个）。没有不在场的外来者时给三个镇民。
  * exclude：不能给的角色（在场的、疯子自己）。
  */
 export function pickBluffsBMR(exclude, rng) {
   const tf = shuffle(T.tf.filter((r) => !exclude.has(r)), rng);
   const out = shuffle(T.out.filter((r) => !exclude.has(r)), rng);
-  const k = out.length && rng() < 0.35 ? 1 : 0;
+  const k = out.length && tf.length >= 2 ? 1 : 0;
   const pick = [...tf.slice(0, 3 - k), ...out.slice(0, k)];
   if (pick.length < 3) pick.push(...out.slice(k, k + 3 - pick.length)); // 镇民不够（几乎不会）才多补外来者
   return shuffle(pick, rng);
@@ -777,6 +777,7 @@ export const BMR_METHODS = {
       }
       this.setWinner('good', '恶魔已经死亡');
     } else if (this.aliveCount() <= 2) this.setWinner('evil', '只剩两名存活玩家，恶魔获胜');
+    else if (this.allAliveEvil()) this.setWinner('evil', '存活的玩家全是邪恶，善良已经无法获胜');
     return this.winner;
   },
 };

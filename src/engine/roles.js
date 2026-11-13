@@ -1,4 +1,6 @@
-import { WW_ROLES, WW_PLAYERS } from './werewolf-roles.js';
+import { WW_ROLES, WW_PLAYERS, ragnarokWolves, RAG_PLAYERS } from './werewolf-roles.js';
+
+export { ragnarokWolves };
 
 // 三个剧本的全部角色：暗流涌动（Trouble Brewing，script: 'tb'）、黯月初升（Bad Moon Rising，script: 'bmr'）和梦殒春宵（Sects & Violets，script: 'snv'）。
 // firstNight / otherNight 是夜晚行动顺序（0 = 这一晚不醒；各剧本各自排序），
@@ -250,6 +252,13 @@ const BS7 = {
     ability: '恶魔拥有一个不在场的善良角色的能力（即使恶魔醉酒或中毒）。你和恶魔都知道是哪个能力。' },
 };
 
+// ───────────────────────── 实验性角色（Uncertain Death 等社区剧本用到的）─────────────────────────
+// 能力文字照官方中文百科（提线木偶页）用自己的话写。
+const EXP = {
+  marionette: { name: '提线木偶', en: 'Marionette', team: 'minion', firstNight: 0, otherNight: 0,
+    ability: '你以为你是一个善良角色，但其实你不是。恶魔知道你是提线木偶。你与恶魔相邻。' },
+};
+
 // ───────────────────────── 失忆者专用的原创能力 ─────────────────────────
 // 官方：失忆者的能力可以是现有能力、类似的能力或原创能力。这几个是在现有能力上改的变种，只会作为失忆者的隐藏能力出现，
 // 不属于任何剧本（script: 'amnesiac'，rolesOf / inScript 都不会列出来）。结算在 engine/snv.js。
@@ -272,6 +281,7 @@ for (const [id, r] of Object.entries(BMR)) { r.script = 'bmr'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(SNV)) { r.script = 'snv'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(LUF)) { r.script = 'luf'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(BS7)) { r.script = 'bs7'; ROLES[id] = r; }
+for (const [id, r] of Object.entries(EXP)) { r.script = 'exp'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(AMNESIAC_ONLY)) { r.script = 'amnesiac'; r.virtual = true; ROLES[id] = r; }
 for (const [id, r] of Object.entries(WW_ROLES)) { r.script = 'ww'; r.virtual = true; ROLES[id] = r; } // 狼人杀的角色：不是血染的角色，说书人的角色列表里不列
 
@@ -297,8 +307,17 @@ export const SCRIPTS = {
   cat: { id: 'cat', name: '冒名钓鱼', en: 'Catfishing', engine: 'snv',
     roles: ['investigator', 'chef', 'grandmother', 'balloonist', 'dreamer', 'fortuneteller', 'snakecharmer', 'gambler', 'savant', 'philosopher', 'ravenkeeper', 'amnesiac', 'cannibal',
       'drunk', 'recluse', 'sweetheart', 'mutant', 'lunatic', 'godfather', 'cerenovus', 'pithag', 'widow', 'imp', 'vigormortis', 'fanggu'] },
-  // 娱乐模式（用户 2026-11-04 要的「只有猎人和狼人的板子」）：好人全是猎手，坏人全是小恶魔（狼人），见 game.js 的 rollRagnarok
-  rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'tb', ragnarok: true, roles: ['slayer', 'imp'] },
+  // 社区热门剧本 Uncertain Death（作者 Matt，botcscripts 1.0.1，三份推荐名单都有）。中文名是本项目起的。2026-11-11 用户要的
+  ucd: { id: 'ucd', name: '生死未卜', en: 'Uncertain Death', engine: 'snv',
+    roles: ['clockmaker', 'grandmother', 'librarian', 'empath', 'fortuneteller', 'exorcist', 'flowergirl', 'oracle', 'undertaker', 'artist', 'slayer', 'seamstress', 'monk',
+      'lunatic', 'mutant', 'sweetheart', 'recluse', 'godfather', 'assassin', 'scarletwoman', 'marionette', 'nodashii', 'pukka'] },
+  // 官方推荐的 Everyone Can Play（作者 Ben Burns，TPI）：只用三个基础剧本的角色，老手当谜题、新手也能上手。中文名是本项目起的
+  ecp: { id: 'ecp', name: '人人可玩', en: 'Everyone Can Play', engine: 'snv',
+    roles: ['librarian', 'clockmaker', 'chef', 'grandmother', 'fortuneteller', 'empath', 'monk', 'undertaker', 'gambler', 'artist', 'fool', 'ravenkeeper', 'mayor',
+      'drunk', 'recluse', 'saint', 'moonchild', 'baron', 'poisoner', 'assassin', 'devilsadvocate', 'imp'] },
+  // 娱乐模式（用户 2026-11-04 要的「只有猎人和狼人的板子」）。2026-11-11 用户：这是狼人杀的板子，猎人和狼人都是狼人杀的角色，
+  // 走狼人杀的引擎（engine/werewolf.js，script 传 'rag'）。旧的血染版（猎手 + 小恶魔）只留着读老存档
+  rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'ww', werewolf: true, ragnarok: true, players: RAG_PLAYERS, roles: ['ww_hunter', 'ww_wolf'] },
   // 娱乐模式：经典网杀「预女猎守」，不是血染。规则和人数表在 werewolf.js / werewolf-roles.js，房间流程在 server/werewolfRoom.js
   ww: { id: 'ww', name: '狼人杀', en: 'Werewolf', engine: 'ww', werewolf: true, players: WW_PLAYERS, roles: Object.keys(WW_ROLES) },
   // 娱乐模式（用户 2026-11-04 要的）：不是血染，是《抵抗组织：阿瓦隆》原版规则。没有血染角色，规则和角色都在 engine/avalon.js
@@ -306,8 +325,6 @@ export const SCRIPTS = {
   // 娱乐模式「暗印」（原创，用户 2026-11-05 要的）：后颈的花色自己看不到，同屋私聊才能互相看，夜里写错就爆炸。规则在 engine/mark.js
   mark: { id: 'mark', name: '暗印', en: 'The Unseen Mark', engine: 'mark', mark: true, players: [5, 15], roles: [] },
 };
-/** 诸神黄昏几只狼人（小恶魔）：其余全是猎手。 */
-export const ragnarokWolves = (n) => (n <= 6 ? 1 : n <= 9 ? 2 : n <= 12 ? 3 : 4);
 /** 剧本用的规则引擎：'tb' | 'bmr' | 'snv' | 'ww'（狼人杀）| 'avalon'。 */
 export const engineOf = (script) => SCRIPTS[script]?.engine ?? 'tb';
 /** 这个角色在不在这个剧本里。 */

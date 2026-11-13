@@ -1,4 +1,4 @@
-// 小魔典（自己的标记和笔记）：右键头像 / 镇民面板里给人打标签（镇民 / 外来者 / 爪牙 / 恶魔）、猜他的角色、写笔记，
+// 小魔典（自己的标记和笔记）：右键头像 / 镇民面板里给人涂个颜色、猜他的角色（可以猜好几个）、贴角标（毒、醉……）、写笔记，
 // 也能给自己记（比如自己打算冒充谁），还能在两个玩家之间连线（信任、怀疑、同伙、对跳、信息指向），广场上画出来。
 // 存在自己这台设备上（localStorage），别的玩家看不到。每局一份（按服务器给的局编号），下一局自动清空。
 // 标签、猜的角色、连线还会悄悄发给服务器存档（笔记和给自己的标记不发），用来线下看大家在想什么，见 src/server/beliefs.js。
@@ -8,13 +8,34 @@ import { ROLES, SCRIPTS, rolesOf } from '../../src/engine/roles.js';
 import { ATTR } from './flavor.js';
 import { getDisplay } from './display.js';
 
-/** 标签 = 你觉得他是哪一类角色，颜色和游戏里四类角色的主题色一致（镇民蓝、外来者紫、爪牙黄、恶魔红）。 */
+/**
+ * 颜色：给人涂一个颜色，头像框跟着变。界面上只写颜色，不写代表什么（2026-11-12 用户：颜色就只是颜色，别告诉玩家有什么意义）。
+ * id 沿用旧的四类（旧存档、服务器的 beliefs.js 都按这个存）。
+ */
 export const TAGS = {
-  townsfolk: { label: '镇民', color: 'var(--int)' },
-  outsider: { label: '外来者', color: 'var(--psy)' },
-  minion: { label: '爪牙', color: 'var(--mot)' },
-  demon: { label: '恶魔', color: 'var(--phy)' },
+  townsfolk: { label: '蓝', color: 'var(--int)' },
+  outsider: { label: '紫', color: 'var(--psy)' },
+  minion: { label: '黄', color: 'var(--mot)' },
+  demon: { label: '红', color: 'var(--phy)' },
 };
+
+/** 角标：贴在头像角上的小圆字，可以同时贴好几个（2026-11-12 用户：多一个毒，还有各种角标）。 */
+export const CHIPS = {
+  poison: { label: '毒', hint: '中毒', color: '#6fbf4a' },
+  drunk: { label: '醉', hint: '醉酒', color: '#c98a3c' },
+  protect: { label: '护', hint: '被保护', color: '#5fb8cf' },
+  kill: { label: '刀', hint: '可能被恶魔盯上', color: '#db5444' },
+  mad: { label: '疯', hint: '疯狂', color: '#b06adf' },
+  check: { label: '查', hint: '查验过 / 被查过', color: '#9ad08a' },
+  real: { label: '真', hint: '信息是真的', color: '#e9e4d8' },
+  fake: { label: '假', hint: '信息是假的 / 在说谎', color: '#8a8478' },
+  claim: { label: '跳', hint: '跳过身份', color: '#e2b52c' },
+  ask: { label: '?', hint: '存疑', color: '#c9c3b5' },
+};
+
+/** 猜的角色（可以好几个）。旧存档只有一个 role。 */
+export const rolesOfMark = (m) => (Array.isArray(m?.roles) ? m.roles : m?.role ? [m.role] : []).filter((r) => ROLES[r]);
+export const chipsOfMark = (m) => (Array.isArray(m?.chips) ? m.chips : []).filter((c) => CHIPS[c]);
 
 /** 玩家之间的连线：a → b。 */
 export const LINKS = {
@@ -44,7 +65,8 @@ function sendSoon() {
     if (!sink || !gameId) return;
     const { _links, ...people } = data;
     const tags = {};
-    for (const [id, m] of Object.entries(people)) if (id !== me && (m?.tag || m?.role)) tags[id] = { tag: m.tag ?? null, role: m.role ?? null };
+    // 服务器那边一人只记一个角色：发猜的第一个
+    for (const [id, m] of Object.entries(people)) if (id !== me && (m?.tag || rolesOfMark(m).length)) tags[id] = { tag: m.tag ?? null, role: rolesOfMark(m)[0] ?? null };
     sink({ gameId, tags, links: _links ?? [] });
   }, SEND_DELAY);
 }
@@ -65,7 +87,7 @@ function save() {
   sendSoon();
 }
 
-/** 这一局的标记：{ 玩家 id: { tag, role, note }, _links: [{ a, b, kind }] }。 */
+/** 这一局的标记：{ 玩家 id: { tag, roles, role（= roles[0]，旧字段）, chips, note }, _links: [{ a, b, kind }] }。 */
 export function useMarks(s) {
   load(`botc.marks.${s.key}.${s.gameId ?? s.players.map((p) => p.id).join(',')}`, s);
   const [, bump] = useState(0);
@@ -81,6 +103,9 @@ export function setMark(id, patch) {
   data = { ...data, [id]: { ...data[id], ...patch } };
   save();
 }
+
+/** 改猜的角色（一组）：role 跟着写成第一个，旧代码和服务器都只看它。 */
+export const setRoles = (id, roles) => setMark(id, { roles, role: roles[0] ?? null });
 
 export const linksOf = (marks) => marks?._links ?? [];
 
@@ -130,17 +155,20 @@ function rolesOfScript(script) {
 /** 角色颜色（按阵营）：镇民蓝、外来者紫、爪牙黄、恶魔红。 */
 export const roleColor = (id) => (ROLES[id] ? ATTR[ROLES[id].team].color : '#9a9688');
 
-/** 猜角色：只列这个剧本的角色，按阵营上色。 */
-export function RolePicker({ script, value, onPick }) {
+/** 猜角色：只列这个剧本的角色，按阵营上色。multi：可以点好几个（value 是数组，onPick 给新的数组）。 */
+export function RolePicker({ script, value, onPick, multi = false }) {
+  const on = (id) => (multi ? value.includes(id) : value === id);
+  const pick = (id) => (multi ? onPick(value.includes(id) ? value.filter((r) => r !== id) : [...value, id]) : onPick(value === id ? null : id));
+  const none = multi ? !value.length : !value;
   return (
     <div className="role-picker">
-      <button type="button" className={`rp-none ${!value ? 'on' : ''}`} onClick={() => onPick(null)}>不确定</button>
+      <button type="button" className={`rp-none ${none ? 'on' : ''}`} onClick={() => onPick(multi ? [] : null)}>不确定</button>
       {rolesOfScript(script).map(([t, ids]) => (
         <div key={t} className="rp-team" style={{ '--c': ATTR[t].color }}>
           <small>{TEAM_LABEL[t]}</small>
           <div className="rp-roles">
             {ids.map((id) => (
-              <button key={id} type="button" className={value === id ? 'on' : ''} onClick={() => onPick(value === id ? null : id)}>{ROLES[id].name}</button>
+              <button key={id} type="button" className={on(id) ? 'on' : ''} onClick={() => pick(id)}>{ROLES[id].name}</button>
             ))}
           </div>
         </div>
@@ -201,19 +229,29 @@ export function MarkMenu({ s, player, mark, at, onClose }) {
       <div className="mm-title">{player.seat}号 {player.id === s.me ? '你自己' : player.name}</div>
       <div className="mm-tags">
         {Object.entries(TAGS).map(([id, t]) => (
-          <button key={id} type="button" className={mark?.tag === id ? 'on' : ''} style={{ '--c': t.color }}
+          <button key={id} type="button" className={mark?.tag === id ? 'on' : ''} style={{ '--c': t.color }} aria-label={t.label}
             onClick={() => setMark(player.id, { tag: mark?.tag === id ? null : id })}>{t.label}</button>
         ))}
       </div>
-      <div className="mm-sub">{player.id === s.me ? '我打算说自己是' : '猜他是'}</div>
-      <RolePicker script={s.script} value={mark?.role ?? null} onPick={(r) => setMark(player.id, { role: r })} />
+      <div className="mm-sub">角标（可以贴好几个）</div>
+      <div className="mm-chips">
+        {Object.entries(CHIPS).map(([id, c]) => {
+          const has = chipsOfMark(mark).includes(id);
+          return (
+            <button key={id} type="button" className={has ? 'on' : ''} style={{ '--c': c.color }} title={c.hint} aria-label={c.hint} aria-pressed={has}
+              onClick={() => setMark(player.id, { chips: has ? chipsOfMark(mark).filter((x) => x !== id) : [...chipsOfMark(mark), id] })}>{c.label}</button>
+          );
+        })}
+      </div>
+      <div className="mm-sub">{player.id === s.me ? '我打算说自己是' : '猜他是（可以点好几个）'}</div>
+      <RolePicker multi script={s.script} value={rolesOfMark(mark)} onPick={(rs) => setRoles(player.id, rs)} />
       <div className="mm-sub">笔记</div>
       <textarea className="mm-note" rows={2} value={mark?.note ?? ''} placeholder={player.id === s.me ? '给自己记点什么…' : '他说了什么、自称什么身份…'}
         onChange={(e) => setMark(player.id, { note: e.target.value })} />
       <div className="mm-sub">连线</div>
       <LinkEditor s={s} from={player.id} marks={marks} />
       <div className="mm-foot">
-        <button type="button" onClick={() => { setMark(player.id, { tag: null, role: null }); onClose(); }}>清除标记</button>
+        <button type="button" onClick={() => { setMark(player.id, { tag: null, role: null, roles: [], chips: [] }); onClose(); }}>清除标记</button>
         <button type="button" onClick={onClose}>好</button>
       </div>
     </div>,
@@ -221,14 +259,31 @@ export function MarkMenu({ s, player, mark, at, onClose }) {
   );
 }
 
-/** 头像旁边的小标记：标签颜色 + 猜的角色（角色按阵营上色）。 */
-export function MarkBadge({ mark }) {
+/**
+ * 头像旁边的小标记：猜的每个角色一个名字方块（各按自己的阵营上色，一个叠一个，2026-11-12 用户：不要混在一起）；
+ * 只涂了颜色就是一小条色块；加上右上角的角标小圆字。--i：第几个方块，绝对定位的地方按它往外错开。
+ * part：'roles' 只画名字方块（放在玩家名字下面用，2026-11-12 用户），'chips' 只画角标，默认都画。
+ */
+export function MarkBadge({ mark, part = 'all' }) {
   const t = TAGS[mark?.tag];
-  if (!t && !mark?.role) return null;
+  const roles = part === 'chips' ? [] : rolesOfMark(mark);
+  const chips = part === 'roles' ? [] : chipsOfMark(mark);
+  const swatch = part !== 'chips' && t && !roles.length;
+  if (!swatch && !roles.length && !chips.length) return null;
   return (
-    <span className="mark-badge" style={{ '--c': mark.role ? roleColor(mark.role) : t.color, '--ring': t?.color ?? 'transparent' }}>
-      {mark.role ? ROLES[mark.role]?.name : t?.label}
-    </span>
+    <>
+      {roles.map((r, i) => (
+        <span key={r} className="mark-badge" style={{ '--c': roleColor(r), '--ring': t?.color ?? 'transparent', '--i': i }} title={ROLES[r].name}>
+          {ROLES[r].name}
+        </span>
+      ))}
+      {swatch && <span className="mark-badge swatch" style={{ '--c': t.color, '--ring': t.color }} />}
+      {chips.length > 0 && (
+        <span className="mark-chips" aria-label={chips.map((c) => CHIPS[c].hint).join('、')}>
+          {chips.map((c) => <b key={c} style={{ '--c': CHIPS[c].color }} title={CHIPS[c].hint}>{CHIPS[c].label}</b>)}
+        </span>
+      )}
+    </>
   );
 }
 
