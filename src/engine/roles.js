@@ -257,6 +257,18 @@ const BS7 = {
 const EXP = {
   marionette: { name: '提线木偶', en: 'Marionette', team: 'minion', firstNight: 0, otherNight: 0,
     ability: '你以为你是一个善良角色，但其实你不是。恶魔知道你是提线木偶。你与恶魔相邻。' },
+  // 下面五个是 2026-11-14 为 Harold Holt's Revenge、Onion Pies、Trust 加的（口径见 references/community.md）
+  pixie: { name: '小精灵', en: 'Pixie', team: 'townsfolk', firstNight: 1, otherNight: 0,
+    ability: '在你的首个夜晚，你会得知一个在场的镇民角色。如果你「疯狂」地证明你是这个角色，他死亡时你获得他的能力。' },
+  general: { name: '将军', en: 'General', team: 'townsfolk', firstNight: 1, otherNight: 1,
+    ability: '每个夜晚，你会得知说书人认为哪个阵营正在获胜：善良、邪恶，或者都不是。' },
+  politician: { name: '政客', en: 'Politician', team: 'outsider', firstNight: 0, otherNight: 0,
+    ability: '如果你是对你的阵营落败负最大责任的人，你转变阵营并获胜，即使你已死亡。' },
+  ogre: { name: '食人魔', en: 'Ogre', team: 'outsider', firstNight: 1, otherNight: 0,
+    choose: { count: 1, notSelf: true },
+    ability: '在你的首个夜晚，选择一名其他玩家：你变成他的阵营（你不知道是哪个），即使你醉酒或中毒。' },
+  mezepheles: { name: '灵言师', en: 'Mezepheles', team: 'minion', firstNight: 1, otherNight: 1,
+    ability: '在你的首个夜晚，你会得知一个关键词。第一个说出这个关键词的善良玩家，当晚变成邪恶阵营。（要他开着收音页说才听得到）' },
 };
 
 // ───────────────────────── 失忆者专用的原创能力 ─────────────────────────
@@ -317,6 +329,19 @@ export const SCRIPTS = {
       'drunk', 'recluse', 'saint', 'moonchild', 'baron', 'poisoner', 'assassin', 'devilsadvocate', 'imp'] },
   // 娱乐模式（用户 2026-11-04 要的「只有猎人和狼人的板子」）。2026-11-11 用户：这是狼人杀的板子，猎人和狼人都是狼人杀的角色，
   // 走狼人杀的引擎（engine/werewolf.js，script 传 'rag'）。旧的血染版（猎手 + 小恶魔）只留着读老存档
+  // 2026-11-14 用户挑的四个热门社区剧本（中文名除「大诚小镇」外是本项目起的；角色表对过多份公开的剧本 JSON）
+  hhr: { id: 'hhr', name: '哈罗德的复仇', en: "Harold Holt's Revenge", engine: 'snv',
+    roles: ['librarian', 'investigator', 'shugenja', 'balloonist', 'dreamer', 'snakecharmer', 'towncrier', 'slayer', 'savant', 'amnesiac', 'seamstress', 'courtier', 'magician',
+      'mutant', 'damsel', 'lunatic', 'politician', 'cerenovus', 'pithag', 'baron', 'goblin', 'marionette', 'leviathan'] },
+  pie: { id: 'pie', name: '洋葱派', en: 'Onion Pies', engine: 'snv',
+    roles: ['noble', 'chef', 'washerwoman', 'librarian', 'pixie', 'empath', 'fortuneteller', 'monk', 'slayer', 'soldier', 'ravenkeeper', 'virgin', 'cannibal', 'mayor',
+      'ogre', 'saint', 'recluse', 'drunk', 'poisoner', 'spy', 'baron', 'scarletwoman', 'marionette', 'imp'] },
+  trust: { id: 'trust', name: '大诚小镇', en: 'Trust', engine: 'snv',
+    roles: ['noble', 'librarian', 'pixie', 'general', 'fortuneteller', 'oracle', 'monk', 'seamstress', 'philosopher', 'magician', 'ravenkeeper', 'mayor', 'cannibal',
+      'recluse', 'drunk', 'politician', 'lunatic', 'cerenovus', 'baron', 'mezepheles', 'marionette', 'imp', 'vigormortis'] },
+  twv: { id: 'twv', name: '暗流紫罗兰', en: 'Trouble with Violets', engine: 'snv',
+    roles: ['washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'undertaker', 'monk', 'ravenkeeper', 'virgin', 'slayer', 'soldier', 'mayor',
+      'butler', 'drunk', 'recluse', 'saint', 'eviltwin', 'witch', 'cerenovus', 'pithag', 'fanggu', 'vigormortis', 'nodashii', 'vortox'] },
   rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'ww', werewolf: true, ragnarok: true, players: RAG_PLAYERS, roles: ['ww_hunter', 'ww_wolf'] },
   // 娱乐模式：经典网杀「预女猎守」，不是血染。规则和人数表在 werewolf.js / werewolf-roles.js，房间流程在 server/werewolfRoom.js
   ww: { id: 'ww', name: '狼人杀', en: 'Werewolf', engine: 'ww', werewolf: true, players: WW_PLAYERS, roles: Object.keys(WW_ROLES) },

@@ -37,6 +37,23 @@ function MadnessRule({ about }) {
       </section>
     );
   }
+  if (about.kind === 'listen') {
+    return (
+      <section className="mic-rule" aria-label="为什么收音">
+        <h2>说书人在听</h2>
+        <p>这个剧本里有<b>灵言师</b>：他知道一个关键词，第一个说出这个词的善良玩家当晚会变成邪恶。说书人要听大家说的话才知道是谁说了。</p>
+        <p>正常聊天就好。音频只在这台服务器上转成文字，不保存，文字到黄昏就清掉。</p>
+      </section>
+    );
+  }
+  if (about.kind === 'pixie') {
+    return (
+      <section className="mic-rule" aria-label="小精灵">
+        <h2>你是小精灵：可以疯狂地证明你是{about.role}</h2>
+        <p>如果你<b>真心实意、尽最大努力</b>让大家相信你就是<b>{about.role}</b>，等真正的{about.role}死了，你会获得他的能力。不证明也不会被罚，只是拿不到能力。</p>
+      </section>
+    );
+  }
   const who = about.kind === 'madness' ? <b>{about.role}</b> : '那个角色';
   return (
     <section className="mic-rule" aria-label="疯狂是什么">

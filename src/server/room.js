@@ -23,7 +23,7 @@ import { MarkTable, MK_ACTIONS, MARK_SETTINGS } from './mark.js';
 // 受害者那段破门过场多长（毫秒）：踹门 → 踹开 → "你死了"，播完再天亮
 // 每人在镇上有家的剧本（早上从自家门口出门）；其中暗流涌动一系还有夜里「冲到对方家门口破门」的过场
 const KILL_SCENE_SCRIPTS = new Set(['tb']); // 破门过场只在暗流涌动（2026-11-11 用户定）
-const HOME_SCRIPTS = new Set(['tb', 'ngj', 'rag', 'cat', 'ucd', 'ecp', 'bmr']); // 每人在镇上有个家（白天从自家出门）：和破门是两回事
+const HOME_SCRIPTS = new Set(['tb', 'ngj', 'rag', 'cat', 'ucd', 'ecp', 'bmr', 'hhr', 'pie', 'trust']); // 每人在镇上有个家（白天从自家出门）：和破门是两回事
 const SHARED_HOME_SCRIPTS = new Set(['bmr']); // 能当家的房子比人少时合住（黯月初升的地图只有 6 栋）
 const VICTIM_SCENE_MS = 6500;
 // 一局里的真人全都离线这么久，就暂停这局、放开所有闭麦闭耳（有人回来自动接着打）
@@ -1899,6 +1899,14 @@ export class Room {
       if (this.game !== g) return;
       if (said === 'true' && g.st.mutantExecuted(p, { voice: true })) punish(p.id, '语音里说服别人自己是外来者', `**${g.name(p.id)}** 因为疯狂被处决了！`);
     }
+    // 小精灵：疯狂地证明自己是那个镇民了没有（没证明不罚，只是那人死时拿不到能力）
+    for (const [id, px] of Object.entries(g.pixie ?? {})) {
+      if (px.gained || px.mad || !g.get(id)?.alive) continue;
+      const heard = this.heardLines(id);
+      if (!heard.length) continue;
+      if (await ask(`我是${ROLES[px.role].name}`, heard, id) === 'true') g.pixieMad(id);
+      if (this.game !== g) return;
+    }
     // 洗脑师的目标：听到了就让模型判；什么都没听到（没开语音判定、或者他一句没说）也掷骰子，只是依据不同
     // 有收音服务时声明不算数，要听他说的话；开不了收音的（机器人、掉线的）声明了就算尽力
     for (const { id, role, claimed } of g.madnessDue({ claimed: !!this.mic }).filter((x) => !dealt(x.id) && (g.get(x.id).alive || !taken()))) {
@@ -2043,19 +2051,30 @@ export class Room {
     const mutants = g.players.filter((q) => this.thinksMutant(q) && !this.isFake(q.id)).map((q) => q.id);
     const ids = [...new Set([...due, ...mutants])];
     this.hearing?.listen(ids);
+    // 收音页还要发给：小精灵（可以疯狂地证明自己是那个镇民）；剧本里有灵言师时所有活着的真人（听关键词）。
+    // 灵言师那条不看他在不在场，免得谁收到收音页就说明灵言师在场（2026-11-14 用户：灵言师用收音页、本机转写、检测关键词）
+    const pixies = g.players.filter((q) => q.alive && g.pixie?.[q.id] && !g.pixie[q.id].gained && !this.isFake(q.id)).map((q) => q.id);
+    const everyone = inScript('mezepheles', g.script) ? g.players.filter((q) => q.alive && !this.isFake(q.id)).map((q) => q.id) : [];
+    const micIds = [...new Set([...ids, ...pixies, ...everyone])];
     // 收音页：被洗脑的人和畸形秀演员自己决定开不开，所以不用房主打开（micFor 由服务器注入，没有转写服务时没有）。
     // 以前只发给被洗脑的人，畸形秀演员拿不到收音链接，也就没有弹窗（2026-11-11 用户报的）
     if (!this.stId && this.micFor) {
       this.mic ??= this.micFor();
-      this.mic.onLine = (id, text) => this.hearBreak(id, text).catch((e) => console.warn('[botc] 判定破坏疯狂出错：', e.message));
+      this.mic.onLine = (id, text) => {
+        this.game?.mezHeard?.(id, text); // 灵言师的关键词：本机转写的文字里找，不交给大模型
+        this.hearBreak(id, text).catch((e) => console.warn('[botc] 判定破坏疯狂出错：', e.message));
+      };
       // 收音页上显示哪种疯狂的定义（被洗脑的要证明的角色；畸形秀演员）
       this.mic.about = (id) => {
         const gg = this.game;
         const m = gg?.madness?.[id];
         if (m) return { kind: 'madness', role: ROLES[m.role].name };
-        return this.thinksMutant(gg?.get(id)) ? { kind: 'mutant' } : {};
+        if (this.thinksMutant(gg?.get(id))) return { kind: 'mutant' };
+        const px = gg?.pixie?.[id];
+        if (px && !px.gained) return { kind: 'pixie', role: ROLES[px.role].name };
+        return inScript('mezepheles', gg?.script) ? { kind: 'listen' } : {};
       };
-      this.mic.listen(ids);
+      this.mic.listen(micIds);
     }
   }
 
@@ -2980,7 +2999,7 @@ export class Room {
       const prompt = g.phase === 'night' && (!this.resolving || this.revivePending === uid) && (p.alive || g.ghostLunatic?.(p) || (g.engine === 'snv' && g.kept(p))) ? g.nightPrompts().find((x) => x.playerId === uid) : null;
       view.self = {
         seat: p.seat, alive: g.visAlive(p) || hushed.has(p.id), ghostVote: p.ghostVote,
-        role: { id: p.shownRole, name: r.name, team: r.team, teamName: TEAM_NAME[r.team], evil: g.engine === 'snv' && !['lunatic', 'marionette'].includes(p.role) ? g.evilOf(p) : isEvilRole(p.shownRole), ability: r.ability }, // 疯子、提线木偶看到的是他以为的阵营
+        role: { id: p.shownRole, name: r.name, team: r.team, teamName: TEAM_NAME[r.team], evil: g.engine === 'snv' && !['lunatic', 'marionette'].includes(p.role) && !(p.role === 'ogre' && !p.ogreKnows) ? g.evilOf(p) : isEvilRole(p.shownRole), ability: r.ability }, // 疯子、提线木偶看到的是他以为的阵营；食人魔不知道自己变成了哪边
         ...(g.engine === 'snv' ? this.snvSelf(p) : {}),
         canDeclare: this.canDeclare(uid),
         inbox: this.inbox.get(uid) ?? [],
@@ -3066,6 +3085,8 @@ export class Room {
       hearing: !!this.hearing,
       mic: day ? this.mic?.tokenFor(uid) ?? null : null,
       micOn: !!this.mic?.seconds.has(uid), // 收音页传上来过声音
+      micWhy: g.madness?.[uid] || this.thinksMutant(p) ? null : g.pixie?.[uid] && !g.pixie[uid].gained ? 'pixie' : inScript('mezepheles', g.script) ? 'listen' : null, // 为什么发收音：小精灵 / 灵言师剧本
+      pixie: g.pixie?.[uid] ? { role: ROLES[g.pixie[uid].role].name, mad: !!g.pixie[uid].mad, gained: !!g.pixie[uid].gained } : null,
     };
   }
 

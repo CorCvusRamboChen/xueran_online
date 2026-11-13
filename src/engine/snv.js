@@ -125,6 +125,10 @@ export function rollMixed(script, n, rng, { exclude = null } = {}) {
  * 科学怪人能给恶魔的能力：不在场的善良角色，而且是这套引擎能结算、恶魔不用再多醒一次去选人的（我们的夜里每人只有一个选人面板）。
  * 官方能给任何不在场的善良角色（不能给酒鬼等几个），这里只挑被动的和自动拿信息的。
  */
+/** 灵言师的关键词：平时聊天不太会说、但能想办法引人说出口的词（官方建议用生僻词）。 */
+export const MEZ_WORDS = ['琥珀', '灯塔', '狐狸', '樱桃', '风筝', '珊瑚', '萤火虫', '冰糖', '望远镜', '海螺', '蒲公英', '雪橇', '石榴', '鹦鹉', '指南针', '薄荷',
+  '仙人掌', '火烈鸟', '万花筒', '橄榄', '企鹅', '彩虹', '棉花糖', '向日葵', '水晶球', '松鼠', '秋千', '柠檬', '热气球', '章鱼'];
+
 export const BOFFIN_POOL = ['empath', 'oracle', 'noble', 'shugenja', 'librarian', 'washerwoman', 'investigator', 'chef', 'balloonist', 'undertaker',
   'clockmaker', 'flowergirl', 'towncrier', 'mathematician', 'soldier', 'mayor', 'slayer', 'savant', 'fisherman'];
 /** 恶魔拿到也能拿来证明自己的：信息具体、别人能核对（士兵、镇长、杀手、博学者、渔夫这类恶魔拿了也证明不了什么）。 */
@@ -283,7 +287,65 @@ export const SNV_METHODS = {
       const proof = free.filter((r) => BOFFIN_PROOF.has(r));
       this.boffin = proof.length && this.st.roll('boffinProof') ? this.st.choose('boffin', proof) : free.length ? this.st.choose('boffin', free) : null;
     }
+    this.pixie = {};          // 小精灵：id → { role 被告知的镇民角色, target 那个镇民是谁（可能没有：醉酒时给了不在场的）, mad 疯狂过没有 }
+    this.mez = inPlay.has('mezepheles') ? { word: this.st.choose('mezWord', MEZ_WORDS), used: false, hit: null } : null; // 灵言师的关键词
+    this.execHist = [];       // 处决记录（政客终局判责任用）：{ day, id, by 提名者, voters }
     this.twinSync(null);
+  },
+
+  // ───────────────────────── 2026-11-14 的五个新角色 ─────────────────────────
+  /**
+   * 灵言师：收音页转写出的一句话（房间层每句都送进来）。第一个说出关键词的善良玩家，当晚变成邪恶。
+   * 说出口的那一刻灵言师醉没醉都不管，看夜里（官方）。比较时去掉空格标点。
+   */
+  mezHeard(id, text) {
+    const m = this.mez;
+    const p = this.get(id);
+    if (!m || m.used || m.hit || !p?.alive || this.evilOf(p)) return false;
+    const clean = (s) => String(s ?? '').replace(/[\s，。！？、,.!?…「」“”"'：:；;（）()-]/g, '');
+    if (!clean(text).includes(clean(m.word))) return false;
+    m.hit = id;
+    this.record('st', `${this.tag(id)} 说出了灵言师的关键词「${m.word}」：今晚变成邪恶`);
+    return true;
+  },
+  /** 小精灵被判定疯狂地证明了自己是那个镇民（黄昏判，房间层调）。 */
+  pixieMad(id) { const x = this.pixie?.[id]; if (x && !x.mad) { x.mad = true; this.record('st', `小精灵 ${this.tag(id)} 疯狂地证明了自己是${ROLES[x.role].name}`); } },
+  /** 那个镇民死了：疯狂过、没失效的小精灵获得他的能力（不告诉他，下次被叫醒才知道；官方）。 */
+  pixieGain(dead) {
+    for (const [id, x] of Object.entries(this.pixie ?? {})) {
+      const px = this.get(id);
+      if (x.target !== dead.id || x.gained || !px?.alive) continue;
+      if (!x.mad) { this.record('st', `${this.tag(dead.id)} 死了，但小精灵 ${this.tag(id)} 没有疯狂地证明过自己是${ROLES[x.role].name}`); continue; }
+      if (this.snvBroken(px)) { this.flag(px, '小精灵失效，没有获得能力'); continue; }
+      x.gained = true;
+      px.gained = x.role; px.gainedFake = false;
+      this.record('st', `小精灵 ${this.tag(id)} 获得了${ROLES[x.role].name}的能力`);
+    }
+  },
+  /**
+   * 政客（终局判）：输掉的一方里，对落败负最大责任的人。官方没有公式，这里按处决记账：
+   * 处决了自己人，提名的人记 2 分、举手的记 1 分（好人处决好人、坏人处决坏人）。政客分数是本方最高、且至少 3 分才算。
+   * 醉酒中毒、被麻脸巫婆从邪恶变成政客的不转。
+   */
+  politicianCheck() {
+    const lost = this.winner === 'good' ? true : this.winner === 'evil' ? false : null; // 输掉的一方是不是邪恶
+    if (lost == null) return;
+    for (const p of this.players.filter((q) => q.role === 'politician' && this.evilOf(q) === lost)) {
+      if (this.snvBroken(p) || p.noTurnGood && lost) continue;
+      const score = {};
+      for (const e of this.execHist ?? []) {
+        const ex = this.get(e.id);
+        if (!ex || this.evilOf(ex) !== lost) continue; // 处决了自己人
+        if (e.by) score[e.by] = (score[e.by] ?? 0) + 2;
+        for (const v of e.voters ?? []) score[v] = (score[v] ?? 0) + 1;
+      }
+      const mine = score[p.id] ?? 0;
+      const best = Math.max(0, ...this.players.filter((q) => q.id !== p.id && this.evilOf(q) === lost).map((q) => score[q.id] ?? 0));
+      this.st.decide('politician', { who: p.id, chosen: mine >= 3 && mine > best, mine, best });
+      if (mine < 3 || mine <= best) continue;
+      p.evil = !lost;
+      this.record('end', `政客 ${this.tag(p.id)} 对本方落败负最大责任：他转变阵营，和${lost ? '善良' : '邪恶'}一起获胜`);
+    }
   },
 
   // ───────────────────────── 状态查询 ─────────────────────────
@@ -516,6 +578,7 @@ export const SNV_METHODS = {
     p.apparentDead = false;
     if (team(p) === 'demon' && cause === 'execution') this.demonExecuted = true;
     if (ab === 'moonchild') this.pendingMoonchild = p.id;
+    if (this.pixie && Object.keys(this.pixie).length) this.pixieGain(p);
     if (p.role === 'pukka') this.pukkaVictim = null; // 普卡死亡：「中毒」标记移除，接任的新普卡不会毒死旧普卡毒的人 // 失效的月之子也要选（他不知道），选中善良也不会死
     if (cause === 'demon' && p.id === this.grandchild) { // 孙子被恶魔杀死，祖母随之而去
       const gm = this.holders('grandmother').find((q) => q.alive && !this.snvBroken(q));
@@ -707,7 +770,9 @@ export const SNV_METHODS = {
     // 提线木偶：不知道自己是爪牙，首夜不醒，别的爪牙也不知道他；恶魔知道他是谁（人少没有恶魔信息时也告诉，这是他能力的一部分）
     const marionette = this.players.find((p) => p.role === 'marionette');
     const minions = this.players.filter((p) => team(p) === 'minion' && p.role !== 'marionette');
-    if (marionette && demon) say(demon, `**${this.name(marionette.id)}** 是提线木偶：他以为自己是${ROLES[marionette.shownRole].name}，不知道自己是爪牙。他就坐在你旁边。`);
+    // 相克（魔术师/提线木偶）：魔术师活着时，恶魔只知道提线木偶坐在旁边，不知道是哪一边
+    const magicOn = this.players.some((q) => q.role === 'magician' && q.alive && !this.snvBroken(q));
+    if (marionette && demon) say(demon, magicOn ? '提线木偶就坐在你旁边，但魔术师在场：**你不知道是左边还是右边那个人**。他以为自己是善良的镇民。' : `**${this.name(marionette.id)}** 是提线木偶：他以为自己是${ROLES[marionette.shownRole].name}，不知道自己是爪牙。他就坐在你旁边。`);
     // 疯子：恶魔知道他是谁（这是疯子能力的一部分，人少没有恶魔信息时也告诉）
     const lunatic = this.players.find((p) => p.role === 'lunatic');
     if (lunatic && demon) this.tellLunatic(demon, say);
@@ -773,7 +838,8 @@ ${this.grimoire()}
       if (role === 'barber' && team(q) === 'demon' && q.id !== p.id) return false; // 不能选其他恶魔
       return true;
     }).map((q) => q.id);
-    const roleOptions = spec.role ? (spec.good ? goodOf(this.script) : rolesOf(this.script)) : null;
+    let roleOptions = spec.role ? (spec.good ? goodOf(this.script) : rolesOf(this.script)) : null;
+    if (role === 'cerenovus' && inScript('goblin', this.script)) roleOptions = [...roleOptions, 'goblin']; // 相克：洗脑师可以让人对「自己是哥布林」疯狂
     return { playerId: p.id, role: this.hidden(p) ? p.role : role, count: spec.count, options, optional: !!spec.optional, pickRole: !!spec.role, roleOptions, waiting: false };
   },
 
@@ -918,8 +984,16 @@ ${this.grimoire()}
           this.record('choice', `${this.tag(p.id)} 想把 ${this.tag(t.id)} 变成 ${ROLES[c.role].name}`);
           if (this.players.some((q) => q.role === c.role)) { this.record('st', `${ROLES[c.role].name} 已在场，无事发生`); continue; }
           if (broken(p)) { this.flag(p, '麻脸巫婆失效，没有变成'); continue; }
+          if (c.role === 'leviathan' && this.day >= 5) { this.record('st', '相克：第 5 天以后麻脸巫婆不能造出利维坦，无事发生'); continue; }
           const wasDemon = team(t) === 'demon';
           const old = this.demonsAlive().filter((q) => q.id !== t.id);
+          if (c.role === 'damsel') { // 相克：麻脸巫婆造落难少女时，由说书人决定是哪名玩家
+            const pool = this.alive().filter((q) => !this.evilOf(q) && !this.players.some((x) => x.role === 'damsel'));
+            const st = pool.length ? this.st.choose('pithagDamsel', pool) : t;
+            if (st !== t) this.record('st', `相克：麻脸巫婆要造落难少女，说书人改让 ${this.tag(st.id)} 变成落难少女`);
+            this.changeRole(st, 'damsel'); say(st, '你变成了 **落难少女**。你的阵营没有变。'); this.afterChange(say); changed.push(st.id); continue;
+          }
+          if (['politician', 'ogre'].includes(c.role) && this.evilOf(t)) t.noTurnGood = true; // 相克：被变成政客 / 食人魔的邪恶玩家不能靠自身能力转为善良
           this.changeRole(t, c.role);
           if (c.role === 'drunk') t.shownRole = pickOne(goodOf(this.script).filter((r) => ROLES[r].team === 'townsfolk' && !this.players.some((q) => q.role === r || q.shownRole === r) && !['amnesiac', 'cannibal'].includes(r)), this.rng) ?? 'drunk';
           if (c.role === 'lunatic') t.shownRole = pickOne(rolesOf(this.script, 'demon'), this.rng) ?? 'lunatic';
@@ -1176,6 +1250,53 @@ ${this.grimoire()}
           const t = this.choiceOfSNV(p)?.targets[0]; if (!t) continue;
           if (p.role === 'butler') this.butlerMaster = t.id;
           say(p, `你的主人是 ${this.name(t.id)}。明天只有他举手时你才能投票。`);
+        } break;
+        case 'mezepheles': for (const p of this.holders('mezepheles')) {
+          const m = this.mez;
+          if (!m) continue;
+          if (!m.told) { m.told = true; tell(p, `你的关键词是「**${m.word}**」。第一个说出它的善良玩家今晚会变成邪恶（他要开着收音页说，说书人才听得到）。`, `你得知了一个词：「**${m.word}**」。`); }
+          const t = m.hit && this.get(m.hit);
+          if (!t || m.used) continue;
+          m.used = true; // 当晚醉了也算用掉，以后不能再转任何人（官方）
+          if (broken(p)) { this.flag(p, '灵言师失效：说出关键词的人没有变成邪恶，能力也用掉了'); continue; }
+          if (this.evilOf(t) || !t.alive) continue;
+          t.evil = true;
+          say(t, '说书人叫醒了你：**你现在是邪恶阵营**。（你说出了某个关键词。你的角色不变，但从现在起和邪恶一起赢。）');
+          this.record('st', `${this.tag(t.id)} 变成了邪恶`);
+        } break;
+        case 'pixie': for (const p of this.holders('pixie')) {
+          if (this.pixie[p.id]) continue;
+          const lie = this.lieMode(p);
+          const real = this.players.filter((q) => q.id !== p.id && team(q) === 'townsfolk');
+          let t = real.length ? this.st.choose('pixieTarget', real, { who: p.id }) : null;
+          let role = t?.role ?? null;
+          if (lie) { // 失效：可能给一个不在场的镇民（「疯狂」标记仍放在某个真镇民旁）
+            const absent = rolesOf(this.script, 'townsfolk').filter((r) => !this.players.some((q) => q.role === r));
+            if (absent.length) { role = this.st.choose('pixieFake', absent, { who: p.id }); this.flag(p, '小精灵得知了一个不在场的镇民'); }
+          }
+          if (!role) continue;
+          this.pixie[p.id] = { role, target: t?.id ?? null, mad: false, gained: false };
+          tell(p, `在场的一个镇民是 **${ROLES[role].name}**。如果你「疯狂」地证明自己就是${ROLES[role].name}，等他死了，你会获得他的能力。（白天开着收音页说，说书人才听得到）`, `你得知了一个角色：**${ROLES[role].name}**。`);
+        } break;
+        case 'ogre': for (const p of this.holders('ogre')) {
+          if (this.firstDone[`ogre-${p.id}`]) continue;
+          const t = this.choiceOfSNV(p)?.targets[0]; if (!t) continue;
+          this.firstDone[`ogre-${p.id}`] = true;
+          // 醉酒中毒也照样生效（官方）。相克：间谍对食人魔一定被当作邪恶；陌客被当作邪恶时，食人魔得知自己是邪恶
+          const recluseEvil = t.role === 'recluse' && this.misregSNV(t, '食人魔');
+          const evil = t.role === 'spy' || recluseEvil || (t.role !== 'recluse' && this.evilOf(t));
+          if (p.noTurnGood && !evil) continue;
+          p.evil = evil;
+          this.record('st', `食人魔 ${this.tag(p.id)} 选了 ${this.tag(t.id)}：变成${evil ? '邪恶' : '善良'}`);
+          if (recluseEvil) { p.ogreKnows = true; say(p, '你选的人被当作了邪恶：**你现在是邪恶阵营**。'); }
+        } break;
+        case 'general': for (const p of this.holders('general')) {
+          const b = this.st.balance();
+          const truth = b > 0.25 ? 'good' : b < -0.25 ? 'evil' : 'neither';
+          let said = truth;
+          if (this.lieMode(p)) { said = this.st.choose('generalFake', ['good', 'evil', 'neither'].filter((x) => x !== truth), { who: p.id }); this.flag(p, '将军得到了错的局势'); }
+          const word = { good: '**善良**正在获胜', evil: '**邪恶**正在获胜', neither: '**两边都没有**明显领先' }[said];
+          tell(p, `说书人认为：${word}。`, `你得知：${word}。`);
         } break;
         case 'spy': for (const p of this.holders('spy')) {
           if (broken(p)) this.flag(p, '间谍失效（魔典照看，说书人可以给他看错的）');
@@ -1612,6 +1733,7 @@ ${this.grimoire()}
 
   /** 处决带来的结果（普通处决和疯狂处决共用）。 */
   afterExecution(p) {
+    (this.execHist ??= []).push({ day: this.day, id: p.id, by: this.nomBy?.[p.id] ?? null, voters: this.block === p.id ? [...(this.blockVoters ?? [])] : [] }); // 政客终局判责任用
     const goodTwin = this.twinGoodId();
     const on = this.twinOn();
     // 利维坦：处决了就算（死人、没死都算），看的是被处决那一刻的阵营；同一个人只算一次

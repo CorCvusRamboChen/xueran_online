@@ -210,7 +210,8 @@ export class Game {
       'moonchildPick', 'pendingMoonchild', 'diedToday', 'outsiderDiedToday', 'mastermindDay', 'demonExecuted', 'nightRevived', 'newbies', 'deadDrunk', 'lunaticGhost', 'evilMessages', 'midNight', 'lunaticFake', 'goonHit', 'pendingGoonNews', 'blocked', 'lunaticPicks',
       'firstDone', 'twin', 'fangUsed', 'vigKept', 'abnormal', 'demonVoted', 'minionNominated', 'dayVoters', 'jugglerDay', 'juggled', 'juggleLog', 'madness', 'savantDay', 'declared', 'claims', 'records', 'sageHit', 'barberDue', 'pendingKlutz', 'klutzQueue', 'klutzNow', 'madNight', 'curseFail', 'pitNight',
       'balloon', 'leviGood', 'goblinMark', 'amnesiacDay', 'amnesiacKnown', 'woke', 'pardonDay',
-      'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7', 'lunaticTold', 'lunaticTellTo', 'heard'];
+      'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7', 'lunaticTold', 'lunaticTellTo', 'heard',
+      'pixie', 'mez', 'execHist', 'nomBy', 'blockVoters', 'politicianDone'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -652,6 +653,8 @@ export class Game {
     this.blockVotes = 0;   // 当前最高票（平票时 block 为 null）
     this.blockTied = [];   // 平票时同票的几个人（只用来显示：他们一起站在台上，但谁都不会被处决）
     this.executedToday = false;
+    this.nomBy = {};       // 今天谁提名了谁：被提名者 → 提名者（政客终局判责任用）
+    this.blockVoters = []; // 台上那个人的举手名单
   }
 
   /** 提名。返回 {virgin:true, executed} 表示贞洁者触发、提名者被立即处决。 */
@@ -666,6 +669,7 @@ export class Game {
     if (this.nominees.has(b.id)) throw new Error(`${this.name(b.id)} 今天已经被提名过了`);
     this.nominators.add(a.id);
     this.nominees.add(b.id);
+    (this.nomBy ??= {})[b.id] = a.id;
     this.suspicion[b.id] = (this.suspicion[b.id] ?? 0) + 1;
     this.log.push(`第${this.day}天 ${this.name(a.id)} 提名 ${this.name(b.id)}`);
     this.record('nominate', `${this.tag(a.id)} 提名了 ${this.tag(b.id)}`);
@@ -713,7 +717,7 @@ export class Game {
     const threshold = this.threshold();
     let outcome = 'fail';
     if (count >= threshold) {
-      if (count > this.blockVotes) { this.block = nomineeId; this.blockVotes = count; this.blockTied = []; outcome = 'block'; }
+      if (count > this.blockVotes) { this.block = nomineeId; this.blockVotes = count; this.blockTied = []; this.blockVoters = [...voters]; outcome = 'block'; }
       else if (count === this.blockVotes) { this.blockTied = [...new Set([...(this.block ? [this.block] : this.blockTied ?? []), nomineeId])]; this.block = null; outcome = 'tie'; }
       else outcome = 'lower';
     }
@@ -782,6 +786,7 @@ export class Game {
     this.winReason = reason;
     this.phase = 'ended';
     this.record('end', `${team === 'good' ? '善良' : '邪恶'}获胜：${reason}`);
+    if (this.engine === 'snv' && !this.politicianDone) { this.politicianDone = true; this.politicianCheck(); } // 政客：不管是怎么分出胜负的，终局都判一次
   }
 
   checkWinner() {

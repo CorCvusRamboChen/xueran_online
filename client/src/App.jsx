@@ -43,6 +43,10 @@ const BOARD_NOTE = {
   cat: ['教父在场外来者 ±1，方古 +1，亡骨魔 −1，气球驾驶员 +0~1', '教父±1 · 方古+1 · 亡骨魔−1'],
   ucd: ['教父在场时：外来者 +1 或 −1（说书人决定）；提线木偶坐在恶魔旁边', '教父在场 外来者±1'],
   ecp: ['男爵在场时：外来者 +2、镇民 −2', '男爵在场 外来者+2'],
+  hhr: ['男爵在场时外来者 +2（外来者不够就少加）；气球驾驶员 +0~1；提线木偶坐在恶魔旁边', '男爵+2 · 利维坦不杀人'],
+  pie: ['男爵在场时：外来者 +2、镇民 −2；提线木偶坐在恶魔旁边', '男爵在场 外来者+2'],
+  trust: ['男爵在场时：外来者 +2；亡骨魔在场时外来者 −1；提线木偶坐在恶魔旁边', '男爵+2 · 亡骨魔−1'],
+  twv: ['方古在场时外来者 +1；亡骨魔在场时外来者 −1', '方古 +1 · 亡骨魔 −1'],
 };
 /** 顶部常驻：这局的板子配置（几个镇民、外来者、爪牙、恶魔）。 */
 function BoardBar({ n, script }) {
@@ -801,7 +805,9 @@ function MicDemand({ me }) {
     <div className="sheet-bg gossip-bg" role="presentation">
       <div className="gossip-modal mic-demand" role="alertdialog" aria-label="打开收音">
         <h3>{me.madness ? '你被洗脑了' : '说书人要听你说话'}</h3>
-        <p className="lead">{madnessGoal(me)}说书人只听得到收音{me.madness ? '，不开收音很可能被处决' : ''}。</p>
+        <p className="lead">{me.micWhy === 'listen' ? <>这个剧本里有<b>灵言师</b>：说书人要听大家说的话，才知道谁说出了他的关键词。开着收音页说话，说书人才听得到你。</>
+          : me.micWhy === 'pixie' ? <>你是小精灵：如果你<b>疯狂地证明自己就是{me.pixie?.role}</b>，等他死了你就获得他的能力（不证明也不会被罚）。</> : madnessGoal(me)}
+          说书人只听得到收音{me.madness ? '，不开收音很可能被处决' : ''}。</p>
         <p className="muted">{opened ? '在打开的页面里点「开始收音」，然后说话。说书人听到第一句，这里就会关掉。' : '别人不知道你开了。音频不保存，转成文字后发给 AI 说书人判断。'}</p>
         <div className="btn-row">
           <Btn kind="primary" onClick={() => { setOpened(true); openMic(me.mic); }}>{opened ? '再打开一次' : '打开收音'}</Btn>

@@ -333,19 +333,152 @@ NIGHT_ORDER.cat = {
   ],
 };
 
+// 2026-11-14 的四个社区剧本：照官方英文总表（nightsheet.json）的顺序，只列这个剧本里会醒的
+NIGHT_ORDER.hhr = {
+  first: [
+    ['minioninfo', '7 人及以上：爪牙互认、得知恶魔（提线木偶不醒）'],
+    ['lunatic', '以为自己是恶魔：拿到假的爪牙和伪装（真恶魔知道他是疯子）'],
+    ['demoninfo', '7 人及以上：恶魔得知爪牙和 3 个伪装；魔术师在场时只知道提线木偶坐在旁边、不知道是哪边'],
+    ['courtier', '每局一次：选一个角色，他醉三天三夜'],
+    ['snakecharmer', '选一人：选中恶魔就互换角色和阵营'],
+    ['cerenovus', '选一人和一个角色（可以是哥布林）：他明天要疯狂地证明自己是那个角色'],
+    ['damsel', '爪牙得知落难少女在场'],
+    ['librarian', '得知两人之一是某个外来者（或场上没有外来者）'],
+    ['investigator', '得知两人之一是某个爪牙'],
+    ['dreamer', '选一人，得知一善一恶两个角色'],
+    ['seamstress', '每局一次：选两人，得知是不是同一阵营'],
+    ['balloonist', '得知一名玩家'],
+    ['shugenja', '得知最近的邪恶玩家在顺时针还是逆时针'],
+  ],
+  other: [
+    ['courtier', '每局一次：选一个角色，他醉三天三夜'],
+    ['snakecharmer', '选一人：选中恶魔就互换角色和阵营'],
+    ['cerenovus', '选一人和一个角色：他明天要疯狂地证明自己是那个角色'],
+    ['pithag', '选一人和一个不在场的角色：他变成那个角色（第 5 天以后不能造利维坦）'],
+    ['dreamer', '选一人，得知一善一恶两个角色'],
+    ['towncrier', '得知今天有没有爪牙提名过'],
+    ['seamstress', '每局一次：选两人，得知是不是同一阵营'],
+    ['balloonist', '得知一名玩家，和上一晚得知的人角色类型不同'],
+  ],
+  why: [
+    '恶魔是利维坦：不杀人。处决了两个好人、或者撑到第五天结束，邪恶就赢。所以白天的每一次处决都要想清楚。',
+    '政客：输掉的一方里，对落败负最大责任的人会转阵营、跟赢的一方一起赢（终局时说书人判）。',
+    '相克：洗脑师可以让人对「自己是哥布林」疯狂；魔术师活着时恶魔不知道提线木偶是哪个邻座；麻脸巫婆造落难少女时说书人挑人。',
+  ],
+};
+NIGHT_ORDER.pie = {
+  first: [
+    ['minioninfo', '7 人及以上：爪牙互认、得知恶魔（提线木偶不醒）'],
+    ['demoninfo', '7 人及以上：恶魔得知爪牙和 3 个伪装'],
+    ['marionette', '恶魔得知谁是提线木偶（人少也告诉）'],
+    ['poisoner', '选一人中毒（到明天黄昏）'],
+    ['pixie', '得知一个在场的镇民角色'],
+    ['washerwoman', '得知两人之一是某个镇民'],
+    ['librarian', '得知两人之一是某个外来者（或场上没有外来者）'],
+    ['chef', '得知有几对相邻的邪恶玩家'],
+    ['empath', '得知两侧存活邻座里有几个邪恶'],
+    ['fortuneteller', '选两人，得知其中有没有恶魔'],
+    ['noble', '得知三人，其中恰好一人是邪恶的'],
+    ['spy', '看魔典'],
+    ['ogre', '选一人：变成他的阵营（自己不知道是哪边）'],
+  ],
+  other: [
+    ['poisoner', '选一人中毒'],
+    ['monk', '选一人：他今晚不会被恶魔杀死'],
+    ['scarletwoman', '恶魔今天死了：她在这时成为新的恶魔'],
+    ['imp', '选一人杀死；选自己就是自杀传位'],
+    ['ravenkeeper', '今晚死了才醒：选一人，得知他的角色'],
+    ['empath', '得知两侧存活邻座里有几个邪恶'],
+    ['fortuneteller', '选两人，得知其中有没有恶魔'],
+    ['spy', '看魔典'],
+  ],
+  why: [
+    '底子是暗流涌动：大部分是老面孔，新手也能上手。新的是小精灵（疯狂地扮演一个镇民，他死了你接手）、食人魔（首夜跟着选的人站队，自己不知道站哪边）和提线木偶（以为自己是镇民的爪牙）。',
+    '相克：间谍对食人魔一定被当作邪恶；陌客被食人魔当作邪恶时，食人魔会得知自己是邪恶。',
+  ],
+};
+NIGHT_ORDER.trust = {
+  first: [
+    ['philosopher', '选一个善良角色，获得它的能力'],
+    ['minioninfo', '7 人及以上：爪牙互认、得知恶魔（提线木偶不醒）'],
+    ['lunatic', '以为自己是恶魔：拿到假的爪牙和伪装'],
+    ['demoninfo', '7 人及以上：恶魔得知爪牙和 3 个伪装；魔术师在场时只知道提线木偶坐在旁边、不知道是哪边'],
+    ['cerenovus', '选一人和一个角色：他明天要疯狂地证明自己是那个角色'],
+    ['mezepheles', '得知一个关键词'],
+    ['pixie', '得知一个在场的镇民角色'],
+    ['librarian', '得知两人之一是某个外来者（或场上没有外来者）'],
+    ['fortuneteller', '选两人，得知其中有没有恶魔'],
+    ['seamstress', '每局一次：选两人，得知是不是同一阵营'],
+    ['noble', '得知三人，其中恰好一人是邪恶的'],
+    ['general', '得知说书人觉得哪边在赢'],
+  ],
+  other: [
+    ['philosopher', '还没用过的话：选一个善良角色，获得它的能力'],
+    ['monk', '选一人：他今晚不会被恶魔杀死'],
+    ['cerenovus', '选一人和一个角色：他明天要疯狂地证明自己是那个角色'],
+    ['mezepheles', '今天有善良玩家说出了关键词：他变成邪恶'],
+    ['lunatic', '以为自己是恶魔，照样选人（没有效果，恶魔知道他选了谁）'],
+    ['imp', '选一人杀死；选自己就是自杀传位'],
+    ['vigormortis', '选一人杀死；杀死的爪牙保留能力'],
+    ['ravenkeeper', '今晚死了才醒：选一人，得知他的角色'],
+    ['fortuneteller', '选两人，得知其中有没有恶魔'],
+    ['oracle', '得知死人里有几个邪恶'],
+    ['seamstress', '每局一次：选两人，得知是不是同一阵营'],
+    ['general', '得知说书人觉得哪边在赢'],
+  ],
+  why: [
+    '这本讲「信谁」：让人醉酒中毒的来源很少，信息大多是真的；但政客、灵言师、提线木偶、疯子都让人不敢信。僧侣要做的事比平常多（作者原话）。',
+    '灵言师：剧本里有灵言师时，每个人都会收到收音页，开着说话说书人才听得到；第一个说出关键词的好人当晚变成邪恶。',
+  ],
+};
+NIGHT_ORDER.twv = {
+  first: [
+    ['minioninfo', '7 人及以上：爪牙互认、得知恶魔'],
+    ['demoninfo', '7 人及以上：恶魔得知爪牙和 3 个伪装'],
+    ['eviltwin', '镜像双子和对立双子互相得知'],
+    ['witch', '选一人：他明天提名就会死'],
+    ['cerenovus', '选一人和一个角色：他明天要疯狂地证明自己是那个角色'],
+    ['washerwoman', '得知两人之一是某个镇民'],
+    ['librarian', '得知两人之一是某个外来者（或场上没有外来者）'],
+    ['investigator', '得知两人之一是某个爪牙'],
+    ['chef', '得知有几对相邻的邪恶玩家'],
+    ['empath', '得知两侧存活邻座里有几个邪恶'],
+    ['fortuneteller', '选两人，得知其中有没有恶魔'],
+    ['butler', '选一个主人'],
+  ],
+  other: [
+    ['monk', '选一人：他今晚不会被恶魔杀死'],
+    ['witch', '选一人：他明天提名就会死'],
+    ['cerenovus', '选一人和一个角色：他明天要疯狂地证明自己是那个角色'],
+    ['pithag', '选一人和一个不在场的角色：他变成那个角色'],
+    ['fanggu', '选一人杀死；第一个被杀的外来者变成新的方古'],
+    ['nodashii', '选一人杀死；两侧最近的镇民一直中毒'],
+    ['vortox', '选一人杀死；镇民的信息都是错的'],
+    ['vigormortis', '选一人杀死；杀死的爪牙保留能力'],
+    ['ravenkeeper', '今晚死了才醒：选一人，得知他的角色'],
+    ['empath', '得知两侧存活邻座里有几个邪恶'],
+    ['fortuneteller', '选两人，得知其中有没有恶魔'],
+    ['undertaker', '得知今天被处决的人的角色'],
+    ['butler', '选一个主人'],
+  ],
+  why: [
+    '暗流涌动的全部好人，对上梦殒春宵的全部坏人：好人的信息很直白，坏人却会换角色、换阵营、让信息全错（涡流）。社区普遍觉得邪恶偏强，好人要多处决、多验证。',
+  ],
+};
+
 /**
  * 小剧本的结算步骤（engine/snv.js 用）：这套引擎认得的所有角色按官方总表排好；不在场的步骤自动跳过。
  * 失忆者、食人族拿到的能力也按这张表的位置醒。
  */
 export const MIX_STEPS = {
-  first: ['philosopher', 'sailor', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'pukka',
+  first: ['philosopher', 'sailor', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'pukka', 'pixie',
     'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'grandmother', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress', 'noble', 'balloonist', 'shugenja', 'villageidiot',
-    'butler', 'spy', 'chambermaid', 'mathematician'],
-  other: ['philosopher', 'sailor', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'exorcist',
+    'butler', 'spy', 'ogre', 'general', 'chambermaid', 'mathematician'],
+  other: ['philosopher', 'sailor', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist',
     'imp', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'assassin', 'godfather', 'gossip',
     'barber', 'sweetheart', 'sage', 'professor', 'farmer', 'tinker', 'moonchild', 'grandmother', 'ravenkeeper', // 照官方英文总表（11-11 用户定：和集石百科不一样时以英文新表为准）
     'washerwoman', 'librarian', 'investigator', 'chef', 'clockmaker', 'noble', 'shugenja', 'empath', 'fortuneteller', 'undertaker', 'dreamer', 'amn_detect', 'amn_echo', 'flowergirl', 'towncrier', 'oracle', 'seamstress',
-    'juggler', 'balloonist', 'villageidiot', 'butler', 'spy', 'chambermaid', 'mathematician'],
+    'juggler', 'balloonist', 'villageidiot', 'butler', 'spy', 'general', 'chambermaid', 'mathematician'],
 };
 
 /** 黯月初升的结算步骤（engine/bmr.js 用）：去掉不是角色的信息步骤；教父首夜那一步是"得知外来者"。 */
