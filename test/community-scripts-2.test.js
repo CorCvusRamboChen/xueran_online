@@ -9,7 +9,7 @@ import { MIX_STEPS, NIGHT_ORDER, STEP_NAMES, NOT_STEPS } from '../src/shared/nig
 import { getMap } from '../src/shared/map.js';
 import { Room } from '../src/server/room.js';
 
-const NEW = ['hhr', 'pie', 'trust', 'twv'];
+const NEW = ['hhr', 'pie', 'trust', 'twv', 'booz'];
 const players = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, name: `玩家${i + 1}` }));
 const mk = (roles, script, seed = 7) => new Game(players(roles.length), { roles, rng: makeRng(seed), script, misregister: 0 });
 const text = (msgs, id) => msgs.filter((m) => m.playerId === id).map((m) => m.text).join('\n');
@@ -23,7 +23,7 @@ function night(g, choices = {}) {
 }
 
 test('四个剧本：角色都在、用通用引擎、各有一张基础图的变体；会醒的角色都在结算表里', () => {
-  assert.deepEqual(NEW.map((s) => rolesOf(s).length), [23, 24, 23, 25]);
+  assert.deepEqual(NEW.map((s) => rolesOf(s).length), [23, 24, 23, 25, 25]);
   assert.deepEqual(rolesOf('hhr', 'demon'), ['leviathan']);
   assert.deepEqual(rolesOf('trust', 'demon'), ['imp', 'vigormortis']);
   const steps = [...MIX_STEPS.first, ...MIX_STEPS.other];
@@ -130,7 +130,42 @@ test('相克：魔术师活着时恶魔不知道提线木偶是哪个邻座；�
   assert.ok(pr.roleOptions.includes('goblin'));
 });
 
-// ───────────── 房间：四个剧本各打一整局 ─────────────
+test('瞒天过海：有巡山人时落难少女一定在场；巡山人选中落难少女，她变成不在场的镇民', () => {
+  for (let seed = 1; seed < 200; seed++) for (const n of [5, 8, 12]) {
+    const roles = rollMixed('booz', n, makeRng(seed));
+    if (roles.includes('huntsman')) assert.ok(roles.includes('damsel'), `第 ${seed} 局 ${n} 人：有巡山人没有落难少女`);
+    assert.equal(roles.length, n);
+  }
+  const g = mk(['huntsman', 'noble', 'oracle', 'damsel', 'savant', 'cerenovus', 'imp'], 'booz');
+  night(g, { p1: ['p4'] });
+  assert.equal(ROLES[g.get('p4').role].team, 'townsfolk');
+  assert.ok(!g.evilOf(g.get('p4')));
+  g.dawn(); g.endDay();
+  g.startNight();
+  assert.ok(!g.nightPrompts().some((x) => x.playerId === 'p1'), '每局一次');
+});
+
+test('魔像：整局只能提名一次；提名的人不是恶魔就当场死，是恶魔就没事', () => {
+  const g = mk(['golem', 'noble', 'oracle', 'savant', 'fisherman', 'cerenovus', 'imp'], 'booz');
+  night(g); g.dawn();
+  const r = g.nominate('p1', 'p2');
+  assert.equal(r.golem, true);
+  assert.equal(g.get('p2').alive, false);
+  g.endDay(); night(g, { p7: ['p4'] }); g.dawn();
+  assert.throws(() => g.nominate('p1', 'p3'), /只能提名一次/);
+  const h = mk(['golem', 'noble', 'oracle', 'savant', 'fisherman', 'cerenovus', 'imp'], 'booz');
+  night(h); h.dawn();
+  assert.equal(h.nominate('p1', 'p7').golem, false);
+  assert.ok(h.get('p7').alive);
+});
+
+test('女祭司：每晚得知说书人认为她最该和谁聊', () => {
+  const g = mk(['highpriestess', 'noble', 'oracle', 'savant', 'fisherman', 'cerenovus', 'imp'], 'booz');
+  const r = night(g);
+  assert.match(text(r.messages, 'p1'), /最应该和 \*\*\d+号/);
+});
+
+// ───────────── 房间：每个剧本各打一整局 ─────────────
 const FAST = { chooseSeconds: 0.05, voteSeconds: 0.002, voteCountdown: 0.005, pauseMs: 5, killSceneMs: 0, accuseSeconds: 0.005, defendSeconds: 0.005 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (cond, ms) => { const end = Date.now() + ms; while (!cond() && Date.now() < end) await sleep(3); };

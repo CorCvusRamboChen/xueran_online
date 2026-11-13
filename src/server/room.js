@@ -23,7 +23,7 @@ import { MarkTable, MK_ACTIONS, MARK_SETTINGS } from './mark.js';
 // 受害者那段破门过场多长（毫秒）：踹门 → 踹开 → "你死了"，播完再天亮
 // 每人在镇上有家的剧本（早上从自家门口出门）；其中暗流涌动一系还有夜里「冲到对方家门口破门」的过场
 const KILL_SCENE_SCRIPTS = new Set(['tb']); // 破门过场只在暗流涌动（2026-11-11 用户定）
-const HOME_SCRIPTS = new Set(['tb', 'ngj', 'rag', 'cat', 'ucd', 'ecp', 'bmr', 'hhr', 'pie', 'trust']); // 每人在镇上有个家（白天从自家出门）：和破门是两回事
+const HOME_SCRIPTS = new Set(['tb', 'ngj', 'rag', 'cat', 'ucd', 'ecp', 'bmr', 'hhr', 'pie', 'trust', 'booz']); // 每人在镇上有个家（白天从自家出门）：和破门是两回事
 const SHARED_HOME_SCRIPTS = new Set(['bmr']); // 能当家的房子比人少时合住（黯月初升的地图只有 6 栋）
 const VICTIM_SCENE_MS = 6500;
 // 一局里的真人全都离线这么久，就暂停这局、放开所有闭麦闭耳（有人回来自动接着打）
@@ -1007,6 +1007,11 @@ export class Room {
     if (this.dusking || this.duskDay === g.day) throw new UserError('今天已经到黄昏了，不能再提名');
     if (!this.stId && !this.noms && !this.roamedToday) throw new UserError('现在还不能提名，等大家回到广场'); // 天亮到自由活动之间：这时提名成功，自由活动就起不来了
     const r = g.nominate(uid, target);
+    if (r.golem) {
+      this.pub(`**${g.name(uid)}** 提名了 **${g.name(target)}**——**${g.name(target)} 突然倒地身亡！** 提名照常进行。`, 'death');
+      if (g.winner) { this.later(0, () => this.endGame()); return; }
+      this.klutzNotice();
+    }
     if (r.cursed) {
       this.pub(`**${g.name(uid)}** 提名了 **${g.name(target)}**——**${g.name(uid)} 突然倒地身亡！** 提名照常进行。`, 'death');
       if (g.winner) { this.later(0, () => this.endGame()); return; }

@@ -1054,6 +1054,23 @@ export class Storyteller {
     return keep;
   }
 
+  /**
+   * 女祭司：说书人认为她最该和谁聊。往落后的一方偏：善良落后时多指拿着真信息的善良玩家（帮她们对上信息），
+   * 偶尔直接指恶魔；善良领先时多指一个满嘴假话的邪恶或随便一个人。失效时随便指。
+   */
+  priestessPick(p, lie) {
+    const g = this.g;
+    const others = g.alive().filter((q) => q.id !== p.id);
+    if (!others.length) return null;
+    if (lie) return this.choose('priestessFake', others, { who: p.id });
+    const b = this.balance();
+    const evil = others.filter((q) => g.evilOf(q));
+    const goodInfo = others.filter((q) => !g.evilOf(q) && ROLES[q.role].team === 'townsfolk' && !g.snvBroken?.(q));
+    const pool = b < -0.15 ? (goodInfo.length && this.roll('priestessGood', {}, { who: p.id }) ? goodInfo : evil.length ? evil : others)
+      : b > 0.15 ? (evil.length && this.roll('priestessEvil', {}, { who: p.id }) ? evil : others) : others;
+    return this.choose('priestess', pool.length ? pool : others, { who: p.id, b });
+  }
+
   /** 失效的侍女：给一个错的数字。 */
   fakeChambermaid(p, truth) {
     const opts = [0, 1, 2].filter((n) => n !== truth);

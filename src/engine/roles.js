@@ -267,6 +267,14 @@ const EXP = {
   ogre: { name: '食人魔', en: 'Ogre', team: 'outsider', firstNight: 1, otherNight: 0,
     choose: { count: 1, notSelf: true },
     ability: '在你的首个夜晚，选择一名其他玩家：你变成他的阵营（你不知道是哪个），即使你醉酒或中毒。' },
+  // 瞒天过海（Boozling）用到的三个（2026-11-14）
+  highpriestess: { name: '女祭司', en: 'High Priestess', team: 'townsfolk', firstNight: 1, otherNight: 1,
+    ability: '每个夜晚，你会得知说书人认为你最应该和谁聊一聊。' },
+  huntsman: { name: '巡山人', en: 'Huntsman', team: 'townsfolk', firstNight: 1, otherNight: 1,
+    choose: { count: 1, alive: true, optional: true, once: true },
+    ability: '每局一次，在夜晚时，你可以选择一名存活的玩家：如果他是落难少女，他变成一个不在场的镇民。[+落难少女]' },
+  golem: { name: '魔像', en: 'Golem', team: 'outsider', firstNight: 0, otherNight: 0,
+    ability: '你整局只能提名一次。你提名时，如果被提名的人不是恶魔，他死亡。' },
   mezepheles: { name: '灵言师', en: 'Mezepheles', team: 'minion', firstNight: 1, otherNight: 1,
     ability: '在你的首个夜晚，你会得知一个关键词。第一个说出这个关键词的善良玩家，当晚变成邪恶阵营。（要他开着收音页说才听得到）' },
 };
@@ -342,6 +350,10 @@ export const SCRIPTS = {
   twv: { id: 'twv', name: '暗流紫罗兰', en: 'Trouble with Violets', engine: 'snv',
     roles: ['washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'undertaker', 'monk', 'ravenkeeper', 'virgin', 'slayer', 'soldier', 'mayor',
       'butler', 'drunk', 'recluse', 'saint', 'eviltwin', 'witch', 'cerenovus', 'pithag', 'fanggu', 'vigormortis', 'nodashii', 'vortox'] },
+  // 2022 剧本世界杯冠军（作者 Lau），v9。集石的官方中文名是「瞒天过海」；B 站「染钟楼」中文社区说 v9 改顺了、适合新手进阶
+  booz: { id: 'booz', name: '瞒天过海', en: 'Boozling', engine: 'snv',
+    roles: ['noble', 'pixie', 'highpriestess', 'balloonist', 'fortuneteller', 'oracle', 'savant', 'philosopher', 'huntsman', 'fisherman', 'slayer', 'sage', 'cannibal',
+      'drunk', 'mutant', 'damsel', 'klutz', 'golem', 'baron', 'cerenovus', 'scarletwoman', 'marionette', 'nodashii', 'fanggu', 'imp'] },
   rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'ww', werewolf: true, ragnarok: true, players: RAG_PLAYERS, roles: ['ww_hunter', 'ww_wolf'] },
   // 娱乐模式：经典网杀「预女猎守」，不是血染。规则和人数表在 werewolf.js / werewolf-roles.js，房间流程在 server/werewolfRoom.js
   ww: { id: 'ww', name: '狼人杀', en: 'Werewolf', engine: 'ww', werewolf: true, players: WW_PLAYERS, roles: Object.keys(WW_ROLES) },

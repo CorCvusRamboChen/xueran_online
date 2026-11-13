@@ -118,7 +118,13 @@ export function rollMixed(script, n, rng, { exclude = null } = {}) {
     const swap = sample(towns.filter((r) => r !== 'villageidiot'), extra, rng);
     towns = [...towns.filter((r) => !swap.includes(r)), ...swap.map(() => 'villageidiot')];
   }
-  return shuffle([...towns, ...sample(out, o, rng), ...minions, demon], rng);
+  let outs = sample(out, o, rng);
+  // 巡山人 [+落难少女]：落难少女一定在场（外来者有空位就换进来，没有就占一个镇民的位置）
+  if (towns.includes('huntsman') && out.includes('damsel') && !outs.includes('damsel')) {
+    if (outs.length) outs[Math.floor(rng() * outs.length)] = 'damsel';
+    else if (towns.length > 1) { const drop = pickOne(towns.filter((r) => r !== 'huntsman'), rng); towns = towns.filter((r) => r !== drop); outs = ['damsel']; }
+  }
+  return shuffle([...towns, ...outs, ...minions, demon], rng);
 }
 
 /**
@@ -216,7 +222,7 @@ export const SNV_METHODS = {
     for (const p of this.players) {
       if (p.role === 'drunk') p.shownRole = pickOne(L.tf.filter((r) => !inPlay.has(r) && !['amnesiac', 'cannibal'].includes(r)), rng); // 以为自己是失忆者/食人族的酒鬼永远不醒，等于露馅
       // 提线木偶：以为自己是一个善良角色（官方：抽到的是镇民标记）。和酒鬼一样挑不在场的，别和酒鬼撞
-      if (p.role === 'marionette') p.shownRole = pickOne(L.tf.filter((r) => !inPlay.has(r) && !['amnesiac', 'cannibal'].includes(r) && !this.players.some((q) => q.shownRole === r)), rng) ?? 'chef';
+      if (p.role === 'marionette') p.shownRole = pickOne(L.tf.filter((r) => !inPlay.has(r) && !['amnesiac', 'cannibal', 'huntsman', 'balloonist'].includes(r) && !this.players.some((q) => q.shownRole === r)), rng) ?? 'chef';
       if (p.role === 'lunatic') p.shownRole = pickOne(L.dem, rng);
       if (p.role === 'amnesiac') {
         const free = AMNESIAC_POOL.filter((r) => !inPlay.has(r));
@@ -308,6 +314,18 @@ export const SNV_METHODS = {
     this.record('st', `${this.tag(id)} 说出了灵言师的关键词「${m.word}」：今晚变成邪恶`);
     return true;
   },
+  /** 魔像整局只能提名一次：第二次就不让提（在记下提名之前查）。 */
+  golemBlocked(a) { return this.has(a, 'golem') && a.role === 'golem' && !!this.used[`golem-${a.id}`]; },
+  /** 魔像提名：被提名的人不是恶魔就死（陌客可能被当作恶魔）。失效时不死，但这一次也用掉了。返回死没死。 */
+  golemSNV(a, b) {
+    if (!this.has(a, 'golem') || this.used[`golem-${a.id}`]) return false;
+    this.used[`golem-${a.id}`] = true;
+    if (!b.alive || this.seenDemon(b, '魔像提名')) { this.record('st', `魔像 ${this.tag(a.id)} 提名了 ${this.tag(b.id)}：${b.alive ? '是恶魔，没有死' : '他已经死了'}`); return false; }
+    if (this.snvBroken(a)) { this.flag(a, '魔像失效，被提名的人没有死'); return false; }
+    this.record('st', `魔像 ${this.tag(a.id)} 提名了不是恶魔的 ${this.tag(b.id)}：他死亡`);
+    return this.snvKill(b, 'golem', this.dayMessages()) === 'died';
+  },
+
   /** 小精灵被判定疯狂地证明了自己是那个镇民（黄昏判，房间层调）。 */
   pixieMad(id) { const x = this.pixie?.[id]; if (x && !x.mad) { x.mad = true; this.record('st', `小精灵 ${this.tag(id)} 疯狂地证明了自己是${ROLES[x.role].name}`); } },
   /** 那个镇民死了：疯狂过、没失效的小精灵获得他的能力（不告诉他，下次被叫醒才知道；官方）。 */
@@ -560,7 +578,7 @@ export const SNV_METHODS = {
       madness: '因疯狂被处决', storyteller: '说书人判定死亡', starpass: '恶魔自杀（传位）', slayer: '被猎手射杀',
       harpy: '没能疯狂地证明，被鹰身女妖的能力杀死', boomdandy: '死于炸弹人的炸弹',
       assassin: '被刺客刺杀', godfather: '被教父杀死', gambler: '赌错了角色', gossip: '因造谣者的声明而死', tinker: '修补匠突然死亡',
-      moonchild: '被月之子带走', grandmother: '孙子被恶魔杀死，祖母随之而去',
+      golem: '被魔像提名，不是恶魔所以死了', moonchild: '被月之子带走', grandmother: '孙子被恶魔杀死，祖母随之而去',
     }[cause] ?? cause;
     this.log.push(`${this.name(p.id)} 死亡（${cause}）`);
     this.record('death', `${this.tag(p.id)} ${why}`);
@@ -1289,6 +1307,24 @@ ${this.grimoire()}
           p.evil = evil;
           this.record('st', `食人魔 ${this.tag(p.id)} 选了 ${this.tag(t.id)}：变成${evil ? '邪恶' : '善良'}`);
           if (recluseEvil) { p.ogreKnows = true; say(p, '你选的人被当作了邪恶：**你现在是邪恶阵营**。'); }
+        } break;
+        case 'highpriestess': for (const p of this.holders('highpriestess')) {
+          const t = this.st.priestessPick(p, this.lieMode(p));
+          if (t) tell(p, `说书人认为你最应该和 **${this.name(t.id)}** 聊一聊。`, `说书人指了指 **${this.name(t.id)}**。`);
+        } break;
+        case 'huntsman': for (const p of this.holders('huntsman')) {
+          const t = this.choiceOfSNV(p)?.targets[0]; if (!t) continue;
+          this.used[p.id] = true;
+          if (t.role !== 'damsel') { this.record('st', `巡山人选了 ${this.tag(t.id)}：不是落难少女`); continue; }
+          if (broken(p)) { this.flag(p, '巡山人找到了落难少女，但他失效了'); continue; }
+          const free = rolesOf(this.script, 'townsfolk').filter((r) => !this.players.some((q) => q.role === r || q.shownRole === r));
+          const role = free.length ? this.st.choose('huntsmanRole', free, { who: t.id }) : null;
+          if (!role) continue;
+          this.changeRole(t, role);
+          this.afterChange(say);
+          say(t, `巡山人找到了你：**你现在是${ROLES[role].name}**。（你不再是落难少女了。）`);
+          this.record('st', `巡山人救出了落难少女 ${this.name(t.id)}：她变成了${ROLES[role].name}`);
+          changed.push(t.id);
         } break;
         case 'general': for (const p of this.holders('general')) {
           const b = this.st.balance();

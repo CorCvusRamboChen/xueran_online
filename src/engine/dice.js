@@ -56,6 +56,8 @@ export const DICE = {
   savantTrue: { base: 0.5 },
   balloonSame: { base: 0.7 },                       // 失效的气球驾驶员看到同类型的人（信息链断了才看得出是假的）
   fishStrong: { base: 0.3, balance: -2 },           // 渔夫的建议直指恶魔：善良落后时多给
+  priestessGood: { base: 0.75 },                    // 善良落后：女祭司多被指向拿着真信息的善良玩家
+  priestessEvil: { base: 0.5 },                     // 善良领先：女祭司常被指向一个邪恶玩家（听他满嘴假话）
   goblinClaim: { base: 0.6 },                       // 机器人哥布林被提名时声明身份
   librarianNone: { base: 0.25 },                    // 失效的图书管理员被告知「没有外来者」（其实有）
   harpyKill: { base: 0.6, evil: -1.5, newbie: -1.5, rookie: ROOKIE }, // 鹰身女妖的疯狂没做到：杀人（"可能"死亡，别靠这个让邪恶自己送分）

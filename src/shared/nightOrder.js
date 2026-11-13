@@ -466,19 +466,55 @@ NIGHT_ORDER.twv = {
   ],
 };
 
+// 瞒天过海（Boozling v9，2022 世界杯冠军）：照官方英文总表的顺序
+NIGHT_ORDER.booz = {
+  first: [
+    ['philosopher', '选一个善良角色，获得它的能力（那个角色醉酒）'],
+    ['minioninfo', '7 人及以上：爪牙互认、得知恶魔（提线木偶不醒）'],
+    ['demoninfo', '7 人及以上：恶魔得知爪牙和 3 个伪装；也知道谁是提线木偶'],
+    ['cerenovus', '选一人和一个角色：他明天要疯狂地证明自己是那个角色'],
+    ['pixie', '得知一个在场的镇民角色'],
+    ['huntsman', '每局一次：选一名存活的玩家，是落难少女就让她变成一个不在场的镇民'],
+    ['damsel', '爪牙得知落难少女在场'],
+    ['fortuneteller', '选两人，得知其中有没有恶魔'],
+    ['noble', '得知三人，其中恰好一人是邪恶的'],
+    ['balloonist', '得知一名玩家'],
+    ['highpriestess', '得知说书人觉得她最该和谁聊'],
+  ],
+  other: [
+    ['philosopher', '还没用过的话：选一个善良角色，获得它的能力'],
+    ['cerenovus', '选一人和一个角色：他明天要疯狂地证明自己是那个角色'],
+    ['scarletwoman', '恶魔今天死了：她在这时成为新的恶魔'],
+    ['imp', '选一人杀死；选自己就是自杀传位'],
+    ['fanggu', '选一人杀死；第一个被杀的外来者变成新的方古'],
+    ['nodashii', '选一人杀死；两侧最近的镇民一直中毒'],
+    ['sage', '被恶魔杀死才醒：得知两名玩家，其中一名是杀他的恶魔'],
+    ['huntsman', '每局一次：选一名存活的玩家，是落难少女就让她变成一个不在场的镇民'],
+    ['fortuneteller', '选两人，得知其中有没有恶魔'],
+    ['oracle', '得知死人里有几个邪恶'],
+    ['balloonist', '得知一名玩家，和上一晚得知的人角色类型不同'],
+    ['highpriestess', '得知说书人觉得她最该和谁聊'],
+  ],
+  why: [
+    '「瞒天过海」：好人多是限次能力（猎手一枪、渔夫一问、巡山人一救、魔像一提名、博学者每天两句真假话），坏人靠洗脑师、提线木偶、诺-达鲺和酒鬼让信息出错。',
+    '魔像整局只能提名一次，提名的人不是恶魔就当场死；落难少女被爪牙猜中坏人就赢，巡山人可以先把她救走。',
+    '相克：红唇女郎在方古跳人时不会变成第二个恶魔；提线木偶不会以为自己是巡山人或气球驾驶员（那样开局要多放外来者，说书人选别的）。',
+  ],
+};
+
 /**
  * 小剧本的结算步骤（engine/snv.js 用）：这套引擎认得的所有角色按官方总表排好；不在场的步骤自动跳过。
  * 失忆者、食人族拿到的能力也按这张表的位置醒。
  */
 export const MIX_STEPS = {
-  first: ['philosopher', 'sailor', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'pukka', 'pixie',
+  first: ['philosopher', 'sailor', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'pukka', 'pixie', 'huntsman',
     'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'grandmother', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress', 'noble', 'balloonist', 'shugenja', 'villageidiot',
-    'butler', 'spy', 'ogre', 'general', 'chambermaid', 'mathematician'],
+    'butler', 'spy', 'ogre', 'highpriestess', 'general', 'chambermaid', 'mathematician'],
   other: ['philosopher', 'sailor', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist',
     'imp', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'assassin', 'godfather', 'gossip',
-    'barber', 'sweetheart', 'sage', 'professor', 'farmer', 'tinker', 'moonchild', 'grandmother', 'ravenkeeper', // 照官方英文总表（11-11 用户定：和集石百科不一样时以英文新表为准）
+    'barber', 'sweetheart', 'sage', 'professor', 'huntsman', 'farmer', 'tinker', 'moonchild', 'grandmother', 'ravenkeeper', // 照官方英文总表（11-11 用户定：和集石百科不一样时以英文新表为准）
     'washerwoman', 'librarian', 'investigator', 'chef', 'clockmaker', 'noble', 'shugenja', 'empath', 'fortuneteller', 'undertaker', 'dreamer', 'amn_detect', 'amn_echo', 'flowergirl', 'towncrier', 'oracle', 'seamstress',
-    'juggler', 'balloonist', 'villageidiot', 'butler', 'spy', 'general', 'chambermaid', 'mathematician'],
+    'juggler', 'balloonist', 'villageidiot', 'butler', 'spy', 'highpriestess', 'general', 'chambermaid', 'mathematician'],
 };
 
 /** 黯月初升的结算步骤（engine/bmr.js 用）：去掉不是角色的信息步骤；教父首夜那一步是"得知外来者"。 */

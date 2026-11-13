@@ -665,6 +665,7 @@ export class Game {
     const a = this.get(nominatorId); const b = this.get(nomineeId);
     if (!a || !b) throw new Error('提名者或被提名者不在游戏中');
     if (!this.visAlive(a)) throw new Error('死亡玩家不能提名');
+    if (this.engine === 'snv' && this.golemBlocked?.(a)) throw new Error('你整局只能提名一次，已经用掉了');
     if (this.nominators.has(a.id)) throw new Error('你今天已经提名过了');
     if (this.nominees.has(b.id)) throw new Error(`${this.name(b.id)} 今天已经被提名过了`);
     this.nominators.add(a.id);
@@ -675,8 +676,10 @@ export class Game {
     this.record('nominate', `${this.tag(a.id)} 提名了 ${this.tag(b.id)}`);
     if (this.engine === 'snv') {
       const cursed = this.nominateSNV(a);
+      const golem = !cursed && !this.winner && this.golemSNV(a, b); // 魔像：提名的人不是恶魔就死，提名照常进行
+      if (golem) this.checkWinner();
       const executed = cursed || this.winner ? null : this.virginSNV(a, b);
-      return executed ? { virgin: true, executed, cursed } : { virgin: false, cursed };
+      return executed ? { virgin: true, executed, cursed, golem } : { virgin: false, cursed, golem };
     }
 
     if (b.role === 'virgin' && b.alive && !this.virginUsed) {
