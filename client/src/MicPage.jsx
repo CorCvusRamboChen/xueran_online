@@ -40,7 +40,8 @@ function MadnessRule({ about }) {
   if (about.kind === 'listen') {
     return (
       <section className="mic-rule" aria-label="为什么收音">
-        <h2>说书人在听</h2>
+        <h2>说书人在听 · 你不用证明任何东西</h2>
+        <p><b>这不是疯狂。</b>剧本里有下面这些角色，所以每个人都会收到收音，不代表你被选中、也不代表你要证明什么。正常玩、正常说话就好，不会因为收音被处决。</p>
         {(about.why ?? ['mezepheles']).includes('mezepheles') && <p>这个剧本里有<b>灵言师</b>：他知道一个关键词，第一个说出这个词的善良玩家当晚会变成邪恶。说书人要听大家说的话才知道是谁说了。</p>}
         {about.why?.includes('general') && <p>这个剧本里有<b>将军</b>：说书人要听大家的发言，判断现在哪一方在赢。</p>}
         {about.why?.includes('politician') && <p>这个剧本里有<b>政客</b>：终局时说书人要按整局的发言，判断谁对本方落败负最大责任。</p>}
@@ -150,7 +151,7 @@ export default function MicPage({ token }) {
   const canStart = ['ready', 'lost', 'denied', 'stopped'].includes(state);
   return (
     <main className="mic-page">
-      <p className="mic-eyebrow">疯狂 · 收音</p>
+      <p className="mic-eyebrow">{about.kind === 'listen' ? '收音' : about.kind === 'pixie' ? '小精灵 · 收音' : '疯狂 · 收音'}</p>
       <h1 className={state === 'on' ? 'mic-on' : ''}>{title}</h1>
       {text && <p className="mic-lead">{text}</p>}
       {canStart && <button type="button" className="mic-btn" onClick={start}>{state === 'ready' ? '开始收音' : '重新开始'}</button>}
@@ -162,8 +163,9 @@ export default function MicPage({ token }) {
         <ul className="mic-rules">
           <li>只收这台设备的麦克风，请戴耳机，不然会录到别人的声音。</li>
           <li>录音和转写会保存下来（复盘和改进说书人用），转出的文字会发给 AI 说书人判断。</li>
-          {about.kind !== 'mutant' && <li>不开也能继续玩，但说书人听不到你，很可能判你不够疯狂。</li>}
-          <li>说书人一直在听：说漏嘴（被洗脑的）、说服别人自己是外来者（畸形秀演员），都可能当场被处决。</li>
+          {about.kind === 'listen' && <li>不开也能继续玩，只是说书人听不到你说的话。</li>}
+          {about.kind !== 'mutant' && about.kind !== 'listen' && <li>不开也能继续玩，但说书人听不到你，很可能判你不够疯狂。</li>}
+          {about.kind !== 'listen' && <li>说书人一直在听：说漏嘴（被洗脑的）、说服别人自己是外来者（畸形秀演员），都可能当场被处决。</li>}
         </ul>
       )}
       {lines.length > 0 && (

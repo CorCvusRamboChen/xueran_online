@@ -854,7 +854,7 @@ function MicDemand({ me, day }) {
     <div className="sheet-bg gossip-bg" role="presentation">
       <div className="gossip-modal mic-demand" role="alertdialog" aria-label="打开收音">
         <h3>{me.madness ? '你被洗脑了' : '说书人要听你说话'}</h3>
-        <p className="lead">{me.micWhy === 'listen' ? <>{listenReason(me.listenWhy)}开着收音页说话，说书人才听得到你。</>
+        <p className="lead">{me.micWhy === 'listen' ? <>{listenReason(me.listenWhy)}所以每个人都会收到这个提示。<b>你不用证明任何东西</b>，正常玩、正常说话就好；开着收音页，说书人才听得到你。</>
           : me.micWhy === 'pixie' ? <>你是小精灵：如果你<b>疯狂地证明自己就是{me.pixie?.role}</b>，等他死了你就获得他的能力（不证明也不会被罚）。</> : madnessGoal(me)}
           说书人只听得到收音{me.madness ? '，不开收音很可能被处决' : ''}。</p>
         <p className="muted">{opened ? '在打开的页面里点「开始收音」，这里就会关掉。收音页开着就行，晚上会自动暂停，第二天接着收，不用重开。' : '别人不知道你开了。录音和转写会保存下来（复盘和改进说书人用），转出的文字会发给 AI 说书人判断。'}</p>
