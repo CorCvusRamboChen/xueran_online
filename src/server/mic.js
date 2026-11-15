@@ -1,7 +1,7 @@
 // 收音页（语音判定疯狂的另一条路）：被洗脑的玩家自己在普通浏览器里打开麦克风，一句一句传上来转成文字。
 // 不靠机器人，所以走到哪个语音频道都听得到，旺财的服务器和 KOOK 也能用；别人看不出谁开了。
 // 畸形秀演员也给（2026-11-12 用户要的，以前不给）：说服别人自己是外来者会被当场判。
-// 隐私：音频不落盘，文字只留到当天黄昏判完。凭令牌上传，令牌只发给本人。
+// 存档：每一句的音频和转写都交给 onAudio（房间层存进 data/recordings，见 recorder.js；2026-11-16 用户要保存录音）。凭令牌上传，令牌只发给本人。
 // 令牌整局不变（2026-11-16 用户：开了收音第二天还弹提示）：晚上收工只是暂停，第二天还在名单里就接着收，收音页不用重开；
 // 这局结束（stop）才作废。收音页每 15 秒报一次「还开着」（ping），服务器据此知道谁开着收音，开着就不再弹提示。
 import crypto from 'node:crypto';
@@ -83,6 +83,7 @@ export class MicInbox {
       if (this.gen !== gen || !this.ids.has(id)) return { status: 200, text: '' }; // 转写的时候到了黄昏：这句不算
       this.seconds.set(id, (this.seconds.get(id) ?? 0) + secs);
       this.seen.set(id, Date.now());
+      this.onAudio?.(id, wav, text ?? ''); // 存档（听不清的也存）
       if (!was) this.onStatus?.(id);
       if (!text) return { status: 200, text: '' };
       const list = this.lines.get(id) ?? [];

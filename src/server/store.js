@@ -75,6 +75,7 @@ export function archiveGame(room) {
       id, endedAt, key: room.key, winner: g.winner, reason: g.winReason, days: g.day,
       players: g.players.map((p) => ({ id: p.id, seat: p.seat, name: p.name, avatar: room.users.get(p.id)?.avatar ?? null, role: p.role, evil: g.evilOf?.(p) ?? undefined, shownRole: p.shownRole, alive: p.alive, ...(p.role === 'amnesiac' && p.gained ? { gained: p.gained } : {}) })),
       timeline: g.timeline, votes: room.voteHistory ?? [],
+      recordings: `recordings/${safe(room.guildId)}/${safe(g.id)}`, // 这局的录音和转写（server/recorder.js），没开收音的局目录不存在
       decisions: g.st.decisions, beliefs: room.beliefs?.gameId === g.id ? room.beliefs.log : [], meets: room.meets ?? [], records: g.records ?? null, heard: g.heard ?? [],
     };
     fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify(data));

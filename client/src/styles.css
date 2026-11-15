@@ -1897,6 +1897,8 @@ span.lr-newbie { cursor: default; }
 .token-face .pelt-stack { bottom: 64%; } /* 压在头像的头上往上叠：第一排座位不会被顶上的票数栏盖住 */
 .walker-head { position: relative; }
 .as-face { position: relative; }
+.walker-head .float { position: relative; }
+.walker-head .float .pelt-stack { bottom: 55%; } /* 地图上小人头顶的小头像：一样压在头上往上叠 */
 .as-face .pelt-stack { bottom: 58%; } /* 左下角存活条：压在头像的头上往上叠 */
 .pelt-items { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
 .pelt-item { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line, #3a3a3a); background: rgba(255,255,255,.03); color: inherit; cursor: pointer; }

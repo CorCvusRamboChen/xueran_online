@@ -1,7 +1,7 @@
 // 语音判定疯狂（只有梦殒春宵、AI 说书、自家机器人的 Discord 服务器，房主打开才用）。
 // AI 说书人听不到语音：这里让机器人常驻广场语音频道，只转写"此刻被疯狂的人"说的话，晚上交给大模型判断他有没有努力证明。
 // 为什么常驻广场：一个机器人在一个服务器里同时只能待在一个语音频道，跟着目标进房子等于告诉全场谁被洗脑了。所以房子里的悄悄话听不到。
-// 隐私：别人的声音不接收（receiver 只订阅目标），音频只在内存里过一下、发给 Azure 转成文字，不落盘；文字到第二天就清掉。
+// 别人的声音不接收（receiver 只订阅目标）。每一句的 Ogg 和转写交给 onAudio 存档（data/recordings，见 recorder.js；2026-11-16 用户要保存录音）。
 // 音频：Discord 发来的是 Opus 包，套上 Ogg 外壳就是 Azure 短音频接口认的格式，不用解码。一句话按说完后 1 秒静音切开，最长 30 秒。
 
 const SILENCE_MS = 1000;
@@ -82,7 +82,9 @@ export class Hearing {
       const ogg = await this.toOgg(stream);
       if (this.closed || !this.targets.has(id) || !ogg.length) return;
       const text = await this.transcribe(ogg);
-      if (!text || this.closed || !this.targets.has(id)) return;
+      if (this.closed || !this.targets.has(id)) return;
+      this.onAudio?.(id, ogg, text ?? ''); // 存档（听不清的也存）
+      if (!text) return;
       const list = this.lines.get(id) ?? [];
       if (list.length < MAX_LINES) list.push(text);
       this.lines.set(id, list);

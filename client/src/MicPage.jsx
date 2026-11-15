@@ -44,7 +44,7 @@ function MadnessRule({ about }) {
         {(about.why ?? ['mezepheles']).includes('mezepheles') && <p>这个剧本里有<b>灵言师</b>：他知道一个关键词，第一个说出这个词的善良玩家当晚会变成邪恶。说书人要听大家说的话才知道是谁说了。</p>}
         {about.why?.includes('general') && <p>这个剧本里有<b>将军</b>：说书人要听大家的发言，判断现在哪一方在赢。</p>}
         {about.why?.includes('politician') && <p>这个剧本里有<b>政客</b>：终局时说书人要按整局的发言，判断谁对本方落败负最大责任。</p>}
-        <p>正常聊天就好。音频只在这台服务器上转成文字，不保存。{about.why?.some((r) => r === 'general' || r === 'politician') ? '文字留到这局结束（给说书人判局势和政客），不进往期对局记录。' : '文字到黄昏就清掉。'}</p>
+        <p>正常聊天就好。录音和转出来的文字会保存在这台服务器上，用来复盘和改进说书人。</p>
       </section>
     );
   }
@@ -161,7 +161,7 @@ export default function MicPage({ token }) {
       {state !== 'expired' && (
         <ul className="mic-rules">
           <li>只收这台设备的麦克风，请戴耳机，不然会录到别人的声音。</li>
-          <li>音频不保存，转成文字后发给 AI 说书人判断，当天黄昏清掉。</li>
+          <li>录音和转写会保存下来（复盘和改进说书人用），转出的文字会发给 AI 说书人判断。</li>
           {about.kind !== 'mutant' && <li>不开也能继续玩，但说书人听不到你，很可能判你不够疯狂。</li>}
           <li>说书人一直在听：说漏嘴（被洗脑的）、说服别人自己是外来者（畸形秀演员），都可能当场被处决。</li>
         </ul>

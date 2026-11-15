@@ -8,6 +8,7 @@ import { getMap, houseAt, houseCenter, doorPoint, pathLength, positionAt, speedO
 import { CHARACTERS, CHARACTER_IDS } from '../shared/characters.js';
 import { cleanOutfit } from '../shared/outfit.js';
 import { PELT_ITEMS, PELT_PER_DAY } from '../shared/pelt.js';
+import { saveRecording } from './recorder.js';
 import { SETUPS, pickPreset, PRESET_SHARE } from '../shared/setups.js';
 import { buildRoles, easeNewbies } from '../engine/assign.js';
 import { narration } from './narration.js';
@@ -1291,6 +1292,13 @@ export class Room {
     this.changed();
   }
 
+  /** 一句录音存档（recorder.js）。教程不存；saveRecordings 设成 false（测试）也不存。 */
+  saveTalk(source, ext, id, audio, text) {
+    const g = this.game;
+    if (!g || this.tutorial || this.saveRecordings === false) return;
+    saveRecording({ guildId: this.guildId, gameId: g.id, id, name: g.get(id)?.name ?? this.users.get(id)?.name ?? id, day: g.day, phase: g.phase, source, audio, ext, text });
+  }
+
   // ───────────── 局势和政客：听大家的发言（2026-11-16 用户要的）─────────────
   /** 有灵言师、将军或政客的剧本：每天给所有活着的真人发收音（谁都收到，所以不暴露谁是什么角色）。 */
   listenAll(g) { return g?.engine === 'snv' && ['mezepheles', 'general', 'politician'].some((r) => inScript(r, g.script)); }
@@ -2251,6 +2259,7 @@ export class Room {
     const g = this.game;
     if (g.engine !== 'snv' || this.stId || !this.settings.hearMadness || !this.square || !this.hearingFor) return;
     this.hearing = await this.hearingFor(this.square).catch(() => null);
+    if (this.hearing) this.hearing.onAudio = (id, audio, text) => this.saveTalk('square', 'ogg', id, audio, text);
     if (this.hearing) this.announce('本局开了语音判定：机器人留在广场语音里，只转写被疯狂的玩家说的话，音频不保存。', 'info');
     else this.announce('语音判定没有打开：说书人听不到语音，疯狂由说书人按局势判定（被洗脑的人可以打开收音页，让说书人听到自己）。', 'info');
   }
@@ -2310,6 +2319,7 @@ export class Room {
         return gg && this.listenAll(gg) ? { kind: 'listen', why: this.listenWhy(gg) } : {};
       };
       this.mic.onStatus = () => this.changed(); // 有人刚打开收音：马上刷新，他那边的提示就关掉
+      this.mic.onAudio = (id, audio, text) => this.saveTalk('mic', 'wav', id, audio, text);
       this.mic.listen(micIds);
     }
   }

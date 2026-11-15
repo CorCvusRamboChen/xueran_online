@@ -298,6 +298,7 @@ export function TownMap({ s, onMove, night = false }) {
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => { if (p.id !== s.me) setWalkerMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}
                 onContextMenu={(e) => { e.preventDefault(); setWalkerMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}>
+                <PeltStack items={s.pelted?.[p.id]} size={14} />
                 <Portrait p={p} size={24} prefer="avatar" frame={p.id === s.me ? 'var(--mot)' : TAGS[marks[p.id]?.tag]?.color ?? '#f4f4f0'} />
                 <i className="walker-seat">{p.seat}</i>
                 <MarkBadge mark={marks[p.id]} part="chips" />
