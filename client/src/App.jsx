@@ -12,6 +12,7 @@ import { AvalonGame } from './Avalon.jsx';
 import { MarkGame } from './Mark.jsx';
 import { Line, Portrait, clock, syncClock, serverNow, gameClock, useTick, useCountdown, cnNum } from './util.jsx';
 import { Tag, Panel, Btn, Stat, Check, Faces, HudBar } from './ui.jsx';
+import { PeltButton, PeltPanel } from './Pelt.jsx';
 import { tick } from './world/footsteps.js';
 import { ATTR, FLAVOR, ROLE_NAMES, ROLE_TEAM, voiceOf } from './flavor.js';
 import { ROLE_ART } from './art.js';
@@ -254,6 +255,7 @@ const ROLES_DEMON = new Set(['imp']); // 暗流涌动的恶魔（破门过场）
 const ST_FACE = { id: 'storyteller', seat: '★', name: '说书人', alive: true };
 
 const MODES = {
+  pelt: { title: '惩罚场外', hint: '选一个人和一样东西，叠在他头上。', confirm: '扔' }, // 面板是 Pelt.jsx 的 PeltPanel，这里只给选人模式占个位
   psycho: { title: '精神病患者 · 杀人', hint: '公开站出来说你是精神病患者，选一名玩家：他死亡。每天一次，要在提名开始之前。', confirm: '杀死' },
   nominate: { title: '提名', hint: '选一个人，站出来指着他。', confirm: '提名' },
   slay: { title: '声称是猎手 · 开枪', hint: '任何人都可以站出来声称自己是猎手，当众向一个人开枪（可以用来诈身份）。只有真猎手打中恶魔，对方才会倒下；每人每局只能开一次。', confirm: '开枪' },
@@ -284,7 +286,7 @@ function Game({ s, act, ask }) {
   const pickKey = `${s.phase}-${s.night}-${s.day}-${mode}-${!!prompt}-${rk}`;
   useEffect(() => { setPicked([]); setPickedRole(null); }, [pickKey]);
   // 换阶段就取消正在选人的操作；自由活动开始/结束时也取消，只有"开枪"例外（官方规则：白天任何时候都能开枪）
-  useEffect(() => { setMode((m) => (s.phase !== 'day' ? null : s.roam && m !== 'slay' && m !== 'psycho' ? null : m)); }, [s.phase, !!s.roam]);
+  useEffect(() => { setMode((m) => (s.phase !== 'day' ? null : s.roam && m !== 'slay' && m !== 'psycho' && m !== 'pelt' ? null : m)); }, [s.phase, !!s.roam]);
 
   const onTap = (p) => {
     if (pickSpec) {
@@ -1018,6 +1020,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
     );
   }
 
+  if (mode === 'pelt') return <PeltPanel s={s} act={act} onClose={() => setMode(null)} />;
   if (mode) {
     const M = MODES[mode];
     return (
@@ -1105,6 +1108,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
         <GossipButton s={s} act={act} />
         <SlayButton s={s} setMode={setMode} />
         {!s.noms && <PsychoButton s={s} setMode={setMode} />}
+        <PeltButton s={s} setMode={setMode} />
         <SnvButtons s={s} act={act} />
         {s.executedToday && <p className="sq-status">今天的处决已经发生</p>}
         <div className="btn-row">
@@ -1298,6 +1302,7 @@ function RoamActions({ s, act, name, face, setMode }) {
           <GossipButton s={s} act={act} />
           <SlayButton s={s} setMode={setMode} />
           <PsychoButton s={s} setMode={setMode} />
+          <PeltButton s={s} setMode={setMode} />
           <SnvButtons s={s} act={act} />
           <EndRoamVote s={s} act={act} />
         </Panel>
@@ -1311,6 +1316,7 @@ function RoamActions({ s, act, name, face, setMode }) {
           <GossipButton s={s} act={act} />
           <SlayButton s={s} setMode={setMode} />
           <PsychoButton s={s} setMode={setMode} />
+          <PeltButton s={s} setMode={setMode} />
           <SnvButtons s={s} act={act} />
           <EndRoamVote s={s} act={act} />
         </Panel>

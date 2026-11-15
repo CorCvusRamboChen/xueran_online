@@ -7,6 +7,7 @@ import { ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEv
 import { getMap, houseAt, houseCenter, doorPoint, pathLength, positionAt, speedOf } from '../shared/map.js';
 import { CHARACTERS, CHARACTER_IDS } from '../shared/characters.js';
 import { cleanOutfit } from '../shared/outfit.js';
+import { PELT_ITEMS, PELT_PER_DAY } from '../shared/pelt.js';
 import { SETUPS, pickPreset, PRESET_SHARE } from '../shared/setups.js';
 import { buildRoles, easeNewbies } from '../engine/assign.js';
 import { narration } from './narration.js';
@@ -312,6 +313,7 @@ export class Room {
       case 'nomDone': this.nomDone(uid); break;
       case 'skipNom': this.skipNom(uid); break;
       case 'riotPass': this.riotPass(uid); break;
+      case 'pelt': this.pelt(uid, p.target, p.item); break;
       case 'psycho': this.psycho(uid, p.target); break;
       case 'rps': this.rpsHand(uid, p.hand); break;
       case 'hand': this.hand(uid, !!p.up); break;
@@ -523,6 +525,7 @@ export class Room {
   // ───────────── 开局 ─────────────
   async start() {
     if (this.game) throw new UserError('游戏已经开始了');
+    this.pelted = {}; this.pelts = {}; // 惩罚场外：头上叠的东西每局重来
     if (this.lobby.length < MIN_PLAYERS) throw new UserError(`至少需要 ${MIN_PLAYERS} 名玩家`);
     const seats = this.settings.shuffle ? shuffle(this.lobby, Math.random) : [...this.lobby];
     const script = this.tutorial ? 'tb' : this.settings.script ?? 'tb';
@@ -1276,6 +1279,26 @@ export class Room {
     if (this.noms) this.noms.timeUp = true;
     this.later(this.settings.pauseMs, () => this.autoDusk());
     this.changed();
+  }
+
+  // ───────────── 金币：惩罚聊场外 ─────────────
+  /** 花金币朝某人扔东西（烂番茄、乌鸦、毒舌笼头），叠在他头上直到这局结束。只买面子，不影响结算。 */
+  pelt(uid, target, item) {
+    const g = this.requireGame();
+    if (!this.wallet) throw new UserError('这里没有开金币');
+    const it = PELT_ITEMS[item];
+    if (!it) throw new UserError('没有这个东西');
+    if (this.ended || g.phase !== 'day') throw new UserError('只能在白天扔');
+    if (!g.get?.(uid) || this.isFake(uid)) throw new UserError('只有这局的玩家能扔');
+    if (!g.get(target)) throw new UserError('要扔给这局的一名玩家');
+    if (target === uid) throw new UserError('不能扔自己');
+    this.pelts ??= {}; this.pelted ??= {};
+    const key = `${g.day}:${uid}`;
+    if ((this.pelts[key] ?? 0) >= PELT_PER_DAY) throw new UserError(`每天最多扔 ${PELT_PER_DAY} 次`);
+    try { this.wallet.spendCoins(uid, it.cost, `${it.name} → ${g.name(target)}`); } catch (e) { throw new UserError(e.message); }
+    this.pelts[key] = (this.pelts[key] ?? 0) + 1;
+    (this.pelted[target] ??= []).push({ item, by: uid });
+    this.pub(`**${g.name(uid)}** 嫌 **${g.name(target)}** 聊场外，${it.verb}。`, 'vote');
   }
 
   // ───────────── 夜半狂欢：精神病患者 ─────────────
@@ -2911,7 +2934,7 @@ export class Room {
       ended: this.ended, square: this.square, log: this.log, logSeq: this.logSeq, logEpoch: this.epoch, stLog: this.stLog,
       inbox: entries(this.inbox), acts: entries(this.acts ?? new Map()), pendingInfo: entries(this.pendingInfo),
       resolving: this.resolving, rkPending: this.rkPending, revivePending: this.revivePending ?? null, deadline: this.deadline, nightBase: this.nightBase ?? null, dueFor: this.dueFor ?? {}, dawnAt: this.dawnAt ?? null,
-      roamedToday: !!this.roamedToday, duskDay: this.duskDay ?? null, homes: this.homes ?? null,
+      roamedToday: !!this.roamedToday, duskDay: this.duskDay ?? null, homes: this.homes ?? null, pelted: this.pelted ?? {}, pelts: this.pelts ?? {},
       pendingNom: this.pendingNom,
       noms: this.noms && { until: this.noms.until, paused: this.noms.paused, timeUp: this.noms.timeUp, skips: [...this.noms.skips] },
       vote: this.vote && { ...this.vote, yes: [...this.vote.yes], locked: [...this.vote.locked] },
@@ -2947,6 +2970,7 @@ export class Room {
       voteHistory: s.voteHistory ?? [], knifeLog: s.knifeLog ?? [], execLog: s.execLog ?? [], pubLog: s.pubLog ?? [],
       beliefs: s.beliefs ?? null, meets: s.meets ?? [],
       outfits: new Map(s.outfits ?? []),
+      pelted: s.pelted ?? {}, pelts: s.pelts ?? {},
       watchMuted: [], // 机器人重启时账上的闭麦都解开了：resume 里重新闭上
       paused: !!s.paused,
     });
@@ -3058,6 +3082,9 @@ export class Room {
       roleAssign: this.isHost(uid) && !g ? this.roleAssign ?? {} : null, // 房主指定的角色：只发给房主
       newbies: this.isHost(uid) ? this.newbies ?? [] : [], // 新手标记只有房主看得到：新手当邪恶的概率被调低了，别人看得到就能据此排除
       myOutfit: this.outfits.get(uid) ?? null,
+      coins: this.wallet && !this.isFake(uid) ? this.wallet.balance(uid) : null, // 金币余额（没开钱包时 null）
+      pelted: this.pelted ?? {}, // 惩罚场外：谁头上叠了什么
+      peltLeft: g ? PELT_PER_DAY - (this.pelts?.[`${g.day}:${uid}`] ?? 0) : 0,
       log: this.log.slice(-40),
       logEpoch: this.epoch,
       now: Date.now(),

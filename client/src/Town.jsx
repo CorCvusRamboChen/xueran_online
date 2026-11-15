@@ -7,6 +7,7 @@ import { Portrait } from './util.jsx';
 import { useMarks, TAGS, MarkMenu, MarkBadge, LinkLines, LINKS, addLink, useLinkKind, LinkKinds } from './marks.jsx';
 import { ClockTower, Tree, Lamp, MAP_COLORS as C, INK } from './art/TownArt.jsx';
 import { SCENE_ART } from './art.js';
+import { PeltStack } from './Pelt.jsx';
 
 // 手绘广场（白天 / 夜里两张同构图，夜里淡入）；没有就用线稿。
 // 每个剧本一张：square-day-<剧本>.webp（暗流涌动不带后缀）；还没画的剧本先用暗流涌动的
@@ -158,6 +159,7 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
             title={`${p.seat}号 ${p.name}${marks[p.id]?.note ? `\n笔记：${marks[p.id].note}` : ''}\n（右键做标记）`}
           >
             <div className="token-face">
+              <PeltStack items={s.pelted?.[p.id]} size={Math.max(14, Math.round(tk * 0.36))} />
               <Portrait p={p} size={tk} frame={frameOf(p)} />
               {!p.alive && <span className="stamp">{p.ghostVote ? '亡 · 余一票' : '亡'}</span>}
               <span className="seat">{p.seat}</span>

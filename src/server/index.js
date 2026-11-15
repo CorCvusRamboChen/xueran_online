@@ -11,7 +11,8 @@ import { Client, Events, GatewayIntentBits } from 'discord.js';
 import { Room, UserError } from './room.js';
 import { VoiceHub } from './voice.js';
 import { ttsHandler, ttsEnabled } from './tts.js';
-import { saveSoon, flushAll, loadAll, archiveGame, listGames, getGame, statsFor, archiveMark, markStatsFor } from './store.js';
+import { saveSoon, flushAll, loadAll, archiveGame, listGames, getGame, statsFor, archiveMark, markStatsFor, allPlayerWins } from './store.js';
+import { WALLET, awardWins, seedWallet } from './wallet.js';
 import { startTutorial } from './tutorial.js';
 import { KookBot, KOOK_PREFIX } from './kook.js';
 import { signTicket, verifyTicket } from './tickets.js';
@@ -366,7 +367,14 @@ function roomFor(guildId, channelId, hostId) {
     }
     room.onPos = (r, id, move) => { broadcastPos(r, id, move); saveSoon(r); };
     room.onQuiet = saveSoon;
-    room.onEnded = archiveGame;
+    room.onEnded = (r) => { // 永久存档这一局；赢的真人各得一枚金币
+      archiveGame(r);
+      try {
+        const got = awardWins(r);
+        if (got.length) r.announce(`赢的一方 ${got.map((id) => `**${r.game.name(id)}**`).join('、')} 各得 **1 枚金币**。`, 'end');
+      } catch (e) { console.warn('[botc] 发金币出错：', e.message); }
+    };
+    room.wallet = WALLET;
     room.onMarkEnded = archiveMark; // 暗印的生还排行
     room.history = { list: listGames, get: getGame, stats: statsFor, markStats: markStatsFor };
     room.peers = () => rooms.values(); // 开局时查同一个语音频道有没有别的局
@@ -565,4 +573,5 @@ if (process.env.SQUADPOOL_BASE_URL && process.env.SQUADPOOL_SYNC_TOKEN && PARTNE
 }
 
 statsFor(''); // 先把往期存档读一遍：不然第一次开局时才读，所有房间的计时器都要停一下
+{ const n = seedWallet(allPlayerWins()); if (n) console.log(`🪙 补发金币：赢过的 ${n} 人各一枚`); } // 只发一次（data/wallet.json 里记着）
 server.listen(PORT, () => console.log(`🕰️ 血染钟楼 Activity 服务已启动：http://localhost:${PORT}${DEV_LOGIN ? '（已开启 DEV_LOGIN，可直接用浏览器测试）' : ''}`));

@@ -142,6 +142,9 @@ const MATE_MIN = 4; // 同队少于这么多局不算（局数太少的胜率没
  * 当好人时举手 [次数, 举在邪恶身上]。死因从时间线的"N号 名字（角色） 被处决 / 被恶魔杀死"里按座位号认。
  * 队友：和谁同一阵营打过几局、赢了几局（mates）；战绩卡上的「最好的队友 / 最坏的队友」是同队至少 MATE_MIN 局里胜率最高 / 最低的人。
  */
+/** 所有真人的赢局数（补发金币用，server/wallet.js 的 seedWallet）。 */
+export function allPlayerWins() { return allStats().players.map((p) => ({ id: p.id, wins: p.wins })); }
+
 export function statsFor(guildId, uid = null) {
   const { players, guilds } = allStats();
   const here = guilds.get(safe(guildId)) ?? { games: 0, goodWins: 0, ids: new Set() };
