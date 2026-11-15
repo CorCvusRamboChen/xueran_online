@@ -151,7 +151,19 @@ export class Storyteller {
     const heat = Object.values(g.suspicion);
     const maxHeat = Math.max(1, ...heat);
     const demonHeat = demon ? (g.suspicion[demon.id] ?? 0) / maxHeat : 1;
-    const raw = clamp(1.0 * minionDead + 0.4 * demonHeat - 0.8 * goodDead, -1, 1);
+    let raw = 1.0 * minionDead + 0.4 * demonHeat - 0.8 * goodDead;
+    // 2026-11-16 用户要的三条（影响从大到小）：
+    // ① 小魔典：好人们（只算善良玩家的标记）怀疑的是真邪恶就算善良领先，集体怀疑好人算邪恶领先。房间层算好放在 signals 里，没有就不算
+    let sig = {};
+    try { sig = g.signals?.() ?? {}; } catch { /* 看情况不能耽误结算（features 里会记一次警告） */ }
+    if (typeof sig.marksLead === 'number') raw += 0.6 * sig.marksLead;
+    // ② 离终局多近：剩 5 人起越来越偏邪恶；恶魔已经被大家盯上（被提名投票多、或者小魔典里多数人怀疑他）就打折
+    const alive = g.aliveCount();
+    const end = alive <= 5 ? Math.min(1, (6 - alive) / 3.5) : 0;
+    if (end && demon) raw -= 0.9 * end * (1 - Math.max(demonHeat, sig.demonExposed ?? 0));
+    raw = clamp(raw, -1, 1);
+    // ③ AI 说书人黄昏时听了大家今天说的话、看了真实情况，判断谁在赢（有将军或政客的剧本才问）：当晚一半听它的
+    if (g.aiLead && g.aiLead.day === g.day) raw = clamp(0.5 * raw + 0.5 * ({ good: 0.6, evil: -0.6, neither: 0 }[g.aiLead.side] ?? 0), -1, 1);
     // 官方《给说书人的建议》：「如果你不知道你应该帮助哪个阵营，要么哪个阵营都不帮，要么就帮助邪恶阵营」。
     // 看不出谁领先时，当作善良略好一点（所有骰子都是往落后的一方偏，这就等于稍微帮邪恶），但不越过「略占上风」的线
     return Math.abs(raw) < 0.15 ? Math.min(0.149, raw + EVIL_LEAN) : raw;

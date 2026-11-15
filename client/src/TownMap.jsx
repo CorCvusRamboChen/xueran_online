@@ -47,6 +47,7 @@ export function AliveStrip({ s, watching = null, onWatch = null }) {
               className={['as-face', watching === p.id && 'on', p.id === s.me && 'me', !p.alive && 'dead', h && 'inside', h?.locked && 'locked'].filter(Boolean).join(' ')}
               onClick={() => onWatch?.(p.id)}
               onContextMenu={(e) => { e.preventDefault(); setMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}>
+              <PeltStack items={s.pelted?.[p.id]} size={20} />
               <Portrait p={p} size={44} prefer="avatar" speak={false} frame={p.id === s.me ? 'var(--mot)' : allies[p.id] ? 'var(--phy)' : TAGS[marks[p.id]?.tag]?.color ?? '#f4f4f0'} />
               <i>{p.seat}</i>
               {allies[p.id] ? <span className="mark-badge ally">队友·{allies[p.id]}</span> : <MarkBadge mark={marks[p.id]} />}
@@ -293,7 +294,6 @@ export function TownMap({ s, onMove, night = false }) {
           >
             <div className="walker-head">
               {knocking.has(p.id) && <div className="speech">“叩，叩。”</div>}
-              <PeltStack items={s.pelted?.[p.id]} size={16} />
               <div className="float" title={p.id === s.me ? '你' : `${p.seat}号 ${p.name}（点头像做标记）`}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => { if (p.id !== s.me) setWalkerMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}

@@ -42,8 +42,8 @@ export function PeltStack({ items, size = 14, max = 6 }) {
   const title = Object.entries(counts).map(([k, n]) => `${PELT_ITEMS[k]?.name ?? k} ×${n}`).join('、');
   return (
     <span className="pelt-stack" title={`被嫌聊场外：${title}`} style={{ '--ps': `${size}px` }}>
-      {shown.map((x, i) => <i key={i} className={`ps-${x.item}`} style={{ '--i': i }}><PeltIcon item={x.item} size={size} /></i>)}
-      {items.length > max && <b>×{items.length}</b>}
+      {shown.map((x, i) => <span key={i} className={`ps-it ps-${x.item}`} style={{ '--i': i }}><PeltIcon item={x.item} size={size} /></span>)}
+      {items.length > max && <span className="ps-n">×{items.length}</span>}
     </span>
   );
 }

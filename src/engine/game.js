@@ -213,7 +213,7 @@ export class Game {
       'balloon', 'leviGood', 'goblinMark', 'amnesiacDay', 'amnesiacKnown', 'woke', 'pardonDay',
       'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7', 'lunaticTold', 'lunaticTellTo', 'heard',
       'pixie', 'mez', 'execHist', 'nomBy', 'blockVoters', 'politicianDone', 'fibbinUsed', 'riotChain',
-      'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared'];
+      'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared', 'aiLead', 'politicianEval'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];

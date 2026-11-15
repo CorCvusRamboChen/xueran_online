@@ -389,8 +389,11 @@ export const SNV_METHODS = {
   politicianCheck() {
     const lost = this.winner === 'good' ? true : this.winner === 'evil' ? false : null; // 输掉的一方是不是邪恶
     if (lost == null) return;
+    this.politicianEval = [];
     for (const p of this.players.filter((q) => q.role === 'politician' && this.evilOf(q) === lost)) {
       if (this.snvBroken(p) || p.noTurnGood && lost) continue;
+      const ev = { id: p.id, lost, flipped: false };
+      this.politicianEval.push(ev); // 房间层可以拿 AI 的判断改判（politicianVerdict）
       const score = {};
       for (const e of this.execHist ?? []) {
         const ex = this.get(e.id);
@@ -402,9 +405,28 @@ export const SNV_METHODS = {
       const best = Math.max(0, ...this.players.filter((q) => q.id !== p.id && this.evilOf(q) === lost).map((q) => score[q.id] ?? 0));
       this.st.decide('politician', { who: p.id, chosen: mine >= 3 && mine > best, mine, best });
       if (mine < 3 || mine <= best) continue;
+      ev.flipped = true;
       p.evil = !lost;
       this.record('end', `政客 ${this.tag(p.id)} 对本方落败负最大责任：他转变阵营，和${lost ? '善良' : '邪恶'}一起获胜`);
     }
+  },
+
+  /**
+   * AI 说书人终局读了整局的发言和提名投票，判政客是不是本方落败的最主要责任人：和打分的结果不一样就改判。
+   * 返回改了没有。
+   */
+  politicianVerdict(id, responsible, reason) {
+    const ev = this.politicianEval?.find((x) => x.id === id);
+    const p = this.get(id);
+    if (!ev || !p) return false;
+    this.st.decide('politicianAI', { who: id, chosen: responsible, was: ev.flipped, reason });
+    if (responsible === ev.flipped) return false;
+    ev.flipped = responsible;
+    p.evil = responsible ? !ev.lost : ev.lost;
+    this.record('end', responsible
+      ? `说书人听了整局的发言，判政客 ${this.tag(id)} 对本方落败负最大责任：他转变阵营，和${ev.lost ? '善良' : '邪恶'}一起获胜（${reason}）`
+      : `说书人听了整局的发言，判政客 ${this.tag(id)} 不是本方落败的最主要责任人：他不转阵营（${reason}）`);
+    return true;
   },
 
   // ───────────────────────── 状态查询 ─────────────────────────
@@ -1414,7 +1436,8 @@ ${this.grimoire()}
         } break;
         case 'general': for (const p of this.holders('general')) {
           const b = this.st.balance();
-          const truth = b > 0.25 ? 'good' : b < -0.25 ? 'evil' : 'neither';
+          // 有 AI 说书人黄昏的判断（听了今天大家说的话）就照它说；没有就按局势分
+          const truth = this.aiLead?.day === this.day ? this.aiLead.side : b > 0.25 ? 'good' : b < -0.25 ? 'evil' : 'neither';
           let said = truth;
           if (this.lieMode(p)) { said = this.st.choose('generalFake', ['good', 'evil', 'neither'].filter((x) => x !== truth), { who: p.id }); this.flag(p, '将军得到了错的局势'); }
           const word = { good: '**善良**正在获胜', evil: '**邪恶**正在获胜', neither: '**两边都没有**明显领先' }[said];

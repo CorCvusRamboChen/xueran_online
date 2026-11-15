@@ -12,7 +12,7 @@ import { SETUPS, pickPreset, PRESET_SHARE } from '../shared/setups.js';
 import { buildRoles, easeNewbies } from '../engine/assign.js';
 import { narration } from './narration.js';
 import { ttsUrl } from './tts.js';
-import { judgeStatement, judgeMadness, judgeBreak, looksBroken, judgeAvailable, judgeAmnesiac, adviseFisherman, looksInjected, speakSeat7 } from './judge.js';
+import { judgeStatement, judgeMadness, judgeBreak, looksBroken, judgeAvailable, judgeAmnesiac, adviseFisherman, looksInjected, speakSeat7, judgeLead, judgeResponsible } from './judge.js';
 import { noteMarks, readTown, markedRole } from './beliefs.js';
 import { Werewolf } from '../engine/werewolf.js';
 import { WW_ROOM } from './werewolfRoom.js';
@@ -399,6 +399,15 @@ export class Room {
       const demon = g.demon();
       out.coverage = Object.keys(this.beliefs.now).length / Math.max(1, this.realIds().length);
       if (demon) out.demonMarks = town[demon.id].suspect - 0.5;
+      // 局势：好人们怀疑真邪恶的程度减去怀疑好人的程度（恶魔算两倍），按表态的人多少打折。说书人的 balance() 用
+      const live = g.players.filter((p) => p.alive);
+      const avg = (list, w = () => 1) => { const ws = list.reduce((a, p) => a + w(p), 0); return ws ? list.reduce((a, p) => a + w(p) * (town[p.id].suspect - 0.5), 0) / ws : 0; };
+      const evilSus = avg(live.filter((p) => g.evilOf(p)), (p) => (ROLES[p.role].team === 'demon' ? 2 : 1));
+      const goodSus = avg(live.filter((p) => !g.evilOf(p)));
+      const opinions = live.filter((p) => town[p.id].evil + town[p.id].good > 0).length;
+      const sure = Math.min(1, opinions / Math.max(3, live.length * 0.6));
+      if (opinions) out.marksLead = Math.max(-1, Math.min(1, 2 * (evilSus - goodSus))) * sure;
+      if (demon && town[demon.id].evil + town[demon.id].good > 0) out.demonExposed = town[demon.id].suspect;
       if (said.length) out.split = said.reduce((a, t) => a + Math.min(t.evil, t.good) / (t.evil + t.good), 0) / said.length; // 0 大家意见一致，0.5 对半分
       if (who && town[who]) out.marksHeat = town[who].suspect - 0.5;
       // 善良玩家在小魔典里猜的恶魔不止一种：大家对「恶魔是哪个」有分歧（修补匠用它挑混乱的夜里死）
@@ -526,6 +535,7 @@ export class Room {
   async start() {
     if (this.game) throw new UserError('游戏已经开始了');
     this.pelted = {}; this.pelts = {}; // 惩罚场外：头上叠的东西每局重来
+    this.talk = []; // 将军、政客用的每天发言
     if (this.lobby.length < MIN_PLAYERS) throw new UserError(`至少需要 ${MIN_PLAYERS} 名玩家`);
     const seats = this.settings.shuffle ? shuffle(this.lobby, Math.random) : [...this.lobby];
     const script = this.tutorial ? 'tb' : this.settings.script ?? 'tb';
@@ -1281,6 +1291,52 @@ export class Room {
     this.changed();
   }
 
+  // ───────────── 局势和政客：听大家的发言（2026-11-16 用户要的）─────────────
+  /** 有灵言师、将军或政客的剧本：每天给所有活着的真人发收音（谁都收到，所以不暴露谁是什么角色）。 */
+  listenAll(g) { return g?.engine === 'snv' && ['mezepheles', 'general', 'politician'].some((r) => inScript(r, g.script)); }
+  listenWhy(g) { return ['mezepheles', 'general', 'politician'].filter((r) => inScript(r, g.script)); }
+  /** 有将军或政客：今天的转写留到这局结束（只在内存和临时存档里，不进往期对局文件）。每人每天最多 30 句。 */
+  keepTalk(g) {
+    if (!this.mic || !['general', 'politician'].some((r) => inScript(r, g.script))) return;
+    const day = {};
+    for (const p of g.players) { const lines = this.mic.transcript(p.id); if (lines.length) day[p.id] = lines.slice(-30); }
+    if (Object.keys(day).length) (this.talk ??= []).push({ day: g.day, lines: day });
+  }
+  /** 给 AI 看的发言：按天、按人，太长就从最早的天开始丢。onlyDay：只要那一天的。 */
+  talkText(g, onlyDay = null, max = 6000) {
+    const days = (this.talk ?? []).filter((t) => onlyDay == null || t.day === onlyDay);
+    const blocks = days.map((t) => `第${t.day}天：\n${Object.entries(t.lines).map(([id, ls]) => `${g.name(id)}：${ls.join(' / ')}`).join('\n')}`);
+    let out = blocks.join('\n\n');
+    while (out.length > max && blocks.length > 1) { blocks.shift(); out = blocks.join('\n\n'); }
+    return out.slice(-max);
+  }
+  /** 黄昏：有将军的剧本问 AI 现在谁在赢（今晚将军听它的，说书人的骰子一半看它）。没配 AI 就跳过。 */
+  async judgeLeadNow(g) {
+    if (g.engine !== 'snv' || g.winner || !inScript('general', g.script)) return;
+    const ask = this.leadJudge ?? (judgeAvailable() ? judgeLead : null);
+    if (!ask) return;
+    const r = await ask(g.factsSNV(), this.talkText(g, g.day)).catch(() => null);
+    if (!r || this.game !== g) return;
+    g.aiLead = { day: g.day, side: r.side, reason: r.reason };
+    this.stNote(`AI 说书人看今天的局势：${{ good: '善良领先', evil: '邪恶领先', neither: '两边都没领先' }[r.side]}（${r.reason}）`);
+    g.st.note(`黄昏判局势：${{ good: '善良领先', evil: '邪恶领先', neither: '两边都没领先' }[r.side]}——${r.reason}`, g.st.balance());
+  }
+  /** 终局：输的一方有政客，问 AI 谁对落败负最大责任，和打分的结果不一样就改判。没配 AI 就照打分。 */
+  async judgePoliticianNow(g) {
+    const ev = (g.politicianEval ?? []);
+    if (g.engine !== 'snv' || !ev.length) return;
+    const ask = this.politicianJudge ?? (judgeAvailable() ? judgeResponsible : null);
+    if (!ask) return;
+    for (const e of ev) {
+      const losers = g.players.filter((q) => (q.id === e.id ? true : g.evilOf(q) === e.lost));
+      const r = await ask(g.factsSNV(), this.talkText(g), losers.map((q) => ({ seat: q.seat, name: q.name }))).catch(() => null);
+      if (!r || this.game !== g) continue;
+      const pick = losers.find((q) => q.seat === r.seat);
+      if (!pick) continue;
+      if (g.politicianVerdict(e.id, pick.id === e.id, r.reason) && pick.id === e.id) this.announce(`**${g.name(e.id)}** 是政客：说书人判他对本方落败负最大责任，他转变阵营，和赢的一方一起获胜。`, 'end');
+    }
+  }
+
   // ───────────── 金币：惩罚聊场外 ─────────────
   /** 花金币朝某人扔东西（烂番茄、乌鸦、毒舌笼头），叠在他头上直到这局结束。只买面子，不影响结算。 */
   pelt(uid, target, item) {
@@ -1500,7 +1556,10 @@ export class Room {
     this.clearNoms();
     await this.judgeMadness();
     if (this.game !== g) return undefined;
+    this.keepTalk(g); // 有将军或政客的剧本：今天的发言留到这局结束（AI 判局势、判政客用）
     this.mic?.listen([]); // 判完了：收音令牌作废，文字清掉
+    await this.judgeLeadNow(g);
+    if (this.game !== g) return undefined;
     if (g.winner) return this.endGame();
     await this.psychoRps(g);
     if (this.game !== g) return undefined;
@@ -2230,7 +2289,7 @@ export class Room {
     // 收音页还要发给：小精灵（可以疯狂地证明自己是那个镇民）；剧本里有灵言师时所有活着的真人（听关键词）。
     // 灵言师那条不看他在不在场，免得谁收到收音页就说明灵言师在场（2026-11-14 用户：灵言师用收音页、本机转写、检测关键词）
     const pixies = g.players.filter((q) => q.alive && g.pixie?.[q.id] && !g.pixie[q.id].gained && !this.isFake(q.id)).map((q) => q.id);
-    const everyone = inScript('mezepheles', g.script) ? g.players.filter((q) => q.alive && !this.isFake(q.id)).map((q) => q.id) : [];
+    const everyone = this.listenAll(g) ? g.players.filter((q) => q.alive && !this.isFake(q.id)).map((q) => q.id) : [];
     const micIds = [...new Set([...ids, ...pixies, ...everyone])];
     // 收音页：被洗脑的人和畸形秀演员自己决定开不开，所以不用房主打开（micFor 由服务器注入，没有转写服务时没有）。
     // 以前只发给被洗脑的人，畸形秀演员拿不到收音链接，也就没有弹窗（2026-11-11 用户报的）
@@ -2248,7 +2307,7 @@ export class Room {
         if (this.thinksMutant(gg?.get(id))) return { kind: 'mutant' };
         const px = gg?.pixie?.[id];
         if (px && !px.gained) return { kind: 'pixie', role: ROLES[px.role].name };
-        return inScript('mezepheles', gg?.script) ? { kind: 'listen' } : {};
+        return gg && this.listenAll(gg) ? { kind: 'listen', why: this.listenWhy(gg) } : {};
       };
       this.mic.onStatus = () => this.changed(); // 有人刚打开收音：马上刷新，他那边的提示就关掉
       this.mic.listen(micIds);
@@ -2706,6 +2765,7 @@ export class Room {
     // 先公布结果：语音收尾（关房间、解开闭麦）要等合作机器人，慢的时候大家会一直卡在最后一刻
     const won = g.werewolf ? { good: '好人阵营获胜！', evil: '狼人阵营获胜！' } : { good: '善良阵营获胜！', evil: '邪恶阵营获胜！' };
     this.announce(`${won[g.winner]} ${g.winReason}`, 'end');
+    await this.judgePoliticianNow(g);
     if (!this.tutorial) this.onEnded?.(this); // 永久存档这一局
     this.narrate('end', { team: g.winner, reason: g.winReason });
     this.changed();
@@ -2935,7 +2995,7 @@ export class Room {
       ended: this.ended, square: this.square, log: this.log, logSeq: this.logSeq, logEpoch: this.epoch, stLog: this.stLog,
       inbox: entries(this.inbox), acts: entries(this.acts ?? new Map()), pendingInfo: entries(this.pendingInfo),
       resolving: this.resolving, rkPending: this.rkPending, revivePending: this.revivePending ?? null, deadline: this.deadline, nightBase: this.nightBase ?? null, dueFor: this.dueFor ?? {}, dawnAt: this.dawnAt ?? null,
-      roamedToday: !!this.roamedToday, duskDay: this.duskDay ?? null, homes: this.homes ?? null, pelted: this.pelted ?? {}, pelts: this.pelts ?? {},
+      roamedToday: !!this.roamedToday, duskDay: this.duskDay ?? null, homes: this.homes ?? null, pelted: this.pelted ?? {}, pelts: this.pelts ?? {}, talk: this.talk ?? [],
       pendingNom: this.pendingNom,
       noms: this.noms && { until: this.noms.until, paused: this.noms.paused, timeUp: this.noms.timeUp, skips: [...this.noms.skips] },
       vote: this.vote && { ...this.vote, yes: [...this.vote.yes], locked: [...this.vote.locked] },
@@ -2971,7 +3031,7 @@ export class Room {
       voteHistory: s.voteHistory ?? [], knifeLog: s.knifeLog ?? [], execLog: s.execLog ?? [], pubLog: s.pubLog ?? [],
       beliefs: s.beliefs ?? null, meets: s.meets ?? [],
       outfits: new Map(s.outfits ?? []),
-      pelted: s.pelted ?? {}, pelts: s.pelts ?? {},
+      pelted: s.pelted ?? {}, pelts: s.pelts ?? {}, talk: s.talk ?? [],
       watchMuted: [], // 机器人重启时账上的闭麦都解开了：resume 里重新闭上
       paused: !!s.paused,
     });
@@ -3275,7 +3335,8 @@ export class Room {
       hearing: !!this.hearing,
       mic: day ? this.mic?.tokenFor(uid) ?? null : null,
       micOn: !!this.mic?.isOn(uid), // 收音页开着（最近报到过，或者今天传上来过话）
-      micWhy: g.madness?.[uid] || this.thinksMutant(p) ? null : g.pixie?.[uid] && !g.pixie[uid].gained ? 'pixie' : inScript('mezepheles', g.script) ? 'listen' : null, // 为什么发收音：小精灵 / 灵言师剧本
+      micWhy: g.madness?.[uid] || this.thinksMutant(p) ? null : g.pixie?.[uid] && !g.pixie[uid].gained ? 'pixie' : this.listenAll(g) ? 'listen' : null, // 为什么发收音：小精灵 / 灵言师、将军、政客的剧本
+      listenWhy: this.listenAll(g) ? this.listenWhy(g) : null,
       pixie: g.pixie?.[uid] ? { role: ROLES[g.pixie[uid].role].name, mad: !!g.pixie[uid].mad, gained: !!g.pixie[uid].gained } : null,
     };
   }

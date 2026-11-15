@@ -836,6 +836,15 @@ function MadnessPanel({ me }) {
   );
 }
 
+/** 为什么所有人都要开收音：灵言师听关键词，将军、政客要听大家的发言判局势和责任。 */
+export function listenReason(why = ['mezepheles']) {
+  const parts = [];
+  if (why?.includes('mezepheles')) parts.push(<>有<b>灵言师</b>：说书人要听大家说的话，才知道谁说出了他的关键词。</>);
+  if (why?.includes('general')) parts.push(<>有<b>将军</b>：说书人要听大家的发言，判断现在哪一方在赢。</>);
+  if (why?.includes('politician')) parts.push(<>有<b>政客</b>：终局时说书人要按整局的发言，判断谁对本方落败负最大责任。</>);
+  return <>这个剧本里{parts.map((x, i) => <span key={i}>{x}</span>)}</>;
+}
+
 /** 被洗脑、或者是畸形秀演员时，屏幕中间要求开收音：传上来第一句话就自己消失。可以先收起来，右边的「疯狂」面板还能打开。 */
 function MicDemand({ me, day }) {
   const [later, setLater] = useState(null); // 今天点过「等会儿再开」（令牌整局不变，按天记，第二天再提醒）
@@ -845,7 +854,7 @@ function MicDemand({ me, day }) {
     <div className="sheet-bg gossip-bg" role="presentation">
       <div className="gossip-modal mic-demand" role="alertdialog" aria-label="打开收音">
         <h3>{me.madness ? '你被洗脑了' : '说书人要听你说话'}</h3>
-        <p className="lead">{me.micWhy === 'listen' ? <>这个剧本里有<b>灵言师</b>：说书人要听大家说的话，才知道谁说出了他的关键词。开着收音页说话，说书人才听得到你。</>
+        <p className="lead">{me.micWhy === 'listen' ? <>{listenReason(me.listenWhy)}开着收音页说话，说书人才听得到你。</>
           : me.micWhy === 'pixie' ? <>你是小精灵：如果你<b>疯狂地证明自己就是{me.pixie?.role}</b>，等他死了你就获得他的能力（不证明也不会被罚）。</> : madnessGoal(me)}
           说书人只听得到收音{me.madness ? '，不开收音很可能被处决' : ''}。</p>
         <p className="muted">{opened ? '在打开的页面里点「开始收音」，这里就会关掉。收音页开着就行，晚上会自动暂停，第二天接着收，不用重开。' : '别人不知道你开了。音频不保存，转成文字后发给 AI 说书人判断。'}</p>

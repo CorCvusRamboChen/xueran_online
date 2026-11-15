@@ -41,8 +41,10 @@ function MadnessRule({ about }) {
     return (
       <section className="mic-rule" aria-label="为什么收音">
         <h2>说书人在听</h2>
-        <p>这个剧本里有<b>灵言师</b>：他知道一个关键词，第一个说出这个词的善良玩家当晚会变成邪恶。说书人要听大家说的话才知道是谁说了。</p>
-        <p>正常聊天就好。音频只在这台服务器上转成文字，不保存，文字到黄昏就清掉。</p>
+        {(about.why ?? ['mezepheles']).includes('mezepheles') && <p>这个剧本里有<b>灵言师</b>：他知道一个关键词，第一个说出这个词的善良玩家当晚会变成邪恶。说书人要听大家说的话才知道是谁说了。</p>}
+        {about.why?.includes('general') && <p>这个剧本里有<b>将军</b>：说书人要听大家的发言，判断现在哪一方在赢。</p>}
+        {about.why?.includes('politician') && <p>这个剧本里有<b>政客</b>：终局时说书人要按整局的发言，判断谁对本方落败负最大责任。</p>}
+        <p>正常聊天就好。音频只在这台服务器上转成文字，不保存。{about.why?.some((r) => r === 'general' || r === 'politician') ? '文字留到这局结束（给说书人判局势和政客），不进往期对局记录。' : '文字到黄昏就清掉。'}</p>
       </section>
     );
   }

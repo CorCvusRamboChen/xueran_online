@@ -233,7 +233,8 @@ test('房间：夜半狂欢 9 人局（2 真人 + 7 机器人）能打完', asyn
 test('房间：真人是哈迪寂亚选中的人、精神病患者被处决猜拳，都能走完', async () => {
   const { g } = await playRoom({ n: 8, assign: { u1: 'alhadikhia', u2: 'psychopath' }, blockFirst: 'u2' });
   assert.ok(g.winner);
-  assert.ok(g.timeline.some((e) => /精神病患者猜拳/.test(e.text)), '第一天处决精神病患者时猜了拳');
+  // 第一天处决精神病患者：没失效就猜拳；被投毒者毒了（机器人随机）就直接处决，不猜拳（官方）
+  assert.ok(g.timeline.some((e) => /精神病患者猜拳/.test(e.text) || /阿二.*被处决/.test(e.text)), '第一天处决精神病患者：猜了拳，或者中毒了直接处决');
   assert.ok(g.timeline.some((e) => /悄悄选择/.test(e.text)) || g.winner, '哈迪寂亚选的人做了选择');
 });
 
