@@ -1451,6 +1451,14 @@ span.lr-newbie { cursor: default; }
 .ri-body header small { font: italic 400 11px var(--num); color: var(--muted); }
 .ri-tag { font: 900 10px/1.6 var(--sans); padding: 0 4px; background: var(--attr); color: #111; }
 .ri-tag.night { background: #22344a; color: #cfe2ff; }
+.ri-tag.night.st { background: #3a3024; color: #f0dcb4; }
+.ri-wake { font-size: 12px; color: #cfe2ff; opacity: .85; margin: 2px 0 0; }
+/* 夜晚顺序：这一步睁眼 / 条件睁眼 / 说书人判定 */
+.no-wake { display: inline-block; margin-left: 6px; padding: 0 5px; font: 900 10px/1.7 var(--sans); font-style: normal; vertical-align: 1px; border-radius: 2px; }
+.no-wake.wake { background: #22344a; color: #cfe2ff; }
+.no-wake.if { background: #2f3a24; color: #d8ecb8; }
+.no-wake.st { background: #3a3024; color: #f0dcb4; }
+.no-note { font-size: 11px; color: var(--muted); }
 .ri-body p { margin: 0; font-size: 13px; line-height: 1.65; color: #ddd8cb; }
 .ri-body .ri-note { font-size: 12px; color: var(--mot); }
 .ri-more { align-self: flex-start; background: none; border: 0; padding: 0; color: var(--muted); font: 700 12px var(--sans); cursor: pointer; }

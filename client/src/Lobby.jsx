@@ -1,6 +1,7 @@
 // 大厅：参考极乐迪斯科主菜单——手绘的雪夜小镇铺满首屏，左边大标题和一列竖排菜单；
 // 右边是镇民名册（带阵营构成）、挑形象、房间设置（按夜晚 / 白天分组）。
 import { Portrait } from './util.jsx';
+import { stepWake, wakeOf, WAKE_LABEL } from '../../src/shared/nightWake.js';
 import { CHARACTERS } from '../../src/shared/characters.js';
 import { MODEL_CHARS } from './world/models.js';
 import { AVATAR_3D_ON } from './display.js';
@@ -618,23 +619,25 @@ const TEAM_HINT = {
 /** 夜间顺序：首夜 / 其他夜晚各一列，每步写这个角色醒来做什么，最后讲为什么这么排（照官方的夜晚顺序表）。 */
 export function NightOrder({ script }) {
   const o = NIGHT_ORDER[script];
-  const row = ([id, what], i) => {
+  const row = (first) => ([id, what], i) => {
     const r = ROLES[id];
     const color = r ? ATTR[r.team].color : 'var(--muted)';
+    const w = stepWake(id, first);
+    const note = r && wakeOf(id).note && w !== 'wake' ? wakeOf(id).note : null;
     return (
       <li key={`${id}-${i}`} style={{ '--attr': color }}>
         <span className="no-n">{i + 1}</span>
         <span className="no-art">{r && ROLE_ART[id] ? <img src={ROLE_ART[id]} alt="" loading="lazy" /> : null}</span>
-        <span className="no-body"><b>{r ? r.name : STEP_NAMES[id]}</b><span><Glossed text={what} /></span></span>
+        <span className="no-body"><b>{r ? r.name : STEP_NAMES[id]}{w && <i className={`no-wake ${w}`} title={note ?? undefined}>{WAKE_LABEL[w]}</i>}</b><span><Glossed text={what} /></span>{note && <small className="no-note">{note}</small>}</span>
       </li>
     );
   };
   return (
     <div className="night-order">
-      <p className="muted">说书人每晚按这个顺序叫人。没在场的角色直接跳过；死了的人不再醒（守鸦人这种死了才触发的除外）。</p>
+      <p className="muted">说书人每晚按这个顺序走。<b className="no-wake wake">睁眼</b> 这个人会被叫醒；<b className="no-wake if">条件</b> 满足条件才醒（或醒的是别人）；<b className="no-wake st">判定</b> 本人不醒，说书人自己结算。没在场的角色直接跳过；死了的人不再醒（守鸦人这种死了才触发的除外）。</p>
       <div className="no-cols">
-        <section><h3>☾ 首夜</h3><ol>{o.first.map(row)}</ol></section>
-        <section><h3>☾ 其他夜晚</h3><ol>{o.other.map(row)}</ol></section>
+        <section><h3>☾ 首夜</h3><ol>{o.first.map(row(true))}</ol></section>
+        <section><h3>☾ 其他夜晚</h3><ol>{o.other.map(row(false))}</ol></section>
       </div>
       <h3>为什么这么排</h3>
       <ul className="no-why">{o.why.map((t) => <li key={t}><Glossed text={t} /></li>)}</ul>

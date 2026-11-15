@@ -10,9 +10,9 @@ import { Glossed } from './terms.jsx';
 import { useMarks, rolesOfMark } from './marks.jsx';
 import { AbilityCard } from './AbilityCard.jsx';
 import { NightOrder, TEAMS } from './Lobby.jsx';
+import { wakeOf, wakeTags } from '../../src/shared/nightWake.js';
 
 const has = (id, q) => [ROLES[id].name, ROLES[id].en, ROLES[id].ability].some((t) => t.toLowerCase().includes(q));
-const nightsOf = (r) => [r.firstNight > 0 && '首夜醒', r.otherNight > 0 && '每晚醒'].filter(Boolean);
 const MULTI_KEY = 'botc.rolesMulti';
 
 export function RoleIndex({ s }) {
@@ -118,10 +118,11 @@ function RoleDetail({ id, mine, guessed, onCard, onClose, innerRef }) {
         <header>
           <b>{r.name}</b><small>{r.en}</small>
           <span className="ri-tag">{TEAM_NAME[r.team]}</span>
-          {nightsOf(r).map((n) => <span key={n} className="ri-tag night">☾ {n}</span>)}
+          {wakeTags(id).map((n) => <span key={n} className={`ri-tag night ${/判定/.test(n) ? 'st' : ''}`}>☾ {n}</span>)}
           {onClose && <button type="button" className="ri-x" onClick={onClose} aria-label={`收起${r.name}`}>×</button>}
         </header>
         <p><Glossed text={r.ability} /></p>
+        {wakeOf(id).note && <p className="ri-wake">☾ 夜里：{wakeOf(id).note}</p>}
         {mine && <p className="ri-note">这是你的角色。</p>}
         {guessed && <p className="ri-note">小魔典里你猜 {guessed.join('、')} 号是它。</p>}
         <button type="button" className="ri-more" onClick={onCard}>完整能力牌 ▸</button>
