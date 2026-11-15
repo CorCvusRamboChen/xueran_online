@@ -433,7 +433,8 @@ function Game({ s, act, ask }) {
         {!roaming && !skills && s.script !== 'mark' && <button type="button" className="mm-sheet-btn scene-sheet-btn" onClick={() => setSkills(true)} title="所有角色的技能">技能表</button>}
         <SoundToggles onFixVoice={me && s.phase !== 'ended' ? () => act('fixVoice') : null} onSheet={!roaming && !skills ? () => setSkills(true) : null} />
         <SkillCheck check={check} onClose={closeCheck} />
-        <MicDemand me={me} />
+        <MicDemand me={me} day={s.day} />
+        {me?.mic && me.micOn && <div className="mic-chip" title="收音页开着：说书人听得到你。关掉收音页大约 45 秒后，这里会重新提醒。">● 收音开着</div>}
         <HudBar items={items} active={tab} onPick={pick} label={t.label}
           timer={timerSpec && { label: timerSpec.label, secs: timerSecs, urgent }} />
         {warn && <div className="nom-warn" key={warn}>{warn}</div>}
@@ -836,10 +837,10 @@ function MadnessPanel({ me }) {
 }
 
 /** 被洗脑、或者是畸形秀演员时，屏幕中间要求开收音：传上来第一句话就自己消失。可以先收起来，右边的「疯狂」面板还能打开。 */
-function MicDemand({ me }) {
-  const [later, setLater] = useState(null); // 这个令牌（当天）点过「等会儿再开」
+function MicDemand({ me, day }) {
+  const [later, setLater] = useState(null); // 今天点过「等会儿再开」（令牌整局不变，按天记，第二天再提醒）
   const [opened, setOpened] = useState(false);
-  if (!me?.mic || me.micOn || later === me.mic) return null;
+  if (!me?.mic || me.micOn || later === `${me.mic}-${day}`) return null;
   return createPortal(
     <div className="sheet-bg gossip-bg" role="presentation">
       <div className="gossip-modal mic-demand" role="alertdialog" aria-label="打开收音">
@@ -847,10 +848,10 @@ function MicDemand({ me }) {
         <p className="lead">{me.micWhy === 'listen' ? <>这个剧本里有<b>灵言师</b>：说书人要听大家说的话，才知道谁说出了他的关键词。开着收音页说话，说书人才听得到你。</>
           : me.micWhy === 'pixie' ? <>你是小精灵：如果你<b>疯狂地证明自己就是{me.pixie?.role}</b>，等他死了你就获得他的能力（不证明也不会被罚）。</> : madnessGoal(me)}
           说书人只听得到收音{me.madness ? '，不开收音很可能被处决' : ''}。</p>
-        <p className="muted">{opened ? '在打开的页面里点「开始收音」，然后说话。说书人听到第一句，这里就会关掉。' : '别人不知道你开了。音频不保存，转成文字后发给 AI 说书人判断。'}</p>
+        <p className="muted">{opened ? '在打开的页面里点「开始收音」，这里就会关掉。收音页开着就行，晚上会自动暂停，第二天接着收，不用重开。' : '别人不知道你开了。音频不保存，转成文字后发给 AI 说书人判断。'}</p>
         <div className="btn-row">
           <Btn kind="primary" onClick={() => { setOpened(true); openMic(me.mic); }}>{opened ? '再打开一次' : '打开收音'}</Btn>
-          <Btn onClick={() => setLater(me.mic)}>等会儿再开</Btn>
+          <Btn onClick={() => setLater(`${me.mic}-${day}`)}>等会儿再开</Btn>
         </div>
       </div>
     </div>,

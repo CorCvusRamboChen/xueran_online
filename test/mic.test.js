@@ -1,7 +1,7 @@
 // 收音页：令牌只给本人、当天作废、不保留音频和文字；音频切句和 WAV 格式；判定时算上收音的话。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MicInbox, micIngest, micValid, micAbout } from '../src/server/mic.js';
+import { MicInbox, micIngest, micValid, micAbout, micPing } from '../src/server/mic.js';
 import { wavSamples } from '../src/server/stt.js';
 import { Segmenter, downsample, encodeWav, RATE } from '../client/src/micAudio.js';
 import { Room } from '../src/server/room.js';
@@ -74,7 +74,7 @@ test('切句：比他自己说话小很多的句子当成扬声器里别人的�
   assert.equal(got.length, 3, '一分钟没说话，参照降下来了');
 });
 
-test('令牌：名单里的人才有；换一天旧令牌作废、文字清掉', async () => {
+test('令牌：名单里的人才有；整局不变（换一天文字清掉，晚上暂停不收）；这局结束才作废', async () => {
   const inbox = new MicInbox({ transcribe: async () => '我是贤者' });
   inbox.listen(['a']);
   assert.equal(inbox.tokenFor('b'), null);
@@ -82,12 +82,37 @@ test('令牌：名单里的人才有；换一天旧令牌作废、文字清掉',
   assert.ok(micValid(first));
   assert.deepEqual(await micIngest(first, wav(1)), { status: 200, text: '我是贤者' });
   assert.deepEqual(inbox.transcript('a'), ['我是贤者']);
-  inbox.listen(['a']);
+  inbox.listen([]); // 黄昏收工：暂停，令牌还在
+  assert.ok(micValid(first));
+  assert.equal(inbox.tokenFor('a'), null);
+  assert.deepEqual(await micIngest(first, wav(1)), { status: 200, text: '' }, '暂停时这句不收');
+  assert.deepEqual(inbox.transcript('a'), []);
+  inbox.listen(['a']); // 第二天：同一个令牌接着收，收音页不用重开
+  assert.equal(inbox.tokenFor('a'), first);
+  assert.deepEqual(await micIngest(first, wav(1)), { status: 200, text: '我是贤者' });
+  inbox.stop();
   assert.ok(!micValid(first));
   assert.equal((await micIngest(first, wav(1))).status, 410);
-  assert.deepEqual(inbox.transcript('a'), []);
-  inbox.stop();
   assert.equal((await micIngest('瞎编的', wav(1))).status, 410);
+});
+
+test('谁开着收音：收音页报到过（45 秒内）或今天传上来过话；刚开时通知房间', async () => {
+  const inbox = new MicInbox({ transcribe: async () => '' });
+  const told = [];
+  inbox.onStatus = (id) => told.push(id);
+  inbox.listen(['a', 'b']);
+  assert.equal(inbox.isOn('a'), false);
+  assert.equal(micPing(inbox.tokenFor('a')), true);
+  assert.equal(inbox.isOn('a'), true);
+  assert.deepEqual(told, ['a']);
+  micPing(inbox.tokenFor('a'));
+  assert.deepEqual(told, ['a'], '一直开着不重复通知');
+  inbox.seen.set('a', Date.now() - 60_000);
+  assert.equal(inbox.isOn('a'), false, '收音页关了一分钟');
+  inbox.listen([]);
+  assert.equal(inbox.isOn('b'), false, '晚上暂停不算开着');
+  inbox.stop();
+  assert.equal(micPing('瞎编的'), false);
 });
 
 test('上传：不是音频、太长都拒绝；太短的不转写；同时只转一句', async () => {
@@ -122,8 +147,9 @@ test('转写失败不算他说了话；转写途中到了黄昏，这句不要',
   await sleep(1);
   late.listen([]);
   release('我是贤者');
-  assert.equal((await pending).status, 410);
+  assert.deepEqual(await pending, { status: 200, text: '' }, '这句不算，但收音页照开着');
   assert.deepEqual(late.transcript('a'), []);
+  late.stop();
 });
 
 function mockVoice() {
@@ -169,7 +195,7 @@ test('房间：令牌只发给被洗脑的本人，不用房主打开', async ()
   assert.ok(!micValid(token), '结束后令牌作废');
 });
 
-test('房间：收音的话交给模型判定，判过就是努力证明了；黄昏后令牌作废', async () => {
+test('房间：收音的话交给模型判定，判过就是努力证明了；黄昏后暂停，这局结束才作废', async () => {
   const room = await dayRoom();
   const g = room.game;
   const token = room.viewFor('u2').self.mic;
@@ -182,8 +208,10 @@ test('房间：收音的话交给模型判定，判过就是努力证明了；�
   assert.deepEqual(seen[0].lines, ['我真的是神谕者']);
   assert.ok(g.get('u2').alive);
   await room.dusk();
-  assert.ok(!micValid(token));
+  assert.ok(micValid(token), '黄昏只是暂停，第二天还能接着用');
+  assert.equal(room.mic.tokenFor('u2'), null);
   await room.teardown();
+  assert.ok(!micValid(token), '这局结束作废');
 });
 
 test('房间：有收音时声明不算数，不开收音更容易被罚；开了就看转写；机器人声明了照旧算过', async () => {

@@ -46,7 +46,7 @@ function fade(el, to, ms, done) {
   requestAnimationFrame(step);
 }
 function playMusic(url) {
-  if (current?.url === url) return;
+  if (MIC_PAGE || current?.url === url) return;
   const old = current;
   current = null;
   if (old) fade(old.el, 0, 2500, () => old.el.pause());
@@ -57,8 +57,10 @@ function playMusic(url) {
   current = { el, url };
 }
 let pendingUrl = null;
+// 收音页（?mic=）不放任何背景声：会被麦克风录进去（2026-11-16 用户：收音页弹出来有背景音）
+const MIC_PAGE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('mic');
 // 浏览器要求先点一下才能放声音：第一次点击时补放
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && !MIC_PAGE) {
   window.addEventListener('pointerdown', () => { if (pendingUrl && current) { current.el.play().then(() => fade(current.el, musicVol(), 3000)).catch(() => {}); pendingUrl = null; } startWind(); });
 }
 

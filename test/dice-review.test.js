@@ -54,14 +54,14 @@ test('掉线：刚重启没有操作记录的不算，操作过又断开的才�
   assert.equal(r.signals('p1').offline, false);
 });
 
-test('有人在听吗：收音箱存在不算，要真传过声音；进屋说话听不到；掉线和机器人都不算', () => {
+test('有人在听吗：收音箱存在不算，要收音页真开着；进屋说话听不到；掉线和机器人都不算', () => {
   const g = new Game(players(8), { roles: SNV, rng: makeRng(1), script: 'snv' });
   g.day = 1;
   const r = room(g);
-  r.mic = { seconds: new Map() };
+  r.mic = { on: new Set(), isOn(id) { return this.on.has(id); } };
   r.online.add('p1');
   assert.equal(r.listeningTo('p1'), false, '没开收音页');
-  r.mic.seconds.set('p1', 3);
+  r.mic.on.add('p1'); // 收音页开着（报到过或传过声音）
   assert.equal(r.listeningTo('p1'), true);
   r.online.delete('p1');
   assert.equal(r.listeningTo('p1'), false, '掉线');

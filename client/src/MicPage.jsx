@@ -82,6 +82,7 @@ export default function MicPage({ token }) {
     l.stream.getTracks().forEach((t) => { t.onended = null; t.stop(); });
     l.ctx.close().catch(() => {});
     l.lock?.release().catch(() => {});
+    clearInterval(l.beat);
   };
 
   const pump = async () => {
@@ -123,7 +124,11 @@ export default function MicPage({ token }) {
       ctx.createMediaStreamSource(stream).connect(tap);
       await ctx.resume();
       const lock = await navigator.wakeLock?.request('screen').catch(() => null);
-      live.current = { stream, ctx, segmenter, lock };
+      // 每 15 秒报一次「还开着」：游戏那边就知道你开了收音，不再弹提示（晚上暂停也照开着，第二天接着收）
+      const ping = () => fetch(`/api/mic/${encodeURIComponent(token)}/ping`, { method: 'POST' }).then((r) => { if (r.status === 410) { shut(); setState('expired'); } }).catch(() => {});
+      ping();
+      const beat = setInterval(ping, 15_000);
+      live.current = { stream, ctx, segmenter, lock, beat };
       stream.getAudioTracks()[0].onended = () => { shut(); setState('lost'); };
       setState('on');
     } catch (e) {

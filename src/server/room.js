@@ -2093,7 +2093,7 @@ export class Room {
       if (this.game !== g) return;
       if (verdict === 'true') continue;
       // 依据不一样，骰子不一样：听到了判没努力最重，有人听但他没说次之，根本没人在听时只知道他没公开声明
-      const noMic = mustMic && !this.mic.seconds.has(id);
+      const noMic = mustMic && !this.mic.isOn(id);
       const how = verdict === 'false' ? { heardFalse: true } : heard.length ? {} : noMic ? { noMic: true, claimed } : this.listeningTo(id) ? { silent: true } : { blind: true };
       if (!g.madnessPenalty(id, how)) continue;
       punish(id, heard.length ? '语音里没有努力证明' : noMic ? '没有打开收音' : '说书人没听到他努力证明', `**${g.name(id)}** 没有疯狂地证明自己，被处决了！`);
@@ -2204,7 +2204,7 @@ export class Room {
    */
   listeningTo(id) {
     if (this.isFake(id) || !this.online.has(id)) return false;
-    if (this.mic?.seconds.has(id)) return true;
+    if (this.mic?.isOn(id)) return true;
     return !!this.hearing && !this.meets.some((m) => m.day === this.game.day && (m.who === id || m.with.includes(id)));
   }
 
@@ -2250,6 +2250,7 @@ export class Room {
         if (px && !px.gained) return { kind: 'pixie', role: ROLES[px.role].name };
         return inScript('mezepheles', gg?.script) ? { kind: 'listen' } : {};
       };
+      this.mic.onStatus = () => this.changed(); // 有人刚打开收音：马上刷新，他那边的提示就关掉
       this.mic.listen(micIds);
     }
   }
@@ -3273,7 +3274,7 @@ export class Room {
       harpy: g.harpyMad?.id === uid && g.harpyMad.night === g.night && g.phase === 'day' ? { target: g.harpyMad.target, name: g.name(g.harpyMad.target), claimed: !!g.harpyMad.claimed } : null,
       hearing: !!this.hearing,
       mic: day ? this.mic?.tokenFor(uid) ?? null : null,
-      micOn: !!this.mic?.seconds.has(uid), // 收音页传上来过声音
+      micOn: !!this.mic?.isOn(uid), // 收音页开着（最近报到过，或者今天传上来过话）
       micWhy: g.madness?.[uid] || this.thinksMutant(p) ? null : g.pixie?.[uid] && !g.pixie[uid].gained ? 'pixie' : inScript('mezepheles', g.script) ? 'listen' : null, // 为什么发收音：小精灵 / 灵言师剧本
       pixie: g.pixie?.[uid] ? { role: ROLES[g.pixie[uid].role].name, mad: !!g.pixie[uid].mad, gained: !!g.pixie[uid].gained } : null,
     };

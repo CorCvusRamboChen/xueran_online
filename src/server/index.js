@@ -21,7 +21,7 @@ import { squadpoolSync } from './squadpool.js';
 import { voiceLaunchBlocked } from './launch.js';
 import { discordHearing, hearingReady } from './hearing.js';
 import { sttReady } from './stt.js';
-import { MicInbox, micDemo, micIngest, micValid, micAbout } from './mic.js';
+import { MicInbox, micDemo, micIngest, micValid, micAbout, micPing } from './mic.js';
 import { timingSafeEqual } from 'node:crypto';
 
 const { DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_TOKEN } = process.env;
@@ -234,6 +234,7 @@ app.get('/api/config', (_req, res) => res.json({ clientId: DISCORD_CLIENT_ID ?? 
 // 收音页：令牌就是身份，只发给被洗脑的本人
 if (DEV_LOGIN) micDemo();
 app.get('/api/mic/:token', (req, res) => (micValid(req.params.token) ? res.json(micAbout(req.params.token)) : res.status(410).end()));
+app.post('/api/mic/:token/ping', (req, res) => res.status(micPing(req.params.token) ? 204 : 410).end()); // 收音页每 15 秒报到：还开着
 app.post('/api/mic/:token', express.raw({ type: 'audio/wav', limit: '2mb' }), async (req, res) => {
   const { status, text } = await micIngest(req.params.token, req.body);
   res.status(status).json({ text: text ?? '' });

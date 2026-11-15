@@ -1900,3 +1900,6 @@ span.lr-newbie { cursor: default; }
 .pelt-item { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line, #3a3a3a); background: rgba(255,255,255,.03); color: inherit; cursor: pointer; }
 .pelt-item small { color: var(--muted); }
 .pelt-item.on { border-color: var(--phy); background: rgba(200,60,50,.15); }
+
+/* 收音开着：左上角一个小红点（只有自己看得到） */
+.mic-chip { position: absolute; left: 12px; bottom: 64px; z-index: 6; font: 900 11px/1.8 var(--sans); padding: 0 8px; background: rgba(20,20,20,.75); color: #f08a7a; border: 1px solid rgba(240,138,122,.4); pointer-events: auto; }
