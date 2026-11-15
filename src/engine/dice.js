@@ -56,6 +56,8 @@ export const DICE = {
   savantTrue: { base: 0.5 },
   balloonSame: { base: 0.7 },                       // 失效的气球驾驶员看到同类型的人（信息链断了才看得出是假的）
   fishStrong: { base: 0.3, balance: -2 },           // 渔夫的建议直指恶魔：善良落后时多给
+  // 骗人精（传奇角色，裁缝与暴乱）：每局一次，一名善良玩家可能得到错误信息。帮邪恶：善良领先时多发生
+  fibbin: { base: 0.2, balance: 1.2 },
   priestessGood: { base: 0.75 },                    // 善良落后：女祭司多被指向拿着真信息的善良玩家
   priestessEvil: { base: 0.5 },                     // 善良领先：女祭司常被指向一个邪恶玩家（听他满嘴假话）
   goblinClaim: { base: 0.6 },                       // 机器人哥布林被提名时声明身份

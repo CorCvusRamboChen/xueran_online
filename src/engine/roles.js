@@ -275,6 +275,9 @@ const EXP = {
     ability: '每局一次，在夜晚时，你可以选择一名存活的玩家：如果他是落难少女，他变成一个不在场的镇民。[+落难少女]' },
   golem: { name: '魔像', en: 'Golem', team: 'outsider', firstNight: 0, otherNight: 0,
     ability: '你整局只能提名一次。你提名时，如果被提名的人不是恶魔，他死亡。' },
+  // 裁缝与暴乱（作者 Sui）用的旧版暴乱（2024-12 改版前的 v1 文字，剧本卡上印的就是这版）
+  riot: { name: '暴乱', en: 'Riot', team: 'demon', firstNight: 0, otherNight: 0,
+    ability: '被提名的玩家死亡，但他可以立刻再次发起提名（第三天白天他必须这么做）。在第三个白天结束时，邪恶阵营获胜。[所有邪恶阵营都是暴乱]' },
   mezepheles: { name: '灵言师', en: 'Mezepheles', team: 'minion', firstNight: 1, otherNight: 1,
     ability: '在你的首个夜晚，你会得知一个关键词。第一个说出这个关键词的善良玩家，当晚变成邪恶阵营。（要他开着收音页说才听得到）' },
 };
@@ -354,6 +357,9 @@ export const SCRIPTS = {
   booz: { id: 'booz', name: '瞒天过海', en: 'Boozling', engine: 'snv',
     roles: ['noble', 'pixie', 'highpriestess', 'balloonist', 'fortuneteller', 'oracle', 'savant', 'philosopher', 'huntsman', 'fisherman', 'slayer', 'sage', 'cannibal',
       'drunk', 'mutant', 'damsel', 'klutz', 'golem', 'baron', 'cerenovus', 'scarletwoman', 'marionette', 'nodashii', 'fanggu', 'imp'] },
+  // 裁缝与暴乱（作者 Sui，美术 Lei；用户 2026-11-15 从杭州说书人的帖子里要的极速板子）：所有善良都是女裁缝，所有邪恶都是暴乱（旧版），
+  // 传奇角色骗人精（每局一次，一名善良玩家可能得到错误信息）。口径见 references/community.md
+  sar: { id: 'sar', name: '裁缝与暴乱', en: 'Seamstresses & Riot', engine: 'snv', riot: true, fibbin: true, roles: ['seamstress', 'riot'] },
   rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'ww', werewolf: true, ragnarok: true, players: RAG_PLAYERS, roles: ['ww_hunter', 'ww_wolf'] },
   // 娱乐模式：经典网杀「预女猎守」，不是血染。规则和人数表在 werewolf.js / werewolf-roles.js，房间流程在 server/werewolfRoom.js
   ww: { id: 'ww', name: '狼人杀', en: 'Werewolf', engine: 'ww', werewolf: true, players: WW_PLAYERS, roles: Object.keys(WW_ROLES) },

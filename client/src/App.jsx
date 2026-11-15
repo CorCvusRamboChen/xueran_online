@@ -47,6 +47,7 @@ const BOARD_NOTE = {
   pie: ['男爵在场时：外来者 +2、镇民 −2；提线木偶坐在恶魔旁边', '男爵在场 外来者+2'],
   trust: ['男爵在场时：外来者 +2；亡骨魔在场时外来者 −1；提线木偶坐在恶魔旁边', '男爵+2 · 亡骨魔−1'],
   twv: ['方古在场时外来者 +1；亡骨魔在场时外来者 −1', '方古 +1 · 亡骨魔 −1'],
+  sar: ['所有善良都是女裁缝，所有邪恶都是暴乱（爪牙加恶魔的位置全是暴乱）；传奇角色骗人精：整局一次，一名善良玩家可能拿到错误信息', '全员女裁缝 vs 全员暴乱'],
   booz: ['男爵 +2、方古 +1 外来者；气球驾驶员 +0~1；有巡山人时落难少女一定在场；提线木偶坐在恶魔旁边', '男爵+2 · 方古+1 · 巡山人带落难少女'],
 };
 /** 顶部常驻：这局的板子配置（几个镇民、外来者、爪牙、恶魔）。 */
@@ -69,7 +70,7 @@ function BoardBar({ n, script }) {
  */
 function VoteStats({ s }) {
   const [open, setOpen] = useState(false);
-  if (s.phase !== 'day' || !(s.noms || s.vote || s.pendingNom)) return null;
+  if (s.phase !== 'day' || !(s.noms || s.vote || s.pendingNom) || s.riotScript) return null; // 暴乱：不投票，没有票数可看
   const dead = s.players.filter((p) => !p.alive);
   const ghosts = dead.filter((p) => p.ghostVote);
   const total = s.aliveCount + ghosts.length;
@@ -318,6 +319,7 @@ function Game({ s, act, ask }) {
   const timerSpec = night ? (s.deadline ? { label: '选择倒计时', until: s.deadline } : null)
     : s.vote ? { label: '投票倒计时', until: s.deadline }
       : s.moonchildDue ? { label: '遗言时间', until: s.moonchildDue }
+      : s.riot ? { label: '接着提名', until: s.riot.until }
       : s.pendingNom?.until ? { label: s.pendingNom.stage === 'accuse' ? '提名陈述' : '辩护', until: s.pendingNom.until }
         : s.noms && !s.noms.timeUp ? { label: '提名结束', until: s.noms.until }
           : s.roam?.until ? { label: '自由活动结束', until: s.roam.until } : null;
@@ -387,8 +389,8 @@ function Game({ s, act, ask }) {
   const myVoteOpen = !!s.vote && !!me && (me.alive || me.ghostVote) && !s.vote.locked.includes(s.me);
   const mySpeech = !!s.pendingNom && ((s.pendingNom.stage === 'accuse' && s.pendingNom.nominator === s.me) || (s.pendingNom.stage === 'defend' && s.pendingNom.nominee === s.me));
   // 提名阶段大家在等我表态（提名或不提名）；点了「提名」「开枪」「拉进密室」正在选人，也算轮到我
-  const myNomOpen = !!s.noms && !s.noms.timeUp && !!me?.alive && !meP?.nominator && !s.noms.skipped && !s.executedToday && !s.vote && !s.pendingNom;
-  const dockHot = !!(prompt || rk) || myVoteOpen || mySpeech || myNomOpen || !!mode;
+  const myNomOpen = !!s.noms && !s.noms.timeUp && !!me?.alive && !meP?.nominator && !s.noms.skipped && !s.executedToday && !s.vote && !s.pendingNom && !s.riot;
+  const dockHot = !!(prompt || rk) || myVoteOpen || mySpeech || myNomOpen || !!s.riot?.mine || !!mode;
   const [dockMin, toggleDock, dockRef] = useDockSheet(dockHot);
   const pick = (id) => { if (id === 'journal') tutEvent('journal'); return id === 'menu' ? setMenu(true) : setTab((cur) => (cur === id ? null : id)); };
   const shown = tab ?? (s.isST ? 'grim' : me ? 'role' : 'log'); // 电脑上右栏默认显示的面板
@@ -1027,6 +1029,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
   }
 
   if (s.boom) return <><BoomPanel s={s} act={act} g={g} />{roomCard}</>;
+  if (s.riot) return <><RiotPanel s={s} act={act} g={g} />{roomCard}</>;
   if (s.pendingNom) return <><NomStage s={s} act={act} g={g} name={name} face={face} />{me?.canGoblin && <GoblinClaim act={act} />}{roomCard}</>;
 
   const meP = g(s.me);
@@ -1037,12 +1040,21 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
       <Panel title={s.dayStage === 'morning' ? '清晨' : s.noms ? '提名' : '广场'} tone="light" className="square-pnl"
         extra={s.noms && !s.noms.timeUp ? <NomClock until={s.noms.until} /> : null}>
         {s.dayStage === 'morning' && lastDay && <p className="lead"><Line text={lastDay.text} /></p>}
-        <div className="sq-board">
-          <div><b>{s.aliveCount}</b><small>存活</small></div>
-          <div><b>{s.threshold}</b><small>处决需要</small></div>
-          <div className={s.block ? 'hot' : ''}><b>{s.block ? `${g(s.block)?.seat}号` : '—'}</b><small>{s.block ? `台上 · ${s.blockVotes} 票` : s.blockVotes ? '平票' : '处决台空着'}</small></div>
-        </div>
-        {s.noms && <p className="sq-status">{s.noms.timeUp ? '提名结束 · 投完这轮入夜' : `已表态 ${s.noms.done} / ${s.aliveCount}`}</p>}
+        {s.riotScript ? (
+          <div className="sq-board">
+            <div><b>{s.aliveCount}</b><small>存活</small></div>
+            <div><b>第 {s.day} 天</b><small>{s.day >= 3 ? '今天必须提名' : '第三天结束邪恶赢'}</small></div>
+            <div className="hot"><b>当场死</b><small>被提名 · 不投票</small></div>
+          </div>
+        ) : (
+          <div className="sq-board">
+            <div><b>{s.aliveCount}</b><small>存活</small></div>
+            <div><b>{s.threshold}</b><small>处决需要</small></div>
+            <div className={s.block ? 'hot' : ''}><b>{s.block ? `${g(s.block)?.seat}号` : '—'}</b><small>{s.block ? `台上 · ${s.blockVotes} 票` : s.blockVotes ? '平票' : '处决台空着'}</small></div>
+          </div>
+        )}
+        {s.riotScript && s.noms && !s.noms.timeUp && <p className="muted">暴乱在场：你提名谁，谁就当场死亡，然后由他接着提名。</p>}
+        {s.noms && <p className="sq-status">{s.noms.timeUp ? (s.riotScript ? '提名结束 · 准备入夜' : '提名结束 · 投完这轮入夜') : `已表态 ${s.noms.done} / ${s.aliveCount}`}</p>}
         <GossipButton s={s} act={act} />
         <SlayButton s={s} setMode={setMode} />
         <SnvButtons s={s} act={act} />
@@ -1057,6 +1069,35 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
         </div>
       </Panel>
     </>
+  );
+}
+
+/** 裁缝与暴乱：有人被提名、当场死亡，正在想下一个提名谁。是自己就点人（第一、二天也可以不提名，今天就结束）；别人看倒计时。 */
+function RiotPanel({ s, act, g }) {
+  const r = s.riot;
+  const secs = useCountdown(r.until);
+  const who = g(r.id);
+  const clock = secs != null ? <span className="nom-clock">{secs}</span> : null;
+  if (!r.mine) {
+    return (
+      <Panel title="暴乱 · 提名链" tone="phy" extra={clock}>
+        <p className="lead"><b>{who?.seat}号 {who?.name}</b> 被提名，当场死亡。{r.must ? '今天是第三天，他必须接着提名下一个人。' : '他可以接着提名下一个人；不提名，今天的提名就结束。'}</p>
+      </Panel>
+    );
+  }
+  const alive = s.players.filter((p) => p.alive && p.id !== s.me && !p.nominated);
+  return (
+    <Panel title="你倒下了 · 接着提名" tone="phy" extra={clock}>
+      <p className="lead">{r.must ? '第三天：你必须提名一个人，他也会当场死亡。时间到了说书人替你提名。' : '点一个人提名他，他会当场死亡并接着提名。不提名，今天的提名就结束、入夜。'}</p>
+      <div className="boom-picks">
+        {alive.map((p) => (
+          <button key={p.id} type="button" className="boom-pick" onClick={() => act('nominate', { target: p.id })}>
+            <b>{p.seat}号</b><span>{p.name}</span>
+          </button>
+        ))}
+      </div>
+      {!r.must && <div className="btn-row"><Btn onClick={() => act('riotPass')}>不提名（今天结束）</Btn></div>}
+    </Panel>
   );
 }
 

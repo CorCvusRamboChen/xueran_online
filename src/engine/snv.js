@@ -92,6 +92,13 @@ export function rollTeensy(script, n, rng, { exclude = null } = {}) {
   return shuffle([...towns, ...sample(out, o, rng), ...minions, demon], rng);
 }
 
+/** 裁缝与暴乱：人数照标准表，爪牙和恶魔的位置全是暴乱，其余全是女裁缝（官方 v1：爪牙标记换成暴乱标记）。 */
+export function rollRiot(n, rng) {
+  if (!DISTRIBUTION[n]) throw new Error(`人数需在 ${MIN_PLAYERS}–${MAX_PLAYERS} 之间`);
+  const [, , m] = DISTRIBUTION[n];
+  return shuffle([...Array(n - m - 1).fill('seamstress'), ...Array(m + 1).fill('riot')], rng);
+}
+
 /**
  * 自选角色的大剧本（七步成诗这种从各剧本挑角色的）按人数随机出一套。人数表照标准的，再按场上角色调：
  * 男爵 +2 外来者（外来者不够就少加），亡骨魔 -1、方古 +1 外来者，气球驾驶员一半一半 +1 外来者，
@@ -209,7 +216,7 @@ export const SNV_METHODS = {
   // ───────────────────────── 开局 ─────────────────────────
   setupSNV(players, roles, rng) {
     const S = SCRIPTS[this.script];
-    const assigned = roles ?? (S.teensy ? rollTeensy(this.script, players.length, rng) : S.roles ? balancedMixed(this.script, players.length, rng) : balancedSNV(players.length, rng));
+    const assigned = roles ?? (S.riot ? rollRiot(players.length, rng) : S.teensy ? rollTeensy(this.script, players.length, rng) : S.roles ? balancedMixed(this.script, players.length, rng) : balancedSNV(players.length, rng));
     if (assigned.length !== players.length) throw new Error('角色数量与玩家数量不符');
     seatMarionette(assigned, rng);
     this.players = players.map((p, i) => ({
@@ -231,7 +238,9 @@ export const SNV_METHODS = {
         p.gained = pickOne(day.length && (!night.length || rng() < DAY_SHARE) ? day : night, rng);
       }
     }
-    this.bluffs = pickBluffsSNV(new Set([...inPlay, ...this.players.map((p) => p.shownRole)]), rng, this.script);
+    this.bluffs = S.riot ? [] : pickBluffsSNV(new Set([...inPlay, ...this.players.map((p) => p.shownRole)]), rng, this.script); // 裁缝与暴乱：善良全是女裁缝，没有可拿的伪装
+    this.fibbinUsed = false;   // 骗人精（传奇角色）用过了
+    this.riotChain = null;     // 暴乱：刚被提名死掉、现在可以（第三天必须）接着提名的人
     this.fx = [];
     this.used = {};            // 每局一次的能力用过了：id → true（女裁缝、哲学家、艺术家）
     this.firstDone = {};       // 首夜能力用过了（钟表匠）：换成这个角色的人还能用一次
@@ -578,7 +587,7 @@ export const SNV_METHODS = {
       madness: '因疯狂被处决', storyteller: '说书人判定死亡', starpass: '恶魔自杀（传位）', slayer: '被猎手射杀',
       harpy: '没能疯狂地证明，被鹰身女妖的能力杀死', boomdandy: '死于炸弹人的炸弹',
       assassin: '被刺客刺杀', godfather: '被教父杀死', gambler: '赌错了角色', gossip: '因造谣者的声明而死', tinker: '修补匠突然死亡',
-      golem: '被魔像提名，不是恶魔所以死了', moonchild: '被月之子带走', grandmother: '孙子被恶魔杀死，祖母随之而去',
+      golem: '被魔像提名，不是恶魔所以死了', riot: '被提名，死于暴乱', moonchild: '被月之子带走', grandmother: '孙子被恶魔杀死，祖母随之而去',
     }[cause] ?? cause;
     this.log.push(`${this.name(p.id)} 死亡（${cause}）`);
     this.record('death', `${this.tag(p.id)} ${why}`);
@@ -811,6 +820,11 @@ ${this.grimoire()}
     }
     if (!this.evilInfo) return messages;
     this.evilKnown = this.knownMap();
+    if (SCRIPTS[this.script]?.riot) { // 裁缝与暴乱：没有爪牙，所有暴乱一起醒来互认（官方 v1：在恶魔信息这一步唤醒所有暴乱）；没有伪装
+      const riots = this.players.filter((p) => p.role === 'riot');
+      for (const r of riots) say(r, `你们都是**暴乱**：${riots.filter((x) => x.id !== r.id).map((x) => `**${this.name(x.id)}**`).join('、') || '只有你一个'}。\n没有伪装可拿：所有善良玩家都是女裁缝。`);
+      return messages;
+    }
     // 魔术师：恶魔以为他是爪牙，爪牙以为他是恶魔
     const mag = this.players.find((p) => p.role === 'magician' && !this.snvBroken(p));
     if (mag && demon) {
@@ -1457,7 +1471,8 @@ ${this.grimoire()}
           const ts = this.choiceOfSNV(p)?.targets ?? []; if (ts.length !== 2) continue;
           this.used[p.id] = true;
           const same = this.seenEvil(ts[0], '女裁缝') === this.seenEvil(ts[1], '女裁缝');
-          const yes = this.infoYes(p, same, (w) => w.evil.has(ts[0].id) === w.evil.has(ts[1].id));
+          let yes = this.infoYes(p, same, (w) => w.evil.has(ts[0].id) === w.evil.has(ts[1].id));
+          if (yes === same && this.fibbinLie(p)) yes = !same; // 骗人精：这次给错的
           tell(p, `${ts.map((q) => this.name(q.id)).join(' 与 ')} ${yes ? '**是**' : '**不是**'}同一阵营。`, `你得知：**${yes ? '是' : '否'}**。`);
         } break;
         case 'juggler': for (const p of this.holders('juggler')) {
@@ -1822,6 +1837,7 @@ ${this.grimoire()}
     }
     const harpyDead = this.winner ? [] : this.harpyPenalty();
     if (!this.winner && this.day >= 5 && this.leviOn()) this.setWinner('evil', `第 ${this.day} 个白天结束，利维坦获胜`);
+    if (!this.winner && SCRIPTS[this.script]?.riot && this.day >= 3 && this.demonsAlive().length) this.setWinner('evil', '第三个白天结束，暴乱还活着，邪恶获胜');
     this.fx = this.fx.filter((f) => !(typeof f.until === 'number' && f.until <= this.day));
     this.curseFail = null;
     return { executed, result, harpyDead };
@@ -1903,13 +1919,48 @@ ${this.grimoire()}
     return who[0];
   },
 
+  /** 骗人精（传奇角色）：每局一次，一名善良玩家可能得到错误信息。说书人掷骰子，用掉了就再也不会。 */
+  fibbinLie(p) {
+    if (!SCRIPTS[this.script]?.fibbin || this.fibbinUsed || this.evilOf(p)) return false;
+    if (!this.st.roll('fibbin', {}, { who: p.id })) return false;
+    this.fibbinUsed = true;
+    this.record('st', `骗人精：${this.tag(p.id)} 这次拿到的是错误信息（每局一次）`);
+    return true;
+  },
+
+  // ───────────── 暴乱（旧版 v1）─────────────
+  // 官方 v1 运作方式：任何人被提名都立即死亡（不投票）；他可以立刻接着提名（死了也能、今天提名过也能），
+  // 不提名今天的提名就结束、入夜；第三天必须提名，不提名说书人替他提。死人不能被提名。
+  // 所有活着的暴乱都失效时能力不在，提名投票照常（这个剧本没有醉酒中毒，留着口子）。
+  riotOn() { return !!SCRIPTS[this.script]?.riot && this.players.some((p) => p.alive && p.role === 'riot' && !this.snvBroken(p)); },
+  /** 被提名的人当场死亡；没分出胜负他就是下一个提名的人。 */
+  riotNominated(b) {
+    this.snvKill(b, 'riot', this.dayMessages());
+    this.checkWinner();
+    this.riotChain = this.winner ? null : b.id;
+  },
+  /** 第三天没人提名、或该提名的人时间到了：说书人替他挑一名存活玩家（官方：说书人替他提名）。 */
+  riotPick(byId) {
+    const pool = this.players.filter((q) => q.alive && q.id !== byId && !this.nominees.has(q.id));
+    return this.st.choose('riotForced', pool, { who: byId ?? undefined });
+  },
+  /** 第三天没有人提名：说书人发起第一次提名。 */
+  riotStoryteller(targetId) {
+    const b = this.get(targetId);
+    if (this.phase !== 'day' || !b?.alive) throw new Error('只能提名一名存活玩家');
+    this.nominees.add(b.id);
+    this.log.push(`第${this.day}天 说书人提名 ${this.name(b.id)}`);
+    this.record('nominate', `第三天没有人提名：说书人提名了 ${this.tag(b.id)}`);
+    this.riotNominated(b);
+  },
+
   checkWinnerSNV() {
     if (this.winner) return this.winner;
     if (this.mastermindDay != null) return null; // 主谋的额外一夜一天：胜负在那天黄昏定
     const noDemon = !this.demonsAlive().length;
     const mm = noDemon && this.demonExecuted && this.holders('mastermind').find((q) => q.alive && !this.snvBroken(q));
     if (mm) { this.mastermindDay = this.day + 1; this.record('st', '恶魔死于处决，但主谋还活着：额外进行一个夜晚和一个白天'); return null; }
-    if (noDemon && !this.twinBlocks()) this.setWinner('good', '恶魔已经死亡');
+    if (noDemon && !this.twinBlocks()) this.setWinner('good', SCRIPTS[this.script]?.riot ? '所有暴乱都死了' : '恶魔已经死亡');
     else if (this.aliveCount() <= 2) this.setWinner('evil', noDemon ? '恶魔已死，但双子挡着善良，只剩两名存活玩家，邪恶获胜' : '只剩两名存活玩家，恶魔获胜'); // 官方：邪恶的胜利条件只看人数，不看恶魔死活
     else if (!noDemon && this.allAliveEvil()) this.setWinner('evil', '存活的玩家全是邪恶，善良已经无法获胜');
     return this.winner;

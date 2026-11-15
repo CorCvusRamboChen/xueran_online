@@ -1579,6 +1579,7 @@ export class World {
     else if (town.weather === 'drizzle') this.buildRain();
     else if (town.weather === 'leaves') this.buildLeaves();
     else if (town.weather === 'petals') this.buildLeaves(['#b79ad8', '#e8a8bf', '#f2e6c8'], 12);
+    else if (town.weather === 'embers') this.buildLeaves(['#f07a2a', '#ffb347', '#e04a1c', '#5a4a44'], 16); // 裁缝与暴乱：火星和灰
     if (town.lanterns?.length) this.buildLanterns(town.lanterns);
     app.renderer.on('resize', () => this.layout());
     app.ticker.add(() => this.frame());

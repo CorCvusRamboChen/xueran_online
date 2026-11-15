@@ -157,7 +157,7 @@ export class Game {
       this.firstDemon = this.players.find((p) => p.role === 'imp')?.id ?? null;
     }
     this.record('setup', this.players.map((p) => `${p.seat}号 ${p.name}：${this.roleText(p)}`).join('；'));
-    this.record('setup', `恶魔拿到的伪装：${this.bluffs.map((r) => ROLES[r].name).join('、')}`);
+    if (this.bluffs.length) this.record('setup', `恶魔拿到的伪装：${this.bluffs.map((r) => ROLES[r].name).join('、')}`); // 裁缝与暴乱没有伪装
 
     this.phase = 'setup'; // setup | night | day | ended
     this.night = 0;
@@ -211,7 +211,7 @@ export class Game {
       'firstDone', 'twin', 'fangUsed', 'vigKept', 'abnormal', 'demonVoted', 'minionNominated', 'dayVoters', 'jugglerDay', 'juggled', 'juggleLog', 'madness', 'savantDay', 'declared', 'claims', 'records', 'sageHit', 'barberDue', 'pendingKlutz', 'klutzQueue', 'klutzNow', 'madNight', 'curseFail', 'pitNight',
       'balloon', 'leviGood', 'goblinMark', 'amnesiacDay', 'amnesiacKnown', 'woke', 'pardonDay',
       'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7', 'lunaticTold', 'lunaticTellTo', 'heard',
-      'pixie', 'mez', 'execHist', 'nomBy', 'blockVoters', 'politicianDone'];
+      'pixie', 'mez', 'execHist', 'nomBy', 'blockVoters', 'politicianDone', 'fibbinUsed', 'riotChain'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -655,6 +655,7 @@ export class Game {
     this.executedToday = false;
     this.nomBy = {};       // 今天谁提名了谁：被提名者 → 提名者（政客终局判责任用）
     this.blockVoters = []; // 台上那个人的举手名单
+    this.riotChain = null; // 暴乱：接着提名的人（只在当天有效）
   }
 
   /** 提名。返回 {virgin:true, executed} 表示贞洁者触发、提名者被立即处决。 */
@@ -664,16 +665,21 @@ export class Game {
     if (this.pardonDay === this.day) throw new Error('今天特赦过了，不再处决');
     const a = this.get(nominatorId); const b = this.get(nomineeId);
     if (!a || !b) throw new Error('提名者或被提名者不在游戏中');
-    if (!this.visAlive(a)) throw new Error('死亡玩家不能提名');
+    const riot = this.engine === 'snv' && this.riotOn?.(); // 暴乱：被提名就死，被提名的人接着提名
+    const chain = riot && this.riotChain === a.id;
+    if (riot && this.riotChain && !chain) throw new Error(`现在轮到 ${this.name(this.riotChain)} 接着提名`);
+    if (!chain && !this.visAlive(a)) throw new Error('死亡玩家不能提名');
     if (this.engine === 'snv' && this.golemBlocked?.(a)) throw new Error('你整局只能提名一次，已经用掉了');
-    if (this.nominators.has(a.id)) throw new Error('你今天已经提名过了');
+    if (!chain && this.nominators.has(a.id)) throw new Error('你今天已经提名过了');
     if (this.nominees.has(b.id)) throw new Error(`${this.name(b.id)} 今天已经被提名过了`);
+    if (riot && !b.alive) throw new Error('暴乱在场时不能提名死亡的玩家');
     this.nominators.add(a.id);
     this.nominees.add(b.id);
     (this.nomBy ??= {})[b.id] = a.id;
     this.suspicion[b.id] = (this.suspicion[b.id] ?? 0) + 1;
     this.log.push(`第${this.day}天 ${this.name(a.id)} 提名 ${this.name(b.id)}`);
     this.record('nominate', `${this.tag(a.id)} 提名了 ${this.tag(b.id)}`);
+    if (riot) { this.riotChain = null; this.riotNominated(b); return { virgin: false, riot: true }; }
     if (this.engine === 'snv') {
       const cursed = this.nominateSNV(a);
       const golem = !cursed && !this.winner && this.golemSNV(a, b); // 魔像：提名的人不是恶魔就死，提名照常进行

@@ -2,7 +2,7 @@
 // 所有操作走 act(userId, type, payload)；状态变了就 onChange()，由服务器给每个人推送各自的视图。
 import { Game, shuffle, balancedTB, setupScoreTB, rollRoles, rollRagnarok } from '../engine/game.js';
 import { balancedBMR, setupScore, rollBMR } from '../engine/bmr.js';
-import { balancedSNV, setupScoreSNV, rollSNV, rollTeensy, rollMixed, balancedMixed, MAX_DECLARES, AMNESIAC_DAY, seatMarionette } from '../engine/snv.js';
+import { balancedSNV, setupScoreSNV, rollSNV, rollTeensy, rollMixed, balancedMixed, MAX_DECLARES, AMNESIAC_DAY, seatMarionette, rollRiot } from '../engine/snv.js';
 import { ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, engineOf, inScript, rolesOf, playersOf, ragnarokWolves } from '../engine/roles.js';
 import { getMap, houseAt, houseCenter, doorPoint, pathLength, positionAt, speedOf } from '../shared/map.js';
 import { CHARACTERS, CHARACTER_IDS } from '../shared/characters.js';
@@ -23,7 +23,7 @@ import { MarkTable, MK_ACTIONS, MARK_SETTINGS } from './mark.js';
 // 受害者那段破门过场多长（毫秒）：踹门 → 踹开 → "你死了"，播完再天亮
 // 每人在镇上有家的剧本（早上从自家门口出门）；其中暗流涌动一系还有夜里「冲到对方家门口破门」的过场
 const KILL_SCENE_SCRIPTS = new Set(['tb']); // 破门过场只在暗流涌动（2026-11-11 用户定）
-const HOME_SCRIPTS = new Set(['tb', 'ngj', 'rag', 'cat', 'ucd', 'ecp', 'bmr', 'hhr', 'pie', 'trust', 'booz']); // 每人在镇上有个家（白天从自家出门）：和破门是两回事
+const HOME_SCRIPTS = new Set(['tb', 'ngj', 'rag', 'cat', 'ucd', 'ecp', 'bmr', 'hhr', 'pie', 'trust', 'booz', 'sar']); // 每人在镇上有个家（白天从自家出门）：和破门是两回事
 const SHARED_HOME_SCRIPTS = new Set(['bmr']); // 能当家的房子比人少时合住（黯月初升的地图只有 6 栋）
 const VICTIM_SCENE_MS = 6500;
 // 一局里的真人全都离线这么久，就暂停这局、放开所有闭麦闭耳（有人回来自动接着打）
@@ -96,6 +96,7 @@ export const DEFAULT_SETTINGS = {
   nominateMinutes: 3,    // 集合后开放提名多久（自动说书）
   accuseSeconds: 60,     // 提名者陈述（房主开局前可调）
   defendSeconds: 60,     // 被提名者辩护（房主开局前可调）
+  riotSeconds: 20,       // 裁缝与暴乱：被提名死掉的人想下一个提名谁的时间（官方现场是数 3、2、1，线上要留点时间点人）
   speechSeconds: 90,     // 狼人杀：白天每人发言多久（遗言最多 60 秒）
   nominatorVotes: true,  // 房规：提名的人自动算一票（票数从 1 开始）
   speechMute: true,      // 陈述/辩护时只有发言的人能说话，其他人服务器闭麦
@@ -143,6 +144,7 @@ export class Room {
     this.square = null;
     this.vote = null;
     this.pendingNom = null;
+    this.riotStep = null;       // 裁缝与暴乱：被提名死掉、正在想下一个提名谁的人 { id, until, must }
     this.roam = null;           // 白天自由活动（小镇地图）
     this.homes = null;          // 每人在镇上的家：playerId → 房子 id
     this.noms = null;           // 自动说书的提名环节：{ until, timeUp, skips }
@@ -308,6 +310,7 @@ export class Room {
       case 'startVote': this.startVote(uid); break;
       case 'nomDone': this.nomDone(uid); break;
       case 'skipNom': this.skipNom(uid); break;
+      case 'riotPass': this.riotPass(uid); break;
       case 'hand': this.hand(uid, !!p.up); break;
       case 'history': return { games: this.history?.list(this.guildId) ?? [] };
       case 'stats': return { stats: this.history?.stats?.(this.guildId, uid) ?? null };
@@ -530,22 +533,23 @@ export class Room {
     const teensy = !!SCRIPTS[script].teensy;
     const mixed = !teensy && !!SCRIPTS[script].roles && SCRIPTS[script].engine === 'snv'; // 自选角色的大剧本（七步成诗）
     const ragnarok = !!SCRIPTS[script].ragnarok; // 诸神黄昏：角色只按人数定（几只狼人），不用推荐配置、不按房主指定
+    const riot = !!SCRIPTS[script].riot; // 裁缝与暴乱：同上，只有女裁缝和暴乱两种，按人数定
     // 房主指定了角色：指定的座位照指定，其余按人数表随机补齐（推荐配置就不用了）
-    const assign = this.tutorial || ragnarok ? {} : Object.fromEntries(Object.entries(this.roleAssign ?? {}).filter(([id, r]) => seats.some((p) => p.id === id) && !!ROLES[r] && inScript(r, script)));
+    const assign = this.tutorial || ragnarok || riot ? {} : Object.fromEntries(Object.entries(this.roleAssign ?? {}).filter(([id, r]) => seats.some((p) => p.id === id) && !!ROLES[r] && inScript(r, script)));
     const custom = Object.keys(assign).length > 0;
     const noBaron = script === 'tb' && seats.length < 7 && !!this.settings.smallNoBaron;
     // 配置三选一：推荐预设（人数对得上时大多从推荐配置里挑，官方的权重高；其余和没有推荐配置的人数用 AI 配置）/ AI 配置 / 完全随机
     const mode = this.settings.setupMode ?? 'preset';
     const pinned = this.settings.preset != null ? SETUPS[script]?.[this.settings.preset] : null; // 指定了某一套（旧设置 / 测试）：人数对得上就固定用它
-    const preset = this.tutorial || custom || ragnarok || mode !== 'preset' ? null
+    const preset = this.tutorial || custom || ragnarok || riot || mode !== 'preset' ? null
       : pinned?.roles.length === seats.length ? pinned
         : Math.random() < PRESET_SHARE ? pickPreset(script, seats.length, Math.random) : null;
     const pure = !this.tutorial && !custom && !preset && mode === 'random'
       ? (ragnarok ? rollRagnarok(seats.length, Math.random) : teensy ? rollTeensy(script, seats.length, Math.random) : mixed ? rollMixed(script, seats.length, Math.random) : script === 'bmr' ? rollBMR(seats.length, Math.random) : script === 'snv' ? rollSNV(seats.length, Math.random) : rollRoles(seats.length, Math.random, { noBaron })) : undefined;
-    let roles = this.tutorial ? this.tutorial.roles : custom ? buildRoles(seats.map((p) => p.id), assign, script, Math.random, { noBaron }) : preset ? shuffle(preset.roles, Math.random) : pure;
+    let roles = riot ? rollRiot(seats.length, Math.random) : this.tutorial ? this.tutorial.roles : custom ? buildRoles(seats.map((p) => p.id), assign, script, Math.random, { noBaron }) : preset ? shuffle(preset.roles, Math.random) : pure;
     // 新手：拿到难角色的大概率和老玩家的同类普通角色对调（房主指定的座位不动）
     const newbies = new Set(this.tutorial ? [] : this.newbies.filter((id) => seats.some((p) => p.id === id)));
-    if (newbies.size) {
+    if (newbies.size && !riot) {
       roles ??= ragnarok ? rollRagnarok(seats.length, Math.random) : teensy ? rollTeensy(script, seats.length, Math.random) : mixed ? balancedMixed(script, seats.length, Math.random) : script === 'bmr' ? balancedBMR(seats.length, Math.random) : script === 'snv' ? balancedSNV(seats.length, Math.random) : balancedTB(seats.length, Math.random, { noBaron });
       roles = easeNewbies(seats.map((p) => p.id), roles, newbies, script, { fixed: new Set(Object.keys(assign)) });
     }
@@ -557,7 +561,7 @@ export class Room {
     this.game.records = this.readRecords(seats);
     this.wireGame();
     if (newbies.size) this.stNote(`新手 ${newbies.size} 人：发身份时调低了当邪恶的概率，难角色尽量换成简单的`);
-    if (pure) this.stNote('完全随机：按人数表随机抽的角色，没有调平衡');
+    if (pure && !riot) this.stNote('完全随机：按人数表随机抽的角色，没有调平衡');
     if (ragnarok) this.stNote(`诸神黄昏：${ragnarokWolves(seats.length)} 只狼人（小恶魔），其余全是猎手`);
     else if (script === 'tb' && !custom && !preset && !this.tutorial) this.stNote(`AI 配板：强弱配平（平衡分 ${setupScoreTB(this.game.players.map((p) => p.role))}，正数偏善良）${seats.length <= 12 ? '；12 人及以下调了信息位（共情者和占卜师少同时出现、F4 一般 1–2 个、有男爵多半有图书管理员）' : ''}`);
     if (this.game.deadDrunk) this.stNote('房规：夜里被杀的信息角色仍拿当晚的信息，按醉酒处理（真假由 AI 说书人按局势定）');
@@ -635,6 +639,7 @@ export class Room {
     await this.endRoam();
     await this.closeAllRooms();
     this.pendingNom = null;
+    this.clearRiot();
     this.moonchildFakes = null;
     const prompts = g.startNight();
     this.resolving = false;
@@ -1003,10 +1008,13 @@ export class Room {
     const g = this.requireGame();
     if (this.pendingNom || this.vote) throw new UserError('还有一场提名/投票没结束');
     if (this.roam) throw new UserError('自由活动中，等集合回到广场再提名');
-    if (this.noms?.timeUp) throw new UserError('提名时间已经结束了');
+    const chain = !!this.riotStep && this.riotStep.id === uid; // 暴乱：被提名死掉的人接着提名，不受提名时间限制
+    if (this.riotStep && !chain) throw new UserError(`现在轮到 ${this.game.name(this.riotStep.id)} 接着提名`);
+    if (this.noms?.timeUp && !chain) throw new UserError('提名时间已经结束了');
     if (this.dusking || this.duskDay === g.day) throw new UserError('今天已经到黄昏了，不能再提名');
     if (!this.stId && !this.noms && !this.roamedToday) throw new UserError('现在还不能提名，等大家回到广场'); // 天亮到自由活动之间：这时提名成功，自由活动就起不来了
     const r = g.nominate(uid, target);
+    if (r.riot) { this.riotAfter(`**${g.name(uid)}** 提名了 **${g.name(target)}**`, target); return; }
     if (r.golem) {
       this.pub(`**${g.name(uid)}** 提名了 **${g.name(target)}**——**${g.name(target)} 突然倒地身亡！** 提名照常进行。`, 'death');
       if (g.winner) { this.later(0, () => this.endGame()); return; }
@@ -1185,8 +1193,91 @@ export class Room {
 
   async autoDusk() {
     const g = this.game;
-    if (!g || g.phase !== 'day' || this.ended || this.vote || this.stId) return;
+    if (!g || g.phase !== 'day' || this.ended || this.vote || this.stId || this.riotStep) return;
+    // 暴乱第三天：没有人提名就由说书人发起第一次提名（官方），提名链一直到分出胜负
+    if (g.engine === 'snv' && g.riotOn?.() && g.day >= 3 && !g.winner && !g.riotChain) { this.riotStoryteller(); return; }
     await this.dusk();
+  }
+
+  // ───────────── 裁缝与暴乱：提名链（旧版暴乱 v1）─────────────
+  /** 有人因提名而死：公布，分出胜负就结束，否则轮到他接着提名。 */
+  riotAfter(what, target) {
+    const g = this.game;
+    this.clearRiot();
+    this.pub(`${what}——**${g.name(target)} 当场死亡！**`, 'death');
+    if (g.winner) { this.later(0, () => this.endGame()); return; }
+    this.pauseNoms();
+    this.riotNext(target);
+    this.changed();
+  }
+
+  /** 第三天没有人提名：说书人提名一名存活玩家，他死亡并接着提名。 */
+  riotStoryteller() {
+    const g = this.game;
+    const t = g.riotPick(null);
+    if (!t) { this.dusk(); return; }
+    g.riotStoryteller(t.id);
+    this.riotAfter('第三天没有人提名，**说书人**提名了 **' + g.name(t.id) + '**', t.id);
+  }
+
+  /** 轮到 id 接着提名：倒计时；第一、二天不提名今天就结束，第三天时间到说书人替他提名。 */
+  riotNext(id) {
+    const g = this.game;
+    const must = g.day >= 3;
+    const secs = this.isFake(id) ? Math.min(3, this.settings.riotSeconds) : this.settings.riotSeconds;
+    const step = this.riotStep = { id, until: Date.now() + secs * 1000, must };
+    this.announce(`**${g.name(id)}** ${must ? '必须立刻提名下一个人（第三天）' : '可以立刻提名下一个人；不提名，今天的提名就结束'}。`, 'vote');
+    this.riotTimer = this.later(secs * 1000, () => { if (this.riotStep === step) this.riotTimeout(); });
+    if (this.isFake(id)) this.later(Math.min(secs * 500, 1500 + Math.random() * 1000), () => {
+      if (this.riotStep !== step) return;
+      const t = this.botRiotPick(id, must);
+      try { if (t) this.nominate(id, t); else this.riotPass(id); } catch (e) { console.warn('[botc] 机器人接着提名出错：', e.message); }
+    });
+  }
+
+  /** 机器人接着提名谁：暴乱挑自己知道不是同伙的人；女裁缝随便挑。前两天有时不接。 */
+  botRiotPick(id, must) {
+    const g = this.game;
+    const me = g.get(id);
+    const allies = new Set((g.evilKnown?.[id] ?? []).map((x) => x.id));
+    const pool = g.alive().filter((q) => q.id !== id && !g.nominees.has(q.id));
+    if (!pool.length) return null;
+    const evil = g.evilOf(me);
+    if (!must && Math.random() < (evil ? 0.2 : 0.45)) return null;
+    const prefer = evil ? pool.filter((q) => !allies.has(q.id)) : pool;
+    const list = prefer.length ? prefer : pool;
+    return list[Math.floor(Math.random() * list.length)].id;
+  }
+
+  riotTimeout() {
+    const step = this.riotStep;
+    if (!step) return;
+    if (!step.must) { this.riotPass(step.id, true); return; }
+    const g = this.game;
+    const t = g.riotPick(step.id);
+    if (!t) return;
+    this.announce(`时间到：**说书人**替 **${g.name(step.id)}** 提名。`, 'vote');
+    try { this.nominate(step.id, t.id); } catch (e) { console.warn('[botc] 说书人替人提名出错：', e.message); }
+  }
+
+  /** 被提名死掉的人不接着提名（只有第一、二天可以）：今天的提名结束，入夜。 */
+  riotPass(uid, timeout = false) {
+    const step = this.riotStep;
+    if (!step || (step.id !== uid && !this.isHost(uid))) throw new UserError('现在不是你接着提名');
+    if (step.must) throw new UserError('第三天必须接着提名');
+    const g = this.game;
+    this.clearRiot();
+    g.riotChain = null;
+    this.announce(`**${g.name(step.id)}** ${timeout ? '没有在时间内' : '决定不'}接着提名：今天的提名结束。`, 'vote');
+    if (this.noms) this.noms.timeUp = true;
+    this.later(this.settings.pauseMs, () => this.autoDusk());
+    this.changed();
+  }
+
+  clearRiot() {
+    if (this.riotTimer) this.cancel(this.riotTimer);
+    this.riotTimer = null;
+    this.riotStep = null;
   }
 
   /** 机器人夜里选人。教程里按剧本：投毒者毒厨师，小恶魔刀一个不是你的好人。 */
@@ -1228,7 +1319,7 @@ export class Room {
     for (const p of g.alive().filter((q) => this.isFake(q.id) && q.id !== SEAT7 && g.visAlive(q) && !g.nominators.has(q.id))) {
       if (this.noms?.skips.has(p.id)) continue;
       this.later(2000 + Math.random() * 5000, () => {
-        if (!this.noms || this.noms.timeUp || this.pendingNom || this.vote || g.phase !== 'day' || g.nominators.has(p.id) || !p.alive) return;
+        if (!this.noms || this.noms.timeUp || this.pendingNom || this.vote || this.riotStep || g.phase !== 'day' || g.nominators.has(p.id) || !p.alive) return;
         // 新手照顾：前两天机器人不提名新手
         const targets = g.players.filter((q) => q.id !== p.id && !g.nominees.has(q.id) && !(g.day <= 2 && g.newbies?.includes(q.id)));
         if (targets.length && Math.random() < 0.3) this.nominate(p.id, targets[Math.floor(Math.random() * targets.length)].id);
@@ -1328,6 +1419,7 @@ export class Room {
     await this.endRoam();
     if (this.game !== g) return undefined; // 等的时候房主结束了这局：别往下一局里写东西
     this.pendingNom = null;
+    this.clearRiot();
     this.clearNoms();
     await this.judgeMadness();
     if (this.game !== g) return undefined;
@@ -2527,6 +2619,7 @@ export class Room {
     this.closeHearing();
     this.vote = null;
     this.pendingNom = null;
+    this.clearRiot();
     this.deadline = null;
     const g = this.game;
     this.clearNoms();
@@ -2958,6 +3051,8 @@ export class Room {
         ...(showRoles ? this.grimEntry(p) : {}),
       })),
       pendingNom: this.pendingNom,
+      riot: this.riotStep ? { id: this.riotStep.id, until: this.riotStep.until, must: this.riotStep.must, mine: this.riotStep.id === uid } : null, // 暴乱：谁在想下一个提名谁
+      riotScript: !!SCRIPTS[g.script]?.riot,
       boom: g.boom?.until ? { until: g.boom.until, alive: g.boom.alive, mine: g.boom.points[uid] ?? null, count: Object.keys(g.boom.points).length } : null, // 炸弹人倒数
       ragShot: this.ragCur ? { id: this.ragCur.id, until: this.ragCur.until, mine: this.ragCur.id === uid, canShoot: this.ragCur.id === uid && g.get(uid)?.role === 'slayer', target: this.ragCur.id === uid ? this.ragCur.target : null } : null, // 诸神黄昏：谁倒下了正在决定开不开枪
       noms: this.noms && {
