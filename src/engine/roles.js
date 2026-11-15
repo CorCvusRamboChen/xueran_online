@@ -275,6 +275,19 @@ const EXP = {
     ability: '每局一次，在夜晚时，你可以选择一名存活的玩家：如果他是落难少女，他变成一个不在场的镇民。[+落难少女]' },
   golem: { name: '魔像', en: 'Golem', team: 'outsider', firstNight: 0, otherNight: 0,
     ability: '你整局只能提名一次。你提名时，如果被提名的人不是恶魔，他死亡。' },
+  // 夜半狂欢（The Midnight Oasis，作者 Zets）用到的五个（2026-11-16）
+  engineer: { name: '工程师', en: 'Engineer', team: 'townsfolk', firstNight: 1, otherNight: 1,
+    choose: { count: 0, optional: true, once: true, role: true, evil: true },
+    ability: '每局游戏限一次，在夜晚时，你可以选择让恶魔变成你选择的恶魔角色，或让爪牙变成你选择的爪牙角色。' },
+  poppygrower: { name: '罂粟种植者', en: 'Poppy Grower', team: 'townsfolk', firstNight: 0, otherNight: 0,
+    ability: '爪牙和恶魔互相不认识。如果你死亡，当晚他们会互相认识。' },
+  atheist: { name: '无神论者', en: 'Atheist', team: 'townsfolk', firstNight: 0, otherNight: 0,
+    ability: '说书人可以打破游戏规则，如果说书人被处决，善良阵营获胜，即使你已死亡。[无邪恶角色在场]' },
+  psychopath: { name: '精神病患者', en: 'Psychopath', team: 'minion', firstNight: 0, otherNight: 0,
+    ability: '每个白天，在提名开始前，你可以公开选择一名玩家：他死亡。如果你被处决，提名你的玩家需要和你猜拳，只有你输了你才会死亡。' },
+  alhadikhia: { name: '哈迪寂亚', en: 'Al-Hadikhia', team: 'demon', firstNight: 0, otherNight: 1,
+    choose: { count: 3, optional: true },
+    ability: '每个夜晚*，你可以选择三名玩家（所有玩家都会得知你选了谁）：他们分别秘密决定自己的生死，然后如果他们都存活则都死亡。' },
   // 裁缝与暴乱（作者 Sui）用的旧版暴乱（2024-12 改版前的 v1 文字，剧本卡上印的就是这版）
   riot: { name: '暴乱', en: 'Riot', team: 'demon', firstNight: 0, otherNight: 0,
     ability: '被提名的玩家死亡，但他可以立刻再次发起提名（第三天白天他必须这么做）。在第三个白天结束时，邪恶阵营获胜。[所有邪恶阵营都是暴乱]' },
@@ -299,6 +312,14 @@ const AMNESIAC_ONLY = {
     ability: '除首夜外的每个夜晚，如果今天白天有人被处决，你会得知他是不是善良的。' },
 };
 
+// 不是角色，只是夜里的一个选择：哈迪寂亚选中的人悄悄决定活还是死（选「角色」ah_live / ah_die）。结算在 engine/snv.js
+const PROMPT_ONLY = {
+  ah_choice: { name: '哈迪寂亚选中了你', en: 'Al-Hadikhia', team: 'demon', firstNight: 0, otherNight: 0, choose: { count: 0, role: true },
+    ability: '悄悄选择：活下去，还是死去。如果被选中的三个人最后都活着，三个人一起死。' },
+  ah_live: { name: '活下去', en: 'Live', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
+  ah_die: { name: '死去', en: 'Die', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
+};
+
 for (const [id, r] of Object.entries(ROLES)) r.script = 'tb';
 for (const [id, r] of Object.entries(BMR)) { r.script = 'bmr'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(SNV)) { r.script = 'snv'; ROLES[id] = r; }
@@ -306,6 +327,7 @@ for (const [id, r] of Object.entries(LUF)) { r.script = 'luf'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(BS7)) { r.script = 'bs7'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(EXP)) { r.script = 'exp'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(AMNESIAC_ONLY)) { r.script = 'amnesiac'; r.virtual = true; ROLES[id] = r; }
+for (const [id, r] of Object.entries(PROMPT_ONLY)) { r.script = 'prompt'; r.virtual = true; ROLES[id] = r; }
 for (const [id, r] of Object.entries(WW_ROLES)) { r.script = 'ww'; r.virtual = true; ROLES[id] = r; } // 狼人杀的角色：不是血染的角色，说书人的角色列表里不列
 
 /**
@@ -360,6 +382,11 @@ export const SCRIPTS = {
   // 裁缝与暴乱（作者 Sui，美术 Lei；用户 2026-11-15 从杭州说书人的帖子里要的极速板子）：所有善良都是女裁缝，所有邪恶都是暴乱（旧版），
   // 传奇角色骗人精（每局一次，一名善良玩家可能得到错误信息）。口径见 references/community.md
   sar: { id: 'sar', name: '裁缝与暴乱', en: 'Seamstresses & Riot', engine: 'snv', riot: true, fibbin: true, roles: ['seamstress', 'riot'] },
+  // 夜半狂欢（The Midnight Oasis，作者 Zets，钟楼剧本博物馆美术；用户 2026-11-16 发来剧本卡）：「旋转木马」快速上手剧本，7–15 人。
+  // 传奇角色：哨兵（外来者可能 ±1）、圣洁之魂（邪恶玩家最多比开局多一名）。口径见 references/community.md
+  mo: { id: 'mo', name: '夜半狂欢', en: 'The Midnight Oasis', engine: 'snv', players: [7, 15], sentinel: true, ivory: true,
+    roles: ['noble', 'snakecharmer', 'balloonist', 'huntsman', 'engineer', 'fisherman', 'professor', 'savant', 'amnesiac', 'farmer', 'cannibal', 'poppygrower', 'atheist',
+      'drunk', 'barber', 'golem', 'damsel', 'poisoner', 'psychopath', 'mezepheles', 'pithag', 'alhadikhia', 'vigormortis'] },
   rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'ww', werewolf: true, ragnarok: true, players: RAG_PLAYERS, roles: ['ww_hunter', 'ww_wolf'] },
   // 娱乐模式：经典网杀「预女猎守」，不是血染。规则和人数表在 werewolf.js / werewolf-roles.js，房间流程在 server/werewolfRoom.js
   ww: { id: 'ww', name: '狼人杀', en: 'Werewolf', engine: 'ww', werewolf: true, players: WW_PLAYERS, roles: Object.keys(WW_ROLES) },
@@ -388,6 +415,9 @@ export const BMR_TOWNSFOLK = rolesOf('bmr', 'townsfolk');
 export const BMR_OUTSIDERS = rolesOf('bmr', 'outsider');
 export const BMR_MINIONS = rolesOf('bmr', 'minion');
 export const BMR_DEMONS = rolesOf('bmr', 'demon');
+
+/** 有无神论者的剧本里，活人可以提名说书人：被提名的「玩家」id 用这个。 */
+export const ST_NOMINEE = 'storyteller';
 
 export const isEvilRole = (id) => ['minion', 'demon'].includes(ROLES[id].team);
 

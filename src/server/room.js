@@ -23,7 +23,7 @@ import { MarkTable, MK_ACTIONS, MARK_SETTINGS } from './mark.js';
 // 受害者那段破门过场多长（毫秒）：踹门 → 踹开 → "你死了"，播完再天亮
 // 每人在镇上有家的剧本（早上从自家门口出门）；其中暗流涌动一系还有夜里「冲到对方家门口破门」的过场
 const KILL_SCENE_SCRIPTS = new Set(['tb']); // 破门过场只在暗流涌动（2026-11-11 用户定）
-const HOME_SCRIPTS = new Set(['tb', 'ngj', 'rag', 'cat', 'ucd', 'ecp', 'bmr', 'hhr', 'pie', 'trust', 'booz', 'sar']); // 每人在镇上有个家（白天从自家出门）：和破门是两回事
+const HOME_SCRIPTS = new Set(['tb', 'ngj', 'rag', 'cat', 'ucd', 'ecp', 'bmr', 'hhr', 'pie', 'trust', 'booz', 'sar', 'mo']); // 每人在镇上有个家（白天从自家出门）：和破门是两回事
 const SHARED_HOME_SCRIPTS = new Set(['bmr']); // 能当家的房子比人少时合住（黯月初升的地图只有 6 栋）
 const VICTIM_SCENE_MS = 6500;
 // 一局里的真人全都离线这么久，就暂停这局、放开所有闭麦闭耳（有人回来自动接着打）
@@ -96,7 +96,8 @@ export const DEFAULT_SETTINGS = {
   nominateMinutes: 3,    // 集合后开放提名多久（自动说书）
   accuseSeconds: 60,     // 提名者陈述（房主开局前可调）
   defendSeconds: 60,     // 被提名者辩护（房主开局前可调）
-  riotSeconds: 20,       // 裁缝与暴乱：被提名死掉的人想下一个提名谁的时间（官方现场是数 3、2、1，线上要留点时间点人）
+  riotSeconds: 20,
+  rpsSeconds: 20,        // 夜半狂欢：精神病患者被处决时猜拳的时间       // 裁缝与暴乱：被提名死掉的人想下一个提名谁的时间（官方现场是数 3、2、1，线上要留点时间点人）
   speechSeconds: 90,     // 狼人杀：白天每人发言多久（遗言最多 60 秒）
   nominatorVotes: true,  // 房规：提名的人自动算一票（票数从 1 开始）
   speechMute: true,      // 陈述/辩护时只有发言的人能说话，其他人服务器闭麦
@@ -311,6 +312,8 @@ export class Room {
       case 'nomDone': this.nomDone(uid); break;
       case 'skipNom': this.skipNom(uid); break;
       case 'riotPass': this.riotPass(uid); break;
+      case 'psycho': this.psycho(uid, p.target); break;
+      case 'rps': this.rpsHand(uid, p.hand); break;
       case 'hand': this.hand(uid, !!p.up); break;
       case 'history': return { games: this.history?.list(this.guildId) ?? [] };
       case 'stats': return { stats: this.history?.stats?.(this.guildId, uid) ?? null };
@@ -983,6 +986,8 @@ export class Room {
       : `第 ${g.day} 天。昨晚是**平安夜**。`, 'day', true);
     const back = (g.nightRevived ?? []).filter((id) => g.get(id)?.alive);
     if (back.length) this.announce(`${back.map((id) => `**${g.name(id)}**`).join('、')} 复活了。`, 'day', true);
+    // 哈迪寂亚：所有人都会得知他选了谁（各自怎么选的不公开，只说现在谁活着）
+    if (g.ahNews?.night === g.night) this.announce(`**哈迪寂亚**昨晚选了：${g.ahNews.targets.map((id) => `**${g.name(id)}**（${g.get(id)?.alive ? '活着' : '死了'}）`).join('、')}。`, 'day', true);
     // 利维坦：每天天亮宣布在场和第几天（官方建议对新手每天说）；它失效的那天不宣布
     if (g.engine === 'snv' && g.leviOn()) this.announce(`**利维坦在场。**现在是第 ${g.day} 天${g.day >= 5 ? '——今天结束时邪恶获胜' : `（第 5 天结束时邪恶获胜；已有 ${g.leviGood.length} 名善良玩家被处决，再处决 ${2 - g.leviGood.length} 名善良玩家邪恶就获胜）`}。`, 'day', true);
     (this.knifeLog ??= []).push({ night: g.night, day: g.day, deaths: [...deaths], revived: back });
@@ -1096,6 +1101,7 @@ export class Room {
     const nom = this.pendingNom;
     if (!nom) return;
     const who = stage === 'accuse' ? nom.nominator : nom.nominee;
+    if (who === 'storyteller') { this.openVote(); return; } // 被提名的是说书人：不辩护，直接投票
     const secs = this.isFake(who) ? 3 : stage === 'accuse' ? this.settings.accuseSeconds : this.settings.defendSeconds;
     nom.stage = stage;
     nom.until = Date.now() + secs * 1000;
@@ -1272,6 +1278,53 @@ export class Room {
     this.changed();
   }
 
+  // ───────────── 夜半狂欢：精神病患者 ─────────────
+  /** 白天提名开始前：精神病患者公开选一名玩家，他死亡。 */
+  psycho(uid, target) {
+    const g = this.requireGame();
+    if (this.noms || this.pendingNom || this.vote || this.dusking || this.duskDay === g.day) throw new UserError('提名已经开始了：精神病患者要在提名开始前动手');
+    const r = g.psychoKill(uid, target);
+    this.pub(`**${g.name(uid)}** 站出来说自己是**精神病患者**，选择了 **${g.name(target)}**——${r.died ? `**${g.name(target)} 当场死亡！**` : '什么都没有发生。'}`, r.died ? 'death' : 'vote');
+    if (g.winner) this.later(0, () => this.endGame());
+    this.changed();
+  }
+
+  /** 精神病患者要被处决：和提名他的人猜拳（自己提名自己就和说书人猜），只有他输了才死。 */
+  async psychoRps(g) {
+    const id = g.block;
+    if (!id || id === 'storyteller' || g.executedToday || g.pardonDay === g.day) return;
+    const p = g.get(id);
+    if (!p?.alive || g.abilityOf?.(p) !== 'psychopath' || g.snvBroken(p)) return;
+    const by = g.nomBy?.[id];
+    const opp = by && by !== id && g.get(by) ? by : 'storyteller';
+    const HANDS = ['rock', 'paper', 'scissors'];
+    const r = this.rps = { a: id, b: opp, picks: {}, until: Date.now() + this.settings.rpsSeconds * 1000 };
+    this.announce(`**${g.name(id)}** 要被处决——他是**精神病患者**：要和 **${g.name(opp)}** 猜拳，只有他输了才会死。`, 'vote');
+    for (const x of [id, opp]) if (x === 'storyteller' || this.isFake(x)) r.picks[x] = HANDS[Math.floor(Math.random() * 3)];
+    this.changed();
+    if (!(r.picks[id] && r.picks[opp])) await new Promise((ok) => { r.done = ok; r.timer = this.later(this.settings.rpsSeconds * 1000, ok); });
+    this.cancel(r.timer);
+    for (const x of [id, opp]) r.picks[x] ??= HANDS[Math.floor(Math.random() * 3)];
+    this.rps = null;
+    const NAME = { rock: '石头', paper: '布', scissors: '剪刀' };
+    const BEATS = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
+    const ha = r.picks[id]; const hb = r.picks[opp];
+    const out = ha === hb ? '平局' : BEATS[ha] === hb ? `${g.name(id)} 赢了` : `${g.name(id)} 输了`;
+    g.record('st', `精神病患者猜拳：${g.name(id)} 出${NAME[ha]}，${g.name(opp)} 出${NAME[hb]} → ${out}`);
+    this.announce(`猜拳：**${g.name(id)}** 出${NAME[ha]}，**${g.name(opp)}** 出${NAME[hb]}——${out}${BEATS[hb] === ha ? '，他会被处决而死。' : '，他被处决但活了下来。'}`, 'vote');
+    if (BEATS[hb] !== ha) g.psychoSpared = id;
+  }
+
+  rpsHand(uid, hand) {
+    const r = this.rps;
+    if (!r || ![r.a, r.b].includes(uid)) throw new UserError('现在不是你猜拳');
+    if (!['rock', 'paper', 'scissors'].includes(hand)) throw new UserError('出石头、剪刀或布');
+    if (r.picks[uid]) throw new UserError('你已经出过了');
+    r.picks[uid] = hand;
+    if (r.picks[r.a] && r.picks[r.b]) r.done?.();
+    this.changed();
+  }
+
   clearRiot() {
     if (this.riotTimer) this.cancel(this.riotTimer);
     this.riotTimer = null;
@@ -1426,6 +1479,8 @@ export class Room {
     if (this.game !== g) return undefined;
     this.mic?.listen([]); // 判完了：收音令牌作废，文字清掉
     if (g.winner) return this.endGame();
+    await this.psychoRps(g);
+    if (this.game !== g) return undefined;
     const already = g.executedToday;
     const { executed, result, harpyDead } = g.endDay();
     this.duskDay = g.day; // 读档时：今天黄昏已经结算过，直接入夜
@@ -3056,6 +3111,9 @@ export class Room {
       pendingNom: this.pendingNom,
       riot: this.riotStep ? { id: this.riotStep.id, until: this.riotStep.until, must: this.riotStep.must, mine: this.riotStep.id === uid } : null, // 暴乱：谁在想下一个提名谁
       riotScript: !!SCRIPTS[g.script]?.riot,
+      stNominable: g.engine === 'snv' && inScript('atheist', g.script), // 有无神论者的剧本：可以提名说书人
+      stNominated: !!g.nominees?.has('storyteller'),
+      rps: this.rps ? { a: this.rps.a, b: this.rps.b, until: this.rps.until, mine: [this.rps.a, this.rps.b].includes(uid), hand: this.rps.picks[uid] ?? null } : null, // 精神病患者猜拳
       boom: g.boom?.until ? { until: g.boom.until, alive: g.boom.alive, mine: g.boom.points[uid] ?? null, count: Object.keys(g.boom.points).length } : null, // 炸弹人倒数
       ragShot: this.ragCur ? { id: this.ragCur.id, until: this.ragCur.until, mine: this.ragCur.id === uid, canShoot: this.ragCur.id === uid && g.get(uid)?.role === 'slayer', target: this.ragCur.id === uid ? this.ragCur.target : null } : null, // 诸神黄昏：谁倒下了正在决定开不开枪
       noms: this.noms && {
@@ -3099,7 +3157,7 @@ export class Room {
     const p = g.get(uid);
     if (p) {
       const r = ROLES[p.shownRole];
-      const prompt = g.phase === 'night' && (!this.resolving || this.revivePending === uid) && (p.alive || g.ghostLunatic?.(p) || (g.engine === 'snv' && g.kept(p))) ? g.nightPrompts().find((x) => x.playerId === uid) : null;
+      const prompt = g.phase === 'night' && (!this.resolving || this.revivePending === uid) && (p.alive || this.revivePending === uid || g.ghostLunatic?.(p) || (g.engine === 'snv' && g.kept(p))) ? g.nightPrompts().find((x) => x.playerId === uid) : null;
       view.self = {
         seat: p.seat, alive: g.visAlive(p) || hushed.has(p.id), ghostVote: p.ghostVote,
         role: { id: p.shownRole, name: r.name, team: r.team, teamName: TEAM_NAME[r.team], evil: g.engine === 'snv' && !['lunatic', 'marionette'].includes(p.role) && !(p.role === 'ogre' && !p.ogreKnows) ? g.evilOf(p) : isEvilRole(p.shownRole), ability: r.ability }, // 疯子、提线木偶看到的是他以为的阵营；食人魔不知道自己变成了哪边
@@ -3179,6 +3237,7 @@ export class Room {
       canFisherman: day && p.alive && tryAs('fisherman') && !g.used?.[`fish-${uid}`] && !this.triedToday(uid, 'fisherman'),
       canAmnesiac: day && p.alive && p.role === 'amnesiac' && g.amnesiacDay?.[uid] !== g.day,
       canSlay: day && p.alive && (['slayer', 'amn_gun', 'amn_judge'].includes(ab) || g.extraAbility(p) === 'slayer' || amn) && !g.shooters?.includes(uid),
+      canPsycho: day && p.alive && ab === 'psychopath' && g.psychoDay?.[uid] !== g.day && !this.noms && !this.pendingNom && !this.vote && !this.dusking && this.duskDay !== g.day,
       canPardon: day && p.alive && (ab === 'amn_pardon' || amn) && !g.used?.[`pardon-${uid}`] && !!g.block && !this.vote && !this.pendingNom,
       // 被提名、还没开始投票：可以公开声明自己是哥布林（谁都可以这么说）
       canGoblin: day && inScript('goblin', g.script) && this.pendingNom?.nominee === uid && !this.vote && g.claims?.[uid] !== 'goblin',

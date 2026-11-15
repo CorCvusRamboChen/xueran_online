@@ -9,7 +9,7 @@
 //    同一个人身上不叠太多隐藏效果：陌客/间谍一晚上最多被错误登记两次。
 //
 // 每个判定都记进手记（journal），终局时公开。选择本身另记一份决策日志（decisions），只进存档，用来线下比较不同做法。
-import { ROLES, TOWNSFOLK, OUTSIDERS, MINIONS, isEvilRole, inScript, rolesOf } from './roles.js';
+import { ROLES, TOWNSFOLK, OUTSIDERS, MINIONS, isEvilRole, inScript, rolesOf, DISTRIBUTION } from './roles.js';
 import { chanceOf, drawOdds, DICE } from './dice.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -539,15 +539,15 @@ export class Storyteller {
    * differ(w) 为真表示这套世界里这次的答案和真相不一样，第一条信息尽量是假的。
    */
   snvWorld(p, mode, differ) {
-    const key = mode === 'must' ? 'vortox' : p.id;
+    const key = mode === 'must' ? 'vortox' : mode === 'atheist' ? 'atheist' : p.id;
     let w = this.worlds.get(key);
     if (w) return w;
-    for (let k = 0; k < 40; k++) { w = this.buildSnvWorld(p); if (!differ || differ(w)) break; }
+    for (let k = 0; k < 40; k++) { w = mode === 'atheist' ? this.buildAtheistWorld() : this.buildSnvWorld(p); if (!differ || differ(w)) break; }
     this.worlds.set(key, w);
     this.decide('world', { who: key, chosen: { demon: w.demon, evil: [...w.evil] }, mode, b: w.b });
     const g = this.g;
     const others = [...w.evil].filter((id) => id !== w.demon);
-    this.note(`${mode === 'must' ? '涡流下镇民共用' : `失效的 ${g.name(p.id)} 用`}的假世界：把 ${g.name(w.demon)} 当成恶魔${others.length ? `、${others.map((id) => g.name(id)).join('、')} 当成爪牙` : ''}`, w.b);
+    this.note(`${mode === 'must' ? '涡流下镇民共用' : mode === 'atheist' ? '无神论者局所有人共用' : `失效的 ${g.name(p.id)} 用`}的假世界：把 ${g.name(w.demon)} 当成恶魔${others.length ? `、${others.map((id) => g.name(id)).join('、')} 当成爪牙` : ''}`, w.b);
     return w;
   }
 
@@ -556,6 +556,14 @@ export class Storyteller {
    * 真邪恶在这个世界里是好人，假邪恶就挑能帮他们圆谎的人：和邪恶公开声明撞了身份的真好人排最前（谁是假的一目了然地指向他），
    * 然后是活人、已经有人怀疑的人。语音里说的身份这里看不到，只算公开声明。
    */
+  /** 无神论者局：说书人假装有一个邪恶阵营（人数照标准表），从无神论者以外的人里挑。整局共用。 */
+  buildAtheistWorld() {
+    const g = this.g; const rng = this.rng;
+    const m = DISTRIBUTION[g.players.length]?.[2] ?? 1;
+    const pool = shuffled(g.players.filter((q) => q.role !== 'atheist'), rng);
+    return { demon: pool[0].id, evil: new Set(pool.slice(0, m + 1).map((q) => q.id)), roles: new Map(), b: this.balance() };
+  }
+
   buildSnvWorld(p) {
     const g = this.g; const rng = this.rng;
     const others = shuffled(g.players.filter((q) => q.id !== p.id), rng);

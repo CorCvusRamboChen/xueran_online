@@ -188,6 +188,7 @@ export class Game {
   }
   /** 带角色的名字（复盘用）：3号 小明（共情者）；酒鬼写成 酒鬼·以为是xx。 */
   tag(id) {
+    if (id === 'storyteller') return '说书人';
     const p = this.get(id);
     if (!p) return '?';
     const r = p.role === 'drunk' ? `酒鬼·以为是${ROLES[p.shownRole].name}` : p.role === 'lunatic' ? `疯子·以为是${ROLES[p.shownRole].name}` : p.role === 'amnesiac' && p.gained ? `失忆者·能力是${ROLES[p.gained].name}` : ROLES[p.role].name;
@@ -211,7 +212,8 @@ export class Game {
       'firstDone', 'twin', 'fangUsed', 'vigKept', 'abnormal', 'demonVoted', 'minionNominated', 'dayVoters', 'jugglerDay', 'juggled', 'juggleLog', 'madness', 'savantDay', 'declared', 'claims', 'records', 'sageHit', 'barberDue', 'pendingKlutz', 'klutzQueue', 'klutzNow', 'madNight', 'curseFail', 'pitNight',
       'balloon', 'leviGood', 'goblinMark', 'amnesiacDay', 'amnesiacKnown', 'woke', 'pardonDay',
       'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7', 'lunaticTold', 'lunaticTellTo', 'heard',
-      'pixie', 'mez', 'execHist', 'nomBy', 'blockVoters', 'politicianDone', 'fibbinUsed', 'riotChain'];
+      'pixie', 'mez', 'execHist', 'nomBy', 'blockVoters', 'politicianDone', 'fibbinUsed', 'riotChain',
+      'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -281,7 +283,7 @@ export class Game {
   aliveCount() { return this.alive().length; }
   byRole(role) { return this.players.find((p) => p.role === role); }
   demon() { return this.players.find((p) => p.alive && ROLES[p.role].team === 'demon'); }
-  name(id) { const p = this.get(id); return p ? `${p.seat}号 ${p.name}` : '?'; }
+  name(id) { if (id === 'storyteller') return '说书人'; const p = this.get(id); return p ? `${p.seat}号 ${p.name}` : '?'; }
 
   visAlive(p) { return p.alive && !p.apparentDead; }
   evilOf(p) { return p.evil ?? isEvilRole(p.role); }
@@ -663,6 +665,7 @@ export class Game {
     if (this.phase !== 'day') throw new Error('只能在白天提名');
     if (this.executedToday) throw new Error('今天已经处决过了');
     if (this.pardonDay === this.day) throw new Error('今天特赦过了，不再处决');
+    if (nomineeId === 'storyteller' && this.engine === 'snv') return this.nominateST(nominatorId); // 有无神论者的剧本：提名说书人
     const a = this.get(nominatorId); const b = this.get(nomineeId);
     if (!a || !b) throw new Error('提名者或被提名者不在游戏中');
     const riot = this.engine === 'snv' && this.riotOn?.(); // 暴乱：被提名就死，被提名的人接着提名
@@ -702,7 +705,7 @@ export class Game {
   /** 投票顺序：从被提名者的下一位开始顺时针，被提名者最后。 */
   voteOrder(nomineeId) {
     const n = this.players.length;
-    const start = this.get(nomineeId).seat; // 下标 = seat
+    const start = (nomineeId === 'storyteller' ? this.get(this.nomBy?.storyteller) ?? this.players[0] : this.get(nomineeId)).seat; // 下标 = seat；说书人没有座位，从提名者的下一位开始
     return Array.from({ length: n }, (_, k) => this.players[(start + k) % n].id);
   }
 

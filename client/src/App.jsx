@@ -47,6 +47,7 @@ const BOARD_NOTE = {
   pie: ['男爵在场时：外来者 +2、镇民 −2；提线木偶坐在恶魔旁边', '男爵在场 外来者+2'],
   trust: ['男爵在场时：外来者 +2；亡骨魔在场时外来者 −1；提线木偶坐在恶魔旁边', '男爵+2 · 亡骨魔−1'],
   twv: ['方古在场时外来者 +1；亡骨魔在场时外来者 −1', '方古 +1 · 亡骨魔 −1'],
+  mo: ['哨兵：外来者可能 +1 或 −1；亡骨魔 −1 外来者；气球驾驶员 +0~1；有巡山人时落难少女一定在场；偶尔是无神论者局（没有邪恶）', '哨兵 ±1 · 可能没有邪恶'],
   sar: ['所有善良都是女裁缝，所有邪恶都是暴乱（爪牙加恶魔的位置全是暴乱）；传奇角色骗人精：整局一次，一名善良玩家可能拿到错误信息', '全员女裁缝 vs 全员暴乱'],
   booz: ['男爵 +2、方古 +1 外来者；气球驾驶员 +0~1；有巡山人时落难少女一定在场；提线木偶坐在恶魔旁边', '男爵+2 · 方古+1 · 巡山人带落难少女'],
 };
@@ -250,7 +251,10 @@ export default function App() {
 // ───────────────────────── 游戏 ─────────────────────────
 const ROLES_DEMON = new Set(['imp']); // 暗流涌动的恶魔（破门过场）
 
+const ST_FACE = { id: 'storyteller', seat: '★', name: '说书人', alive: true };
+
 const MODES = {
+  psycho: { title: '精神病患者 · 杀人', hint: '公开站出来说你是精神病患者，选一名玩家：他死亡。每天一次，要在提名开始之前。', confirm: '杀死' },
   nominate: { title: '提名', hint: '选一个人，站出来指着他。', confirm: '提名' },
   slay: { title: '声称是猎手 · 开枪', hint: '任何人都可以站出来声称自己是猎手，当众向一个人开枪（可以用来诈身份）。只有真猎手打中恶魔，对方才会倒下；每人每局只能开一次。', confirm: '开枪' },
   pull: { title: '拉进密室', hint: '选人拉进私聊房间；只选一个人就是和你单独谈。', confirm: '带走', max: 3 },
@@ -267,8 +271,8 @@ function Game({ s, act, ask }) {
   useTick(1000);
   const [skills, setSkills] = useSheetMode(); // 地图上由 TownMap 自己放，别的场景放在这里
   const me = s.self;
-  const g = (id) => s.players.find((p) => p.id === id);
-  const name = (id) => { const p = g(id); return p ? `${p.seat}号 ${p.name}` : '?'; };
+  const g = (id) => (id === 'storyteller' ? ST_FACE : s.players.find((p) => p.id === id)); // 有无神论者的剧本可以提名说书人
+  const name = (id) => { if (id === 'storyteller') return '说书人'; const p = g(id); return p ? `${p.seat}号 ${p.name}` : '?'; };
 
   const night = s.phase === 'night';
   const prompt = night && me?.prompt && !me.prompt.chosen ? me.prompt : null;
@@ -280,7 +284,7 @@ function Game({ s, act, ask }) {
   const pickKey = `${s.phase}-${s.night}-${s.day}-${mode}-${!!prompt}-${rk}`;
   useEffect(() => { setPicked([]); setPickedRole(null); }, [pickKey]);
   // 换阶段就取消正在选人的操作；自由活动开始/结束时也取消，只有"开枪"例外（官方规则：白天任何时候都能开枪）
-  useEffect(() => { setMode((m) => (s.phase !== 'day' ? null : s.roam && m !== 'slay' ? null : m)); }, [s.phase, !!s.roam]);
+  useEffect(() => { setMode((m) => (s.phase !== 'day' ? null : s.roam && m !== 'slay' && m !== 'psycho' ? null : m)); }, [s.phase, !!s.roam]);
 
   const onTap = (p) => {
     if (pickSpec) {
@@ -306,6 +310,7 @@ function Game({ s, act, ask }) {
     }
     else if (mode === 'nominate') ok = await act('nominate', { target: picked[0] });
     else if (mode === 'slay') ok = await act('slay', { target: picked[0] });
+    else if (mode === 'psycho') ok = await act('psycho', { target: picked[0] });
     else if (mode === 'pull') ok = await act('pull', { targets: picked });
     if (ok) { setMode(null); setPicked([]); }
   };
@@ -320,6 +325,7 @@ function Game({ s, act, ask }) {
     : s.vote ? { label: '投票倒计时', until: s.deadline }
       : s.moonchildDue ? { label: '遗言时间', until: s.moonchildDue }
       : s.riot ? { label: '接着提名', until: s.riot.until }
+      : s.rps ? { label: '猜拳', until: s.rps.until }
       : s.pendingNom?.until ? { label: s.pendingNom.stage === 'accuse' ? '提名陈述' : '辩护', until: s.pendingNom.until }
         : s.noms && !s.noms.timeUp ? { label: '提名结束', until: s.noms.until }
           : s.roam?.until ? { label: '自由活动结束', until: s.roam.until } : null;
@@ -611,6 +617,34 @@ function GossipButton({ s, act }) {
 }
 
 /** 猎手按钮（有猎手的剧本）：白天任何时候谁都能声称猎手开一枪，每人每局一次；真猎手自己看到的是醒目的主按钮。 */
+/** 精神病患者：白天提名开始前，公开选一名玩家杀死（只有真精神病患者看得到这个按钮）。 */
+function PsychoButton({ s, setMode }) {
+  if (!s.self?.canPsycho) return null;
+  return (
+    <div className="btn-row gossip-row">
+      <Btn kind="primary" onClick={() => setMode('psycho')} title="公开说你是精神病患者，选一名玩家：他死亡。每天一次，要在提名开始之前。">精神病患者 · 杀一个人</Btn>
+    </div>
+  );
+}
+
+/** 精神病患者被处决前猜拳：两个人各出一手，其他人看倒计时。 */
+function RpsPanel({ s, act, g }) {
+  const r = s.rps;
+  const secs = useCountdown(r.until);
+  const clock = secs != null ? <span className="nom-clock">{secs}</span> : null;
+  const nm = (id) => (id === 'storyteller' ? '说书人' : `${g(id)?.seat}号 ${g(id)?.name}`);
+  const HAND = { rock: '✊ 石头', scissors: '✌️ 剪刀', paper: '✋ 布' };
+  return (
+    <Panel title="精神病患者 · 猜拳" tone="phy" extra={clock}>
+      <p className="lead"><b>{nm(r.a)}</b> 是精神病患者，要和 <b>{nm(r.b)}</b> 猜拳：只有他输了，这次处决才会让他死。</p>
+      {r.mine && (r.hand
+        ? <p className="muted">你出了{HAND[r.hand]}，等对方出手……</p>
+        : <div className="btn-row">{['rock', 'scissors', 'paper'].map((h) => <Btn key={h} kind="primary" onClick={() => act('rps', { hand: h })}>{HAND[h]}</Btn>)}</div>)}
+      {!r.mine && <p className="muted">两个人正在出手，时间到还没出的随机出。</p>}
+    </Panel>
+  );
+}
+
 function SlayButton({ s, setMode }) {
   const me = s.self;
   // 有猎手的剧本（暗流涌动、生死未卜……）谁都能声称开枪（死人也行，没有效果）；只给真猎手显示等于把身份亮给了全场。
@@ -936,6 +970,18 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
         </Panel>
       );
     }
+    if (prompt?.roleId === 'ah_choice') { // 哈迪寂亚选中了你：悄悄选活还是死
+      return (
+        <Panel title="哈迪寂亚选中了你" tone="phy">
+          <p className="lead">恶魔选了你和另外两个人。悄悄决定：活下去，还是死去。如果三个人最后都活着，三个人一起死。</p>
+          <p className="muted">死了的人选「活下去」会复活。别人只会在天亮时知道这三个人谁活着。</p>
+          <div className="btn-row">
+            <Btn kind="primary" onClick={() => act('choose', { night: prompt.night, targets: [], role: 'ah_live' })}>活下去</Btn>
+            <Btn onClick={() => act('choose', { night: prompt.night, targets: [], role: 'ah_die' })}>死去</Btn>
+          </div>
+        </Panel>
+      );
+    }
     const needRole = !!prompt?.pickRole;
     const ready = picked.length === pickSpec.count && (!needRole || pickedRole);
     const hint = rk ? '你在今晚死去了。选一个人，乌鸦会告诉你他的身份。'
@@ -1029,6 +1075,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
   }
 
   if (s.boom) return <><BoomPanel s={s} act={act} g={g} />{roomCard}</>;
+  if (s.rps) return <><RpsPanel s={s} act={act} g={g} />{roomCard}</>;
   if (s.riot) return <><RiotPanel s={s} act={act} g={g} />{roomCard}</>;
   if (s.pendingNom) return <><NomStage s={s} act={act} g={g} name={name} face={face} />{me?.canGoblin && <GoblinClaim act={act} />}{roomCard}</>;
 
@@ -1057,11 +1104,15 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
         {s.noms && <p className="sq-status">{s.noms.timeUp ? (s.riotScript ? '提名结束 · 准备入夜' : '提名结束 · 投完这轮入夜') : `已表态 ${s.noms.done} / ${s.aliveCount}`}</p>}
         <GossipButton s={s} act={act} />
         <SlayButton s={s} setMode={setMode} />
+        {!s.noms && <PsychoButton s={s} setMode={setMode} />}
         <SnvButtons s={s} act={act} />
         {s.executedToday && <p className="sq-status">今天的处决已经发生</p>}
         <div className="btn-row">
           {me?.alive && !s.executedToday && !meP?.nominator && !s.noms?.timeUp && (s.noms || s.settings?.mode === 'human') && <Btn kind="primary" onClick={() => setMode('nominate')}>提名</Btn>}
           {s.noms && !s.noms.timeUp && me?.alive && !meP?.nominator && !s.noms.skipped && <Btn onClick={() => act('skipNom')}>不提名</Btn>}
+          {s.stNominable && !s.stNominated && me?.alive && !s.executedToday && !meP?.nominator && !s.noms?.timeUp && (s.noms || s.settings?.mode === 'human') && (
+            <Btn onClick={() => act('nominate', { target: 'storyteller' })} title="有无神论者的剧本：可以提名说书人。处决了说书人，场上真有无神论者善良赢，没有就邪恶赢。">提名说书人</Btn>
+          )}
         </div>
         <div className="link-row">
           {s.isHost && <button type="button" onClick={() => act('roam')}>再自由活动一次</button>}
@@ -1246,6 +1297,7 @@ function RoamActions({ s, act, name, face, setMode }) {
           </div>
           <GossipButton s={s} act={act} />
           <SlayButton s={s} setMode={setMode} />
+          <PsychoButton s={s} setMode={setMode} />
           <SnvButtons s={s} act={act} />
           <EndRoamVote s={s} act={act} />
         </Panel>
@@ -1258,6 +1310,7 @@ function RoamActions({ s, act, name, face, setMode }) {
           {s.isHost && <div className="btn-row"><Btn kind="secondary" onClick={() => act('gather')}>敲钟集合</Btn></div>}
           <GossipButton s={s} act={act} />
           <SlayButton s={s} setMode={setMode} />
+          <PsychoButton s={s} setMode={setMode} />
           <SnvButtons s={s} act={act} />
           <EndRoamVote s={s} act={act} />
         </Panel>

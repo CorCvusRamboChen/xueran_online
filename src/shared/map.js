@@ -16,6 +16,7 @@ import TRUST from './maps/trust.js';
 import TWV from './maps/twv.js';
 import BOOZ from './maps/booz.js';
 import SAR from './maps/sar.js';
+import MO from './maps/mo.js';
 import DOORS from './maps/doors.js';
 
 export const SPEED = 240; // 跑步每秒多少单位（双击地面、按住 Shift；按人物比例约 10 米/秒）
@@ -339,7 +340,7 @@ export class TownMap {
 const round = (p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 });
 
 // 两个小剧本用前两张图的变体（同一套手绘图和布局，换色调、天气和点缀；art 记着用哪套手绘图）
-export const MAPS = { tb: new TownMap(TB), bmr: new TownMap(BMR), snv: new TownMap(SNV), ngj: new TownMap(NGJ), luf: new TownMap(LUF), bs7: new TownMap(BS7), cat: new TownMap(CAT), ucd: new TownMap(UCD), ecp: new TownMap(ECP), hhr: new TownMap(HHR), pie: new TownMap(PIE), trust: new TownMap(TRUST), twv: new TownMap(TWV), booz: new TownMap(BOOZ), sar: new TownMap(SAR) };
+export const MAPS = { tb: new TownMap(TB), bmr: new TownMap(BMR), snv: new TownMap(SNV), ngj: new TownMap(NGJ), luf: new TownMap(LUF), bs7: new TownMap(BS7), cat: new TownMap(CAT), ucd: new TownMap(UCD), ecp: new TownMap(ECP), hhr: new TownMap(HHR), pie: new TownMap(PIE), trust: new TownMap(TRUST), twv: new TownMap(TWV), booz: new TownMap(BOOZ), sar: new TownMap(SAR), mo: new TownMap(MO) };
 /** 剧本 → 地图（没有专属地图的剧本用暗流涌动的）。 */
 export const getMap = (script) => MAPS[script] ?? MAPS.tb;
 

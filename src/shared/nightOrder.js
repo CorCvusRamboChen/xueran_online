@@ -518,16 +518,56 @@ NIGHT_ORDER.sar = {
   ],
 };
 
+// 夜半狂欢（The Midnight Oasis，作者 Zets）：照官方英文总表的顺序
+NIGHT_ORDER.mo = {
+  first: [
+    ['poppygrower', '罂粟种植者在场：跳过爪牙和恶魔信息，只给恶魔 3 个伪装'],
+    ['minioninfo', '爪牙互认、得知恶魔（罂粟种植者在场时跳过）'],
+    ['demoninfo', '恶魔得知爪牙和 3 个伪装（罂粟种植者在场时只给伪装）'],
+    ['engineer', '每局一次：选一个恶魔角色或爪牙角色，让邪恶变成它'],
+    ['poisoner', '选一人中毒到明天黄昏'],
+    ['snakecharmer', '选一名存活玩家：选中恶魔就互换角色和阵营，然后他中毒'],
+    ['mezepheles', '得知一个关键词'],
+    ['huntsman', '每局一次：选一名存活的玩家，是落难少女就让她变成一个不在场的镇民'],
+    ['damsel', '爪牙得知落难少女在场'],
+    ['amnesiac', '按说书人定的能力行动'],
+    ['noble', '得知三人，其中恰好一人是邪恶的'],
+    ['balloonist', '得知一名玩家'],
+  ],
+  other: [
+    ['poppygrower', '罂粟种植者今天或今晚死了：爪牙和恶魔互相认识'],
+    ['engineer', '还没用过的话：选一个恶魔角色或爪牙角色'],
+    ['poisoner', '选一人中毒到明天黄昏'],
+    ['snakecharmer', '选一名存活玩家：选中恶魔就互换'],
+    ['pithag', '选一人和一个不在场的角色：他变成那个角色'],
+    ['mezepheles', '有人说出关键词：他变成邪恶'],
+    ['vigormortis', '选一人杀死；杀死的爪牙保留能力'],
+    ['alhadikhia', '选三个人（大家都会知道是谁）：他们一个个悄悄选活或死，三个都活就都死'],
+    ['barber', '理发师今天死了：恶魔可以选两人交换角色'],
+    ['professor', '每局一次：选一名死去的镇民复活'],
+    ['huntsman', '每局一次：选一名存活的玩家'],
+    ['damsel', '落难少女变了人：告诉新的爪牙'],
+    ['amnesiac', '按说书人定的能力行动'],
+    ['farmer', '农夫今晚死了：一名善良玩家变成农夫'],
+    ['balloonist', '得知一名玩家，和上一晚得知的人角色类型不同'],
+  ],
+  why: [
+    '「夜半狂欢」：旋转木马（实验角色）的快速上手剧本。好人信息不多，靠舞蛇人、教授、巡山人、工程师这些能改局面的能力；坏人有白天杀人的精神病患者、让三个人自己选生死的哈迪寂亚。',
+    '无神论者：偶尔整局都没有邪恶，说书人假装有（夜里照样死人，信息照样指向「坏人」）。活人随时可以提名说书人；处决了说书人，场上真有无神论者善良赢，没有就邪恶赢。',
+    '传奇角色：哨兵（外来者可能多一个或少一个）、圣洁之魂（邪恶玩家最多比开局多一名：灵言师最多转一个人）。',
+  ],
+};
+
 /**
  * 小剧本的结算步骤（engine/snv.js 用）：这套引擎认得的所有角色按官方总表排好；不在场的步骤自动跳过。
  * 失忆者、食人族拿到的能力也按这张表的位置醒。
  */
 export const MIX_STEPS = {
-  first: ['philosopher', 'sailor', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'pukka', 'pixie', 'huntsman',
+  first: ['philosopher', 'sailor', 'engineer', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'pukka', 'pixie', 'huntsman',
     'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'grandmother', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress', 'noble', 'balloonist', 'shugenja', 'villageidiot',
     'butler', 'spy', 'ogre', 'highpriestess', 'general', 'chambermaid', 'mathematician'],
-  other: ['philosopher', 'sailor', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist',
-    'imp', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'assassin', 'godfather', 'gossip',
+  other: ['poppygrower', 'philosopher', 'sailor', 'engineer', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist',
+    'imp', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'alhadikhia', 'assassin', 'godfather', 'gossip',
     'barber', 'sweetheart', 'sage', 'professor', 'huntsman', 'farmer', 'tinker', 'moonchild', 'grandmother', 'ravenkeeper', // 照官方英文总表（11-11 用户定：和集石百科不一样时以英文新表为准）
     'washerwoman', 'librarian', 'investigator', 'chef', 'clockmaker', 'noble', 'shugenja', 'empath', 'fortuneteller', 'undertaker', 'dreamer', 'amn_detect', 'amn_echo', 'flowergirl', 'towncrier', 'oracle', 'seamstress',
     'juggler', 'balloonist', 'villageidiot', 'butler', 'spy', 'highpriestess', 'general', 'chambermaid', 'mathematician'],

@@ -13,7 +13,7 @@
 // · 夜里角色会变：舞蛇人换了恶魔、麻脸巫婆造了爪牙、理发师换了角色，新角色当晚还轮得到就要现选。
 //   结算停在这一步，返回 { pause: 他的 id }，选完再调一次 resolveNight() 接着走（this.midNight 记着停在哪）。
 
-import { ROLES, rolesOf, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, SCRIPTS, inScript, playersOf } from './roles.js';
+import { ROLES, rolesOf, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, SCRIPTS, inScript, playersOf, ST_NOMINEE } from './roles.js';
 import { SNV_STEPS, MIX_STEPS } from '../shared/nightOrder.js';
 
 const team = (p) => ROLES[p.role].team;
@@ -92,6 +92,18 @@ export function rollTeensy(script, n, rng, { exclude = null } = {}) {
   return shuffle([...towns, ...sample(out, o, rng), ...minions, demon], rng);
 }
 
+/** 无神论者局占多少（官方：无神论者是说书人决定放不放的角色）。放了就没有邪恶角色，说书人假装有。 */
+export const ATHEIST_SHARE = 0.15;
+
+/** 哨兵（传奇角色）：外来者可能多一个或少一个（三分之一多、三分之一少、三分之一照常）。 */
+function sentinelShift(script, t, o, outMax, rng) {
+  if (!SCRIPTS[script]?.sentinel) return [t, o];
+  const r = rng();
+  if (r < 1 / 3 && o < outMax && t > 1) return [t - 1, o + 1];
+  if (r < 2 / 3 && o > 0) return [t + 1, o - 1];
+  return [t, o];
+}
+
 /** 裁缝与暴乱：人数照标准表，爪牙和恶魔的位置全是暴乱，其余全是女裁缝（官方 v1：爪牙标记换成暴乱标记）。 */
 export function rollRiot(n, rng) {
   if (!DISTRIBUTION[n]) throw new Error(`人数需在 ${MIN_PLAYERS}–${MAX_PLAYERS} 之间`);
@@ -109,13 +121,24 @@ export function rollMixed(script, n, rng, { exclude = null } = {}) {
   const L = listsOf(script);
   let [t, o, m] = DISTRIBUTION[n];
   const out = L.out.filter(ok);
+  // 无神论者局：没有爪牙和恶魔，空出来的位置补镇民（官方：拿掉邪恶角色，补上镇民或外来者）
+  if (L.tf.includes('atheist') && ok('atheist') && rng() < ATHEIST_SHARE) {
+    [t, o] = sentinelShift(script, t + m + 1, o, out.length, rng);
+    if (o > out.length) { t += o - out.length; o = out.length; }
+    const towns = ['atheist', ...sample(L.tf.filter((r) => ok(r) && r !== 'atheist'), t - 1, rng)];
+    const outs = sample(out, o, rng);
+    if (towns.includes('huntsman') && out.includes('damsel') && !outs.includes('damsel') && outs.length) outs[Math.floor(rng() * outs.length)] = 'damsel';
+    return shuffle([...towns, ...outs], rng);
+  }
+  const tfPool = L.tf.filter((r) => ok(r) && r !== 'atheist'); // 不是无神论者局：无神论者不发（可以被酒鬼以为、被邪恶拿来伪装）
   const minions = sample(L.min.filter(ok), m, rng);
   const demon = pickOne(L.dem.filter(ok), rng);
   if (minions.includes('baron')) { const add = Math.max(0, Math.min(2, out.length - o)); t -= add; o += add; }
   if (minions.includes('godfather')) { if (o === 0 || (o < out.length && rng() < 0.5)) { t -= 1; o += 1; } else { t += 1; o -= 1; } }
   [t, o] = demonShift(demon, t, o);
+  [t, o] = sentinelShift(script, t, o, out.length, rng);
   if (o > out.length) { t += o - out.length; o = out.length; }
-  let towns = sample(L.tf.filter(ok), t, rng);
+  let towns = sample(tfPool, t, rng);
   if (towns.includes('balloonist') && towns.length > 1 && o < out.length && rng() < 0.5) { // 只剩气球驾驶员一个镇民时没人可换
     const drop = pickOne(towns.filter((r) => r !== 'balloonist'), rng);
     towns = towns.filter((r) => r !== drop); o += 1;
@@ -241,6 +264,15 @@ export const SNV_METHODS = {
     this.bluffs = S.riot ? [] : pickBluffsSNV(new Set([...inPlay, ...this.players.map((p) => p.shownRole)]), rng, this.script); // 裁缝与暴乱：善良全是女裁缝，没有可拿的伪装
     this.fibbinUsed = false;   // 骗人精（传奇角色）用过了
     this.riotChain = null;     // 暴乱：刚被提名死掉、现在可以（第三天必须）接着提名的人
+    this.atheist = inPlay.has('atheist') && !assigned.some((r) => isEvilRole(r)); // 无神论者局：场上没有邪恶角色，说书人假装有
+    this.evilStart = this.players.filter((p) => p.evil).length; // 圣洁之魂：邪恶玩家最多比开局多一名
+    this.poppyHid = false;     // 罂粟种植者：首夜爪牙和恶魔没有互认
+    this.poppyDue = false;     // 罂粟种植者死了（没失效）：今晚让他们互认
+    this.poppyRevealed = false;
+    this.ahNight = null;       // 哈迪寂亚今晚选的三个人和他们的选择 { night, demon, targets, idx, picks, asked, saved }
+    this.ahNews = null;        // 天亮时公布：哈迪寂亚昨晚选了谁
+    this.psychoDay = {};       // 精神病患者今天用过了：id → 第几天
+    this.psychoSpared = null;  // 精神病患者被处决、猜拳没输：这次处决不死
     this.fx = [];
     this.used = {};            // 每局一次的能力用过了：id → true（女裁缝、哲学家、艺术家）
     this.firstDone = {};       // 首夜能力用过了（钟表匠）：换成这个角色的人还能用一次
@@ -470,6 +502,7 @@ export const SNV_METHODS = {
   },
   /** 这个人的信息要不要改：'must' 涡流（镇民必须拿错的），'fake' 醉酒中毒（说书人给错的），null 给真的。 */
   lieMode(p) {
+    if (this.atheist && !this.evilOf(p)) return 'atheist'; // 无神论者局：所有信息都按说书人假装的那个邪恶阵营给（整局共用一个假世界）
     if (team(p) === 'demon' && this.extraAbility(p)) return null; // 科学怪人给的能力：恶魔醉酒中毒也照样有（恶魔自己的能力不拿信息）
     if (this.isTownsfolk(p) && this.vortoxOn()) return 'must';
     if (!this.snvBroken(p)) return null;
@@ -587,7 +620,8 @@ export const SNV_METHODS = {
       madness: '因疯狂被处决', storyteller: '说书人判定死亡', starpass: '恶魔自杀（传位）', slayer: '被猎手射杀',
       harpy: '没能疯狂地证明，被鹰身女妖的能力杀死', boomdandy: '死于炸弹人的炸弹',
       assassin: '被刺客刺杀', godfather: '被教父杀死', gambler: '赌错了角色', gossip: '因造谣者的声明而死', tinker: '修补匠突然死亡',
-      golem: '被魔像提名，不是恶魔所以死了', riot: '被提名，死于暴乱', moonchild: '被月之子带走', grandmother: '孙子被恶魔杀死，祖母随之而去',
+      golem: '被魔像提名，不是恶魔所以死了', riot: '被提名，死于暴乱', psychopath: '被精神病患者杀死',
+      alhadikhia: '被哈迪寂亚选中，选择了死去', alhadikhia3: '被哈迪寂亚选中，三个人都选了活，一起死去', moonchild: '被月之子带走', grandmother: '孙子被恶魔杀死，祖母随之而去',
     }[cause] ?? cause;
     this.log.push(`${this.name(p.id)} 死亡（${cause}）`);
     this.record('death', `${this.tag(p.id)} ${why}`);
@@ -616,6 +650,8 @@ export const SNV_METHODS = {
       if (ab === 'ravenkeeper') this.rkDue = p.id; // 失效的守鸦人也醒（他不知道自己失效），拿到的可能是假的
     }
     if (cause === 'execution') this.feedCannibals(p, ab);
+    if (ab === 'poppygrower' && !off && this.poppyHid && !this.poppyRevealed) this.poppyDue = true; // 失效时死了，邪恶不会互认（官方）
+    if (this.atheist) this.atheistShift(p);
     if (team(p) === 'demon' && !this.demonsAlive().length && cause !== 'fanggu' && cause !== 'pithag') this.demonHeir(p, cause, aliveBefore, messages);
   },
 
@@ -818,8 +854,15 @@ ${this.grimoire()}
     if (this.players.some((p) => p.role === 'damsel')) {
       for (const m of minions) say(m, '**落难少女在场。** 你们爪牙合计有一次机会白天公开猜她是谁：猜中了，邪恶获胜。（行动面板里点「猜落难少女」）');
     }
-    if (!this.evilInfo) return messages;
+    if (!this.evilInfo || this.atheist) return messages; // 无神论者局：没有邪恶，没人醒来互认
     this.evilKnown = this.knownMap();
+    if (this.poppyHides()) { // 罂粟种植者：爪牙和恶魔互相不认识；恶魔照样拿伪装（官方）
+      this.poppyHid = true;
+      this.evilKnown = Object.fromEntries(this.players.filter((p) => this.evilOf(p)).map((p) => [p.id, []]));
+      if (demon) say(demon, `**罂粟种植者在场**：你不知道你的爪牙是谁（他死了，你们才会在那晚互相认识）。\n不在场的角色（可用来伪装）：${this.bluffs.map((r) => ROLES[r].name).join('、')}。`);
+      for (const m of minions) say(m, '**罂粟种植者在场**：你不知道恶魔和其他爪牙是谁（他死了，你们才会在那晚互相认识）。');
+      return messages;
+    }
     if (SCRIPTS[this.script]?.riot) { // 裁缝与暴乱：没有爪牙，所有暴乱一起醒来互认（官方 v1：在恶魔信息这一步唤醒所有暴乱）；没有伪装
       const riots = this.players.filter((p) => p.role === 'riot');
       for (const r of riots) say(r, `你们都是**暴乱**：${riots.filter((x) => x.id !== r.id).map((x) => `**${this.name(x.id)}**`).join('、') || '只有你一个'}。\n没有伪装可拿：所有善良玩家都是女裁缝。`);
@@ -870,9 +913,10 @@ ${this.grimoire()}
       if (role === 'barber' && team(q) === 'demon' && q.id !== p.id) return false; // 不能选其他恶魔
       return true;
     }).map((q) => q.id);
-    let roleOptions = spec.role ? (spec.good ? goodOf(this.script) : rolesOf(this.script)) : null;
+    let roleOptions = spec.role ? (spec.good ? goodOf(this.script) : spec.evil ? rolesOf(this.script).filter((r) => ['minion', 'demon'].includes(ROLES[r].team)) : rolesOf(this.script)) : null;
+    if (role === 'ah_choice') roleOptions = ['ah_live', 'ah_die'];
     if (role === 'cerenovus' && inScript('goblin', this.script)) roleOptions = [...roleOptions, 'goblin']; // 相克：洗脑师可以让人对「自己是哥布林」疯狂
-    return { playerId: p.id, role: this.hidden(p) ? p.role : role, count: spec.count, options, optional: !!spec.optional, pickRole: !!spec.role, roleOptions, waiting: false };
+    return { playerId: p.id, role: this.hidden(p) && role !== 'ah_choice' ? p.role : role, count: spec.count, options, optional: !!spec.optional, pickRole: !!spec.role, roleOptions, waiting: false };
   },
 
   nightPromptsSNV() {
@@ -932,10 +976,11 @@ ${this.grimoire()}
     if (!pr || pr.waiting) return;
     const p = this.get(playerId);
     const skip = () => { this.choices[playerId] = { targets: [], role: null }; };
+    if (pr.role === 'ah_choice') { this.choices[playerId] = { targets: [], role: this.rng() < 0.6 ? 'ah_live' : 'ah_die' }; return; } // 机器人：多半选活
     if (pr.optional && this.rng() < 0.5) return skip();
     let opts = pr.options;
     const prey = opts.filter((id) => !this.evilOf(this.get(id)) && this.get(id).alive);
-    if (['fanggu', 'vigormortis', 'nodashii', 'vortox', 'witch', 'cerenovus', 'pithag', 'imp', 'widow', 'pukka', 'poisoner', 'zombuul', 'shabaloth', 'po', 'assassin', 'godfather'].includes(pr.role) && prey.length >= pr.count) opts = prey;
+    if (['alhadikhia', 'fanggu', 'vigormortis', 'nodashii', 'vortox', 'witch', 'cerenovus', 'pithag', 'imp', 'widow', 'pukka', 'poisoner', 'zombuul', 'shabaloth', 'po', 'assassin', 'godfather'].includes(pr.role) && prey.length >= pr.count) opts = prey;
     const targets = sample(opts, pr.count, this.rng);
     let role = null;
     if (pr.pickRole) {
@@ -970,6 +1015,7 @@ ${this.grimoire()}
   pauseText(id) {
     const m = this.midNight;
     if (!m?.as) return null; // 黯月初升：夜里被复活，用房间层默认的提示
+    if (m?.as === 'ah_choice') return `哈迪寂亚选中了你（这次选的三个人：${(this.ahNight?.targets ?? []).map((id) => this.name(id)).join('、')}）。悄悄决定：**活下去**，还是**死去**。如果三个人最后都活着，三个人一起死。`;
     if (m?.as === 'barber') return '理发师死了：你可以选两名玩家交换他们的角色（不能选其他恶魔），也可以放弃。';
     if (this.hidden(this.get(m.who))) return '轮到你了：选人吧（你不知道这是什么能力）。';
     return `轮到你了：今晚你要行使「${ROLES[m?.as]?.name ?? ''}」的能力。`;
@@ -1292,9 +1338,35 @@ ${this.grimoire()}
           m.used = true; // 当晚醉了也算用掉，以后不能再转任何人（官方）
           if (broken(p)) { this.flag(p, '灵言师失效：说出关键词的人没有变成邪恶，能力也用掉了'); continue; }
           if (this.evilOf(t) || !t.alive) continue;
+          if (this.ivoryFull()) { this.record('st', `圣洁之魂：邪恶玩家已经比开局多了一名，${this.tag(t.id)} 没有变成邪恶`); continue; }
           t.evil = true;
           say(t, '说书人叫醒了你：**你现在是邪恶阵营**。（你说出了某个关键词。你的角色不变，但从现在起和邪恶一起赢。）');
           this.record('st', `${this.tag(t.id)} 变成了邪恶`);
+        } break;
+        case 'poppygrower': this.poppyReveal(messages); break;
+        case 'engineer': for (const p of this.holders('engineer')) {
+          const c = this.choiceOfSNV(p); if (!c?.role) continue;
+          this.used[p.id] = true;
+          this.record('choice', `工程师 ${this.tag(p.id)} 选了${ROLES[c.role].name}`);
+          if (broken(p)) { this.flag(p, '工程师失效，邪恶角色没有变'); continue; }
+          const isDemon = ROLES[c.role].team === 'demon';
+          const pool = this.players.filter((q) => team(q) === (isDemon ? 'demon' : 'minion'));
+          if (pool.some((q) => q.role === c.role)) { this.record('st', `${ROLES[c.role].name}本来就在场：没有变化`); continue; }
+          const live = pool.filter((q) => q.alive);
+          // 官方：选的是「哪些爪牙在场」。这里一次只选一个角色：恶魔整个换掉；爪牙由说书人挑一名换成它
+          const t = isDemon ? (live[0] ?? pool[0]) : this.st.choose('engineerMinion', live.length ? live : pool, { who: p.id });
+          if (!t) continue;
+          this.changeRole(t, c.role);
+          if (c.role === 'mezepheles' && !this.mez) this.mez = { word: this.st.choose('mezWord', MEZ_WORDS), used: false, hit: null };
+          say(t, `说书人叫醒了你：**你现在是${ROLES[c.role].name}**。${ROLES[c.role].ability}`);
+          this.record('st', `${this.tag(t.id)} 被工程师变成了${ROLES[c.role].name}`);
+          changed.push(t.id);
+        } break;
+        case 'alhadikhia': {
+          if (this.atheist) { if (!first && mid?.as !== 'ah_choice') this.atheistKill(messages); break; }
+          for (const d of this.pitNight?.kill?.splice(0) ?? []) this.snvDie(d, 'pithag', messages); // 麻脸巫婆造恶魔那晚的死亡，在第一个恶魔行动之前
+          if (this.pitNight?.suppress && this.ahNight?.night !== this.night) { if (this.players.some((q) => this.abilityOf(q) === 'alhadikhia' && q.alive)) this.record('st', '今晚的死亡由说书人决定：哈迪寂亚这次没有生效'); break; }
+          if (this.ahStep(i, messages) === 'pause') return pause();
         } break;
         case 'pixie': for (const p of this.holders('pixie')) {
           if (this.pixie[p.id]) continue;
@@ -1496,6 +1568,7 @@ ${this.grimoire()}
       }
       if (this.midCheck(steps, i, changed, messages)) return pause();
     }
+    this.poppyReveal(messages); // 罂粟种植者今晚（在他那一步之后）死了：当晚互认
     if (this.pendingGoonNews) { const gn = this.get(this.pendingGoonNews); say(gn, `你的阵营变了——你现在是**${this.evilOf(gn) ? '邪恶' : '善良'}**的。`); }
     this.fx = this.fx.filter((f) => f.until !== 'dawn');
     this.lastExecuted = null;
@@ -1816,6 +1889,11 @@ ${this.grimoire()}
   executeSNV(p) {
     this.executedToday = true;
     this.log.push(`${this.name(p.id)} 被处决`);
+    if (this.psychoSpared === p.id) { // 精神病患者被处决，猜拳没输：活下来（这次仍算今天的处决）
+      this.psychoSpared = null;
+      this.record('st', `精神病患者 ${this.tag(p.id)} 被处决，但猜拳没有输：他活了下来`);
+      return 'saved';
+    }
     return this.afterExecution(p);
   },
 
@@ -1827,7 +1905,11 @@ ${this.grimoire()}
     }
     if (!this.winner && !this.executedToday && this.block && this.pardonDay !== this.day) {
       executed = this.block;
-      result = this.executeSNV(this.get(executed));
+      if (executed === ST_NOMINEE) { // 说书人被处决：无神论者局善良赢，不是就邪恶赢
+        this.executedToday = true; result = 'storyteller';
+        this.record('st', '说书人被处决了');
+        this.setWinner(this.atheist ? 'good' : 'evil', this.atheist ? '说书人被处决：场上真的没有邪恶，无神论者带领善良获胜' : '说书人被处决，但场上没有无神论者：邪恶获胜');
+      } else result = this.executeSNV(this.get(executed));
     }
     if (!this.winner && this.mastermindDay === this.day) this.setWinner('good', '主谋的额外一天没有处决任何人，善良获胜');
     if (!this.winner && !this.executedToday && this.vortoxOn()) this.setWinner('evil', '涡流在场，今天没有人被处决');
@@ -1919,6 +2001,123 @@ ${this.grimoire()}
     return who[0];
   },
 
+  // ───────────── 夜半狂欢（2026-11-16）─────────────
+  /** 圣洁之魂（传奇角色）：邪恶玩家已经比开局多一名，就不能再多。 */
+  ivoryFull() { return !!SCRIPTS[this.script]?.ivory && this.players.filter((p) => this.evilOf(p)).length >= (this.evilStart ?? 0) + 1; },
+
+  /** 罂粟种植者首夜挡着：爪牙和恶魔互相不认识（他活着、没失效时）。 */
+  poppyHides() { return !this.poppyRevealed && this.players.some((q) => this.abilityOf(q) === 'poppygrower' && q.alive && !this.snvBroken(q)); },
+  /** 罂粟种植者死了：当晚爪牙得知恶魔，恶魔得知爪牙（官方：像首夜那样，不再给伪装）。 */
+  poppyReveal(messages) {
+    if (!this.poppyDue || this.winner) return;
+    this.poppyDue = false; this.poppyRevealed = true;
+    this.evilKnown = this.knownMap();
+    const demon = this.players.find((q) => team(q) === 'demon' && q.alive) ?? this.players.find((q) => team(q) === 'demon');
+    const minions = this.players.filter((q) => team(q) === 'minion');
+    for (const m of minions) {
+      const mates = minions.filter((x) => x.id !== m.id).map((x) => `**${this.name(x.id)}**`);
+      messages.push({ playerId: m.id, text: `罂粟种植者死了，你们今晚互相认识：恶魔是 **${demon ? this.name(demon.id) : '?'}**。${mates.length ? `其他爪牙：${mates.join('、')}。` : ''}` });
+    }
+    if (demon) messages.push({ playerId: demon.id, text: `罂粟种植者死了，你们今晚互相认识：你的爪牙是 ${minions.map((x) => `**${this.name(x.id)}**`).join('、') || '（没有）'}。` });
+    this.record('st', '罂粟种植者死了：爪牙和恶魔今晚互相认识');
+  },
+
+  /**
+   * 哈迪寂亚：恶魔选了三个人，按顺序一个个叫醒，每人悄悄选活或死（选死就死，死人选活就复活）；
+   * 三个人最后都活着，三个人一起死。每问一个人结算就停一次（房间层等他选），选的不放进 choices（他自己今晚可能还有能力要用）。
+   */
+  ahStep(i, messages) {
+    let ah = this.ahNight?.night === this.night ? this.ahNight : null;
+    if (!ah) {
+      const d = this.players.find((q) => q.alive && this.abilityOf(q) === 'alhadikhia' && (this.choiceOfSNV(q)?.targets ?? []).length === 3);
+      if (!d || this.blocked === d.id) return null;
+      const ts = this.choiceOfSNV(d).targets.map((q) => q.id);
+      if (this.snvBroken(d)) { this.flag(d, '哈迪寂亚失效，选中的三个人什么都不用做'); return null; }
+      ah = this.ahNight = { night: this.night, demon: d.id, targets: ts, idx: 0, picks: {}, asked: null, saved: {}, done: false };
+      this.record('choice', `哈迪寂亚 ${this.tag(d.id)} 选了 ${ts.map((id) => this.tag(id)).join('、')}`);
+    }
+    while (ah.idx < ah.targets.length) {
+      const id = ah.targets[ah.idx];
+      const t = this.get(id);
+      if (ah.asked === id) {
+        const c = this.choices[id];
+        let pick = c?.role === 'ah_live' || c?.role === 'ah_die' ? c.role : null;
+        if (pick) { if (id in ah.saved) this.choices[id] = ah.saved[id]; else delete this.choices[id]; } else pick = this.st.choose('ahPick', ['ah_live', 'ah_die'], { who: id });
+        ah.picks[id] = pick; ah.asked = null; ah.idx += 1;
+        this.record('choice', `${this.tag(id)} 悄悄选择${pick === 'ah_live' ? '活下去' : '死去'}`);
+        if (pick === 'ah_die') this.snvDie(t, 'alhadikhia', messages);
+        else if (!t.alive) this.snvRevive(t, '哈迪寂亚选中后选择活下去');
+        continue;
+      }
+      if (this.choices[id]) ah.saved[id] = this.choices[id];
+      delete this.choices[id];
+      ah.asked = id;
+      this.midNight = { step: i, who: id, as: 'ah_choice', messages: [] };
+      this.flushed = messages.splice(0);
+      return 'pause';
+    }
+    if (!ah.done) {
+      ah.done = true;
+      const all = ah.targets.map((id) => this.get(id));
+      if (all.every((q) => q.alive)) { this.record('st', '哈迪寂亚：三个人都活着，一起死去'); for (const q of all) this.snvDie(q, 'alhadikhia3', messages); }
+      this.ahNews = { night: this.night, targets: [...ah.targets] };
+    }
+    return null;
+  },
+
+  /** 精神病患者：白天提名开始前，公开选一名玩家，他死亡（每天一次）。失效时没人死，今天的这次也用掉。 */
+  psychoKill(uid, targetId) {
+    if (this.phase !== 'day') throw new Error('只能在白天');
+    const p = this.get(uid); const t = this.get(targetId);
+    if (!p || !t) throw new Error('玩家不在游戏中');
+    if (!p.alive || this.abilityOf(p) !== 'psychopath') throw new Error('你没有这个能力');
+    if (!t.alive) throw new Error('要选一名存活的玩家');
+    if (this.psychoDay[uid] === this.day) throw new Error('你今天已经用过了');
+    this.psychoDay[uid] = this.day;
+    this.record('slay', `${this.tag(uid)} 以精神病患者的身份公开选择了 ${this.tag(targetId)}`);
+    if (this.snvBroken(p)) { this.flag(p, '精神病患者失效，被选的人没有死'); return { died: false }; }
+    const res = this.snvKill(t, 'psychopath', this.dayMessages());
+    this.checkWinner();
+    return { died: res === 'died' };
+  },
+
+  /** 有无神论者的剧本：活人可以提名说书人（被处决就看场上有没有真的无神论者）。 */
+  nominateST(aid) {
+    if (!inScript('atheist', this.script)) throw new Error('这个剧本不能提名说书人');
+    const a = this.get(aid);
+    if (!a) throw new Error('提名者不在游戏中');
+    if (!this.visAlive(a)) throw new Error('死亡玩家不能提名');
+    if (this.nominators.has(a.id)) throw new Error('你今天已经提名过了');
+    if (this.nominees.has(ST_NOMINEE)) throw new Error('说书人今天已经被提名过了');
+    this.nominators.add(a.id);
+    this.nominees.add(ST_NOMINEE);
+    (this.nomBy ??= {})[ST_NOMINEE] = a.id;
+    this.log.push(`第${this.day}天 ${this.name(a.id)} 提名 说书人`);
+    this.record('nominate', `${this.tag(a.id)} 提名了说书人`);
+    return { virgin: false, storyteller: true };
+  },
+
+  /** 无神论者局：说书人假装的恶魔每晚杀一个人（不杀假世界里的「邪恶」）。 */
+  atheistKill(messages) {
+    const w = this.atheistWorld();
+    const pool = this.alive().filter((q) => !w.evil.has(q.id));
+    const v = pool.length ? this.st.choose('atheistKill', pool, {}) : null;
+    if (!v) return;
+    this.record('st', `无神论者局：说书人假装恶魔，杀死了 ${this.tag(v.id)}`);
+    this.snvDie(v, 'demon', messages);
+  },
+  atheistWorld() { return this.st.snvWorld(this.players.find((q) => q.role === 'atheist') ?? this.players[0], 'atheist'); },
+  /** 假恶魔死了：说书人改把另一个「邪恶」当成恶魔，信息接着对得上。 */
+  atheistShift(p) {
+    const w = this.st.worlds?.get('atheist');
+    if (!w || w.demon !== p.id) return;
+    const next = [...w.evil].map((id) => this.get(id)).find((q) => q?.alive && q.id !== p.id)
+      ?? this.st.choose('atheistDemon', this.alive().filter((q) => q.role !== 'atheist' && q.id !== p.id), {});
+    if (!next) return;
+    w.demon = next.id; w.evil.add(next.id);
+    this.record('st', `无神论者局：假装的恶魔 ${this.tag(p.id)} 死了，说书人改把 ${this.tag(next.id)} 当成恶魔`);
+  },
+
   /** 骗人精（传奇角色）：每局一次，一名善良玩家可能得到错误信息。说书人掷骰子，用掉了就再也不会。 */
   fibbinLie(p) {
     if (!SCRIPTS[this.script]?.fibbin || this.fibbinUsed || this.evilOf(p)) return false;
@@ -1956,6 +2155,10 @@ ${this.grimoire()}
 
   checkWinnerSNV() {
     if (this.winner) return this.winner;
+    if (this.atheist) { // 无神论者局：没有恶魔可杀，处决说书人才赢；只剩两人善良落败
+      if (this.aliveCount() <= 2) this.setWinner('evil', '只剩两名存活玩家：说书人始终没有被处决，善良落败（场上其实没有邪恶）');
+      return this.winner;
+    }
     if (this.mastermindDay != null) return null; // 主谋的额外一夜一天：胜负在那天黄昏定
     const noDemon = !this.demonsAlive().length;
     const mm = noDemon && this.demonExecuted && this.holders('mastermind').find((q) => q.alive && !this.snvBroken(q));
