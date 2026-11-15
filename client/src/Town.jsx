@@ -159,7 +159,7 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
             title={`${p.seat}号 ${p.name}${marks[p.id]?.note ? `\n笔记：${marks[p.id].note}` : ''}\n（右键做标记）`}
           >
             <div className="token-face">
-              <PeltStack items={s.pelted?.[p.id]} size={Math.max(14, Math.round(tk * 0.36))} />
+              <PeltStack items={s.pelted?.[p.id]} size={Math.max(18, Math.round(tk * 0.48))} />
               <Portrait p={p} size={tk} frame={frameOf(p)} />
               {!p.alive && <span className="stamp">{p.ghostVote ? '亡 · 余一票' : '亡'}</span>}
               <span className="seat">{p.seat}</span>

@@ -293,7 +293,7 @@ export function TownMap({ s, onMove, night = false }) {
           >
             <div className="walker-head">
               {knocking.has(p.id) && <div className="speech">“叩，叩。”</div>}
-              <PeltStack items={s.pelted?.[p.id]} size={12} />
+              <PeltStack items={s.pelted?.[p.id]} size={16} />
               <div className="float" title={p.id === s.me ? '你' : `${p.seat}号 ${p.name}（点头像做标记）`}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => { if (p.id !== s.me) setWalkerMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}
