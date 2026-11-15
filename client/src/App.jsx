@@ -1406,7 +1406,8 @@ function EvilNote({ me }) {
   const team = ROLE_TEAM[me.role.id];
   if (team !== 'minion' && team !== 'demon') return null;
   let text;
-  if (me.evilInfo === false) text = '6 人及以下的局，官方规则里恶魔和爪牙互相不知道身份，恶魔也不拿伪装。自己挑一个善良角色来跳吧。（房主可以在大厅打开「小局也互认、发伪装」房规）';
+  if (me.role.id === 'riot') text = me.evilInfo === false ? '裁缝与暴乱：6 人及以下的局，暴乱之间互相不知道。所有善良都是女裁缝，没有伪装可拿，就说自己是女裁缝。' : '裁缝与暴乱：所有善良都是女裁缝，没有伪装可拿，就说自己是女裁缝。';
+  else if (me.evilInfo === false) text = '6 人及以下的局，官方规则里恶魔和爪牙互相不知道身份，恶魔也不拿伪装。自己挑一个善良角色来跳吧。（房主可以在大厅打开「小局也互认、发伪装」房规）';
   else if (!me.allies) text = '第一夜结束后你会知道队友是谁' + (team === 'demon' ? '，并拿到 3 张伪装。' : '。');
   else if (team === 'minion') text = '官方规则里爪牙不拿伪装，自己挑一个善良角色来跳；恶魔可以把它的 3 张伪装分享给你。';
   else text = '你是接任的恶魔：官方规则里接任的恶魔不再拿伪装，继续跳你原来的身份。';

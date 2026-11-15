@@ -1194,9 +1194,7 @@ export class Room {
   async autoDusk() {
     const g = this.game;
     if (!g || g.phase !== 'day' || this.ended || this.vote || this.stId || this.riotStep) return;
-    // 暴乱第三天：没有人提名就由说书人发起第一次提名（官方），提名链一直到分出胜负
-    if (g.engine === 'snv' && g.riotOn?.() && g.day >= 3 && !g.winner && !g.riotChain) { this.riotStoryteller(); return; }
-    await this.dusk();
+    await this.dusk(); // 暴乱第三天没人提名时，dusk 会让说书人先提名
   }
 
   // ───────────── 裁缝与暴乱：提名链（旧版暴乱 v1）─────────────
@@ -1215,7 +1213,7 @@ export class Room {
   riotStoryteller() {
     const g = this.game;
     const t = g.riotPick(null);
-    if (!t) { this.dusk(); return; }
+    if (!t) return;
     g.riotStoryteller(t.id);
     this.riotAfter('第三天没有人提名，**说书人**提名了 **' + g.name(t.id) + '**', t.id);
   }
@@ -1409,6 +1407,9 @@ export class Room {
     const g = this.requireGame();
     if (g.phase !== 'day') throw new UserError('现在不是白天');
     if (this.vote) throw new UserError('等这轮投票结束');
+    if (this.riotStep?.must) throw new UserError('第三天的提名链还没结束');
+    // 暴乱第三天没有人提名：说书人先提名一个人，提名链一直到分出胜负（真人说书点「结束白天」也一样）
+    if (g.engine === 'snv' && g.riotOn?.() && g.day >= 3 && !g.winner && !this.riotStep && !this.ended) { this.riotStoryteller(); return undefined; }
     // 只结算一次：房主连点、等大模型判定的几秒里又触发一次，都会让 endDay 跑两遍，第二夜被直接跳过
     if (this.dusking || this.duskDay === g.day) return undefined;
     this.dusking = true;
@@ -2958,6 +2959,8 @@ export class Room {
       this.wander();
       return;
     }
+    // 重启时正好卡在暴乱的提名链中间：轮到的人重新计时（真人说书也一样，提名链不用说书人推）
+    if (g.riotChain && g.riotOn?.() && !g.winner && this.duskDay !== g.day) { this.riotNext(g.riotChain); return; }
     // 重启时正好在黄昏：结算过了，直接入夜（真人说书也一样，dusk 不会再结算第二次）
     if (this.duskDay === g.day) { if (g.pendingMoonchild || g.pendingKlutz) this.nightAfterDusk(); else this.later(3000, () => this.beginNight()); return; }
     if (this.stId) return;
@@ -3127,7 +3130,7 @@ export class Room {
         } : {
           allies: g.evilKnown?.[uid] ?? null,
           evilInfo: g.evilInfo,
-          bluffs: g.evilKnown && (uid === g.firstDemon || ((g.bluffsShared || this.settings.minionBluffs) && g.get(uid)?.role !== 'marionette' && g.evilKnown[g.firstDemon]?.some((a) => a.id === uid))) ? [...g.bluffs] : null,
+          bluffs: !!g.bluffs?.length && g.evilKnown && (uid === g.firstDemon || ((g.bluffsShared || this.settings.minionBluffs) && g.get(uid)?.role !== 'marionette' && g.evilKnown[g.firstDemon]?.some((a) => a.id === uid))) ? [...g.bluffs] : null,
           bluffsMine: uid === g.firstDemon,
           bluffsShared: !!g.bluffsShared || !!this.settings.minionBluffs,
         }),

@@ -168,3 +168,61 @@ for (const [n, nominate] of [[9, true], [8, false], [12, true]]) {
     await room.teardown();
   });
 }
+
+// 房间开到某一天广场上（2 真人 + 机器人，机器人不主动提名）
+async function roomAtDay(day, settings = {}) {
+  const room = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { ...FAST, mode: 'auto', shuffle: false, script: 'sar', ...settings } });
+  room.judgeReady = () => false;
+  room.botsConsider = () => {};
+  for (const [id, name] of [['u1', '阿一'], ['u2', '阿二']]) room.users.set(id, { id, name, avatar: null });
+  await room.act('u1', 'join'); await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 7 });
+  // 两个真人都是女裁缝，免得提名链先把暴乱打完
+  room.roleAssign = { u1: 'seamstress', u2: 'seamstress' };
+  await room.act('u1', 'start');
+  const g = room.game;
+  for (;;) {
+    for (let k = 0; k < 400 && g.phase === 'night'; k++) {
+      if (!room.resolving) for (const pr of g.nightPrompts()) {
+        if (room.isFake(pr.playerId) || g.choices[pr.playerId] || pr.waiting) continue;
+        await room.act(pr.playerId, 'choose', { night: g.night, targets: [] }).catch(() => {});
+      }
+      await sleep(3);
+    }
+    await until(() => room.roam, 300);
+    await room.act('u1', 'gather').catch(() => {});
+    await until(() => room.noms, 300);
+    if (g.day >= day) return room;
+    await room.autoDusk();
+    await until(() => g.phase !== 'day', 3000);
+  }
+}
+
+test('房间：卡在提名链中间重启，轮到的人重新计时、接着提名', async () => {
+  const room = await roomAtDay(1, { riotSeconds: 30 });
+  const g = room.game;
+  const t = g.alive().find((q) => q.id !== 'u1' && q.id !== 'u2' && q.role === 'seamstress');
+  await room.act('u1', 'nominate', { target: t.id });
+  assert.equal(room.riotStep?.id, t.id);
+  const snap = JSON.parse(JSON.stringify(room.snapshot()));
+  await room.teardown();
+  const back = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: mockVoice() }).restore(snap);
+  back.botsConsider = () => {};
+  back.resume();
+  assert.equal(back.riotStep?.id, t.id, '重启后还是他接着提名');
+  await until(() => !back.riotStep || back.game.nominees.size > 1, 5000); // 机器人 1.5 秒内接着提名或不提名
+  assert.ok(back.game.nominees.size > 1 || back.riotStep === null);
+  await back.teardown();
+});
+
+test('房间：真人说书第三天点「结束白天」：说书人先提名，提名链打到分出胜负', async () => {
+  const room = await roomAtDay(3);
+  const g = room.game;
+  room.settings.mode = 'human'; // 现在改成真人说书（房主 u1 是说书人）
+  try {
+    await room.dusk();
+    assert.ok(g.nominees.size >= 1, '说书人提名了一个人');
+    await until(() => g.winner || room.ended, 8000);
+    assert.ok(g.winner);
+  } finally { await room.teardown(); }
+});
