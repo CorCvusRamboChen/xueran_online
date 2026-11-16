@@ -326,7 +326,7 @@ export class Room {
       case 'rps': this.rpsHand(uid, p.hand); break;
       case 'hand': this.hand(uid, !!p.up); break;
       case 'history': return { games: this.history?.list(this.guildId) ?? [] };
-      case 'stats': return { stats: this.history?.stats?.(this.guildId, uid) ?? null };
+      case 'stats': return { stats: (p.scope === 'all' ? this.history?.statsAll?.() : this.history?.stats?.(this.guildId, uid)) ?? null }; // scope all：全服排行榜（所有服务器合计）
       case 'markStats': return { stats: this.history?.markStats?.(this.guildId) ?? [] }; // 暗印的生还排行
       case 'pastGame': return { game: this.history?.get(this.guildId, String(p.id ?? '')) ?? null };
       case 'shareBluffs': if (!this.game) throw new UserError('游戏还没开始'); this.game.shareBluffs(uid); break;
@@ -466,6 +466,7 @@ export class Room {
     this.requireHost(uid);
     if (this.game) throw new UserError('开局后不能改设置');
     const s = this.settings;
+    if (this.solo && p.mode === 'human') throw new UserError('单机试玩只有 AI 说书人');
     if (p.mode === 'auto' || p.mode === 'human') {
       s.mode = p.mode;
       if (p.mode === 'human') this.lobby = this.lobby.filter((x) => x.id !== this.hostId);
@@ -3042,7 +3043,7 @@ export class Room {
     for (const t of this.timers) clearTimeout(t);
     this.timers.clear();
     this.paused = true;
-    this.announce('大家都离开了，对局暂停，语音里的闭麦闭耳已经放开。有人回来会自动接着打。', 'clock');
+    this.announce(this.solo ? '你离开了，对局暂停。回来就接着打。' : '大家都离开了，对局暂停，语音里的闭麦闭耳已经放开。有人回来会自动接着打。', 'clock');
     await this.syncGame();
     if (this.watchMuted?.length) { const ids = this.watchMuted; this.watchMuted = []; await this.safeVoice((v) => v.setMuted?.(ids, false, 'watch')); }
     await this.wwReleaseMute();
@@ -3269,6 +3270,7 @@ export class Room {
       moonchildDue: this.moonchildDue ?? null,
       voiceReady: !!this.square,
       tutorial: !!this.tutorial,
+      solo: !!this.solo, // 网页单机试玩（server/solo.js）：没有语音、收音、金币，前端藏掉相关的按钮
       // 观战席：在线但没坐下（大厅）/ 不在这局里（游戏中）的人
       watchers: [...this.online].filter((id) => (g ? !g.get(id) : !this.lobby.some((p) => p.id === id)) && id !== this.stId)
         .map((id) => { const u = this.users.get(id); return { id, name: u?.name ?? '?', avatar: u?.avatar ?? null }; }),

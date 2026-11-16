@@ -11,7 +11,8 @@ import { Client, Events, GatewayIntentBits } from 'discord.js';
 import { Room, UserError } from './room.js';
 import { VoiceHub } from './voice.js';
 import { ttsHandler, ttsEnabled } from './tts.js';
-import { saveSoon, flushAll, loadAll, archiveGame, listGames, getGame, statsFor, archiveMark, markStatsFor, allPlayerWins } from './store.js';
+import { saveSoon, flushAll, loadAll, archiveGame, listGames, getGame, statsFor, statsAll, archiveMark, markStatsFor, allPlayerWins, forgetSave } from './store.js';
+import { SOLO_GUILD, soloEnabled, soloIdentity, setupSoloRoom, seatSolo, soloEvictions } from './solo.js';
 import { WALLET, awardWins, seedWallet } from './wallet.js';
 import { startTutorial } from './tutorial.js';
 import { KookBot, KOOK_PREFIX } from './kook.js';
@@ -229,7 +230,7 @@ app.post('/api/clientlog', express.json({ type: () => true, limit: '4kb' }), (re
 });
 setInterval(() => clientLogs.clear(), 10 * 60_000).unref();
 
-app.get('/api/config', (_req, res) => res.json({ clientId: DISCORD_CLIENT_ID ?? null, devLogin: DEV_LOGIN, publicUrl: PUBLIC_URL }));
+app.get('/api/config', (_req, res) => res.json({ clientId: DISCORD_CLIENT_ID ?? null, devLogin: DEV_LOGIN, publicUrl: PUBLIC_URL, solo: soloEnabled() }));
 
 // 收音页：令牌就是身份，只发给被洗脑的本人
 if (DEV_LOGIN) micDemo();
@@ -346,7 +347,7 @@ const isKook = (guildId) => guildId.startsWith(KOOK_PREFIX);
 
 /** 这一局用哪个机器人管语音：KOOK 的房间（服务器 id 带 kook- 前缀）用 KOOK 机器人，其余用 Discord 的。 */
 function voiceFor(guildId, key) {
-  if (guildId === 'dev') return null;
+  if (guildId === 'dev' || guildId === SOLO_GUILD) return null;
   if (isKook(guildId)) return kookHub?.forGuild(guildId.slice(KOOK_PREFIX.length), key) ?? null;
   if (PARTNER_GUILDS.has(guildId)) return partnerHub?.forGuild(guildId, key) ?? null;
   return hub?.forGuild(guildId, key) ?? null;
@@ -355,6 +356,13 @@ function voiceFor(guildId, key) {
 function roomFor(guildId, channelId, hostId) {
   const key = `${guildId}:${channelId}`;
   let room = rooms.get(key);
+  if (!room && guildId === SOLO_GUILD) { // 网页单机试玩的私桌：没有语音、收音，不存档战绩、不发金币（见 solo.js）
+    room = setupSoloRoom(new Room({ key, guildId, hostId, voice: null, onChange: (r) => { broadcast(r); saveSoon(r); } }), { stats: statsAll });
+    room.onPos = (r, id, move) => { broadcastPos(r, id, move); saveSoon(r); };
+    room.onQuiet = saveSoon;
+    rooms.set(key, room);
+    sockets.set(room, new Set());
+  }
   if (!room) {
     const voice = voiceFor(guildId, key);
     room = new Room({ key, guildId, hostId, voice, onChange: (r) => { broadcast(r); saveSoon(r); } });
@@ -377,7 +385,7 @@ function roomFor(guildId, channelId, hostId) {
     };
     room.wallet = WALLET;
     room.onMarkEnded = archiveMark; // 暗印的生还排行
-    room.history = { list: listGames, get: getGame, stats: statsFor, markStats: markStatsFor };
+    room.history = { list: listGames, get: getGame, stats: statsFor, statsAll, markStats: markStatsFor };
     room.peers = () => rooms.values(); // 开局时查同一个语音频道有没有别的局
     rooms.set(key, room);
     sockets.set(room, new Set());
@@ -415,6 +423,11 @@ wss.on('connection', (ws) => {
           try { ticket = verifyTicket(TICKET_SECRET, msg.kook); } catch (e) { throw new UserError(e.message); }
           user = { id: `${KOOK_PREFIX}${ticket.u}`, name: String(ticket.n || 'KOOK 玩家').slice(0, 24), avatar: ticket.a || null };
           via = 'kook';
+        } else if (msg.solo) {
+          // 网页单机试玩（/play）：本机生成的钥匙就是身份，一人一张私桌（见 solo.js）
+          if (!soloEnabled()) throw new UserError('单机试玩没有开放');
+          ({ user } = soloIdentity(msg.solo));
+          via = 'solo';
         } else if (msg.dev) {
           if (!DEV_LOGIN) throw new UserError('服务器没开 DEV_LOGIN');
           user = { id: `dev-${String(msg.dev.id).slice(0, 12)}`, name: String(msg.dev.name || '测试玩家').slice(0, 24), avatar: null };
@@ -423,8 +436,8 @@ wss.on('connection', (ws) => {
         } else {
           user = await discordUser(msg.accessToken, msg.guildId);
         }
-        const guildId = ticket ? `${KOOK_PREFIX}${ticket.g}` : msg.dev ? 'dev' : msg.guildId;
-        const channelId = ticket ? String(ticket.c) : msg.dev ? String(msg.dev.table || 'table') : msg.channelId;
+        const guildId = ticket ? `${KOOK_PREFIX}${ticket.g}` : via === 'solo' ? SOLO_GUILD : msg.dev ? 'dev' : msg.guildId;
+        const channelId = ticket ? String(ticket.c) : via === 'solo' ? user.id : msg.dev ? String(msg.dev.table || 'table') : msg.channelId;
         if (!guildId || !channelId) throw new UserError('请在服务器频道里打开（私信里玩不了）');
         if (via === 'discord') { // Discord 活动才有这个问题；KOOK 和浏览器链接都是浏览器里玩的
           const key = `${guildId}:${channelId}`;
@@ -432,6 +445,7 @@ wss.on('connection', (ws) => {
             throw new UserError(PARTNER_GUILDS.has(guildId) ? '请从钟楼专区的开局文字频道进入' : '请从文字频道进入');
           }
         }
+        if (via === 'solo') for (const old of soloEvictions(rooms, `${guildId}:${channelId}`)) dropRoom(old); // 私桌满了：先清掉没人在的
         const room = roomFor(guildId, channelId, user.id);
         ws.uid = user.id;
         ws.via = via; ws.gid = guildId; ws.cid = channelId;
@@ -439,6 +453,7 @@ wss.on('connection', (ws) => {
         sockets.get(room).add(ws);
         room.users.set(user.id, user);
         room.online.add(user.id);
+        if (via === 'solo') seatSolo(room, user.id); // 第一次进来：你坐下，再坐 6 个机器人
         // 大厅里的人改了昵称/头像就同步一下
         const seat = room.lobby.find((p) => p.id === user.id);
         if (seat && !room.game) Object.assign(seat, { name: user.name, avatar: user.avatar });
@@ -447,7 +462,7 @@ wss.on('connection', (ws) => {
         broadcast(room);
         room.syncWatchMute?.().catch?.(() => {});
         if (partner && PARTNER_GUILDS.has(guildId)) openForPartner(room, guildId, user);
-        if (!msg.dev) console.log(`👤 ${user.name} 进入 ${guildId}:${channelId}（${room.game ? '游戏中' : '大厅'}）`);
+        if (!msg.dev && via !== 'solo') console.log(`👤 ${user.name} 进入 ${guildId}:${channelId}（${room.game ? '游戏中' : '大厅'}）`);
         return;
       }
       // 新手教程：把这个连接切到一个只有自己和机器人的练习局；退出时切回原来的房间
@@ -523,14 +538,19 @@ setInterval(() => {
   }
 }, 30_000);
 
-// 没人在线且没开局的房间，过一阵清掉
+/** 清掉一个房间（单机私桌连存档一起删：没人会回来接着打了）。 */
+function dropRoom(room) {
+  room.teardown().catch(() => {});
+  rooms.delete(room.key);
+  sockets.delete(room);
+  if (room.solo) forgetSave(room.key);
+}
+
+// 没人在线且没开局的房间，过一阵清掉。单机私桌：连着两轮（10–20 分钟）没人，开着局也清掉
 setInterval(() => {
-  for (const [key, room] of rooms) {
-    if (room.online.size === 0 && (!room.game || room.ended)) {
-      room.teardown().catch(() => {});
-      rooms.delete(key);
-      sockets.delete(room);
-    }
+  for (const room of [...rooms.values()]) {
+    if (room.online.size === 0 && (!room.game || room.ended || (room.solo && room.soloIdle))) dropRoom(room);
+    else if (room.solo) room.soloIdle = room.online.size === 0;
   }
 }, 10 * 60_000);
 

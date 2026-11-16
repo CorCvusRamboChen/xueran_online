@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { openMic, login, openSocket, report, listenSpeaking, fromKook, fromBrowserLink } from './connect.js';
+import { openMic, login, openSocket, report, listenSpeaking, fromKook, fromBrowserLink, soloMode } from './connect.js';
 import { Town, PaintFilters } from './Town.jsx';
 import { TownMap, AliveStrip } from './TownMap.jsx';
 import { CheatSheet, useSheetMode } from './CheatSheet.jsx';
@@ -223,7 +223,7 @@ export default function App() {
         )}
         {!wrongPlace && (slow || status.kind === 'error') && (
           <div className="splash-help">
-            <p>{status.kind === 'error' ? '进不去？' : '等太久了？'}点下面重新进入；{fromKook ? '还不行就回 KOOK 频道重新领一次进入链接。' : fromBrowserLink ? '还不行就回 Discord 活动里，在「设置」里再点一次「在浏览器打开」。' : '还不行就关掉活动，再从文字频道打开一次。'}</p>
+            <p>{status.kind === 'error' ? '进不去？' : '等太久了？'}点下面重新进入；{soloMode ? '还不行就过几分钟再来。' : fromKook ? '还不行就回 KOOK 频道重新领一次进入链接。' : fromBrowserLink ? '还不行就回 Discord 活动里，在「设置」里再点一次「在浏览器打开」。' : '还不行就关掉活动，再从文字频道打开一次。'}</p>
             <button type="button" className="splash-retry" onClick={() => location.reload()}>重新进入</button>
           </div>
         )}
@@ -434,7 +434,7 @@ function Game({ s, act, ask }) {
         {!roaming && skills && <CheatSheet s={s} onClose={() => setSkills(false)} />}
         {/* 夜里、广场上也在右上角放一个「技能表」按钮（地图上的在小地图左边，由 TownMap 自己放） */}
         {!roaming && !skills && s.script !== 'mark' && <button type="button" className="mm-sheet-btn scene-sheet-btn" onClick={() => setSkills(true)} title="所有角色的技能">技能表</button>}
-        <SoundToggles onFixVoice={me && s.phase !== 'ended' ? () => act('fixVoice') : null} onSheet={!roaming && !skills ? () => setSkills(true) : null} />
+        <SoundToggles onFixVoice={me && s.phase !== 'ended' && !soloMode ? () => act('fixVoice') : null} onSheet={!roaming && !skills ? () => setSkills(true) : null} />
         <SkillCheck check={check} onClose={closeCheck} />
         <MicDemand me={me} day={s.day} />
         {me?.mic && me.micOn && <div className="mic-chip" title="收音页开着：说书人听得到你。关掉收音页大约 45 秒后，这里会重新提醒。">● 收音开着</div>}
@@ -830,7 +830,7 @@ const madnessGoal = (me) => (me.madness
 
 function MadnessPanel({ me }) {
   // 2026-11-11 起没有通用的「公开声明」了：疯狂只靠后台听语音（广场机器人、收音页）
-  const plain = me.hearing ? '在广场上说，说书人听得到。' : '说书人现在听不到语音，会按局势判定你够不够疯狂。';
+  const plain = soloMode ? '单机试玩没有语音，说书人会按局势判定你够不够疯狂。' : me.hearing ? '在广场上说，说书人听得到。' : '说书人现在听不到语音，会按局势判定你够不够疯狂。';
   return (
     <Panel title="疯狂" tone="psy" className="moonchild-pnl">
       <p className="lead">{madnessGoal(me)}{!me.mic ? plain : me.micOn ? '收音开着，说书人听得到你。' : '要打开收音，说书人才听得到你。别人不知道你开了。'}</p>

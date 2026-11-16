@@ -32,6 +32,26 @@ export async function listenSpeaking(channelId) {
 export const inDiscord = new URLSearchParams(location.search).has('frame_id');
 
 /**
+ * 网页单机试玩：打开 /play，不用 Discord，自己一张私桌和机器人打（服务器见 server/solo.js）。
+ * 身份是这台设备上随机生成的一把钥匙（localStorage，刷新、重开都还是这张桌子）；?name=小明 改自己的名字（也记在本机）。
+ */
+export const soloMode = !inDiscord && /^\/play\/?$/.test(location.pathname);
+const SOLO_KEY = 'botc-solo-key';
+const SOLO_NAME = 'botc-solo-name';
+function soloHello() {
+  const store = (() => { try { return localStorage; } catch { return null; } })();
+  let key = store?.getItem(SOLO_KEY);
+  if (!key || !/^[A-Za-z0-9_-]{16,64}$/.test(key)) {
+    const bytes = crypto.getRandomValues(new Uint8Array(18));
+    key = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    try { store?.setItem(SOLO_KEY, key); } catch { /* 存不了（隐私模式）就每次打开都是一张新桌子 */ }
+  }
+  const q = new URLSearchParams(location.search).get('name')?.trim();
+  if (q) try { store?.setItem(SOLO_NAME, q.slice(0, 24)); } catch { /* 只是记不住名字 */ }
+  return { solo: { key, name: q || store?.getItem(SOLO_NAME) || '旅人' } };
+}
+
+/**
  * 进入链接里的门票（KOOK 的 ?kt=…，浏览器链接的 ?bt=…）：存进这个标签页（刷新还在），再从地址栏去掉
  * （截图、分享地址时不会带出去）。返回门票；不是这样进来的返回 null。
  */
@@ -181,6 +201,11 @@ export async function login(onStep = () => {}) {
     throw e;
   }
 
+  if (soloMode) {
+    if (cfg.solo === false) throw new Error('单机试玩暂时没有开放');
+    onStep('正在走进这座小镇……');
+    return soloHello();
+  }
   const kt = !inDiscord && kookTicket();
   if (kt) { onStep('正在走进这座小镇……'); return { kook: kt }; }
   const bt = !inDiscord && browserTicket();

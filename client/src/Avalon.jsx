@@ -1,5 +1,6 @@
 // 娱乐模式「阿瓦隆」的界面：身份确认、任务记录板（5 个任务格 + 否决计数）、队长选队员、全体投票、出任务票、
 // 湖中仙女、刺杀指认。场景沿用血染的广场座位圈（不用小镇地图：阿瓦隆没有自由活动和私聊），右栏沿用记录面板。规则在 src/engine/avalon.js。
+import { soloMode } from './connect.js';
 import { useEffect, useRef, useState } from 'react';
 import { Town } from './Town.jsx';
 import { Tag, Panel, Btn, Stat, HudBar } from './ui.jsx';
@@ -90,7 +91,7 @@ export function AvalonGame({ s, act, ask, parts: { History, SoundToggles, Watche
         </Town>
         <VoteFlash a={a} s={s} />
         <QuestReveal a={a} s={s} name={name} />
-        <SoundToggles onFixVoice={me && s.phase !== 'ended' ? () => act('fixVoice') : null} />
+        <SoundToggles onFixVoice={me && s.phase !== 'ended' && !soloMode ? () => act('fixVoice') : null} />
         <HudBar items={items} active={tab} onPick={(id) => setTab((cur) => (cur === id ? null : id))} label={STAGE_NAME[a.stage]} timer={timer} />
       </section>
 
@@ -595,7 +596,7 @@ export function AvalonSettings({ st, set, n, Toggle }) {
         <div className="setting-group">
           <h4>观战</h4>
           <Toggle label="观战者能看所有身份" on={st.spectatorGrimoire} onChange={(v) => set({ spectatorGrimoire: v })} />
-          <Toggle label="观战者在语音里闭麦" on={st.muteSpectators} onChange={(v) => set({ muteSpectators: v })} />
+          {!soloMode && <Toggle label="观战者在语音里闭麦" on={st.muteSpectators} onChange={(v) => set({ muteSpectators: v })} />}
         </div>
       </div>
     </div></div>

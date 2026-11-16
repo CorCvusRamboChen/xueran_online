@@ -3,6 +3,7 @@
 //   坏人在这一刻可以调包；路上从别人身后经过可能瞟到；每人每天一封匿名信。
 // · 回到广场圆桌讨论：没有提名，也没有投票。
 // · 夜里：在自己家的小屋（Cottage）里写下自己的印记。写错的人在屋里看到印记炸开（闪光、冲击、烟尘、震屏、音效），别人天亮只看到死讯。
+import { soloMode } from './connect.js';
 import { useEffect, useRef, useState } from 'react';
 import { Town } from './Town.jsx';
 import { TownMap } from './TownMap.jsx';
@@ -143,7 +144,7 @@ export function MarkGame({ s, act, ask, parts: { History, SoundToggles, Watchers
         {night && me?.alive && !me.exploded && <NightBoard me={me} m={m} />}
         {card && roaming && <PeekCard s={s} me={me} card={card} g={g} mk={mk} onClose={() => setCard(null)} />}
         <Notices s={s} me={me} g={g} />
-        <SoundToggles onFixVoice={me && s.phase !== 'ended' ? () => act('fixVoice') : null} />
+        <SoundToggles onFixVoice={me && s.phase !== 'ended' && !soloMode ? () => act('fixVoice') : null} />
         <HudBar items={items} active={tab} onPick={(id) => setTab((cur) => (cur === id ? null : id))} label={STAGE_NAME[stage]} timer={timer} />
       </section>
 
@@ -819,7 +820,7 @@ export function MarkSettings({ st, set, Toggle, Select }) {
           <Toggle label="遗言（炸死的人第二天留一句）" on={st.markLastWords !== false} onChange={(v) => set({ markLastWords: v })} />
           <Toggle label="随机排座位" on={st.shuffle} onChange={(v) => set({ shuffle: v })} />
           <Toggle label="观战者能看所有身份" on={st.spectatorGrimoire} onChange={(v) => set({ spectatorGrimoire: v })} />
-          <Toggle label="观战者在语音里闭麦" on={st.muteSpectators} onChange={(v) => set({ muteSpectators: v })} />
+          {!soloMode && <Toggle label="观战者在语音里闭麦" on={st.muteSpectators} onChange={(v) => set({ muteSpectators: v })} />}
         </div>
       </div>
     </div></div>

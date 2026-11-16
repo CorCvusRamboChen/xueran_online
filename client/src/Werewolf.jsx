@@ -1,5 +1,6 @@
 // 狼人杀（娱乐模式）的游戏画面：座位圈 + 操作面板 + 右栏。服务器那边见 src/server/werewolfRoom.js，规则见 src/engine/werewolf.js。
 // 借用血染的零件（广场座位圈、HUD、记录、小魔典），流程和按钮是狼人杀自己的。
+import { soloMode } from './connect.js';
 import { useEffect, useState } from 'react';
 import { Town } from './Town.jsx';
 import { Tag, Panel, Btn, HudBar } from './ui.jsx';
@@ -165,7 +166,7 @@ export function WerewolfGame({ s, act, ask }) {
         <Town s={s} picked={picked ? [picked] : []} pickable={options} onTap={onTap}>
           <WwCenter s={s} name={name} g={g} />
         </Town>
-        <SoundToggles onFixVoice={me && s.phase !== 'ended' ? () => act('fixVoice') : null} />
+        <SoundToggles onFixVoice={me && s.phase !== 'ended' && !soloMode ? () => act('fixVoice') : null} />
         <HudBar items={items} active={tab} onPick={(id) => setTab((cur) => (cur === id ? null : id))} label={night ? `第${cnNum(s.night)}夜` : `第${cnNum(s.day)}天`}
           timer={s.deadline && secs != null ? { label: timerLabel, secs, urgent: secs <= 10 } : null} />
       </section>

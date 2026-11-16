@@ -22,7 +22,7 @@ import { NIGHT_ORDER, STEP_NAMES } from '../../src/shared/nightOrder.js';
 import { WwShowcase, wwDist } from './Werewolf.jsx';
 import { TutorialIntro } from './TutorialIntro.jsx';
 import { VolumeButton } from './Volume.jsx';
-import { fromKook, inviteFriends, onDiscordMobile, openInBrowser } from './connect.js';
+import { fromKook, inviteFriends, onDiscordMobile, openInBrowser, soloMode } from './connect.js';
 
 // 标题画上的四栋房子（和游戏地图同一套画法）
 const hero = (id, name, x, y, w, h, side) => {
@@ -115,14 +115,16 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
           <div className="hero-title">
             <h1 className="title">血染钟楼</h1>
             <Tag tone="dark">{`${SCRIPTS[st.script]?.name ?? SCRIPTS.tb.name} · ${(SCRIPTS[st.script]?.en ?? SCRIPTS.tb.en).toUpperCase()}`}</Tag>
+            {soloMode && <Tag tone="mot">单机试玩</Tag>}
           </div>
           <nav className="menu">
             {!(human && host) && (joined
               ? <Btn kind="secondary" className="menu-item" onClick={() => act('leave')}>离开座位</Btn>
               : <Btn kind="primary" className="menu-item" onClick={async () => { if (await act('join') && onDiscordMobile() && !hintSeen()) setBrowserHint(true); }}>加入游戏</Btn>)}
             {host && <Btn kind={n >= lo && n <= hi ? 'primary' : 'secondary'} className="menu-item" disabled={n < lo || n > hi} onClick={() => act('start')}>开始游戏{n < lo ? `（还差 ${lo - n} 人）` : n > hi ? `（这个剧本最多 ${hi} 人）` : ''}</Btn>}
-            {host && <Btn className="menu-item" onClick={() => act('addBots', { count: 1 })}>加一个机器人玩家</Btn>}
-            {host && (release
+            {host && <Btn className="menu-item" disabled={soloMode && n >= hi} onClick={() => act('addBots', { count: 1 })}>加一个机器人玩家</Btn>}
+            {soloMode && host && <SoloBots s={s} act={act} />}
+            {host && !soloMode && (release
               ? <Btn kind="primary" className="menu-item" onClick={async () => { setRelease(false); await act('releaseHost'); }} onMouseLeave={() => setRelease(false)}>确定让出房主（交给在线的人）</Btn>
               : <Btn className="menu-item" onClick={() => setRelease(true)}>让出房主</Btn>)}
             {!host && !s.hostOnline && <Btn className="menu-item" onClick={() => act('claimHost')}>房主不在，接管房主</Btn>}
@@ -134,10 +136,14 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
             {browserHint && createPortal(<BrowserHint toast={toast} onClose={() => { markHintSeen(); setBrowserHint(false); }} />, document.body)}
           </nav>
           <ul className="lobby-tips">
-            <li>大家先进同一个语音频道，<b>房主也要在里面</b>——机器人会把它当成城镇广场。</li>
+            {soloMode ? <>
+              <li>单机试玩：这张桌子只有你和机器人，别人进不来；没有语音，机器人自己提名、投票。</li>
+              <li>选好剧本，用上面的按钮把机器人加到想要的人数，点「开始游戏」。打完的局不算进排行榜，也不发金币。</li>
+              <li>想和朋友一起玩、用语音聊：在 Discord 里打开这个活动，或者在 KOOK 发「/血染」。</li>
+            </> : <><li>大家先进同一个语音频道，<b>房主也要在里面</b>——机器人会把它当成城镇广场。</li>
             {fromKook
               ? <li>在 KOOK 文字频道发<b>「/血染」</b>，每个人点卡片上的按钮领自己的进入链接；语音还是在 KOOK 里聊。</li>
-              : <li>从<b>文字频道</b>的应用启动器打开：进房子私聊时被拉去别的语音频道，也不会掉线。</li>}
+              : <li>从<b>文字频道</b>的应用启动器打开：进房子私聊时被拉去别的语音频道，也不会掉线。</li>}</>}
           </ul>
         </section>
 
@@ -168,7 +174,9 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                 {/* 最后一格：虚线框里一个加号，点了邀请朋友（Discord 的邀请框 / 分享链接，见 connect.js） */}
                 {n < hi && (
                   <div className="lr-item">
-                    <button type="button" className="lr-invite" onClick={async () => { const msg = await inviteFriends(); if (msg) toast?.(msg); }} aria-label="邀请朋友进来" title="邀请朋友进来">+</button>
+                    {soloMode
+                      ? host && <button type="button" className="lr-invite" onClick={() => act('addBots', { count: 1 })} aria-label="加一个机器人" title="加一个机器人">+</button>
+                      : <button type="button" className="lr-invite" onClick={async () => { const msg = await inviteFriends(); if (msg) toast?.(msg); }} aria-label="邀请朋友进来" title="邀请朋友进来">+</button>}
                   </div>
                 )}
               </div>
@@ -211,7 +219,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                     <h4>开局与夜晚</h4>
                     <p className="muted setting-note">按人数表发身份（下面「狼人杀 · 预女猎守」里有表），法官全自动。</p>
                     <Toggle label="随机排座位" on={st.shuffle} onChange={(v) => set({ shuffle: v })} />
-                    <Toggle label="夜里闭麦闭耳" on={st.nightDeafen} onChange={(v) => set({ nightDeafen: v })} />
+                    {!soloMode && <Toggle label="夜里闭麦闭耳" on={st.nightDeafen} onChange={(v) => set({ nightDeafen: v })} />}
                     <Select label="夜里行动 / 投票时限" value={st.chooseSeconds} options={[30, 45, 60, 90, 120]} unit="秒" onChange={(v) => set({ chooseSeconds: v })} />
                   </div>
                 </div>
@@ -219,13 +227,13 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                   <div className="setting-group">
                     <h4>白天</h4>
                     <Select label="每人发言" value={st.speechSeconds ?? 90} options={[30, 60, 90, 120, 180]} unit="秒" onChange={(v) => set({ speechSeconds: v })} />
-                    <Toggle label="发言时其他人闭麦" on={st.speechMute} onChange={(v) => set({ speechMute: v })} />
+                    {!soloMode && <Toggle label="发言时其他人闭麦" on={st.speechMute} onChange={(v) => set({ speechMute: v })} />}
                   </div>
-                  <div className="setting-group">
+                  {!soloMode && <div className="setting-group">
                     <h4>观战</h4>
                     <Toggle label="观战者能看所有身份" on={st.spectatorGrimoire} onChange={(v) => set({ spectatorGrimoire: v })} />
                     <Toggle label="观战者在语音里闭麦" on={st.muteSpectators} onChange={(v) => set({ muteSpectators: v })} />
-                  </div>
+                  </div>}
                 </div>
               </div></div>
             ) : <>
@@ -250,14 +258,14 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                 : n ? `推荐预设：${n} 人还没有推荐配置，会用 AI 配置。` : '推荐预设：按坐下的人数从推荐配置里挑，这个人数没有的话用 AI 配置。';
             })()}</p>
             {s.roleAssign && n > 0 && <RoleAssign s={s} act={act} script={st.script ?? 'tb'} />}
-            <div className="setting mode-row">
+            {!soloMode && <><div className="setting mode-row">
               <span>说书人</span>
               <div className="seg">
                 <button type="button" className={!human ? 'on' : ''} onClick={() => set({ mode: 'auto' })}>AI 房主</button>
                 <button type="button" className={human ? 'on' : ''} onClick={() => set({ mode: 'human' })}>真人说书</button>
               </div>
             </div>
-            <p className="muted setting-note">{human ? '房主看魔典、审核每条夜间信息；机器人负责发身份、叫人、跑流程。' : 'AI 房主全自动：发身份、夜里叫人、像真人说书人一样做判定、给提名和投票计时、用语音播报旁白，不需要人主持。'}</p>
+            <p className="muted setting-note">{human ? '房主看魔典、审核每条夜间信息；机器人负责发身份、叫人、跑流程。' : 'AI 房主全自动：发身份、夜里叫人、像真人说书人一样做判定、给提名和投票计时、用语音播报旁白，不需要人主持。'}</p></>}
             {/* 四组：左边开局和夜晚，右边白天和观战。「房规」是和官方规则不一样的地方，标个小标签 */}
             <div className="setting-wrap"><div className="setting-groups">
               <div className="setting-col">
@@ -270,7 +278,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                 </div>
                 <div className="setting-group">
                   <h4>夜晚</h4>
-                  <Toggle label="夜里闭麦闭耳" on={st.nightDeafen} onChange={(v) => set({ nightDeafen: v })} />
+                  {!soloMode && <Toggle label="夜里闭麦闭耳" on={st.nightDeafen} onChange={(v) => set({ nightDeafen: v })} />}
                   <Select label="选人时限" value={st.chooseSeconds} options={[30, 45, 60, 90, 120]} unit="秒" onChange={(v) => set({ chooseSeconds: v })} />
                   {['tb', 'bmr'].includes(engineOf(st.script)) && <Toggle rule label="夜里死了仍拿信息（醉酒）" on={!!st.deadDrunk} onChange={(v) => set({ deadDrunk: v })} />}
                   {st.script === 'bmr' && <Toggle rule label="疯子（以为是僵怖）死后照样醒" on={!!st.lunaticGhost} onChange={(v) => set({ lunaticGhost: v })} />}
@@ -285,15 +293,15 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                   <Select label="提名理由" value={st.accuseSeconds} options={[15, 30, 60, 90, 120]} unit="秒" onChange={(v) => set({ accuseSeconds: v })} />
                   <Select label="辩护时间" value={st.defendSeconds} options={[30, 60, 90, 120, 180]} unit="秒" onChange={(v) => set({ defendSeconds: v })} />
                   <Select label="投票时钟每人" value={st.voteSeconds} options={[1, 2, 3, 4, 5]} unit="秒" onChange={(v) => set({ voteSeconds: v })} />
-                  <Toggle label="发言时其他人闭麦" on={st.speechMute} onChange={(v) => set({ speechMute: v })} />
+                  {!soloMode && <Toggle label="发言时其他人闭麦" on={st.speechMute} onChange={(v) => set({ speechMute: v })} />}
                   <Toggle rule label="提名者自动举手（可以放下）" on={st.nominatorVotes} onChange={(v) => set({ nominatorVotes: v })} />
                   <Toggle rule label="投票时隐藏票型（投完公开）" on={st.hideVotes} onChange={(v) => set({ hideVotes: v })} />
                 </div>
-                <div className="setting-group">
+                {!soloMode && <div className="setting-group">
                   <h4>观战</h4>
                   <Toggle label="观战者能看魔典（所有身份）" on={st.spectatorGrimoire} onChange={(v) => set({ spectatorGrimoire: v })} />
                   <Toggle label="观战者在语音里闭麦" on={st.muteSpectators} onChange={(v) => set({ muteSpectators: v })} />
-                </div>
+                </div>}
               </div>
             </div></div>
             </>}
@@ -305,6 +313,13 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
       </div>
     </div>
   );
+}
+
+/** 单机试玩：去掉一个机器人（加机器人用上面的按钮，或者座位最后的「+」）。 */
+function SoloBots({ s, act }) {
+  const bots = s.lobby.filter((p) => p.fake);
+  if (!bots.length) return null;
+  return <Btn className="menu-item" onClick={() => act('kick', { target: bots.at(-1).id })}>去掉一个机器人</Btn>;
 }
 
 /** 观战席：在线但没坐下的人。 */
@@ -459,21 +474,26 @@ function RecordCard({ p, isMe }) {
  */
 function RecordAndHistory({ s, ask }) {
   const [st, setSt] = useState(null);
+  const [all, setAll] = useState(null); // 全服排行榜：所有服务器合计（服务器 statsAll）
   const [games, setGames] = useState(null);
   const [pick, setPick] = useState(null);
   const [sort, setSort] = useState('wins');
-  const [tab, setTab] = useState('board');
+  const [tab, setTab] = useState(soloMode ? 'all' : 'board'); // 单机试玩没有「这个服务器」，只有全服排行榜
   const [open, setOpen] = useState(null);
   useEffect(() => {
-    ask?.('stats').then((r) => setSt(r?.stats ?? null)).catch(() => {});
-    ask?.('history').then((r) => setGames(r?.games ?? [])).catch(() => {});
+    if (!soloMode) {
+      ask?.('stats').then((r) => setSt(r?.stats ?? null)).catch(() => {});
+      ask?.('history').then((r) => setGames(r?.games ?? [])).catch(() => {});
+    }
+    ask?.('stats', { scope: 'all' }).then((r) => setAll(r?.stats ?? null)).catch(() => {});
   }, []);
-  if (!st?.games && !games?.length) return null;
-  const players = st?.players ?? [];
+  if (!st?.games && !games?.length && !all?.games) return null;
+  const cur = tab === 'all' ? all : st;
+  const players = cur?.players ?? [];
   const me = players.find((p) => p.id === s.me);
-  const shown = players.find((p) => p.id === pick) ?? me;
   const [, , key, ok] = SORTS.find((x) => x[0] === sort);
   const board = players.filter(ok).sort((a, b) => key(b) - key(a) || b.games - a.games);
+  const shown = players.find((p) => p.id === pick) ?? me ?? (soloMode ? board[0] : null); // 单机试玩自己没有战绩：先看榜首的
   const show = async (id) => { const r = await ask('pastGame', { id }); if (r?.game) setOpen(r.game); };
   const when = (t) => new Date(t).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const th = (k, label) => (
@@ -484,20 +504,23 @@ function RecordAndHistory({ s, ask }) {
   return (
     <section className="lobby-roles glass pnl past-games rh">
       <header className="roles-head">
-        <h2>战绩与往期对局</h2>
-        <p className="muted">{st?.games ? `这个服务器打完了 ${st.games} 局，善良赢 ${pct(st.goodWins, st.games)}，邪恶赢 ${pct(st.games - st.goodWins, st.games)}。` : ''}个人胜率合并了所有服务器。点表里的人看他的战绩，点往期的局看所有人的身份、票型和整局复盘。</p>
+        <h2>{soloMode ? '全服排行榜' : '战绩与往期对局'}</h2>
+        <p className="muted">{tab === 'all'
+          ? `${all?.games ? `所有服务器合计打完了 ${all.games} 局（${all.guilds} 个服务器），善良赢 ${pct(all.goodWins, all.games)}。` : ''}这里是所有服务器的真人玩家合起来排的${soloMode ? '；单机试玩的局不算进排行榜' : ''}。点表里的人看他的战绩。`
+          : `${st?.games ? `这个服务器打完了 ${st.games} 局，善良赢 ${pct(st.goodWins, st.games)}，邪恶赢 ${pct(st.games - st.goodWins, st.games)}。` : ''}个人胜率合并了所有服务器。点表里的人看他的战绩，点往期的局看所有人的身份、票型和整局复盘。`}</p>
       </header>
       <div className="rh-grid">
         <div className="rh-left">
-          {shown ? <RecordCard p={shown} isMe={shown.id === s.me} /> : <p className="rec-none">你还没打完过一局。点右边表里的人，看看他们的战绩。</p>}
+          {shown ? <RecordCard p={shown} isMe={shown.id === s.me} /> : <p className="rec-none">{soloMode ? '单机试玩的局不记战绩。点右边表里的人，看看他们的战绩。' : '你还没打完过一局。点右边表里的人，看看他们的战绩。'}</p>}
           {pick && pick !== s.me && me && <button type="button" className="rec-back" onClick={() => setPick(null)}>← 看我自己的</button>}
         </div>
         <div className="rh-right">
           <div className="rh-tabs" role="tablist">
-            <button type="button" role="tab" aria-selected={tab === 'board'} className={tab === 'board' ? 'on' : ''} onClick={() => setTab('board')}>排行榜 <small>{players.length} 人</small></button>
-            <button type="button" role="tab" aria-selected={tab === 'games'} className={tab === 'games' ? 'on' : ''} onClick={() => setTab('games')}>往期对局 <small>最近 {games?.length ?? 0} 局</small></button>
+            {!soloMode && <button type="button" role="tab" aria-selected={tab === 'board'} className={tab === 'board' ? 'on' : ''} onClick={() => { setTab('board'); setPick(null); }}>排行榜 <small>{st?.players?.length ?? 0} 人</small></button>}
+            <button type="button" role="tab" aria-selected={tab === 'all'} className={tab === 'all' ? 'on' : ''} onClick={() => { setTab('all'); setPick(null); }}>全服排行榜 <small>{all?.players?.length ?? 0} 人</small></button>
+            {!soloMode && <button type="button" role="tab" aria-selected={tab === 'games'} className={tab === 'games' ? 'on' : ''} onClick={() => setTab('games')}>往期对局 <small>最近 {games?.length ?? 0} 局</small></button>}
           </div>
-          {tab === 'board' ? (
+          {tab !== 'games' ? (
             board.length ? (
               <div className="rh-scroll">
                 <table className="rh-table">

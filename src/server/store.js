@@ -152,6 +152,24 @@ export function statsFor(guildId, uid = null) {
   return { games: here.games, goodWins: here.goodWins, players: players.filter((p) => here.ids.has(p.id) || p.id === uid) };
 }
 
+/**
+ * 全服排行榜：所有服务器（Discord 各服务器、KOOK 各服务器）合起来。games / goodWins 是所有服务器的总局数，
+ * players 是所有打过的真人（个人数字本来就跨服合并）；guilds 是有几个服务器打过。KOOK 和 Discord 账号照样不合并。
+ * 单机试玩（server/solo.js）的局不存档，不会出现在这里。
+ */
+export function statsAll() {
+  const { players, guilds } = allStats();
+  let games = 0; let goodWins = 0;
+  for (const g of guilds.values()) { games += g.games; goodWins += g.goodWins; }
+  return { games, goodWins, guilds: guilds.size, players: players.filter((p) => !String(p.id).startsWith('solo-')) };
+}
+
+/** 删掉一个房间的存档（单机私桌没人回来、清掉时用）。 */
+export function forgetSave(key) {
+  for (const [room, t] of pending) if (room.key === key) { clearTimeout(t); pending.delete(room); }
+  try { fs.rmSync(fileOf(key), { force: true }); } catch { /* 本来就没有 */ }
+}
+
 const parsed = new Map(); // 读过的存档：不会再变，每局结束只读新的那一份
 
 /** 战绩用得到的字段。决策日志和标记很占地方，这里不留。 */
