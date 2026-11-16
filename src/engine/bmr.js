@@ -198,9 +198,9 @@ export const BMR_METHODS = {
   /** p 现在为什么不会死（返回原因，或 null）。cause：execution / assassin / 其他。 */
   protection(p, cause) {
     if (cause === 'assassin') return null;
-    if (p.role === 'sailor' && !this.bmrBroken(p)) return '水手';
+    if (this.abHolder(p, 'sailor') && !this.bmrBroken(p)) return '水手';
     if (this.phase === 'night' && this.fx.some((f) => f.kind === 'safe' && f.target === p.id && this.fxLive(f))) return '旅店老板';
-    for (const t of this.players.filter((q) => q.role === 'tealady' && q.alive && !this.bmrBroken(q))) {
+    for (const t of this.players.filter((q) => this.abHolder(q, 'tealady') && q.alive && !this.bmrBroken(q))) {
       const nb = this.visNeighbours(t);
       if (nb.length === 2 && nb.every((q) => !this.evilOf(q)) && nb.some((q) => q.id === p.id)) return '茶艺师';
     }
@@ -215,10 +215,10 @@ export const BMR_METHODS = {
     const prot = this.protection(p, cause);
     if (prot) { this.record('st', `${this.tag(p.id)} 因${prot}没有死（${cause}）`); return 'saved'; }
     if (cause === 'execution' && !this.evilOf(p)) {
-      const pac = this.players.find((q) => q.role === 'pacifist' && q.alive && !this.bmrBroken(q));
+      const pac = this.players.find((q) => this.abHolder(q, 'pacifist') && q.alive && !this.bmrBroken(q));
       if (pac && this.st.pacifistSaves(p)) { this.record('st', `和平主义者：被处决的善良玩家 ${this.tag(p.id)} 没有死`); return 'saved'; }
     }
-    if (p.role === 'fool' && cause !== 'assassin' && !this.used[p.id] && !this.bmrBroken(p)) {
+    if (this.abHolder(p, 'fool') && cause !== 'assassin' && !this.used[p.id] && !this.bmrBroken(p)) {
       this.used[p.id] = true;
       this.record('st', `弄臣 ${this.tag(p.id)} 第一次将要死亡，没有死（能力用掉）`);
       return 'saved';
@@ -260,7 +260,7 @@ export const BMR_METHODS = {
     if (p.role === 'moonchild') this.pendingMoonchild = p.id;
     // 祖母：孙子被恶魔杀死，祖母一起死（她自己清醒时）
     if (cause === 'demon' && p.id === this.grandchild) {
-      const gm = this.players.find((q) => q.role === 'grandmother' && q.alive && !this.bmrBroken(q));
+      const gm = this.players.find((q) => this.abHolder(q, 'grandmother') && q.alive && !this.bmrBroken(q));
       if (gm) this.tryKill(gm, 'grandmother', messages);
     }
   },
@@ -312,6 +312,8 @@ export const BMR_METHODS = {
   },
 
   /** 这个人今晚按什么角色行动（疯子按他以为的恶魔）。 */
+  /** 谁拿着这个能力：角色本人，或者拿到这个能力的学徒（探查类能力看的仍是 q.role，学徒查出来是学徒）。 */
+  abHolder(q, role) { return q.role === role || (q.role === 'apprentice' && q.traveller && q.apprenticeAs === role); },
   actsAs(p) { return p.role === 'lunatic' ? p.shownRole : p.role === 'apprentice' && p.apprenticeAs ? p.apprenticeAs : p.role; }, // 学徒按获得的能力醒
 
   nightPromptsBMR() {
@@ -321,6 +323,7 @@ export const BMR_METHODS = {
     const lunatic = this.players.find((q) => q.role === 'lunatic' && (q.alive || this.ghostLunatic(q)));
     for (const p of [...this.alive(), ...this.players.filter((q) => this.ghostLunatic(q))]) {
       if (p.apparentDead && p.role !== 'zombuul') continue;
+      if (p.traveller && p.joinedNight === this.night) continue; // 夜里才加入的旅行者：下一晚才醒
       const role = this.actsAs(p);
       const spec = ROLES[role].choose;
       if (!spec) continue;
@@ -571,7 +574,7 @@ export const BMR_METHODS = {
           if (t.role === 'grandmother') this.grandmotherInfo(t, say);
         } break;
         case 'gossip': {
-          const g = this.players.find((q) => q.role === 'gossip' && q.alive);
+          const g = this.players.find((q) => this.abHolder(q, 'gossip') && q.alive);
           if (this.gossipPending && g && !broken(g)) {
             const v = this.st.gossipVictim();
             if (v) this.tryKill(v, 'gossip', messages);
@@ -735,7 +738,7 @@ export const BMR_METHODS = {
     }
     const res = this.tryKill(p, 'execution');
     if (res === 'died' && team(p) === 'minion') {
-      const min = this.players.find((q) => q.role === 'minstrel' && q.alive && !this.bmrBroken(q));
+      const min = this.players.find((q) => this.abHolder(q, 'minstrel') && q.alive && !this.bmrBroken(q));
       if (min) {
         for (const q of this.players) if (q.id !== min.id) this.fx.push({ kind: 'drunk', target: q.id, source: min.id, until: this.day + 1, why: '吟游诗人' });
         this.record('st', '爪牙死于处决：除吟游诗人外所有人醉酒，直到明天黄昏');
@@ -770,7 +773,7 @@ export const BMR_METHODS = {
     if (this.mastermindDay != null) return null; // 主谋的额外一夜一天：照常进行，胜负在那天黄昏定
     const demonAlive = this.players.some((p) => p.alive && DEMON_ROLES.has(p.role));
     if (!demonAlive) {
-      const mm = this.players.find((p) => p.role === 'mastermind' && p.alive && !this.bmrBroken(p));
+      const mm = this.players.find((p) => this.abHolder(p, 'mastermind') && p.alive && !this.bmrBroken(p));
       if (this.demonExecuted && mm) {
         this.mastermindDay = this.day + 1;
         this.record('st', '恶魔死于处决，但主谋还活着：额外进行一个夜晚和一个白天');

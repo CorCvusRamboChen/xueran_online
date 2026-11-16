@@ -1029,6 +1029,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
               : me && !me.alive ? '你已经死了，但还在这座镇子里。' : '闭上眼睛，等天亮。'}
         </p>
         {s.isHost && !s.isST && <div className="btn-row"><Btn onClick={() => act('dawn')}>立刻天亮</Btn></div>}
+        <TravellerJoin s={s} act={act} />
       </Panel>
     );
   }
@@ -1757,6 +1758,7 @@ function PlayerSheet({ s, p, act, name, onClose }) {
             {p.alive ? <Btn kind="primary" onClick={() => st('kill')}>杀死</Btn> : <Btn onClick={() => st('revive')}>复活</Btn>}
             {(p.alive || s.phase === 'day') && engineOf(s.script) === 'snv' && <Btn onClick={() => st('madExecute')} title={s.phase === 'day' ? '他疯狂证明得不够：处决他，算今天的处决（死人也可以处决，他不会再死一次）' : '他疯狂证明得不够：处决他，当场公布，不占白天的处决'}>疯狂处决</Btn>}
             <Btn onClick={() => st('poison')}>下毒</Btn>
+            {s.bishop && s.phase === 'day' && !p.traveller && <Btn onClick={() => st('nominate')} title="主教在场：只有说书人可以提名">提名他（主教）</Btn>}
             <Btn onClick={() => act('pull', { targets: [p.id] }).then((ok) => ok && onClose())}>单独谈话</Btn>
           </div>
           <div className="field-row">

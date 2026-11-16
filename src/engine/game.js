@@ -412,7 +412,7 @@ export class Game {
 
   nightOrder() {
     const key = this.night === 1 ? 'firstNight' : 'otherNight';
-    return this.alive().filter((p) => ROLES[p.shownRole][key] > 0)
+    return this.alive().filter((p) => ROLES[p.shownRole][key] > 0 && !(p.traveller && p.joinedNight === this.night))
       .sort((a, b) => ROLES[a.shownRole][key] - ROLES[b.shownRole][key]);
   }
 

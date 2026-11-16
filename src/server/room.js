@@ -1388,6 +1388,8 @@ export class Room {
   joinTraveller(uid, role) {
     const g = this.requireGame();
     if (this.ended || !this.travellersOk(g)) throw new UserError('这一局不能加入旅行者');
+    if (g.townAlive() < 7) throw new UserError('存活的玩家不到 7 人，说书人不再加入旅行者（官方建议）');
+    if (this.resolving) throw new UserError('说书人正在结算夜晚，稍等几秒再加入');
     if (uid === this.stId) throw new UserError('说书人不能当旅行者');
     if (g.players.length >= 20) throw new UserError('人已经太多了（最多 20 人）');
     const user = this.users.get(uid);
@@ -1484,6 +1486,18 @@ export class Room {
   }
 
   /** 法官：别人发起的这次提名，强制处决成功或失败（每局一次）。在陈述、辩护或投票中都能用。 */
+  /** 女舍监在场（官方：玩家只能在座位上和相邻的玩家耳语）：屋里只要有一个人不是他的左右邻座，就不能进去私聊。 */
+  matronBlocks(uid, st) {
+    const g = this.game;
+    if (!g?.matronOn?.() || !st) return false;
+    const seated = g.players.filter((q) => !q.left);
+    const i = seated.findIndex((q) => q.id === uid);
+    if (i < 0) return false;
+    const n = seated.length;
+    const near = new Set([seated[(i + 1) % n].id, seated[(i - 1 + n) % n].id]);
+    return [...st.ids].some((id) => id !== uid && !near.has(id));
+  }
+
   /** 女舍监：一次宣布至多三对玩家交换座位（公开）。 */
   matron(uid, pairs) {
     const g = this.requireGame();
@@ -2665,13 +2679,7 @@ export class Room {
     if (g.phase !== 'day' || this.ended) throw new UserError('只有白天能自由活动');
     if (this.vote || this.pendingNom) throw new UserError('等这轮提名/投票结束');
     if (this.roam) return;
-    if (g.matronOn?.()) { // 女舍监（官方）：玩家不能离开座位私聊。线上的私聊就是进房子，所以今天没有自由活动
-      if (this.roamedToday) return;
-      this.roamedToday = true;
-      this.announce('女舍监在场：大家不能离开座位私聊，今天没有自由活动，直接在广场上聊。', 'day');
-      if (!this.stId) this.later(this.settings.pauseMs, () => this.openNominations());
-      return;
-    }
+
     this.roamedToday = true;
     const houses = this.town.housesFor();
     const now = Date.now();
@@ -2739,7 +2747,10 @@ export class Room {
       }
     }
     const target = houseAt(r.houses, to.x, to.y);
-    if (target && r.zone.get(uid) !== target.id && !force) {
+    if (target && r.zone.get(uid) !== target.id && !force && this.matronBlocks(uid, r.state.get(target.id))) {
+      to = doorPoint(target, 24);
+      notice = '女舍监在场：只能和左右邻座私聊，屋里有不是你邻座的人';
+    } else if (target && r.zone.get(uid) !== target.id && !force) {
       const st = r.state.get(target.id);
       if (st.locked) {
         to = doorPoint(target, 24);
@@ -2876,6 +2887,7 @@ export class Room {
     if (!st.ids.has(uid)) throw new UserError('你得在房子里才能邀请别人');
     if (!this.game.get(who) || who === uid) throw new UserError('邀请谁？');
     if (st.ids.has(who)) throw new UserError('他已经在屋里了');
+    if (this.matronBlocks(who, st)) throw new UserError('女舍监在场：只能和左右邻座私聊');
     const at = Date.now();
     (r.invites ??= new Map()).set(who, { house: hid, from: uid, at });
     this.later(60_000, () => { if (r.invites?.get(who)?.at === at) r.invites.delete(who); });
@@ -3048,6 +3060,17 @@ export class Room {
     const p = g.get(target);
     if (!p) throw new UserError('选择一名玩家');
     switch (action) {
+      case 'nominate': { // 主教在场：只有说书人可以提名
+        if (!g.bishopOn?.()) throw new UserError('主教不在场时由玩家提名');
+        if (this.pendingNom || this.vote) throw new UserError('还有一场提名/投票没结束');
+        if (g.nominees.has(p.id)) throw new UserError(`${g.name(p.id)} 今天已经被提名过了`);
+        if (p.traveller) throw new UserError('旅行者不能被提名处决');
+        g.nominees.add(p.id); (g.nomBy ??= {})[p.id] = 'storyteller';
+        g.record('nominate', `说书人（主教）提名了 ${g.tag(p.id)}`);
+        this.announce(`**说书人**提名了 **${g.name(p.id)}**`, 'vote');
+        this.pendingNom = { nominator: 'storyteller', nominee: p.id };
+        break;
+      }
       case 'kill': g.stKill(p.id); break;
       case 'artistAnswer': {
         const ask = this.artistAsks?.find((x) => x.uid === p.id);
@@ -3531,7 +3554,7 @@ export class Room {
       riotScript: !!SCRIPTS[g.script]?.riot,
       // 旅行者：观战的人可以加入（白天）；流放举手；枪手 / 法官能不能用
       travellers: this.travellersOk(g) ? travellerList(g.script).map((id) => ({ id, name: ROLES[id].name, ability: ROLES[id].ability, taken: !!g.travellerOf(id) })) : null,
-      canTravel: spectator && !this.ended && g.phase === 'day' && this.travellersOk(g) && uid !== this.stId && g.players.length < 20,
+      canTravel: spectator && !this.ended && this.travellersOk(g) && uid !== this.stId && g.players.length < 20 && g.townAlive() >= 7, // 官方百科：还有七名或更多玩家存活时才考虑加入旅行者
       exile: this.exile ? { target: this.exile.target, by: this.exile.by, until: this.exile.until, count: this.exile.yes.size, mine: this.exile.yes.has(uid), need: Math.ceil(g.players.filter((q) => !q.left).length / 2) } : null,
       butcher: this.butcher ? { by: this.butcher.by, stage: this.butcher.stage, target: this.butcher.target, until: this.butcher.until, count: this.butcher.yes.size, mine: this.butcher.yes.has(uid) } : null,
       laughs: this.exile?.laughs?.size ?? 0, laughed: !!this.exile?.laughs?.has(uid),

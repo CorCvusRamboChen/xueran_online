@@ -6,9 +6,6 @@
 //   替罪羊在处决入口换人；枪手、法官是白天的主动能力，房间层调。
 import { ROLES, TRAVELLER_IDS, rolesOf } from './roles.js';
 
-// 学徒能拿到的能力（黯月初升里按夜里选人结算的）：善良拿镇民，邪恶拿爪牙
-const APPRENTICE_TOWNSFOLK = ['innkeeper', 'gambler', 'courtier', 'exorcist', 'professor'];
-const APPRENTICE_MINIONS = ['assassin', 'devilsadvocate'];
 const pickOne = (list, rng) => list[Math.floor((rng?.() ?? Math.random()) * list.length)];
 
 export const TRAVELLER_METHODS = {
@@ -26,10 +23,9 @@ export const TRAVELLER_METHODS = {
   /** 加入一名旅行者。evil 由说书人定（房间层掷骰）。返回要私下告诉他的话。 */
   addTraveller(user, role, evil) {
     if (!TRAVELLER_IDS.includes(role)) throw new Error('没有这个旅行者');
-    if (this.phase !== 'day' && this.phase !== 'setup') throw new Error('夜里不能加入，天亮后再来');
     if (this.get(user.id)) throw new Error('你已经在这局里了');
     if (this.travellerOf(role)) throw new Error(`${ROLES[role].name}已经有人当了`);
-    const p = { id: user.id, name: user.name, seat: this.players.length + 1, role, shownRole: role, alive: true, ghostVote: true, evil: !!evil, traveller: true, joinedDay: this.day,
+    const p = { id: user.id, name: user.name, seat: this.players.length + 1, role, shownRole: role, alive: true, ghostVote: true, evil: !!evil, traveller: true, joinedDay: this.day, joinedNight: this.phase === 'night' ? this.night : null,
       gained: null, gainedFake: false, kept: false, ...(role === 'beggar' ? { beggarTokens: 0 } : {}) };
     this.players.push(p);
     if (this.suspicion) this.suspicion[p.id] = 0;
@@ -93,14 +89,20 @@ export const TRAVELLER_METHODS = {
    */
   apprenticeSetup() {
     const p = this.travellerOf('apprentice');
-    if (!p || !p.alive || p.apprenticeAs || p.apprenticeTold) return;
+    if (!p || !p.alive || p.apprenticeAs || p.apprenticeTold || p.joinedNight === this.night) return;
     // 梦殒春宵引擎（冒名钓鱼）：能力按 abilityOf 走（和哲学家一样用 gained），剧本里的镇民 / 爪牙都能给
-    const pool = this.engine === 'snv' ? rolesOf(this.script, this.evilOf(p) ? 'minion' : 'townsfolk') : this.evilOf(p) ? APPRENTICE_MINIONS : APPRENTICE_TOWNSFOLK;
+    const pool = rolesOf(this.script, this.evilOf(p) ? 'minion' : 'townsfolk');
     const inPlay = new Set(this.players.map((q) => q.role));
     const free = pool.filter((r) => !inPlay.has(r));
     const role = pickOne(free.length ? free : pool, this.rng);
     p.apprenticeAs = role; p.apprenticeTold = true;
-    if (this.engine === 'snv') p.gained = role;
+    p.gained = role; // 通用的「拿着这个能力」判定（has / abilityOf）都认 gained
+    // 只在首个夜晚生效的能力（官方：在学徒加入的当晚就生效）
+    if (this.script === 'bmr' && role === 'grandmother' && !this.bmrBroken(p)) this.grandmotherInfo(p, (q, text) => (this.evilMessages ??= []).push({ playerId: q.id, text }));
+    if (this.script === 'bmr' && role === 'godfather') {
+      const outs = this.players.filter((q) => ROLES[q.role]?.team === 'outsider').map((q) => ROLES[q.role].name);
+      (this.evilMessages ??= []).push({ playerId: p.id, text: outs.length ? `在场的外来者：**${outs.join('、')}**。` : '场上**没有**外来者。' });
+    }
     this.record('st', `学徒 ${this.tag(p.id)} 获得了${ROLES[role].name}的能力`);
     (this.evilMessages ??= []).push({ playerId: p.id, text: `学徒：你获得了**${ROLES[role].name}**的能力，保留到你死亡。${ROLES[role].ability}（你仍然是学徒，别人查你看到的是学徒。）` });
   },
@@ -114,11 +116,28 @@ export const TRAVELLER_METHODS = {
     if (!b || !this.travellerOn(b)) return;
     const pool = this.players.filter((q) => this.active(q) && q.id !== b.id && !q.traveller && ['townsfolk', 'outsider'].includes(ROLES[q.role]?.team));
     if (!pool.length) return;
-    const broken = pool.filter((q) => this.snvBroken(q)); // 先帮正在醉酒中毒的人
-    const t = pickOne(broken.length && (this.rng?.() ?? Math.random()) < 0.6 ? broken : pool, this.rng);
-    this.baristaFx = { id: t.id, night: this.night };
-    this.record('st', `咖啡师：${this.tag(t.id)} 直到黄昏清醒且健康，获得正确信息`);
-    messages.push({ playerId: t.id, text: '**咖啡师**的能力对你生效（第一种）：直到下个黄昏，你**清醒且健康，并获得正确信息**。' });
+    const twiceOk = (q) => { const r = this.abilityOf(q); const c = ROLES[r]?.choose; return !!c && !c.once && !c.role && ROLES[r].otherNight > 0 && !this.snvBroken(q) && this.holders(r).length === 1; };
+    const doubles = pool.filter(twiceOk);
+    const broken = pool.filter((q) => this.snvBroken(q)); // 醉酒中毒的人：给清醒健康最有用
+    const roll = this.rng?.() ?? Math.random();
+    const twice = doubles.length && (!broken.length || roll < 0.4);
+    const t = twice ? pickOne(doubles, this.rng) : pickOne(broken.length && roll < 0.8 ? broken : pool, this.rng);
+    this.baristaFx = { id: t.id, night: this.night, twice: !!twice, done: false };
+    this.record('st', `咖啡师：${this.tag(t.id)} ${twice ? '今晚能力生效两次' : '直到黄昏清醒且健康，获得正确信息'}`);
+    messages.push({ playerId: t.id, text: twice ? '**咖啡师**的能力对你生效（第二种）：今晚你的**能力生效两次**——你会被叫醒再选一次。' : '**咖啡师**的能力对你生效（第一种）：直到下个黄昏，你**清醒且健康，并获得正确信息**。' });
+  },
+  /** 咖啡师第二种：这一步结算完，叫醒他再选一次，这一步再结算一遍。 */
+  baristaAgain(step, i, messages) {
+    const fx = this.baristaFx;
+    if (!fx?.twice || fx.done || fx.night !== this.night) return false;
+    const p = this.get(fx.id);
+    if (!p || !this.active(p) || this.abilityOf(p) !== step || !this.choices[p.id]) return false;
+    fx.done = true;
+    delete this.choices[p.id];
+    this.midNight = { step: i, who: p.id, as: step, messages: [] };
+    this.flushed = messages.splice(0);
+    this.record('st', `咖啡师：${this.tag(p.id)} 的能力再生效一次`);
+    return true;
   },
 
   /** 流莺（每晚*）：选一名存活玩家，叫醒他问同不同意；同意就得知他的角色，说书人决定两人是否同时死亡（不会因此杀死恶魔结束游戏）。 */

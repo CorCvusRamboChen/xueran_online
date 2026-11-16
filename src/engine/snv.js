@@ -950,7 +950,7 @@ ${this.grimoire()}
     if (this.midNight) { const p = this.get(this.midNight.who); return p ? [this.promptFor(p, this.midNight.as)] : []; }
     const first = this.night === 1;
     const out = [];
-    for (const p of this.players.filter((q) => this.active(q))) {
+    for (const p of this.players.filter((q) => this.active(q) && !(q.traveller && q.joinedNight === this.night))) { // 夜里才加入的旅行者下一晚才醒
       // 疯子以为自己是恶魔：按那个恶魔的样子醒来选人（没有效果，恶魔会知道他选了谁）
       const role = p.role === 'lunatic' && ROLES[p.shownRole]?.team === 'demon' ? p.shownRole : this.abilityOf(p);
       const spec = ROLES[role].choose;
@@ -1599,6 +1599,7 @@ ${this.grimoire()}
         } break;
         default: break;
       }
+      if (this.baristaAgain?.(step, i, messages)) return pause(); // 咖啡师：能力生效两次
       if (this.midCheck(steps, i, changed, messages)) return pause();
     }
     this.poppyReveal(messages); // 罂粟种植者今晚（在他那一步之后）死了：当晚互认
