@@ -1910,6 +1910,7 @@ ${this.grimoire()}
   },
 
   executeSNV(p) {
+    p = this.scapegoatSwap(p); // 替罪羊可能替死
     this.executedToday = true;
     this.log.push(`${this.name(p.id)} 被处决`);
     if (this.psychoSpared === p.id) { // 精神病患者被处决，猜拳没输：活下来（这次仍算今天的处决）
@@ -1936,7 +1937,7 @@ ${this.grimoire()}
     }
     if (!this.winner && this.mastermindDay === this.day) this.setWinner('good', '主谋的额外一天没有处决任何人，善良获胜');
     if (!this.winner && !this.executedToday && this.vortoxOn()) this.setWinner('evil', '涡流在场，今天没有人被处决');
-    if (!this.winner && !this.executedToday && this.aliveCount() === 3) {
+    if (!this.winner && !this.executedToday && this.townAlive() === 3) {
       const mayor = this.holders('mayor').find((q) => q.alive && !this.snvBroken(q));
       if (mayor) this.setWinner(this.evilOf(mayor) ? 'evil' : 'good', `只剩三人且无人被处决，镇长 ${this.name(mayor.id)} 带领${this.evilOf(mayor) ? '邪恶' : '善良'}获胜`);
     }
@@ -2179,7 +2180,7 @@ ${this.grimoire()}
   checkWinnerSNV() {
     if (this.winner) return this.winner;
     if (this.atheist) { // 无神论者局：没有恶魔可杀，处决说书人才赢；只剩两人善良落败
-      if (this.aliveCount() <= 2) this.setWinner('evil', '只剩两名存活玩家：说书人始终没有被处决，善良落败（场上其实没有邪恶）');
+      if (this.townAlive() <= 2) this.setWinner('evil', '只剩两名存活玩家：说书人始终没有被处决，善良落败（场上其实没有邪恶）');
       return this.winner;
     }
     if (this.mastermindDay != null) return null; // 主谋的额外一夜一天：胜负在那天黄昏定
@@ -2187,7 +2188,7 @@ ${this.grimoire()}
     const mm = noDemon && this.demonExecuted && this.holders('mastermind').find((q) => q.alive && !this.snvBroken(q));
     if (mm) { this.mastermindDay = this.day + 1; this.record('st', '恶魔死于处决，但主谋还活着：额外进行一个夜晚和一个白天'); return null; }
     if (noDemon && !this.twinBlocks()) this.setWinner('good', SCRIPTS[this.script]?.riot ? '所有暴乱都死了' : '恶魔已经死亡');
-    else if (this.aliveCount() <= 2) this.setWinner('evil', noDemon ? '恶魔已死，但双子挡着善良，只剩两名存活玩家，邪恶获胜' : '只剩两名存活玩家，恶魔获胜'); // 官方：邪恶的胜利条件只看人数，不看恶魔死活
+    else if (this.townAlive() <= 2) this.setWinner('evil', noDemon ? '恶魔已死，但双子挡着善良，只剩两名存活玩家，邪恶获胜' : '只剩两名存活玩家，恶魔获胜'); // 官方：邪恶的胜利条件只看人数，不看恶魔死活
     else if (!noDemon && this.allAliveEvil()) this.setWinner('evil', '存活的玩家全是邪恶，善良已经无法获胜');
     return this.winner;
   },

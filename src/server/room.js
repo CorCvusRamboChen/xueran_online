@@ -3,7 +3,7 @@
 import { Game, shuffle, balancedTB, setupScoreTB, rollRoles, rollRagnarok } from '../engine/game.js';
 import { balancedBMR, setupScore, rollBMR } from '../engine/bmr.js';
 import { balancedSNV, setupScoreSNV, rollSNV, rollTeensy, rollMixed, balancedMixed, MAX_DECLARES, AMNESIAC_DAY, seatMarionette, rollRiot } from '../engine/snv.js';
-import { ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, engineOf, inScript, rolesOf, playersOf, ragnarokWolves } from '../engine/roles.js';
+import { TRAVELLER_IDS, ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, engineOf, inScript, rolesOf, playersOf, ragnarokWolves } from '../engine/roles.js';
 import { getMap, houseAt, houseCenter, doorPoint, pathLength, positionAt, speedOf } from '../shared/map.js';
 import { CHARACTERS, CHARACTER_IDS } from '../shared/characters.js';
 import { cleanOutfit } from '../shared/outfit.js';
@@ -99,6 +99,7 @@ export const DEFAULT_SETTINGS = {
   accuseSeconds: 60,     // 提名者陈述（房主开局前可调）
   defendSeconds: 60,     // 被提名者辩护（房主开局前可调）
   riotSeconds: 20,
+  exileSeconds: 20,      // 旅行者：提议流放后大家举手的时间
   rpsSeconds: 20,        // 夜半狂欢：精神病患者被处决时猜拳的时间       // 裁缝与暴乱：被提名死掉的人想下一个提名谁的时间（官方现场是数 3、2、1，线上要留点时间点人）
   speechSeconds: 90,     // 狼人杀：白天每人发言多久（遗言最多 60 秒）
   nominatorVotes: true,  // 房规：提名的人自动算一票（票数从 1 开始）
@@ -315,6 +316,12 @@ export class Room {
       case 'skipNom': this.skipNom(uid); break;
       case 'riotPass': this.riotPass(uid); break;
       case 'pelt': this.pelt(uid, p.target, p.item); break;
+      case 'traveller': this.joinTraveller(uid, p.role); break;
+      case 'travellerLeave': this.leaveTraveller(uid); break;
+      case 'exile': this.proposeExile(uid, p.target); break;
+      case 'exileHand': this.exileHand(uid, !!p.up); break;
+      case 'gunslinger': this.gunslinger(uid, p.target); break;
+      case 'judge': this.judge(uid, !!p.pass); break;
       case 'psycho': this.psycho(uid, p.target); break;
       case 'rps': this.rpsHand(uid, p.hand); break;
       case 'hand': this.hand(uid, !!p.up); break;
@@ -1345,6 +1352,104 @@ export class Room {
     }
   }
 
+  // ───────────── 旅行者（2026-11-16 用户要的）─────────────
+  /** 能当旅行者的剧本：血染的三套引擎（狼人杀、阿瓦隆、暗印不行）。 */
+  travellersOk(g) { return !!g && ['tb', 'bmr', 'snv'].includes(g.engine) && !SCRIPTS[g.script]?.riot && !this.tutorial; }
+
+  /** 开局后进来的人以旅行者身份加入。阵营由说书人定：大多善良（官方），善良领先时多给邪恶。 */
+  joinTraveller(uid, role) {
+    const g = this.requireGame();
+    if (this.ended || !this.travellersOk(g)) throw new UserError('这一局不能加入旅行者');
+    if (uid === this.stId) throw new UserError('说书人不能当旅行者');
+    if (g.players.length >= 20) throw new UserError('人已经太多了（最多 20 人）');
+    const user = this.users.get(uid);
+    if (!user) throw new UserError('先进房间');
+    const evilNow = g.players.filter((q) => q.traveller && !q.left && g.evilOf(q)).length;
+    const evil = g.st.roll('travellerEvil', { evilTravellers: evilNow }, { who: uid });
+    let msg;
+    try { msg = g.addTraveller({ id: uid, name: user.name }, role, evil); } catch (e) { throw new UserError(e.message); }
+    this.tell(uid, msg, 'clock');
+    this.pub(`**${g.name(uid)}** 以旅行者身份加入了：**${ROLES[role].name}**——${ROLES[role].ability}`, 'day');
+    this.syncWatchMute?.();
+  }
+
+  leaveTraveller(uid) {
+    const g = this.requireGame();
+    if (this.exile?.target === uid) throw new UserError('正在对你流放举手，等结果出来');
+    try { g.removeTraveller(uid); } catch (e) { throw new UserError(e.message); }
+    this.pub(`旅行者 **${g.name(uid)}** 离开了这局。`, 'day');
+    if (g.winner) this.later(0, () => this.endGame());
+  }
+
+  /** 提议流放一名活着的旅行者：任何人（死人也行）都可以提，每名旅行者每天只能被提一次。然后全体举手。 */
+  proposeExile(uid, target) {
+    const g = this.requireGame();
+    const p = g.get(uid); const t = g.get(target);
+    if (g.phase !== 'day' || this.ended || this.dusking || this.duskDay === g.day) throw new UserError('只能在白天提议流放');
+    if (!p || p.left) throw new UserError('只有这局的玩家能提议流放');
+    if (!t?.traveller || !t.alive) throw new UserError('只能流放活着的旅行者');
+    if (uid === target) throw new UserError('不能提议流放自己（想走可以直接离开）');
+    if (this.exile || this.vote || this.pendingNom || this.riotStep || this.rps) throw new UserError('等这一轮结束再提');
+    this.exiled ??= {};
+    if (this.exiled[`${g.day}:${target}`]) throw new UserError(`今天已经有人提议流放过 ${g.name(target)} 了`);
+    this.exiled[`${g.day}:${target}`] = true;
+    this.pauseNoms();
+    const secs = this.settings.exileSeconds;
+    const ex = this.exile = { target, by: uid, until: Date.now() + secs * 1000, yes: new Set() };
+    // 机器人：善良的机器人多半支持流放邪恶旅行者；随机一点
+    for (const q of g.players) if (this.isFake(q.id) && !q.left && q.id !== target && Math.random() < (g.evilOf(q) === g.evilOf(t) ? 0.2 : 0.55)) ex.yes.add(q.id);
+    if (!this.isFake(uid)) ex.yes.add(uid); // 提议的人自己当然支持
+    this.pub(`**${g.name(uid)}** 提议流放旅行者 **${g.name(target)}**。所有人（死人也算，不消耗投票标记）举手表态，${secs} 秒。`, 'vote');
+    ex.timer = this.later(secs * 1000, () => this.finishExile(ex));
+  }
+
+  exileHand(uid, up) {
+    const ex = this.exile; const g = this.requireGame();
+    const p = g.get(uid);
+    if (!ex) throw new UserError('现在没有在流放举手');
+    if (!p || p.left) throw new UserError('你不是这局的玩家');
+    if (up) ex.yes.add(uid); else ex.yes.delete(uid);
+  }
+
+  finishExile(ex) {
+    const g = this.game;
+    if (this.exile !== ex || !g) return;
+    this.exile = null;
+    this.cancel(ex.timer);
+    const all = g.players.filter((q) => !q.left);
+    const need = Math.ceil(all.length / 2); // 官方：所有玩家的一半，不是存活玩家
+    const yes = [...ex.yes].filter((id) => g.get(id) && !g.get(id).left);
+    const pass = yes.length >= need;
+    (this.voteHistory ??= []).push({ day: g.day, nominator: ex.by, nominee: ex.target, voters: yes, count: yes.length, threshold: need, outcome: pass ? 'exile' : 'fail', exile: true, at: Date.now() });
+    this.pub(`流放 **${g.name(ex.target)}**：${yes.length} 人支持（需要 ${need}，所有玩家的一半）→ ${pass ? `**${g.name(ex.target)} 被流放了。**` : '没有通过。'}${yes.length ? `支持：${yes.map((id) => g.name(id)).join('、')}` : ''}`, pass ? 'death' : 'vote');
+    if (pass) g.exileTraveller(ex.target);
+    if (g.winner) { this.later(0, () => this.endGame()); return; }
+    this.resumeNoms();
+    this.changed();
+  }
+
+  /** 枪手：今天第一次投票统计后，打死一名今天投过票的人。 */
+  gunslinger(uid, target) {
+    const g = this.requireGame();
+    if (this.vote) throw new UserError('等这轮投票结束');
+    const voters = [...new Set((this.voteHistory ?? []).filter((v) => v.day === g.day && !v.exile).flatMap((v) => v.voters))];
+    let r;
+    try { r = g.gunslinger(uid, target, voters); } catch (e) { throw new UserError(e.message); }
+    this.pub(`枪手 **${g.name(uid)}** 向 **${g.name(target)}** 开了一枪——${r.died ? `**${g.name(target)} 死了！**` : '什么都没有发生。'}`, r.died ? 'death' : 'vote');
+    if (g.winner) this.later(0, () => this.endGame());
+  }
+
+  /** 法官：别人发起的这次提名，强制处决成功或失败（每局一次）。在陈述、辩护或投票中都能用。 */
+  judge(uid, pass) {
+    const g = this.requireGame();
+    const nom = this.vote ?? this.pendingNom;
+    if (!nom) throw new UserError('现在没有正在进行的提名');
+    let on;
+    try { on = g.judgeUse(uid, nom.nominator, pass); } catch (e) { throw new UserError(e.message); }
+    if (on) { if (this.vote) this.vote.force = pass ? 'pass' : 'fail'; else nom.force = pass ? 'pass' : 'fail'; }
+    this.pub(`法官 **${g.name(uid)}** 宣布：这次处决强制**${pass ? '成功' : '失败'}**。`, 'vote');
+  }
+
   // ───────────── 金币：惩罚聊场外 ─────────────
   /** 花金币朝某人扔东西（烂番茄、乌鸦、毒舌笼头），叠在他头上直到这局结束。只买面子，不影响结算。 */
   pelt(uid, target, item) {
@@ -1480,7 +1585,7 @@ export class Room {
     this.narrate('voteStart', { b: this.game.name(nom.nominee) });
     this.pendingNom = null;
     this.speakOnly(null);
-    this.vote = { nominator: nom.nominator, nominee: nom.nominee, order: this.game.voteOrder(nom.nominee), idx: -1, yes: new Set(), locked: new Set(), result: null };
+    this.vote = { nominator: nom.nominator, nominee: nom.nominee, order: this.game.voteOrder(nom.nominee), idx: -1, yes: new Set(), locked: new Set(), result: null, force: nom.force ?? null };
     // 房规：提名的人自动投一票
     if (this.settings.nominatorVotes && this.nominatorAlive(nom.nominator)) this.vote.yes.add(nom.nominator);
     this.deadline = Date.now() + this.settings.voteCountdown * 1000;
@@ -1507,7 +1612,7 @@ export class Room {
   finishVote() {
     const v = this.vote; const g = this.game;
     const before = { block: g.block, votes: g.blockVotes };
-    v.result = g.recordVote(v.nominee, [...v.yes].filter((id) => v.locked.has(id)));
+    v.result = g.recordVote(v.nominee, [...v.yes].filter((id) => v.locked.has(id)), v.force ?? null); // 法官可能强制成功或失败
     const what = {
       block: `${g.name(v.nominee)} 被送上处决台`,
       tie: `和${before.block ? ` ${g.name(before.block)} ` : '之前的'}${before.votes} 票打平，台上清空，谁都不会被处决`,
@@ -1561,6 +1666,7 @@ export class Room {
     if (this.game !== g) return undefined; // 等的时候房主结束了这局：别往下一局里写东西
     this.pendingNom = null;
     this.clearRiot();
+    if (this.exile) { this.cancel(this.exile.timer); this.exile = null; }
     this.clearNoms();
     await this.judgeMadness();
     if (this.game !== g) return undefined;
@@ -3203,12 +3309,18 @@ export class Room {
         outfit: this.outfits.get(p.id) ?? null,
         fake: this.isFake(p.id), seat7: !!p.seat7,
         nominated: g.nominees.has(p.id), nominator: g.nominators.has(p.id), shot: (g.shooters ?? []).includes(p.id),
+        traveller: !!p.traveller, left: !!p.left, travellerRole: p.traveller ? ROLES[p.role].name : null, // 旅行者的角色是公开的（阵营不公开）
         online: this.online.has(p.id),
         ...(showRoles ? this.grimEntry(p) : {}),
       })),
       pendingNom: this.pendingNom,
       riot: this.riotStep ? { id: this.riotStep.id, until: this.riotStep.until, must: this.riotStep.must, mine: this.riotStep.id === uid } : null, // 暴乱：谁在想下一个提名谁
       riotScript: !!SCRIPTS[g.script]?.riot,
+      // 旅行者：观战的人可以加入（白天）；流放举手；枪手 / 法官能不能用
+      travellers: this.travellersOk(g) ? TRAVELLER_IDS.map((id) => ({ id, name: ROLES[id].name, ability: ROLES[id].ability, taken: !!g.travellerOf(id) })) : null,
+      canTravel: spectator && !this.ended && g.phase === 'day' && this.travellersOk(g) && uid !== this.stId && g.players.length < 20,
+      exile: this.exile ? { target: this.exile.target, by: this.exile.by, until: this.exile.until, count: this.exile.yes.size, mine: this.exile.yes.has(uid), need: Math.ceil(g.players.filter((q) => !q.left).length / 2) } : null,
+      exiledToday: Object.keys(this.exiled ?? {}).filter((k) => k.startsWith(`${g.day}:`)).map((k) => k.slice(k.indexOf(':') + 1)),
       stNominable: g.engine === 'snv' && inScript('atheist', g.script), // 有无神论者的剧本：可以提名说书人
       stNominated: !!g.nominees?.has('storyteller'),
       rps: this.rps ? { a: this.rps.a, b: this.rps.b, until: this.rps.until, mine: [this.rps.a, this.rps.b].includes(uid), hand: this.rps.picks[uid] ?? null } : null, // 精神病患者猜拳
@@ -3335,6 +3447,9 @@ export class Room {
       canFisherman: day && p.alive && tryAs('fisherman') && !g.used?.[`fish-${uid}`] && !this.triedToday(uid, 'fisherman'),
       canAmnesiac: day && p.alive && p.role === 'amnesiac' && g.amnesiacDay?.[uid] !== g.day,
       canSlay: day && p.alive && (['slayer', 'amn_gun', 'amn_judge'].includes(ab) || g.extraAbility(p) === 'slayer' || amn) && !g.shooters?.includes(uid),
+      canGun: day && p.alive && p.role === 'gunslinger' && g.gunDay !== g.day && (this.voteHistory ?? []).some((v) => v.day === g.day && !v.exile) && !this.vote,
+      canJudge: day && p.alive && p.role === 'judge' && !g.judgeUsed && !!(this.vote ?? this.pendingNom) && (this.vote ?? this.pendingNom).nominator !== uid,
+      isTraveller: !!p.traveller,
       canPsycho: day && p.alive && ab === 'psychopath' && g.psychoDay?.[uid] !== g.day && !this.noms && !this.pendingNom && !this.vote && !this.dusking && this.duskDay !== g.day,
       canPardon: day && p.alive && (ab === 'amn_pardon' || amn) && !g.used?.[`pardon-${uid}`] && !!g.block && !this.vote && !this.pendingNom,
       // 被提名、还没开始投票：可以公开声明自己是哥布林（谁都可以这么说）

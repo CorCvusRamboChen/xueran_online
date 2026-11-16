@@ -9,6 +9,7 @@
 //   const dawn = game.dawn();               // 天亮公布死讯
 // 白天：nominate → voteOrder / recordVote → endDay
 
+import { TRAVELLER_METHODS } from './travellers.js';
 import {
   ROLES, TOWNSFOLK, OUTSIDERS, MINIONS, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, SCRIPTS, engineOf, ragnarokWolves, inScript,
 } from './roles.js';
@@ -213,7 +214,7 @@ export class Game {
       'balloon', 'leviGood', 'goblinMark', 'amnesiacDay', 'amnesiacKnown', 'woke', 'pardonDay',
       'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7', 'lunaticTold', 'lunaticTellTo', 'heard',
       'pixie', 'mez', 'execHist', 'nomBy', 'blockVoters', 'politicianDone', 'fibbinUsed', 'riotChain',
-      'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared', 'aiLead', 'politicianEval'];
+      'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared', 'aiLead', 'politicianEval', 'scapegoatDay', 'gunDay', 'judgeUsed'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -324,7 +325,7 @@ export class Game {
     if (this.misregister != null) return this.rng() < this.misregister;
     return this.st.misregister(p, by, help);
   }
-  regEvil(p, by, help) { const evil = isEvilRole(p.role); return this.misreg(p, by, help) ? !evil : evil; }
+  regEvil(p, by, help) { const evil = this.evilOf(p); return this.misreg(p, by, help) ? !evil : evil; }
   regDemon(p, by) { return p.role === 'imp' || (p.role === 'recluse' && this.misreg(p, by)); }
   regTownsfolk(p, by, help) { return ROLES[p.role].team === 'townsfolk' || (p.role === 'spy' && this.misreg(p, by, help)); }
   /** 被送葬者/守鸦人看到的角色。 */
@@ -668,6 +669,8 @@ export class Game {
     if (nomineeId === 'storyteller' && this.engine === 'snv') return this.nominateST(nominatorId); // 有无神论者的剧本：提名说书人
     const a = this.get(nominatorId); const b = this.get(nomineeId);
     if (!a || !b) throw new Error('提名者或被提名者不在游戏中');
+    if (b.left || a.left) throw new Error('离开了这局的人不能提名，也不能被提名');
+    if (b.traveller) throw new Error('旅行者不能被提名处决：要让他出局，用「提议流放」');
     const riot = this.engine === 'snv' && this.riotOn?.(); // 暴乱：被提名就死，被提名的人接着提名
     const chain = riot && this.riotChain === a.id;
     if (riot && this.riotChain && !chain) throw new Error(`现在轮到 ${this.name(this.riotChain)} 接着提名`);
@@ -709,22 +712,31 @@ export class Game {
     return Array.from({ length: n }, (_, k) => this.players[(start + k) % n].id);
   }
 
-  canVote(id) { const p = this.get(id); return !!p && (this.visAlive(p) || p.ghostVote); }
+  canVote(id) {
+    const p = this.get(id);
+    if (!p || p.left) return false;
+    if (this.voudonOn?.()) return (p.role === 'voudon' && p.alive) || !this.visAlive(p); // 巫毒师：只有他和死人能投，死人不用票
+    return this.visAlive(p) || p.ghostVote;
+  }
   /** 管家：主人举手时才能投票（管家能力失效时不受限）。yesIds 是此刻举着手的人。 */
   butlerOk(id, yesIds) {
     const p = this.get(id);
     if (p?.role !== 'butler' || this.broken(p) || !this.butlerMaster) return true;
     return yesIds.includes(this.butlerMaster);
   }
-  threshold() { return Math.ceil(this.visAliveCount() / 2); }
+  threshold() { return this.voudonOn?.() ? 1 : Math.ceil(this.visAliveCount() / 2); } // 巫毒师：不需要过半数
 
   /** 记录一次投票结果（yesIds 为举手的人）。死人举手会消耗他唯一的幽灵票。 */
-  recordVote(nomineeId, yesIds) {
+  recordVote(nomineeId, yesIds, force = null) {
     // 管家没跟着主人投的违规票也照算（官方：说书人不替管家把关，不算的话大家就知道谁是管家了）
     const voters = yesIds.filter((id) => this.canVote(id));
-    for (const id of voters) { const p = this.get(id); if (!this.visAlive(p)) p.ghostVote = false; }
+    const voudon = this.voudonOn?.();
+    for (const id of voters) { const p = this.get(id); if (!this.visAlive(p) && !voudon) p.ghostVote = false; }
     if (this.engine === 'snv') this.voteSNV(voters);
-    const count = voters.length;
+    // 旅行者：窃贼选的人算负票、官员选的人算三票（count 可能比举手的人数多或少）
+    let count = voters.reduce((a, id) => a + (this.voteWeight?.(id) ?? 1), 0);
+    if (force === 'pass') count = Math.max(count, this.threshold(), this.blockVotes + 1); // 法官：强制成功
+    if (force === 'fail') count = Math.min(count, this.threshold() - 1, this.blockVotes - 1); // 法官：强制失败
     this.suspicion[nomineeId] = (this.suspicion[nomineeId] ?? 0) + count;
     const threshold = this.threshold();
     let outcome = 'fail';
@@ -742,6 +754,7 @@ export class Game {
   execute(p) {
     if (this.script === 'bmr') return this.executeBMR(p);
     if (this.engine === 'snv') return this.executeSNV(p);
+    p = this.scapegoatSwap(p); // 替罪羊可能替死
     this.executedToday = true;
     if (p.alive) this.lastExecuted = p.id; // 送葬者看的是"今天死于处决"的人：处决一个已经死了的人不算
     this.log.push(`${this.name(p.id)} 被处决`);
@@ -763,7 +776,7 @@ export class Game {
       executed = this.block;
       this.execute(this.get(executed));
     }
-    if (!this.winner && !this.executedToday && this.aliveCount() === 3) {
+    if (!this.winner && !this.executedToday && this.townAlive() === 3) {
       const mayor = this.byRole('mayor');
       if (mayor?.alive && !this.broken(mayor)) this.setWinner('good', `只剩三人且无人被处决，镇长 ${this.name(mayor.id)} 带领善良获胜`);
     }
@@ -807,7 +820,7 @@ export class Game {
     if (this.winner) return this.winner;
     if (!this.demon()) this.setWinner('good', SCRIPTS[this.script].ragnarok ? '狼人全部死亡' : '恶魔已经死亡');
     else if (SCRIPTS[this.script].ragnarok && this.alive().filter((p) => p.role === 'imp').length * 2 >= this.aliveCount()) this.setWinner('evil', '存活的狼人追平了好人');
-    else if (this.aliveCount() <= 2) this.setWinner('evil', '只剩两名存活玩家，恶魔获胜');
+    else if (this.townAlive() <= 2) this.setWinner('evil', '只剩两名存活玩家，恶魔获胜'); // 旅行者不算
     else if (this.allAliveEvil()) this.setWinner('evil', ALL_EVIL);
     return this.winner;
   }
@@ -816,7 +829,7 @@ export class Game {
    * 被当作死亡的僵怖算活着（他真的活着）。
    */
   allAliveEvil() {
-    const live = this.alive();
+    const live = this.alive().filter((p) => !p.traveller); // 旅行者不算
     return live.length > 0 && live.every((p) => this.evilOf(p));
   }
 
@@ -880,3 +893,4 @@ export class Game {
 // 黯月初升的方法（script === 'bmr' 时上面各处转过去调用）
 Object.assign(Game.prototype, BMR_METHODS);
 Object.assign(Game.prototype, SNV_METHODS);
+Object.assign(Game.prototype, TRAVELLER_METHODS);

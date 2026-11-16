@@ -58,6 +58,10 @@ export const DICE = {
   fishStrong: { base: 0.3, balance: -2 },           // 渔夫的建议直指恶魔：善良落后时多给
   // 骗人精（传奇角色，裁缝与暴乱）：每局一次，一名善良玩家可能得到错误信息。帮邪恶：善良领先时多发生
   fibbin: { base: 0.2, balance: 1.2 },
+  // 旅行者的阵营（官方：大多数是善良；一名可以是邪恶，三名以上才考虑更多）。善良领先时多给邪恶；已经有邪恶旅行者就少给
+  travellerEvil: { base: 0.2, balance: 1.2, evilTravellers: -2.5 },
+  // 替罪羊：同阵营的人被处决，说书人决定他替不替（官方「可能」）。不看局势
+  scapegoat: { base: 0.4 },
   priestessGood: { base: 0.75 },                    // 善良落后：女祭司多被指向拿着真信息的善良玩家
   priestessEvil: { base: 0.5 },                     // 善良领先：女祭司常被指向一个邪恶玩家（听他满嘴假话）
   goblinClaim: { base: 0.6 },                       // 机器人哥布林被提名时声明身份

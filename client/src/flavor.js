@@ -4,6 +4,7 @@ import { ROLES } from '../../src/engine/roles.js';
 
 export const ATTR = {
   townsfolk: { name: '智力', color: 'var(--int)' },
+  traveller: { name: '旅途', color: '#c9a86a' }, // 旅行者（2026-11-16）
   outsider: { name: '精神', color: 'var(--psy)' },
   minion: { name: '运动', color: 'var(--mot)' },
   demon: { name: '体格', color: 'var(--phy)' },

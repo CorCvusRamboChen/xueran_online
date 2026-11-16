@@ -725,6 +725,7 @@ export const BMR_METHODS = {
 
   /** 处决。返回 died / saved / fake / already。 */
   executeBMR(p) {
+    p = this.scapegoatSwap(p); // 替罪羊可能替死
     this.executedToday = true;
     this.lastExecuted = p.id;
     this.log.push(`${this.name(p.id)} 被处决`);
@@ -776,7 +777,7 @@ export const BMR_METHODS = {
         return null;
       }
       this.setWinner('good', '恶魔已经死亡');
-    } else if (this.aliveCount() <= 2) this.setWinner('evil', '只剩两名存活玩家，恶魔获胜');
+    } else if (this.townAlive() <= 2) this.setWinner('evil', '只剩两名存活玩家，恶魔获胜'); // 旅行者不算
     else if (this.allAliveEvil()) this.setWinner('evil', '存活的玩家全是邪恶，善良已经无法获胜');
     return this.winner;
   },

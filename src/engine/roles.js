@@ -312,6 +312,25 @@ const AMNESIAC_ONLY = {
     ability: '除首夜外的每个夜晚，如果今天白天有人被处决，你会得知他是不是善良的。' },
 };
 
+// 旅行者（2026-11-16 用户要的）：开局后才进来的人可以当旅行者加入，随时可以离开；阵营由说书人定，邪恶的得知恶魔是谁。
+// 不算进人数配置、不算进「只剩两人存活」；对他们只能「流放」（全体举手，过所有玩家的一半），不算处决。
+// 官方 15 个里先做线上自动说书做得好的 6 个，结算在 engine/travellers.js，房间流程在 server/room.js。
+const TRAVELLERS = {
+  thief: { name: '窃贼', en: 'Thief', team: 'traveller', edition: 'tb', firstNight: 6, otherNight: 6, choose: { count: 1, notSelf: true },
+    ability: '每个夜晚，选择除你以外的一名玩家：他明天白天的投票算作负数。' },
+  bureaucrat: { name: '官员', en: 'Bureaucrat', team: 'traveller', edition: 'tb', firstNight: 6, otherNight: 6, choose: { count: 1, notSelf: true },
+    ability: '每个夜晚，选择除你以外的一名玩家：他明天白天的投票算作三票。' },
+  gunslinger: { name: '枪手', en: 'Gunslinger', team: 'traveller', edition: 'tb', firstNight: 0, otherNight: 0,
+    ability: '每个白天，在第一次投票被统计后，你可以选择一名投过票的玩家：他死亡。' },
+  scapegoat: { name: '替罪羊', en: 'Scapegoat', team: 'traveller', edition: 'tb', firstNight: 0, otherNight: 0,
+    ability: '如果你所在阵营的一名玩家被处决，你可能会代替他被处决。' },
+  judge: { name: '法官', en: 'Judge', team: 'traveller', edition: 'bmr', firstNight: 0, otherNight: 0,
+    ability: '每局游戏限一次，如果另一名玩家发起了提名，你可以选择强制让当前的处决成功或失败。' },
+  voudon: { name: '巫毒师', en: 'Voudon', team: 'traveller', edition: 'bmr', firstNight: 0, otherNight: 0,
+    ability: '只有你和已死亡的玩家可以投票。他们投票时不需要消耗投票标记。投票不需要达到半数。' },
+};
+export const TRAVELLER_IDS = Object.keys(TRAVELLERS);
+
 // 不是角色，只是夜里的一个选择：哈迪寂亚选中的人悄悄决定活还是死（选「角色」ah_live / ah_die）。结算在 engine/snv.js
 const PROMPT_ONLY = {
   ah_choice: { name: '哈迪寂亚选中了你', en: 'Al-Hadikhia', team: 'demon', firstNight: 0, otherNight: 0, choose: { count: 0, role: true },
@@ -328,6 +347,7 @@ for (const [id, r] of Object.entries(BS7)) { r.script = 'bs7'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(EXP)) { r.script = 'exp'; ROLES[id] = r; }
 for (const [id, r] of Object.entries(AMNESIAC_ONLY)) { r.script = 'amnesiac'; r.virtual = true; ROLES[id] = r; }
 for (const [id, r] of Object.entries(PROMPT_ONLY)) { r.script = 'prompt'; r.virtual = true; ROLES[id] = r; }
+for (const [id, r] of Object.entries(TRAVELLERS)) { r.script = 'traveller'; ROLES[id] = r; } // 不属于任何剧本的角色名单（rolesOf 不列），旅行者面板单独列
 for (const [id, r] of Object.entries(WW_ROLES)) { r.script = 'ww'; r.virtual = true; ROLES[id] = r; } // 狼人杀的角色：不是血染的角色，说书人的角色列表里不列
 
 /**
@@ -404,7 +424,7 @@ export const rolesOf = (script, team) => (SCRIPTS[script]?.roles ?? Object.keys(
 /** 剧本的人数范围。 */
 export const playersOf = (script) => SCRIPTS[script]?.players ?? [MIN_PLAYERS, MAX_PLAYERS];
 
-export const TEAM_NAME = { townsfolk: '镇民', outsider: '外来者', minion: '爪牙', demon: '恶魔' };
+export const TEAM_NAME = { townsfolk: '镇民', outsider: '外来者', minion: '爪牙', demon: '恶魔', traveller: '旅行者' };
 
 export const byTeam = (team) => rolesOf('tb', team); // 下面这几个列表是暗流涌动的（老代码在用）
 export const TOWNSFOLK = byTeam('townsfolk');

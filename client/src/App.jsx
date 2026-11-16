@@ -13,6 +13,7 @@ import { MarkGame } from './Mark.jsx';
 import { Line, Portrait, clock, syncClock, serverNow, gameClock, useTick, useCountdown, cnNum } from './util.jsx';
 import { Tag, Panel, Btn, Stat, Check, Faces, HudBar } from './ui.jsx';
 import { PeltButton, PeltPanel } from './Pelt.jsx';
+import { TravellerJoin, TravellerActions, ExilePanel, JudgeButtons } from './Travellers.jsx';
 import { tick } from './world/footsteps.js';
 import { ATTR, FLAVOR, ROLE_NAMES, ROLE_TEAM, voiceOf } from './flavor.js';
 import { ROLE_ART } from './art.js';
@@ -255,6 +256,7 @@ const ROLES_DEMON = new Set(['imp']); // 暗流涌动的恶魔（破门过场）
 const ST_FACE = { id: 'storyteller', seat: '★', name: '说书人', alive: true };
 
 const MODES = {
+  gun: { title: '枪手 · 开枪', hint: '选一名今天投过票的玩家：他死亡。每天一次。', confirm: '开枪' },
   pelt: { title: '惩罚场外', hint: '选一个人和一样东西，叠在他头上。', confirm: '扔' }, // 面板是 Pelt.jsx 的 PeltPanel，这里只给选人模式占个位
   psycho: { title: '精神病患者 · 杀人', hint: '公开站出来说你是精神病患者，选一名玩家：他死亡。每天一次，要在提名开始之前。', confirm: '杀死' },
   nominate: { title: '提名', hint: '选一个人，站出来指着他。', confirm: '提名' },
@@ -286,7 +288,7 @@ function Game({ s, act, ask }) {
   const pickKey = `${s.phase}-${s.night}-${s.day}-${mode}-${!!prompt}-${rk}`;
   useEffect(() => { setPicked([]); setPickedRole(null); }, [pickKey]);
   // 换阶段就取消正在选人的操作；自由活动开始/结束时也取消，只有"开枪"例外（官方规则：白天任何时候都能开枪）
-  useEffect(() => { setMode((m) => (s.phase !== 'day' ? null : s.roam && m !== 'slay' && m !== 'psycho' && m !== 'pelt' ? null : m)); }, [s.phase, !!s.roam]);
+  useEffect(() => { setMode((m) => (s.phase !== 'day' ? null : s.roam && m !== 'slay' && m !== 'psycho' && m !== 'pelt' && m !== 'gun' ? null : m)); }, [s.phase, !!s.roam]);
 
   const onTap = (p) => {
     if (pickSpec) {
@@ -313,6 +315,7 @@ function Game({ s, act, ask }) {
     else if (mode === 'nominate') ok = await act('nominate', { target: picked[0] });
     else if (mode === 'slay') ok = await act('slay', { target: picked[0] });
     else if (mode === 'psycho') ok = await act('psycho', { target: picked[0] });
+    else if (mode === 'gun') ok = await act('gunslinger', { target: picked[0] });
     else if (mode === 'pull') ok = await act('pull', { targets: picked });
     if (ok) { setMode(null); setPicked([]); }
   };
@@ -410,7 +413,7 @@ function Game({ s, act, ask }) {
         {s.spectator && s.phase !== 'ended' && (
           <div className="spectator-bar">观战中{s.settings?.spectatorGrimoire ? ' · 你能看到所有人的身份，别在语音里说' : ' · 看不到任何人的身份'}{(s.watchers?.length ?? 0) > 1 ? ` · 观战 ${s.watchers.length} 人` : ''}</div>
         )}
-        <BoardBar n={s.players.length} script={s.script} />
+        <BoardBar n={s.players.filter((p) => !p.traveller).length} script={s.script} /> {/* 旅行者不算进人数配置 */}
         <VoteStats s={s} />
         {roaming ? (
           <TownMap s={s} onMove={me ? (x, y, run) => { predictMove(s, x, y, run); return act('move', { x, y, run }); } : () => null} />
@@ -1049,6 +1052,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
 
   // 诸神黄昏：倒下的人正在决定开不开枪。自己倒下了就先开枪（自由活动也让路）；别人在自由活动时照常活动，看公告
   if (s.ragShot && (s.ragShot.mine || !s.roam)) return <RagShotPanel s={s} act={act} g={g} />;
+  if (s.exile) return <ExilePanel s={s} act={act} g={g} />; // 流放举手：自由活动时也要能举
   if (s.roam) return <RoamActions s={s} act={act} name={name} face={face} setMode={setMode} />;
 
   if (s.transit) return <TransitCard s={s} />;
@@ -1082,15 +1086,17 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
               <div className="btn-row dock-hand"><Btn kind={raised ? 'secondary' : 'primary'} onClick={() => act('hand', { up: !raised })}>{raised ? '放下手' : '举手 ✋'}</Btn></div>
             </>))}
         <VoteTrack s={s} />
+        <JudgeButtons s={s} act={act} />
         {me && !me.alive && me.ghostVote && !locked && <p className="muted">你是鬼魂，只剩一张幽灵票。</p>}
       </Panel>
     );
   }
 
   if (s.boom) return <><BoomPanel s={s} act={act} g={g} />{roomCard}</>;
+  if (s.exile) return <><ExilePanel s={s} act={act} g={g} />{roomCard}</>;
   if (s.rps) return <><RpsPanel s={s} act={act} g={g} />{roomCard}</>;
   if (s.riot) return <><RiotPanel s={s} act={act} g={g} />{roomCard}</>;
-  if (s.pendingNom) return <><NomStage s={s} act={act} g={g} name={name} face={face} />{me?.canGoblin && <GoblinClaim act={act} />}{roomCard}</>;
+  if (s.pendingNom) return <><NomStage s={s} act={act} g={g} name={name} face={face} />{me?.canGoblin && <GoblinClaim act={act} />}<JudgeButtons s={s} act={act} />{roomCard}</>;
 
   const meP = g(s.me);
   const lastDay = [...s.log].reverse().find((l) => l.kind === 'day' || l.kind === 'death');
@@ -1119,6 +1125,8 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
         <SlayButton s={s} setMode={setMode} />
         {!s.noms && <PsychoButton s={s} setMode={setMode} />}
         <PeltButton s={s} setMode={setMode} />
+        <TravellerActions s={s} act={act} setMode={setMode} />
+        <TravellerJoin s={s} act={act} />
         <SnvButtons s={s} act={act} />
         {s.executedToday && <p className="sq-status">今天的处决已经发生</p>}
         <div className="btn-row">
@@ -1313,6 +1321,8 @@ function RoamActions({ s, act, name, face, setMode }) {
           <SlayButton s={s} setMode={setMode} />
           <PsychoButton s={s} setMode={setMode} />
           <PeltButton s={s} setMode={setMode} />
+          <TravellerActions s={s} act={act} setMode={setMode} />
+          <TravellerJoin s={s} act={act} />
           <SnvButtons s={s} act={act} />
           <EndRoamVote s={s} act={act} />
         </Panel>
@@ -1327,6 +1337,8 @@ function RoamActions({ s, act, name, face, setMode }) {
           <SlayButton s={s} setMode={setMode} />
           <PsychoButton s={s} setMode={setMode} />
           <PeltButton s={s} setMode={setMode} />
+          <TravellerActions s={s} act={act} setMode={setMode} />
+          <TravellerJoin s={s} act={act} />
           <SnvButtons s={s} act={act} />
           <EndRoamVote s={s} act={act} />
         </Panel>
