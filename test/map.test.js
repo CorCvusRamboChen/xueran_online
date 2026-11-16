@@ -241,6 +241,24 @@ test('梦殒春宵：拱门都走得过去，老帐篷在镇子外圈，遗迹�
   }
 });
 
+test('修道院（灰盒）：隐修石窟最远；挡土墙只能从石阶或东边崖径过；四个分区都有能进的房子', () => {
+  const town = getMap('abbey');
+  assert.equal(town.id, 'abbey');
+  const houses = town.housesFor();
+  const from = town.seatSpot(3, 8);
+  const toRoom = (h) => town.route(houses, from, { x: h.x + h.w / 2, y: h.y + h.h / 2 });
+  const hermit = houses.find((h) => h.id === 'hermit');
+  for (const h of houses) if (h !== hermit) assert.ok(pathLength(toRoom(h)) < pathLength(toRoom(hermit)), `${h.name} 比隐修石窟还远`);
+  // 挡土墙一线上，只有大石阶、墓园小石阶和崖径能走
+  for (const y of [600, 1250]) {
+    const open = [];
+    for (let x = 140; x < 1760; x += 10) if (!town.blockedAt(houses, x, y + 8)) open.push(x);
+    for (const x of open) assert.ok(Math.abs(x - 1000) < 50 || (y === 1250 && Math.abs(x - 300) < 40), `挡土墙 y=${y} 在 x=${x} 有缺口`);
+  }
+  const zones = new Set(town.allHouses().map((h) => town.zoneAt(h.x + h.w / 2, h.y + h.h / 2).id));
+  assert.deepEqual([...zones].sort(), ['cliff', 'cloister', 'lower', 'upper']);
+});
+
 test('剧本 → 地图：暗流涌动用钟楼广场，黯月初升用黯月驿站，不认识的剧本退回暗流涌动', () => {
   assert.equal(getMap('tb').id, 'tb');
   assert.equal(getMap('bmr').id, 'bmr');
