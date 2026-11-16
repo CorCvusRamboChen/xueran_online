@@ -438,7 +438,7 @@ export const SNV_METHODS = {
   /** 这个死人还留着能力吗（被亡骨魔杀死的爪牙，亡骨魔还在且没失效）。 */
   kept(p) { return !!p && !p.alive && !!p.kept && team(p) === 'minion' && this.vigOn(); },
   /** 还用得了能力吗（活着，或者保留了能力）。不管醉酒中毒。 */
-  active(p) { return !!p && (p.alive || this.kept(p)); },
+  active(p) { return !!p && (p.alive || this.kept(p) || !!p.regained); }, // regained：集骨者让死人重新获得能力到黄昏
   /** 科学怪人给恶魔的那个能力（科学怪人还在、没失效时才有；恶魔自己醉酒中毒不影响）。 */
   extraAbility(p) {
     if (!this.boffin || !p || team(p) !== 'demon') return null;
@@ -504,6 +504,7 @@ export const SNV_METHODS = {
   /** 醉酒或中毒（能力失效）。哲学家在失效时选的能力从来没真正到手。 */
   snvBroken(p, seen = new Set()) {
     if (!p) return false;
+    if (this.baristaFx?.id === p.id && !p.gainedFake && p.role !== 'marionette') return false; // 咖啡师：清醒且健康（酒鬼照他以为的角色拿正确信息）
     if (seen.has(p.id)) return false;
     if (p.gainedFake || p.role === 'drunk' || p.role === 'marionette') return true; // 提线木偶的「能力」从来不生效，说书人假装生效（和酒鬼一样）
     const next = new Set(seen); next.add(p.id);
@@ -524,6 +525,7 @@ export const SNV_METHODS = {
   },
   /** 这个人的信息要不要改：'must' 涡流（镇民必须拿错的），'fake' 醉酒中毒（说书人给错的），null 给真的。 */
   lieMode(p) {
+    if (this.baristaFx?.id === p.id) return null; // 咖啡师：清醒且健康，获得正确信息
     if (this.atheist && !this.evilOf(p)) return 'atheist'; // 无神论者局：所有信息都按说书人假装的那个邪恶阵营给（整局共用一个假世界）
     if (team(p) === 'demon' && this.extraAbility(p)) return null; // 科学怪人给的能力：恶魔醉酒中毒也照样有（恶魔自己的能力不拿信息）
     if (this.isTownsfolk(p) && this.vortoxOn()) return 'must';
@@ -835,6 +837,8 @@ export const SNV_METHODS = {
 
   // ───────────────────────── 夜晚 ─────────────────────────
   startNightSNV() {
+    for (const q of this.players) if (q.regained && q.regained < this.night) delete q.regained; // 集骨者：重新获得的能力到黄昏为止
+    this.baristaFx = null; // 咖啡师：上一晚的效果到黄昏为止
     this.pitNight = null;
     this.sageHit = null;
     this.midNight = null;
@@ -937,8 +941,9 @@ ${this.grimoire()}
     }).map((q) => q.id);
     let roleOptions = spec.role ? (spec.good ? goodOf(this.script) : spec.evil ? rolesOf(this.script).filter((r) => ['minion', 'demon'].includes(ROLES[r].team)) : rolesOf(this.script)) : null;
     if (role === 'ah_choice') roleOptions = ['ah_live', 'ah_die'];
+    if (role === 'harlot_ask') roleOptions = ['harlot_yes', 'harlot_no'];
     if (role === 'cerenovus' && inScript('goblin', this.script)) roleOptions = [...roleOptions, 'goblin']; // 相克：洗脑师可以让人对「自己是哥布林」疯狂
-    return { playerId: p.id, role: this.hidden(p) && role !== 'ah_choice' ? p.role : role, count: spec.count, options, optional: !!spec.optional, pickRole: !!spec.role, roleOptions, waiting: false };
+    return { playerId: p.id, role: this.hidden(p) && role !== 'ah_choice' && role !== 'harlot_ask' ? p.role : role, count: spec.count, options, optional: !!spec.optional, pickRole: !!spec.role, roleOptions, waiting: false };
   },
 
   nightPromptsSNV() {
@@ -999,6 +1004,7 @@ ${this.grimoire()}
     const p = this.get(playerId);
     const skip = () => { this.choices[playerId] = { targets: [], role: null }; };
     if (pr.role === 'ah_choice') { this.choices[playerId] = { targets: [], role: this.rng() < 0.6 ? 'ah_live' : 'ah_die' }; return; } // 机器人：多半选活
+    if (pr.role === 'harlot_ask') { this.choices[playerId] = { targets: [], role: this.rng() < (this.evilOf(p) ? 0.35 : 0.6) ? 'harlot_yes' : 'harlot_no' }; return; } // 机器人：善良的多半同意
     if (pr.optional && this.rng() < 0.5) return skip();
     let opts = pr.options;
     const prey = opts.filter((id) => !this.evilOf(this.get(id)) && this.get(id).alive);
@@ -1037,6 +1043,7 @@ ${this.grimoire()}
   pauseText(id) {
     const m = this.midNight;
     if (!m?.as) return null; // 黯月初升：夜里被复活，用房间层默认的提示
+    if (m?.as === 'harlot_ask') return `流莺 **${this.name(this.harlotAsk?.harlot)}** 选中了你。**同意**的话，她会得知你的角色，但你们两个可能同时死亡；**拒绝**就什么都不会发生。`;
     if (m?.as === 'ah_choice') return `哈迪寂亚选中了你（这次选的三个人：${(this.ahNight?.targets ?? []).map((id) => this.name(id)).join('、')}）。悄悄决定：**活下去**，还是**死去**。如果三个人最后都活着，三个人一起死。`;
     if (m?.as === 'barber') return '理发师死了：你可以选两名玩家交换他们的角色（不能选其他恶魔），也可以放弃。';
     if (this.hidden(this.get(m.who))) return '轮到你了：选人吧（你不知道这是什么能力）。';
@@ -1068,6 +1075,9 @@ ${this.grimoire()}
       // 莽夫：这一步有人用自己的能力选中了他（先算，选他的人当晚就醉）
       if (this.players.some((q) => q.role === 'goon')) for (const p of this.holders(step)) if (p.id !== this.blocked) for (const t of this.choiceOfSNV(p)?.targets ?? []) this.goonSNV(p, t, { assassin: step === 'assassin' });
       switch (step) {
+        case 'barista': this.baristaStep(messages); break;
+        case 'harlot': if (this.harlotStep(i, messages) === 'pause') return pause(); break;
+        case 'bonecollector': if (this.boneStep(i, steps, messages) === 'pause') return pause(); break;
         case 'philosopher': for (const p of this.holders('philosopher')) {
           const c = this.choiceOfSNV(p); if (!c?.role) continue;
           delete this.choices[p.id];

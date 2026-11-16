@@ -85,6 +85,7 @@ export const NIGHT_ORDER = {
   },
   snv: {
     first: [
+      ['barista', '（旅行者）说书人选一名玩家：直到黄昏清醒健康并拿正确信息，或能力生效两次'],
       ['philosopher', '（每局一次）选一个善良角色，获得它的能力'],
       ['minioninfo', '7 人及以上：爪牙睁眼互认，并得知谁是恶魔'],
       ['demoninfo', '7 人及以上：恶魔得知爪牙是谁，拿到 3 个不在场的善良角色当伪装'],
@@ -98,6 +99,9 @@ export const NIGHT_ORDER = {
       ['mathematician', '得知有几个人的能力没有正常生效'],
     ],
     other: [
+      ['barista', '（旅行者）说书人选一名玩家：直到黄昏清醒健康并拿正确信息，或能力生效两次'],
+      ['harlot', '（旅行者）选一名存活玩家：他同意就得知他的角色，两人可能都死'],
+      ['bonecollector', '（旅行者，每局一次）选一名死亡玩家：他重新获得能力到黄昏'],
       ['philosopher', '（每局一次）选一个善良角色，获得它的能力'],
       ['snakecharmer', '选一名存活玩家：选中恶魔就互换角色和阵营'],
       ['witch', '选一名玩家：他明天发起提名就会死'],
@@ -563,10 +567,10 @@ NIGHT_ORDER.mo = {
  * 失忆者、食人族拿到的能力也按这张表的位置醒。
  */
 export const MIX_STEPS = {
-  first: ['philosopher', 'sailor', 'engineer', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'pukka', 'pixie', 'huntsman',
+  first: ['barista', 'philosopher', 'sailor', 'engineer', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'pukka', 'pixie', 'huntsman',
     'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'grandmother', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress', 'noble', 'balloonist', 'shugenja', 'villageidiot',
     'butler', 'spy', 'ogre', 'highpriestess', 'general', 'chambermaid', 'mathematician'],
-  other: ['poppygrower', 'philosopher', 'sailor', 'engineer', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist',
+  other: ['barista', 'harlot', 'bonecollector', 'poppygrower', 'philosopher', 'sailor', 'engineer', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist',
     'imp', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'alhadikhia', 'assassin', 'godfather', 'gossip',
     'barber', 'sweetheart', 'sage', 'professor', 'huntsman', 'farmer', 'tinker', 'moonchild', 'grandmother', 'ravenkeeper', // 照官方英文总表（11-11 用户定：和集石百科不一样时以英文新表为准）
     'washerwoman', 'librarian', 'investigator', 'chef', 'clockmaker', 'noble', 'shugenja', 'empath', 'fortuneteller', 'undertaker', 'dreamer', 'amn_detect', 'amn_echo', 'flowergirl', 'towncrier', 'oracle', 'seamstress',

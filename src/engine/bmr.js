@@ -312,7 +312,7 @@ export const BMR_METHODS = {
   },
 
   /** 这个人今晚按什么角色行动（疯子按他以为的恶魔）。 */
-  actsAs(p) { return p.role === 'lunatic' ? p.shownRole : p.role; },
+  actsAs(p) { return p.role === 'lunatic' ? p.shownRole : p.role === 'apprentice' && p.apprenticeAs ? p.apprenticeAs : p.role; }, // 学徒按获得的能力醒
 
   nightPromptsBMR() {
     const first = this.night === 1;
@@ -421,7 +421,7 @@ export const BMR_METHODS = {
     const say = (p, text) => messages.push({ playerId: p.id, text });
     const first = this.night === 1;
     const prompted = new Set(this.nightPromptsBMR().map((x) => x.playerId));
-    const live = (role) => this.players.filter((q) => q.role === role && ((q.alive && !q.apparentDead) || this.ghostLunatic(q)));
+    const live = (role) => this.players.filter((q) => (q.role === role || (q.role === 'apprentice' && q.apprenticeAs === role)) && ((q.alive && !q.apparentDead) || this.ghostLunatic(q))); // 学徒获得的能力照那个角色结算
     const broken = (p) => this.bmrBroken(p);
     if (mid) { for (const id of mid.woke ?? []) this.wokeTonight.add(id); } else this.pendingGoonNews = null;
     const steps = first ? FIRST_STEPS : OTHER_STEPS;

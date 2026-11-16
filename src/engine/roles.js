@@ -328,6 +328,27 @@ const TRAVELLERS = {
     ability: '每局游戏限一次，如果另一名玩家发起了提名，你可以选择强制让当前的处决成功或失败。' },
   voudon: { name: '巫毒师', en: 'Voudon', team: 'traveller', edition: 'bmr', firstNight: 0, otherNight: 0,
     ability: '只有你和已死亡的玩家可以投票。他们投票时不需要消耗投票标记。投票不需要达到半数。' },
+  // 2026-11-16 补齐官方 15 个旅行者（照集石百科；夜晚顺序照官方英文总表：学徒、咖啡师、官员、窃贼、流莺、集骨者都在夜晚最前面）
+  beggar: { name: '乞丐', en: 'Beggar', team: 'traveller', edition: 'tb', firstNight: 0, otherNight: 0,
+    ability: '你只能使用投票标记进行投票。死亡的玩家可以把他的投票标记给你，如果他这么做，你会得知他的阵营。你不会中毒和醉酒。' },
+  apprentice: { name: '学徒', en: 'Apprentice', team: 'traveller', edition: 'bmr', firstNight: 0, otherNight: 0,
+    ability: '在你的首个夜晚，你会获得一个镇民能力（如果你是善良的），或一个爪牙能力（如果你是邪恶的）。' },
+  matron: { name: '女舍监', en: 'Matron', team: 'traveller', edition: 'bmr', firstNight: 0, otherNight: 0,
+    ability: '每个白天，你可以选择至多三对玩家交换座位。玩家不能离开自己的座位进行私聊。' },
+  bishop: { name: '主教', en: 'Bishop', team: 'traveller', edition: 'bmr', firstNight: 0, otherNight: 0,
+    ability: '只有说书人可以发起提名。每个白天，说书人至少要提名一名你对立阵营的玩家。' },
+  deviant: { name: '怪咖', en: 'Deviant', team: 'traveller', edition: 'snv', firstNight: 0, otherNight: 0,
+    ability: '如果你表现得很有趣，当天你不能被流放。' },
+  bonecollector: { name: '集骨者', en: 'Bone Collector', team: 'traveller', edition: 'snv', firstNight: 0, otherNight: 1, choose: { count: 1, dead: true, optional: true, once: true },
+    ability: '每局游戏限一次，在夜晚时*，你可以选择一名死亡的玩家：他重新获得能力直到下个黄昏。' },
+  barista: { name: '咖啡师', en: 'Barista', team: 'traveller', edition: 'snv', firstNight: 0, otherNight: 0,
+    ability: '每个夜晚，直到下个黄昏：1) 一名玩家清醒且健康并获得正确信息，或 2) 一名玩家的能力生效两次。他会得知是哪一个效果。' },
+  harlot: { name: '流莺', en: 'Harlot', team: 'traveller', edition: 'snv', firstNight: 0, otherNight: 1, choose: { count: 1, alive: true, notSelf: true },
+    ability: '每个夜晚*，选择一名存活的玩家：如果他同意，你会得知他的角色，但是你们两个可能同时死亡。' },
+  gnome: { name: '侏儒', en: 'Gnome', team: 'traveller', edition: 'experimental', firstNight: 0, otherNight: 0,
+    ability: '当你加入游戏时，所有玩家会得知一名与你阵营相同的玩家。每当他被提名时，你可以杀死提名者。' },
+  butcher: { name: '屠夫', en: 'Butcher', team: 'traveller', edition: 'snv', firstNight: 0, otherNight: 0,
+    ability: '每个白天，在首次处决后，你可以再次发起提名。' },
 };
 export const TRAVELLER_IDS = Object.keys(TRAVELLERS);
 
@@ -337,6 +358,10 @@ const PROMPT_ONLY = {
     ability: '悄悄选择：活下去，还是死去。如果被选中的三个人最后都活着，三个人一起死。' },
   ah_live: { name: '活下去', en: 'Live', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
   ah_die: { name: '死去', en: 'Die', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
+  harlot_ask: { name: '流莺选中了你', en: 'Harlot', team: 'traveller', firstNight: 0, otherNight: 0, choose: { count: 0, role: true },
+    ability: '流莺想知道你的角色。同意的话，她会得知你的角色，但你们两个可能同时死亡。' },
+  harlot_yes: { name: '同意', en: 'Yes', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
+  harlot_no: { name: '拒绝', en: 'No', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
 };
 
 for (const [id, r] of Object.entries(ROLES)) r.script = 'tb';

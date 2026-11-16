@@ -2,7 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Game, makeRng } from '../src/engine/game.js';
-import { Room } from '../src/server/room.js';
+import { Room, SCRIPT_TRAVELLERS } from '../src/server/room.js';
+import { ROLES, SCRIPTS } from '../src/engine/roles.js';
 
 const players = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, name: `玩家${i + 1}` }));
 const TB = ['washerwoman', 'librarian', 'empath', 'chef', 'monk', 'poisoner', 'imp'];
@@ -178,8 +179,8 @@ test('法官（官方）：强制失败算 0 票，台上的人不变', () => {
   assert.equal(g.block, 'p1');
 });
 
-test('房间（官方）：推荐的旅行者排在前面；枪手只能打第一次投票里投过票的人；法官强制成功直接处决、结束白天', async () => {
-  const room = new Room({ key: 'k2', guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { ...FAST, mode: 'auto', shuffle: false, script: 'tb' } });
+test('房间（官方）：黯月初升只列它的五个旅行者；法官强制成功直接处决、结束白天', async () => {
+  const room = new Room({ key: 'k2', guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { ...FAST, mode: 'auto', shuffle: false, script: 'bmr' } });
   room.judgeReady = () => false;
   room.botsConsider = () => {};
   for (const [id, name] of [['u1', '阿一'], ['u2', '阿二'], ['ju', '法官'], ['gs', '枪手']]) room.users.set(id, { id, name, avatar: null });
@@ -196,26 +197,215 @@ test('房间（官方）：推荐的旅行者排在前面；枪手只能打第�
       await sleep(3);
     }
     await until(() => g.phase === 'day', 2000);
-    const list = room.viewFor('ju').travellers;
-    assert.deepEqual(list.filter((t) => t.rec).map((t) => t.name), ['窃贼', '官员', '枪手', '替罪羊']);
-    assert.equal(list.findIndex((t) => !t.rec), 4, '推荐的在前');
-    assert.deepEqual(room.viewFor('ju').travellerRecMissing, ['乞丐']);
+    assert.deepEqual(room.viewFor('ju').travellers.map((t) => t.name), ['法官', '女舍监', '巫毒师', '学徒', '主教']);
+    await assert.rejects(room.act('gs', 'traveller', { role: 'gunslinger' }), /这个剧本不用/);
     await room.act('ju', 'traveller', { role: 'judge' });
-    await room.act('gs', 'traveller', { role: 'gunslinger' });
-    g.get('ju').evil = false; g.get('gs').evil = false;
+    g.get('ju').evil = false;
     await until(() => room.roam || room.ended, 500);
     await room.act('u1', 'gather').catch(() => {});
     await until(() => room.noms, 500);
-    // 枪手：第一次投票投过票的人才能打
-    room.voteHistory = [{ day: g.day, voters: ['bot-1'], exile: false }, { day: g.day, voters: ['bot-2'], exile: false }];
-    await assert.rejects(room.act('gs', 'gunslinger', { target: 'bot-2' }), /投过票/);
-    room.voteHistory = [];
-    // 法官：别人的提名，强制成功 → 直接处决，白天结束
-    for (const id of ['u1', 'bot-3']) g.get(id).alive = true;
+    for (const id of ['u1', 'bot-3']) { g.get(id).alive = true; g.get(id).apparentDead = false; }
     await room.act('u1', 'nominate', { target: 'bot-3' });
     await room.act('ju', 'judge', { pass: true });
     await until(() => g.phase !== 'day' || room.ended, 9000); // 机器人辩护要 3 秒
     assert.equal(g.get('bot-3').alive, false, '被法官强制处决');
     assert.ok(room.log.some((l) => /法官强制成功/.test(l.text)));
+  } finally { await room.teardown(); }
+});
+
+// ───────────── 2026-11-16 补齐的九个旅行者 + 侏儒（照集石百科）─────────────
+test('乞丐：没有标记不能投票；死人给了标记才能投、得知阵营，给了的人不能再投；投一次用掉一个', () => {
+  const g = mk(TB, 'tb');
+  night(g); g.dawn();
+  g.addTraveller({ id: 'bg', name: '乞' }, 'beggar', false);
+  assert.equal(g.canVote('bg'), false);
+  assert.throws(() => g.giveBeggar('p2'), /只有死亡的玩家/);
+  g.get('p1').alive = false;
+  const r = g.giveBeggar('p1');
+  assert.equal(r.evil, false);
+  assert.equal(g.get('p1').ghostVote, false);
+  assert.equal(g.canVote('p1'), false);
+  assert.equal(g.canVote('bg'), true);
+  g.recordVote('p6', ['bg']);
+  assert.equal(g.get('bg').beggarTokens, 0);
+  assert.equal(g.canVote('bg'), false);
+  assert.equal(g.travellerOn(g.get('bg')), true, '乞丐不会中毒醉酒');
+});
+
+test('学徒（黯月初升）：首个夜晚善良拿镇民能力、邪恶拿爪牙能力，按那个能力醒；他还是学徒', () => {
+  const g = mk(BMR, 'bmr');
+  night(g); g.dawn();
+  g.addTraveller({ id: 'ap', name: '徒' }, 'apprentice', true);
+  g.endDay();
+  g.startNight();
+  const p = g.get('ap');
+  assert.ok(['assassin', 'devilsadvocate'].includes(p.apprenticeAs));
+  assert.equal(p.role, 'apprentice');
+  assert.ok(g.evilMessages.some((m) => m.playerId === 'ap' && /学徒：你获得了/.test(m.text)));
+  assert.ok(g.nightPrompts().some((pr) => pr.playerId === 'ap'), '按获得的能力醒');
+});
+
+test('学徒（梦殒春宵引擎的剧本，比如冒名钓鱼）：能力按 gained 走', () => {
+  const g = mk(SNV, 'snv');
+  night(g); g.dawn();
+  g.addTraveller({ id: 'ap', name: '徒' }, 'apprentice', false);
+  g.endDay();
+  g.startNight();
+  assert.equal(ROLES[g.get('ap').gained].team, 'townsfolk');
+  assert.equal(g.abilityOf(g.get('ap')), g.get('ap').gained);
+});
+
+test('女舍监：一天一次换至多三对座位，相邻关系跟着变', () => {
+  const g = mk(BMR, 'bmr');
+  night(g); g.dawn();
+  g.addTraveller({ id: 'mt', name: '舍' }, 'matron', false);
+  assert.throws(() => g.matronSwap('mt', [['p1', 'p2'], ['p3', 'p4'], ['p5', 'p6'], ['p1', 'p3']]), /一到三对/);
+  g.matronSwap('mt', [['p1', 'p3']]);
+  if (g.travellerOn(g.get('mt'))) {
+    assert.equal(g.get('p3').seat, 1);
+    assert.equal(g.get('p1').seat, 3);
+    assert.equal(g.players[0].id, 'p3');
+  }
+  assert.throws(() => g.matronSwap('mt', [['p2', 'p4']]), /今天已经换过/);
+  assert.equal(g.matronOn(), true);
+});
+
+test('集骨者（每局一次）：选一个死人，他重新获得能力到黄昏', () => {
+  const g = mk(SNV, 'snv');
+  night(g); g.dawn();
+  g.addTraveller({ id: 'bc', name: '骨' }, 'bonecollector', false);
+  g.get('p2').alive = false; // 筑梦师
+  g.endDay();
+  g.startNight();
+  g.submitChoice('bc', ['p2']);
+  for (const pr of g.nightPrompts()) if (!g.choices[pr.playerId]) g.autoChoose(pr.playerId);
+  let r = g.resolveNight();
+  for (let k = 0; r.pause && k < 6; k++) { g.autoChoose(r.pause); r = g.resolveNight(); }
+  assert.equal(g.used.bc, true);
+  assert.ok(g.timeline.some((e) => /集骨者/.test(e.text)));
+  if (g.travellerOn(g.get('bc'))) assert.ok(g.get('p2').regained, '重新获得了能力');
+  g.dawn(); g.endDay(); g.startNight();
+  assert.equal(g.get('p2').regained, undefined, '到黄昏为止');
+});
+
+test('咖啡师：每晚说书人让一名玩家清醒且健康、拿正确信息，并告诉他', () => {
+  const g = mk(SNV, 'snv');
+  night(g); g.dawn();
+  g.addTraveller({ id: 'ba', name: '咖' }, 'barista', false);
+  g.endDay();
+  const r = night(g);
+  if (!g.travellerOn(g.get('ba'))) return;
+  assert.ok(g.baristaFx);
+  assert.equal(g.snvBroken(g.get(g.baristaFx.id)), false);
+  assert.equal(g.lieMode(g.get(g.baristaFx.id)), null);
+});
+
+test('流莺：选人后叫醒对方问同不同意；同意就得知他的角色；不会因此杀死恶魔', () => {
+  let asked = 0; let learned = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    const g = new Game(players(7), { roles: SNV, rng: makeRng(seed), script: 'snv', misregister: 0 });
+    night(g); g.dawn();
+    g.addTraveller({ id: 'hl', name: '莺' }, 'harlot', false);
+    g.endDay();
+    g.startNight();
+    g.submitChoice('hl', ['p7']); // 恶魔
+    for (const pr of g.nightPrompts()) if (!g.choices[pr.playerId]) g.autoChoose(pr.playerId);
+    let r = g.resolveNight(); const msgs = [...(r.messages ?? [])];
+    for (let k = 0; r.pause && k < 6; k++) { if (r.pause === 'p7') asked++; g.autoChoose(r.pause); r = g.resolveNight(); msgs.push(...(r.messages ?? [])); }
+    if (msgs.some((m) => m.playerId === 'hl' && /同意了/.test(m.text))) learned++;
+    assert.equal(g.get('p7').alive, true, '流莺不会让恶魔死');
+  }
+  assert.ok(asked >= 10, `问了 ${asked} 次`);
+  assert.ok(learned > 0, '有人同意');
+});
+
+test('侏儒：加入时公开一名同阵营的同伴；同伴被提名时可以杀死提名者', () => {
+  const g = mk(SNV, 'snv');
+  night(g); g.dawn();
+  g.addTraveller({ id: 'gn', name: '侏' }, 'gnome', false);
+  const a = g.gnomePickAmigo(g.get('gn'));
+  assert.equal(g.evilOf(a), false);
+  assert.equal(g.get('gn').gnomeAmigo, a.id);
+  const n = g.players.find((q) => q.id !== a.id && !q.traveller && q.alive);
+  assert.equal(g.gnomeKill('gn', n.id), g.travellerOn(g.get('gn')));
+  if (g.travellerOn(g.get('gn'))) assert.equal(g.get(n.id).alive, false);
+});
+
+test('房间：各剧本只列官方的旅行者；没列旅行者的社区剧本不开', () => {
+  const ok = (script) => {
+    const room = new Room({ key: `l-${script}`, guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { mode: 'auto', script } });
+    return room.travellersOk({ engine: SCRIPTS[script].engine, script });
+  };
+  assert.equal(ok('tb'), true);
+  assert.equal(ok('bs7'), true);
+  assert.equal(ok('cat'), true);
+  assert.equal(ok('ecp'), false);
+  assert.equal(ok('ngj'), false);
+  assert.deepEqual(SCRIPT_TRAVELLERS.snv, ['deviant', 'bonecollector', 'barista', 'harlot', 'butcher']);
+});
+
+/** 开一桌（2 真人 + 5 机器人）打到第一天白天。 */
+async function dayRoom(script, extra = []) {
+  const room = new Room({ key: `d-${script}`, guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { ...FAST, mode: 'auto', shuffle: false, script } });
+  room.judgeReady = () => false;
+  room.botsConsider = () => {};
+  for (const id of ['u1', 'u2', ...extra]) room.users.set(id, { id, name: id, avatar: null });
+  await room.act('u1', 'join'); await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 5 });
+  await room.act('u1', 'start');
+  const g = room.game;
+  for (let k = 0; k < 400 && g.phase === 'night'; k++) {
+    if (!room.resolving) for (const pr of g.nightPrompts()) {
+      if (room.isFake(pr.playerId) || g.choices[pr.playerId]) continue;
+      await room.act(pr.playerId, 'choose', { night: g.night, targets: pr.options.slice(0, pr.count), role: pr.pickRole ? pr.roleOptions?.[0] : undefined }).catch(() => {});
+    }
+    await sleep(3);
+  }
+  await until(() => g.phase === 'day', 2000);
+  return { room, g };
+}
+
+test('房间：主教在场只有说书人提名，说书人提名后被提名者辩护、大家投票', async () => {
+  const { room, g } = await dayRoom('bmr', ['bi']);
+  try {
+    await room.act('bi', 'traveller', { role: 'bishop' });
+    g.get('bi').evil = false;
+    if (!g.bishopOn()) return; // 主教失效时玩家照常提名
+    await assert.rejects(room.act('u1', 'nominate', { target: 'u2' }), /只有说书人/);
+    room.roam = null; room.noms = null;
+    room.bishopDay();
+    assert.equal(room.pendingNom?.nominator, 'storyteller');
+    const evilIds = g.players.filter((p) => g.evilOf(p) && !p.traveller && p.alive).map((p) => p.id);
+    assert.ok([room.pendingNom.nominee, ...room.bishopQueue].some((id) => evilIds.includes(id)), '至少提名一名对立阵营（邪恶）的玩家');
+  } finally { await room.teardown(); }
+});
+
+test('房间：怪咖今天被一半的人觉得有趣，流放就不成立', async () => {
+  const { room, g } = await dayRoom('snv', ['dv']);
+  try {
+    await room.act('dv', 'traveller', { role: 'deviant' });
+    if (!g.travellerOn(g.get('dv'))) return;
+    await room.act('u1', 'exile', { target: 'dv' });
+    for (const p of g.players) if (p.id !== 'dv') { room.exile.yes.add(p.id); (room.exile.laughs ??= new Set()).add(p.id); }
+    await until(() => !room.exile, 2000);
+    assert.equal(g.get('dv').alive, true, '有趣：不能被流放');
+    assert.ok(room.log.some((l) => /表现得很有趣/.test(l.text)));
+  } finally { await room.teardown(); }
+});
+
+test('房间：屠夫在首次处决后再提名一次，过存活玩家一半就再处决', async () => {
+  const { room, g } = await dayRoom('snv', ['bu']);
+  try {
+    await room.act('bu', 'traveller', { role: 'butcher' });
+    if (!g.travellerOn(g.get('bu'))) return;
+    g.executedToday = true;
+    const target = g.players.find((p) => !p.traveller && p.alive && !['u1', 'u2'].includes(p.id) && ROLES[p.role].team !== 'demon');
+    const done = room.butcherRound(g);
+    await room.act('bu', 'butcherNominate', { target: target.id });
+    for (const p of g.players) if (g.canVote(p.id)) room.butcher.yes.add(p.id);
+    await done;
+    assert.equal(g.butcherDay, g.day);
+    assert.ok(room.log.some((l) => /屠夫的提名/.test(l.text)));
+    assert.equal(g.get(target.id).alive, false, '被屠夫的提名处决');
   } finally { await room.teardown(); }
 });

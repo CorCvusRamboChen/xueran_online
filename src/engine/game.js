@@ -354,11 +354,13 @@ export class Game {
     this.butlerMaster = null;
     if (this.script === 'bmr') {
       this.startNightBMR();
+      this.apprenticeSetup?.(); // 学徒的首个夜晚：说书人给他一个镇民 / 爪牙能力
       if (this.night === 1) this.evilMessages = this.evilInfoBMR();
       return this.nightPrompts();
     }
     if (this.engine === 'snv') {
       this.startNightSNV();
+      this.apprenticeSetup?.(); // 学徒（冒名钓鱼）
       if (this.night === 1) this.evilMessages = this.evilInfoSNV();
       return this.nightPrompts();
     }
@@ -716,6 +718,7 @@ export class Game {
     const p = this.get(id);
     if (!p || p.left) return false;
     if (this.voudonOn?.()) return (p.role === 'voudon' && p.alive) || !this.visAlive(p); // 巫毒师：只有他和死人能投，死人不用票
+    if (p.role === 'beggar' && p.traveller && this.visAlive(p)) return (p.beggarTokens ?? 0) > 0; // 乞丐：只能用别人给的投票标记
     return this.visAlive(p) || p.ghostVote;
   }
   /** 管家：主人举手时才能投票（管家能力失效时不受限）。yesIds 是此刻举着手的人。 */
@@ -731,7 +734,7 @@ export class Game {
     // 管家没跟着主人投的违规票也照算（官方：说书人不替管家把关，不算的话大家就知道谁是管家了）
     const voters = yesIds.filter((id) => this.canVote(id));
     const voudon = this.voudonOn?.();
-    for (const id of voters) { const p = this.get(id); if (!this.visAlive(p) && !voudon) p.ghostVote = false; }
+    for (const id of voters) { const p = this.get(id); if (!this.visAlive(p) && !voudon) p.ghostVote = false; this.beggarVoted?.(id); }
     if (this.engine === 'snv') this.voteSNV(voters);
     // 旅行者：窃贼选的人算负票、官员选的人算三票（count 可能比举手的人数多或少）
     let count = voters.reduce((a, id) => a + (this.voteWeight?.(id) ?? 1), 0);

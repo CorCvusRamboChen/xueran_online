@@ -13,7 +13,7 @@ import { MarkGame } from './Mark.jsx';
 import { Line, Portrait, clock, syncClock, serverNow, gameClock, useTick, useCountdown, cnNum } from './util.jsx';
 import { Tag, Panel, Btn, Stat, Check, Faces, HudBar } from './ui.jsx';
 import { PeltButton, PeltPanel } from './Pelt.jsx';
-import { TravellerJoin, TravellerActions, ExilePanel, JudgeButtons } from './Travellers.jsx';
+import { TravellerJoin, TravellerActions, ExilePanel, JudgeButtons, ButcherPanel, GnomeButton } from './Travellers.jsx';
 import { tick } from './world/footsteps.js';
 import { ATTR, FLAVOR, ROLE_NAMES, ROLE_TEAM, voiceOf } from './flavor.js';
 import { ROLE_ART } from './art.js';
@@ -1053,6 +1053,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
   // 诸神黄昏：倒下的人正在决定开不开枪。自己倒下了就先开枪（自由活动也让路）；别人在自由活动时照常活动，看公告
   if (s.ragShot && (s.ragShot.mine || !s.roam)) return <RagShotPanel s={s} act={act} g={g} />;
   if (s.exile) return <ExilePanel s={s} act={act} g={g} />; // 流放举手：自由活动时也要能举
+  if (s.butcher) return <ButcherPanel s={s} act={act} g={g} />;
   if (s.roam) return <RoamActions s={s} act={act} name={name} face={face} setMode={setMode} />;
 
   if (s.transit) return <TransitCard s={s} />;
@@ -1094,9 +1095,10 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
 
   if (s.boom) return <><BoomPanel s={s} act={act} g={g} />{roomCard}</>;
   if (s.exile) return <><ExilePanel s={s} act={act} g={g} />{roomCard}</>;
+  if (s.butcher) return <><ButcherPanel s={s} act={act} g={g} />{roomCard}</>;
   if (s.rps) return <><RpsPanel s={s} act={act} g={g} />{roomCard}</>;
   if (s.riot) return <><RiotPanel s={s} act={act} g={g} />{roomCard}</>;
-  if (s.pendingNom) return <><NomStage s={s} act={act} g={g} name={name} face={face} />{me?.canGoblin && <GoblinClaim act={act} />}<JudgeButtons s={s} act={act} />{roomCard}</>;
+  if (s.pendingNom) return <><NomStage s={s} act={act} g={g} name={name} face={face} />{me?.canGoblin && <GoblinClaim act={act} />}<JudgeButtons s={s} act={act} /><GnomeButton s={s} act={act} g={g} />{roomCard}</>;
 
   const meP = g(s.me);
   const lastDay = [...s.log].reverse().find((l) => l.kind === 'day' || l.kind === 'death');
