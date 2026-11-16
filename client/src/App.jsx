@@ -1410,15 +1410,7 @@ function TransitCard({ s }) {
 }
 
 function HandButton({ s, act, raised, big = true }) {
-  const auto = raised && s.vote.nominator === s.me;
-  if (auto && s.settings?.nominatorVotes) {
-    return (
-      <div className={`center-hand on locked ${big ? '' : 'small'}`}>
-        <span>✋ 已投赞成</span>
-        <small>你是提名者，这一票自动算赞成（锁定）</small>
-      </div>
-    );
-  }
+  const auto = raised && s.vote.nominator === s.me; // 提名者一开始自动举手，可以放下（2026-11-16 用户）
   return (
     <button type="button" className={`center-hand ${big ? '' : 'small'} ${raised ? 'on' : ''}`} onClick={() => act('hand', { up: !raised })}>
       <span>{raised ? '✋ 已举手' : '举手'}</span>

@@ -474,6 +474,7 @@ test('提名环节：发言时其他人闭麦；提名者自动一票；投票�
 
 test('观战：不在局里的人看不到身份（房规可开魔典）；开局后语音闭麦，离开/终局解除', async () => {
   const { room, voice } = setup('auto');
+  room.settings.muteSpectators = true; // 2026-11-16 起默认不闭麦，这里测房主打开后的闭麦
   room.users.set('w1', { id: 'w1', name: '观众', avatar: null });
   for (const id of ['u1', 'u2', 'w1']) room.online.add(id);
   await room.act('u1', 'join');
@@ -1186,7 +1187,7 @@ test('告诉旺财谁能说话：开局发玩家名单（不含机器人和围�
   for (const id of ['u1', 'u2', 'u3']) room.online.add(id);
   await room.act('u1', 'start');
   await until(() => voice.games.length);
-  assert.deepEqual(voice.games[0], { square: 'square', active: true, speakerIds: ['u1', 'u2'], god: true, lock: true });
+  assert.deepEqual(voice.games[0], { square: 'square', active: true, speakerIds: ['u1', 'u2'], god: true, lock: false }); // 观战默认不闭麦
   await room.syncWatchMute();
   assert.equal(voice.games.length, 1, '没变就不重发');
   await room.teardown();
@@ -1411,6 +1412,22 @@ test('房间设置：闭麦闭耳、隐藏票型默认关；老房间读档时�
   kept.restore({ hostId: 'u1', settings: { nightDeafen: true, hideVotes: true, settingsVersion: 2 } }); // 改了以后房主自己打开的
   assert.equal(kept.settings.nightDeafen, true);
   assert.equal(kept.settings.hideVotes, true);
+});
+
+test('2026-11-16：观战默认不闭麦（老房间读档改一次）；提名者自动举手但可以放下', async () => {
+  const fresh = new Room({ key: 'k5', guildId: 'g', hostId: 'u1', voice: mockVoice() });
+  assert.equal(fresh.settings.muteSpectators, false);
+  const old = new Room({ key: 'k6', guildId: 'g', hostId: 'u1', voice: mockVoice() });
+  old.restore({ hostId: 'u1', settings: { muteSpectators: true, settingsVersion: 2 } });
+  assert.equal(old.settings.muteSpectators, false);
+  const kept = new Room({ key: 'k7', guildId: 'g', hostId: 'u1', voice: mockVoice() });
+  kept.restore({ hostId: 'u1', settings: { muteSpectators: true, settingsVersion: 3 } }); // 改了以后房主自己打开的
+  assert.equal(kept.settings.muteSpectators, true);
+  const r = new Room({ key: 'k8', guildId: 'g', hostId: 'u1', voice: mockVoice() });
+  r.game = { get: () => ({ alive: true }), canVote: () => true };
+  r.vote = { nominator: 'u1', nominee: 'u2', order: [], idx: -1, yes: new Set(['u1']), locked: new Set(), result: null };
+  r.hand('u1', false);
+  assert.equal(r.vote.yes.has('u1'), false, '提名者放下手');
 });
 
 test('房主自己让出房主：交给在线的真人玩家（先找坐着的），没人在线就不让；真人说书进行中不能让', async () => {

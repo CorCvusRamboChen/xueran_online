@@ -286,7 +286,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                   <Select label="辩护时间" value={st.defendSeconds} options={[30, 60, 90, 120, 180]} unit="秒" onChange={(v) => set({ defendSeconds: v })} />
                   <Select label="投票时钟每人" value={st.voteSeconds} options={[1, 2, 3, 4, 5]} unit="秒" onChange={(v) => set({ voteSeconds: v })} />
                   <Toggle label="发言时其他人闭麦" on={st.speechMute} onChange={(v) => set({ speechMute: v })} />
-                  <Toggle rule label="提名者自动投一票" on={st.nominatorVotes} onChange={(v) => set({ nominatorVotes: v })} />
+                  <Toggle rule label="提名者自动举手（可以放下）" on={st.nominatorVotes} onChange={(v) => set({ nominatorVotes: v })} />
                   <Toggle rule label="投票时隐藏票型（投完公开）" on={st.hideVotes} onChange={(v) => set({ hideVotes: v })} />
                 </div>
                 <div className="setting-group">

@@ -102,7 +102,7 @@ export const DEFAULT_SETTINGS = {
   exileSeconds: 20,      // 旅行者：提议流放后大家举手的时间
   rpsSeconds: 20,        // 夜半狂欢：精神病患者被处决时猜拳的时间       // 裁缝与暴乱：被提名死掉的人想下一个提名谁的时间（官方现场是数 3、2、1，线上要留点时间点人）
   speechSeconds: 90,     // 狼人杀：白天每人发言多久（遗言最多 60 秒）
-  nominatorVotes: true,  // 房规：提名的人自动算一票（票数从 1 开始）
+  nominatorVotes: true,  // 房规：提名的人一开始自动举手（票数从 1 开始）；2026-11-16 用户：可以放下，不一定要投
   speechMute: true,      // 陈述/辩护时只有发言的人能说话，其他人服务器闭麦
   smallEvilInfo: false,  // 房规：6 人及以下也让恶魔和爪牙互认、恶魔拿伪装（官方不给）
   deadDrunk: false,      // 房规：夜里被杀的信息角色照样拿当晚的信息，但按醉酒处理（官方：死了就没有能力，不再醒）
@@ -111,8 +111,8 @@ export const DEFAULT_SETTINGS = {
   minionBluffs: true,    // 房规：爪牙和恶魔共用 3 个伪装（官方只给恶魔，恶魔再私下告诉队友）
   hideVotes: false,      // 房规：投票过程中只看得到自己举没举手，投完公开（官方是实时公开举手，默认照官方）
   spectatorGrimoire: false, // 观战的人能看魔典（所有人身份）——会漏信息，默认关
-  muteSpectators: true,     // 开局后观战的人在语音里被服务器闭麦（免得漏信息）；离开或终局自动解除
-  settingsVersion: 2,       // 2：闭麦闭耳、隐藏票型改成默认关（老房间读档时改一次，之后房主怎么设就怎么样）
+  muteSpectators: false,    // 开局后观战的人在语音里被服务器闭麦（免得漏信息）；离开或终局自动解除。2026-11-16 用户：默认不闭麦
+  settingsVersion: 3,       // 2：闭麦闭耳、隐藏票型改成默认关；3：观战闭麦改成默认关（老房间读档时改一次，之后房主怎么设就怎么样）
   ...AVALON_SETTINGS,       // 娱乐模式阿瓦隆的设置，见 server/avalon.js
   ...MARK_SETTINGS,         // 娱乐模式暗印的设置（调包、遗言开关），见 server/mark.js
 };
@@ -1638,7 +1638,6 @@ export class Room {
     if (!g.get(uid)) throw new UserError('你不是这局的玩家');
     if (v.locked.has(uid)) throw new UserError('指针已经过了你，你的票锁定了');
     if (up && !g.canVote(uid)) throw new UserError('你已经死亡并用掉了幽灵票');
-    if (!up && uid === v.nominator && this.settings.nominatorVotes && this.nominatorAlive(uid)) throw new UserError('提名的人自动投赞成票，不能放下');
     if (up) v.yes.add(uid); else v.yes.delete(uid);
   }
 
@@ -3133,6 +3132,7 @@ export class Room {
     this.hostId = s.hostId;
     this.settings = { ...DEFAULT_SETTINGS, ...s.settings };
     if ((s.settings?.settingsVersion ?? 1) < 2) Object.assign(this.settings, { nightDeafen: false, hideVotes: false, settingsVersion: 2 });
+    if ((this.settings.settingsVersion ?? 1) < 3) Object.assign(this.settings, { muteSpectators: false, settingsVersion: 3 });
     for (const u of s.users ?? []) this.users.set(u.id, u);
     this.lobby = s.lobby ?? [];
     this.roleAssign = s.roleAssign ?? {};
