@@ -30,6 +30,11 @@ const PORT = Number(process.env.PORT ?? 3001);
 const DEV_LOGIN = process.env.DEV_LOGIN === '1';   // 允许在普通浏览器里不登录 Discord 测试
 const { KOOK_TOKEN } = process.env;
 const PUBLIC_URL = process.env.PUBLIC_URL ?? 'https://botc.rambooo.com'; // KOOK 进入链接指向的网页地址
+// 单独的试玩服务器（2026-11-16 用户：官网的试玩不要和 Discord 正式局共用一台）：PLAY_ONLY=1 时只开网页单机试玩，
+// 首页直接进 /play，别的入口（Discord、KOOK、浏览器链接、开发登录）一律不收；不配 Discord / KOOK 的 token。
+// 排行榜从正式服务器读（LEADERBOARD_URL，正式服务器的 /api/leaderboard），自己这边不存战绩。部署见 scripts/deploy-play.sh。
+const PLAY_ONLY = process.env.PLAY_ONLY === '1';
+const LEADERBOARD_URL = process.env.LEADERBOARD_URL ?? '';
 // KOOK 进入链接的签名密钥：没单独配就从机器人 token 派生（换 token 旧链接就作废）；本地测试用固定值
 const TICKET_SECRET = process.env.KOOK_TICKET_SECRET
   || (KOOK_TOKEN ? createHash('sha256').update(`botc-ticket|${KOOK_TOKEN}`).digest('hex') : DEV_LOGIN ? 'dev-ticket-secret' : null);
@@ -230,7 +235,9 @@ app.post('/api/clientlog', express.json({ type: () => true, limit: '4kb' }), (re
 });
 setInterval(() => clientLogs.clear(), 10 * 60_000).unref();
 
-app.get('/api/config', (_req, res) => res.json({ clientId: DISCORD_CLIENT_ID ?? null, devLogin: DEV_LOGIN, publicUrl: PUBLIC_URL, solo: soloEnabled() }));
+app.get('/api/config', (_req, res) => res.json({ clientId: PLAY_ONLY ? null : DISCORD_CLIENT_ID ?? null, devLogin: DEV_LOGIN && !PLAY_ONLY, publicUrl: PUBLIC_URL, solo: soloEnabled(), playOnly: PLAY_ONLY }));
+// 全服排行榜（所有服务器合计，不含单机试玩）：给独立的试玩服务器读。和单机大厅里谁都能看到的那份一样，不含别的信息。
+app.get('/api/leaderboard', (_req, res) => { res.set('Cache-Control', 'public, max-age=60'); res.json(statsAll()); });
 
 // 收音页：令牌就是身份，只发给被洗脑的本人
 if (DEV_LOGIN) micDemo();
@@ -265,6 +272,7 @@ app.post('/api/token', async (req, res) => {
 const dist = path.resolve('client/dist');
 // 前端版本：index.html 里引用的打包文件名每次构建都会变；客户端重连时发现变了就提示刷新
 const BUILD = (() => { try { return fs.readFileSync(path.join(dist, 'index.html'), 'utf8').match(/assets\/index-([\w-]+)\.js/)?.[1] ?? 'dev'; } catch { return 'dev'; } })();
+if (PLAY_ONLY) app.get('/', (_req, res) => res.redirect('/play')); // 试玩服务器：首页直接进单机试玩
 app.use(express.static(dist));
 // 找不到的 /assets/ 文件直接 404（不要回首页 HTML，不然旧页面加载新版本里已删掉的模块时会报 MIME 错误）
 app.get(/^\/(?!api\/|assets\/).*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')));
@@ -343,6 +351,21 @@ function openForPartner(room, guildId, user) {
   });
 }
 
+/** 单机大厅的全服排行榜：试玩服务器从正式服务器拉（一分钟刷新一次，先给上次的结果），否则读本机的对局存档。 */
+let remoteBoard = { at: 0, data: null, busy: false };
+function leaderboard() {
+  if (!LEADERBOARD_URL) return statsAll();
+  if (!remoteBoard.busy && Date.now() - remoteBoard.at > 60_000) {
+    remoteBoard.busy = true;
+    fetch(LEADERBOARD_URL, { signal: AbortSignal.timeout(5000) })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data) => { remoteBoard = { at: Date.now(), data, busy: false }; })
+      .catch((e) => { console.warn('拉全服排行榜失败：', e.message); remoteBoard = { ...remoteBoard, at: Date.now() - 45_000, busy: false }; });
+  }
+  return remoteBoard.data ?? { games: 0, goodWins: 0, guilds: 0, players: [] };
+}
+if (LEADERBOARD_URL) leaderboard(); // 启动时先拉一次
+
 const isKook = (guildId) => guildId.startsWith(KOOK_PREFIX);
 
 /** 这一局用哪个机器人管语音：KOOK 的房间（服务器 id 带 kook- 前缀）用 KOOK 机器人，其余用 Discord 的。 */
@@ -357,7 +380,7 @@ function roomFor(guildId, channelId, hostId) {
   const key = `${guildId}:${channelId}`;
   let room = rooms.get(key);
   if (!room && guildId === SOLO_GUILD) { // 网页单机试玩的私桌：没有语音、收音，不存档战绩、不发金币（见 solo.js）
-    room = setupSoloRoom(new Room({ key, guildId, hostId, voice: null, onChange: (r) => { broadcast(r); saveSoon(r); } }), { stats: statsAll });
+    room = setupSoloRoom(new Room({ key, guildId, hostId, voice: null, onChange: (r) => { broadcast(r); saveSoon(r); } }), { stats: leaderboard });
     room.onPos = (r, id, move) => { broadcastPos(r, id, move); saveSoon(r); };
     room.onQuiet = saveSoon;
     rooms.set(key, room);
@@ -408,6 +431,7 @@ wss.on('connection', (ws) => {
         let user;
         let ticket = null;
         let via = 'discord';
+        if (PLAY_ONLY && !msg.solo) throw new UserError('这里是单机试玩服务器：打开 /play 就能玩。和朋友联机请在 Discord 里打开血染钟楼。');
         if (msg.browser) {
           // Discord 活动里签的浏览器链接：身份、服务器、频道都和 Discord 里一样
           if (!BROWSER_SECRET) throw new UserError(BROWSER_STALE);
