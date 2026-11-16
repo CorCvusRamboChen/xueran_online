@@ -1,7 +1,9 @@
 // AI 房主的配音：Azure 语音服务把旁白合成成 mp3，所有人听到同一个声音。
 // 只合成服务器自己说过的旁白（按内容的哈希登记），外人不能拿这个接口合成任意文字。
 // 合成过的存在 data/tts/，同一句话只花一次钱。没配 AZURE_SPEECH_KEY 时返回 null，客户端退回系统自带语音。
+// 不带玩家名字的固定台词（ttsFixed.js）预先合成好放在 assets/tts/（scripts/tts-bake.mjs，随代码部署），先找那里，不用调 Azure。
 import { createHash } from 'node:crypto';
+import fs from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -12,6 +14,7 @@ const STYLE = process.env.AZURE_TTS_STYLE ?? 'depressed';  // 云枫可选：ser
 const RATE = process.env.AZURE_TTS_RATE || '-8%';
 const PITCH = process.env.AZURE_TTS_PITCH || '-4%';
 const DIR = path.resolve('data/tts');
+export const BAKED = path.resolve('assets/tts'); // 预先合成的固定台词（文件名和 data/tts 一样是哈希，换了声音就对不上，自动退回现合成）
 
 export const ttsEnabled = !!(KEY && REGION);
 const known = new Map();     // 哈希 → 文字
@@ -26,13 +29,11 @@ function ssml(text) {
     + `<voice name="${VOICE}">${STYLE ? `<mstts:express-as style="${STYLE}">${body}</mstts:express-as>` : body}</voice></speak>`;
 }
 
-const hashOf = (text) => createHash('sha1').update(`${VOICE}|${STYLE}|${RATE}|${PITCH}|${text}`).digest('hex').slice(0, 20);
+export const ttsVoice = { voice: VOICE, style: STYLE, rate: RATE, pitch: PITCH };
+export const hashOf = (text) => createHash('sha1').update(`${VOICE}|${STYLE}|${RATE}|${PITCH}|${text}`).digest('hex').slice(0, 20);
 
-async function synthesize(id) {
-  const file = path.join(DIR, `${id}.mp3`);
-  try { return await readFile(file); } catch { /* 还没合成过 */ }
-  const text = known.get(id);
-  if (!text) return null;
+/** 调 Azure 把一句话合成成 mp3（Buffer）。预合成脚本也用这个。 */
+export async function azureSynth(text) {
   const r = await fetch(`https://${REGION}.tts.speech.microsoft.com/cognitiveservices/v1`, {
     method: 'POST',
     headers: {
@@ -44,7 +45,16 @@ async function synthesize(id) {
     body: ssml(text),
   });
   if (!r.ok) throw new Error(`Azure 语音合成失败：${r.status} ${await r.text().catch(() => '')}`.trim());
-  const buf = Buffer.from(await r.arrayBuffer());
+  return Buffer.from(await r.arrayBuffer());
+}
+
+async function synthesize(id) {
+  try { return await readFile(path.join(BAKED, `${id}.mp3`)); } catch { /* 不是预合成的固定台词 */ }
+  const file = path.join(DIR, `${id}.mp3`);
+  try { return await readFile(file); } catch { /* 还没合成过 */ }
+  const text = known.get(id);
+  if (!text) return null;
+  const buf = await azureSynth(text);
   await mkdir(DIR, { recursive: true });
   await writeFile(file, buf);
   return buf;
@@ -71,11 +81,23 @@ export async function ttsHandler(req, res) {
   const id = String(req.params.id ?? '').replace(/\.mp3$/, '');
   if (!/^[0-9a-f]{20}$/.test(id)) return res.status(404).end();
   try {
-    const buf = known.has(id) ? await ensure(id) : await readFile(path.join(DIR, `${id}.mp3`)).catch(() => null);
+    const buf = known.has(id) ? await ensure(id)
+      : await readFile(path.join(BAKED, `${id}.mp3`)).catch(() => readFile(path.join(DIR, `${id}.mp3`))).catch(() => null);
     if (!buf) return res.status(404).end();
     res.set({ 'Content-Type': 'audio/mpeg', 'Cache-Control': 'public, max-age=31536000, immutable' }).send(buf);
   } catch (e) {
     console.warn('[tts]', e.message);
     res.status(502).end();
   }
+}
+
+/** 预合成的固定台词里，有几句和现在的声音设置对得上（启动时打一行日志，部署后看一眼就知道有没有用上）。 */
+export function bakedCount() {
+  let names = [];
+  try { names = fs.readdirSync(BAKED).filter((n) => n.endsWith('.mp3')); } catch { return { ready: 0, total: 0 }; }
+  let manifest = null;
+  try { manifest = JSON.parse(fs.readFileSync(path.join(BAKED, 'manifest.json'), 'utf8')); } catch { /* 没有清单 */ }
+  const ids = Object.keys(manifest?.lines ?? {});
+  const ready = ids.filter((id) => id === hashOf(manifest.lines[id]) && names.includes(`${id}.mp3`)).length;
+  return { ready, total: ids.length };
 }

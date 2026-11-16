@@ -10,7 +10,7 @@ import { WebSocketServer } from 'ws';
 import { Client, Events, GatewayIntentBits } from 'discord.js';
 import { Room, UserError } from './room.js';
 import { VoiceHub } from './voice.js';
-import { ttsHandler, ttsEnabled } from './tts.js';
+import { ttsHandler, ttsEnabled, bakedCount } from './tts.js';
 import { saveSoon, flushAll, loadAll, archiveGame, listGames, getGame, statsFor, statsAll, archiveMark, markStatsFor, allPlayerWins, forgetSave } from './store.js';
 import { SOLO_GUILD, soloEnabled, soloIdentity, setupSoloRoom, seatSolo, soloEvictions } from './solo.js';
 import { WALLET, awardWins, seedWallet } from './wallet.js';
@@ -214,7 +214,7 @@ if (DEV_LOGIN) {
     res.json({ ok: true, path: `design/guides/${name}.png` });
   });
 }
-console.log(ttsEnabled ? `🔊 AI 房主配音：Azure ${process.env.AZURE_TTS_VOICE || 'zh-CN-YunfengNeural'}` : '🔈 没配 AZURE_SPEECH_KEY：旁白用各人设备自带的语音');
+{ const b = bakedCount(); console.log(ttsEnabled ? `🔊 AI 房主配音：Azure ${process.env.AZURE_TTS_VOICE || 'zh-CN-YunfengNeural'}（预合成的固定台词 ${b.ready}/${b.total} 句对得上，其余现合成）` : '🔈 没配 AZURE_SPEECH_KEY：旁白用各人设备自带的语音'); }
 
 // 客户端进入时卡住/出错会报过来（限长度、限频率）
 const clientLogs = new Map();

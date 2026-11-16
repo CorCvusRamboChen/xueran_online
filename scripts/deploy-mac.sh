@@ -8,7 +8,7 @@ HOST=${HOST:-rambochen@100.80.146.66}
 SSH="ssh -i $HOME/.ssh/id_ed25519 -o BatchMode=yes $HOST"
 
 npm run build
-tar --force-local -czf "${TMPDIR:-/tmp}/botc.tgz" package.json package-lock.json src client/dist scripts/botc-start.sh
+tar --force-local -czf "${TMPDIR:-/tmp}/botc.tgz" package.json package-lock.json src assets client/dist scripts/botc-start.sh
 cat "${TMPDIR:-/tmp}/botc.tgz" | $SSH 'set -e
   mkdir -p ~/apps/logs ~/apps/botc
   rm -rf ~/apps/.botc_new && mkdir ~/apps/.botc_new
