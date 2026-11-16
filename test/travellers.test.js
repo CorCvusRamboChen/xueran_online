@@ -154,3 +154,68 @@ test('房间：观战的人白天以旅行者加入，公开角色；提议流�
     await assert.rejects(room.act('u1', 'exile', { target: 'late' }), /只能流放活着的旅行者/);
   } finally { await room.teardown(); }
 });
+
+// ───────────── 2026-11-16 对照官方百科改的 ─────────────
+test('替罪羊（官方）：邪恶替罪羊大多数时候替恶魔挡下处决', () => {
+  let swapped = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    const g = new Game(players(7), { roles: TB, rng: makeRng(seed), script: 'tb', misregister: 0 });
+    night(g); g.dawn();
+    g.addTraveller({ id: 'sg', name: '羊' }, 'scapegoat', true);
+    g.block = 'p7'; g.endDay(); // 7 号是小恶魔
+    if (!g.get('sg').alive) swapped++;
+  }
+  assert.ok(swapped >= 28, `40 次里替了 ${swapped} 次`);
+});
+
+test('法官（官方）：强制失败算 0 票，台上的人不变', () => {
+  const g = mk(TB, 'tb');
+  night(g); g.dawn();
+  g.recordVote('p1', ['p1', 'p2', 'p3', 'p4']);
+  assert.equal(g.block, 'p1');
+  const r = g.recordVote('p2', ['p1', 'p2', 'p3', 'p4', 'p5'], 'fail');
+  assert.equal(r.count, 0);
+  assert.equal(g.block, 'p1');
+});
+
+test('房间（官方）：推荐的旅行者排在前面；枪手只能打第一次投票里投过票的人；法官强制成功直接处决、结束白天', async () => {
+  const room = new Room({ key: 'k2', guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { ...FAST, mode: 'auto', shuffle: false, script: 'tb' } });
+  room.judgeReady = () => false;
+  room.botsConsider = () => {};
+  for (const [id, name] of [['u1', '阿一'], ['u2', '阿二'], ['ju', '法官'], ['gs', '枪手']]) room.users.set(id, { id, name, avatar: null });
+  await room.act('u1', 'join'); await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 5 });
+  await room.act('u1', 'start');
+  const g = room.game;
+  try {
+    for (let k = 0; k < 400 && g.phase === 'night'; k++) {
+      if (!room.resolving) for (const pr of g.nightPrompts()) {
+        if (room.isFake(pr.playerId) || g.choices[pr.playerId]) continue;
+        await room.act(pr.playerId, 'choose', { night: g.night, targets: pr.options.slice(0, pr.count) }).catch(() => {});
+      }
+      await sleep(3);
+    }
+    await until(() => g.phase === 'day', 2000);
+    const list = room.viewFor('ju').travellers;
+    assert.deepEqual(list.filter((t) => t.rec).map((t) => t.name), ['窃贼', '官员', '枪手', '替罪羊']);
+    assert.equal(list.findIndex((t) => !t.rec), 4, '推荐的在前');
+    assert.deepEqual(room.viewFor('ju').travellerRecMissing, ['乞丐']);
+    await room.act('ju', 'traveller', { role: 'judge' });
+    await room.act('gs', 'traveller', { role: 'gunslinger' });
+    g.get('ju').evil = false; g.get('gs').evil = false;
+    await until(() => room.roam || room.ended, 500);
+    await room.act('u1', 'gather').catch(() => {});
+    await until(() => room.noms, 500);
+    // 枪手：第一次投票投过票的人才能打
+    room.voteHistory = [{ day: g.day, voters: ['bot-1'], exile: false }, { day: g.day, voters: ['bot-2'], exile: false }];
+    await assert.rejects(room.act('gs', 'gunslinger', { target: 'bot-2' }), /投过票/);
+    room.voteHistory = [];
+    // 法官：别人的提名，强制成功 → 直接处决，白天结束
+    for (const id of ['u1', 'bot-3']) g.get(id).alive = true;
+    await room.act('u1', 'nominate', { target: 'bot-3' });
+    await room.act('ju', 'judge', { pass: true });
+    await until(() => g.phase !== 'day' || room.ended, 9000); // 机器人辩护要 3 秒
+    assert.equal(g.get('bot-3').alive, false, '被法官强制处决');
+    assert.ok(room.log.some((l) => /法官强制成功/.test(l.text)));
+  } finally { await room.teardown(); }
+});

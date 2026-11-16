@@ -1917,3 +1917,4 @@ span.lr-newbie { cursor: default; }
 .traveller-opt span { font-size: 12px; color: var(--muted); }
 .traveller-opt.on { border-color: #c9a86a; background: rgba(201,168,106,.12); }
 .traveller-opt:disabled { opacity: .45; cursor: not-allowed; }
+.traveller-rec { font-style: normal; font-size: 11px; font-weight: 600; margin-left: 6px; padding: 1px 6px; background: #c9a86a; color: #1a1408; }

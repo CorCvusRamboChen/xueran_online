@@ -19,10 +19,11 @@ export function TravellerJoin({ s, act }) {
   return (
     <div className="traveller-join">
       <p className="lead">选一个旅行者。<b>你的阵营由说书人决定</b>（大多是善良；邪恶的会知道恶魔是谁）。你的角色和能力会公开，阵营不公开。随时可以离开；别人只能「流放」你，不能处决你。</p>
+      {s.travellerRecMissing?.length > 0 && <p className="muted">官方给这个剧本推荐的旅行者里，{s.travellerRecMissing.join('、')}还没做，可以先用其他剧本的。</p>}
       <div className="traveller-list">
         {s.travellers.map((t) => (
           <button key={t.id} type="button" disabled={t.taken} className={`traveller-opt ${pick === t.id ? 'on' : ''}`} aria-pressed={pick === t.id} onClick={() => setPick(t.id)}>
-            <b>{t.name}{t.taken ? '（已有人）' : ''}</b><span>{t.ability}</span>
+            <b>{t.name}{t.rec && <em className="traveller-rec">本剧本推荐</em>}{t.taken ? '（已有人）' : ''}</b><span>{t.ability}</span>
           </button>
         ))}
       </div>
@@ -47,6 +48,7 @@ export function TravellerActions({ s, act, setMode }) {
           {live.map((p) => <Btn key={p.id} onClick={() => act('exile', { target: p.id })} title="任何人都可以提议流放旅行者（死人也行）。所有人举手，过所有玩家的一半就流放。流放不是处决">提议流放 {p.seat}号 {p.name}</Btn>)}
         </div>
       )}
+      {!s.vote && !s.pendingNom && <JudgeButtons s={s} act={act} />}
       {me?.canGun && <div className="btn-row gossip-row"><Btn kind="primary" onClick={() => setMode('gun')}>枪手 · 打死一个投过票的人</Btn></div>}
       {me?.isTraveller && meP?.alive && <div className="btn-row gossip-row"><Btn kind="ghost" onClick={() => { if (window.confirm('确定离开这一局吗？离开后不能再回来。')) act('travellerLeave'); }}>离开这一局（旅行者）</Btn></div>}
     </>
@@ -73,8 +75,8 @@ export function JudgeButtons({ s, act }) {
   if (!s.self?.canJudge) return null;
   return (
     <div className="btn-row gossip-row">
-      <Btn onClick={() => act('judge', { pass: true })} title="每局一次：这次处决强制成功">法官 · 强制成功</Btn>
-      <Btn onClick={() => act('judge', { pass: false })} title="每局一次：这次处决强制失败">法官 · 强制失败</Btn>
+      <Btn onClick={() => act('judge', { pass: true })} title="每局一次：这个人直接被处决，今天的提名到此结束">法官 · 强制成功</Btn>
+      <Btn onClick={() => act('judge', { pass: false })} title="每局一次：这次提名算 0 票，提名继续">法官 · 强制失败</Btn>
     </div>
   );
 }

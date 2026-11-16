@@ -73,7 +73,8 @@ export const TRAVELLER_METHODS = {
     const s = this.travellerOf('scapegoat');
     if (!s || s.id === p.id || !this.travellerOn(s) || this.evilOf(s) !== this.evilOf(p) || this.scapegoatDay === this.day) return p;
     this.scapegoatDay = this.day;
-    if (!this.st.roll('scapegoat', {}, { who: s.id, instead: p.id })) return p;
+    const demon = this.evilOf(s) && ROLES[p.role]?.team === 'demon' ? 1 : 0; // 邪恶替罪羊替恶魔挡刀：不挡邪恶就输了
+    if (!this.st.roll('scapegoat', { demon }, { who: s.id, instead: p.id })) return p;
     this.record('st', `替罪羊 ${this.tag(s.id)} 代替 ${this.tag(p.id)} 被处决`);
     return s;
   },

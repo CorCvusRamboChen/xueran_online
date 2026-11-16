@@ -321,7 +321,7 @@ const TRAVELLERS = {
   bureaucrat: { name: '官员', en: 'Bureaucrat', team: 'traveller', edition: 'tb', firstNight: 6, otherNight: 6, choose: { count: 1, notSelf: true },
     ability: '每个夜晚，选择除你以外的一名玩家：他明天白天的投票算作三票。' },
   gunslinger: { name: '枪手', en: 'Gunslinger', team: 'traveller', edition: 'tb', firstNight: 0, otherNight: 0,
-    ability: '每个白天，在第一次投票被统计后，你可以选择一名投过票的玩家：他死亡。' },
+    ability: '每个白天，在第一次投票被统计后，你可以选择一名在这次投票中投过票的玩家：他死亡。' },
   scapegoat: { name: '替罪羊', en: 'Scapegoat', team: 'traveller', edition: 'tb', firstNight: 0, otherNight: 0,
     ability: '如果你所在阵营的一名玩家被处决，你可能会代替他被处决。' },
   judge: { name: '法官', en: 'Judge', team: 'traveller', edition: 'bmr', firstNight: 0, otherNight: 0,

@@ -736,7 +736,7 @@ export class Game {
     // 旅行者：窃贼选的人算负票、官员选的人算三票（count 可能比举手的人数多或少）
     let count = voters.reduce((a, id) => a + (this.voteWeight?.(id) ?? 1), 0);
     if (force === 'pass') count = Math.max(count, this.threshold(), this.blockVotes + 1); // 法官：强制成功
-    if (force === 'fail') count = Math.min(count, this.threshold() - 1, this.blockVotes - 1); // 法官：强制失败
+    if (force === 'fail') count = 0; // 法官：强制失败，官方「视为得到了 0 票」，台上的人不变
     this.suspicion[nomineeId] = (this.suspicion[nomineeId] ?? 0) + count;
     const threshold = this.threshold();
     let outcome = 'fail';

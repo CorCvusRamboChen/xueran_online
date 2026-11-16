@@ -82,6 +82,17 @@ export class UserError extends Error {}
 const KNOCK_STAY = 70; // 敲门的人目的地离门口这么近（像素）就还算站在门口
 const newId = () => Math.random().toString(36).slice(2, 8);
 
+// 官方百科「旅行者」页：每个剧本推荐用自己的五个旅行者（不强制，说书人也可以用别的）。
+// 我们做了的排在前面、标「本剧本推荐」；推荐的还没做（梦殒春宵五个都没做）时，其他剧本的照样能选。
+const TRAVELLER_REC_ALL = {
+  tb: ['官员', '乞丐', '枪手', '窃贼', '替罪羊'],
+  bmr: ['法官', '女舍监', '巫毒师', '学徒', '主教'],
+  snv: ['异类', '集骨者', '咖啡师', '交际花', '屠夫'],
+};
+const TRAVELLER_REC = Object.fromEntries(Object.entries(TRAVELLER_REC_ALL).map(([k, names]) => [k, TRAVELLER_IDS.filter((id) => names.includes(ROLES[id].name))]));
+/** 这个剧本能选的旅行者：推荐的在前，其余在后。 */
+const travellerList = (script) => [...(TRAVELLER_REC[script] ?? []), ...TRAVELLER_IDS.filter((id) => !(TRAVELLER_REC[script] ?? []).includes(id))];
+
 export const DEFAULT_SETTINGS = {
   script: 'tb',          // 剧本：tb 暗流涌动 / bmr 黯月初升 / snv 梦殒春宵
   preset: null,          // 旧设置（只认官方八人推荐的某一套），现在用 setupMode
@@ -1034,6 +1045,7 @@ export class Room {
   nominate(uid, target) {
     const g = this.requireGame();
     if (this.pendingNom || this.vote) throw new UserError('还有一场提名/投票没结束');
+    if (this.judgeDay === g.day) throw new UserError('法官已经强制处决，今天的提名结束了');
     if (this.roam) throw new UserError('自由活动中，等集合回到广场再提名');
     const chain = !!this.riotStep && this.riotStep.id === uid; // 暴乱：被提名死掉的人接着提名，不受提名时间限制
     if (this.riotStep && !chain) throw new UserError(`现在轮到 ${this.game.name(this.riotStep.id)} 接着提名`);
@@ -1433,7 +1445,8 @@ export class Room {
   gunslinger(uid, target) {
     const g = this.requireGame();
     if (this.vote) throw new UserError('等这轮投票结束');
-    const voters = [...new Set((this.voteHistory ?? []).filter((v) => v.day === g.day && !v.exile).flatMap((v) => v.voters))];
+    const first = (this.voteHistory ?? []).find((v) => v.day === g.day && !v.exile); // 官方：当天第一次处决投票（流放不算）
+    const voters = first?.voters ?? [];
     let r;
     try { r = g.gunslinger(uid, target, voters); } catch (e) { throw new UserError(e.message); }
     this.pub(`枪手 **${g.name(uid)}** 向 **${g.name(target)}** 开了一枪——${r.died ? `**${g.name(target)} 死了！**` : '什么都没有发生。'}`, r.died ? 'death' : 'vote');
@@ -1441,14 +1454,44 @@ export class Room {
   }
 
   /** 法官：别人发起的这次提名，强制处决成功或失败（每局一次）。在陈述、辩护或投票中都能用。 */
+  /** 法官能管的那次提名：正在陈述 / 投票的，或者刚统计完、还没有下一次提名的（官方：到下一名玩家被提名之前都能宣布）。 */
+  judgeTarget() {
+    const g = this.game;
+    if (this.vote) return { nom: this.vote, live: true };
+    if (this.pendingNom) return { nom: this.pendingNom, live: true };
+    const last = this.lastVote;
+    if (last && last.day === g?.day && !last.judged && !this.dusking && this.duskDay !== g.day) return { nom: last, live: false };
+    return null;
+  }
+
   judge(uid, pass) {
     const g = this.requireGame();
-    const nom = this.vote ?? this.pendingNom;
-    if (!nom) throw new UserError('现在没有正在进行的提名');
+    const t = this.judgeTarget();
+    if (!t) throw new UserError('现在没有可以裁决的提名');
+    const { nom } = t;
     let on;
     try { on = g.judgeUse(uid, nom.nominator, pass); } catch (e) { throw new UserError(e.message); }
-    if (on) { if (this.vote) this.vote.force = pass ? 'pass' : 'fail'; else nom.force = pass ? 'pass' : 'fail'; }
-    this.pub(`法官 **${g.name(uid)}** 宣布：这次处决强制**${pass ? '成功' : '失败'}**。`, 'vote');
+    this.pub(`法官 **${g.name(uid)}** 宣布：对 **${g.name(nom.nominee)}** 的这次处决强制**${pass ? '成功' : '失败'}**。`, 'vote');
+    if (!on) return; // 中毒醉酒：照样宣布、照样用掉，只是没效果
+    if (t.live) { nom.force = pass ? 'pass' : 'fail'; return; }
+    // 已经统计完：强制成功就直接处决、白天结束；强制失败就把他从台上拿下来（这次算 0 票）
+    nom.judged = true;
+    if (pass) this.judgeExecute(nom.nominee);
+    else if (g.block === nom.nominee || (g.blockTied ?? []).includes(nom.nominee)) {
+      Object.assign(g, { block: nom.before.block, blockVotes: nom.before.votes, blockTied: nom.before.tied ?? [] });
+      this.announce(`${g.name(nom.nominee)} 这次算 0 票，${g.block ? `台上还是 ${g.name(g.block)}` : '台上空了'}。`, 'vote');
+    }
+  }
+
+  /** 法官强制成功：不管票数和台上是谁，这个人被处决，白天直接结束（官方法官页）。 */
+  judgeExecute(id) {
+    const g = this.game;
+    Object.assign(g, { block: id, blockVotes: Math.max(g.blockVotes ?? 0, 1), blockTied: [] });
+    this.judgeDay = g.day;
+    this.announce(`法官强制成功：**${g.name(id)}** 被处决，今天的提名到此结束。`, 'death');
+    if (this.stId) return; // 真人说书：请说书人点「结束白天」
+    this.pauseNoms?.();
+    this.later(this.settings.pauseMs, () => this.autoDusk());
   }
 
   // ───────────── 金币：惩罚聊场外 ─────────────
@@ -1612,7 +1655,8 @@ export class Room {
 
   finishVote() {
     const v = this.vote; const g = this.game;
-    const before = { block: g.block, votes: g.blockVotes };
+    const before = { block: g.block, votes: g.blockVotes, tied: [...(g.blockTied ?? [])] };
+    v.before = before; v.day = g.day; // 法官统计完以后还能裁决，要能退回去
     v.result = g.recordVote(v.nominee, [...v.yes].filter((id) => v.locked.has(id)), v.force ?? null); // 法官可能强制成功或失败
     const what = {
       block: `${g.name(v.nominee)} 被送上处决台`,
@@ -1630,6 +1674,7 @@ export class Room {
     });
     this.lastVote = v;
     this.vote = null;
+    if (v.force === 'pass') { v.judged = true; this.judgeExecute(v.nominee); return; } // 法官强制成功：直接处决，白天结束
     this.afterVote();
   }
 
@@ -3319,7 +3364,8 @@ export class Room {
       riot: this.riotStep ? { id: this.riotStep.id, until: this.riotStep.until, must: this.riotStep.must, mine: this.riotStep.id === uid } : null, // 暴乱：谁在想下一个提名谁
       riotScript: !!SCRIPTS[g.script]?.riot,
       // 旅行者：观战的人可以加入（白天）；流放举手；枪手 / 法官能不能用
-      travellers: this.travellersOk(g) ? TRAVELLER_IDS.map((id) => ({ id, name: ROLES[id].name, ability: ROLES[id].ability, taken: !!g.travellerOf(id) })) : null,
+      travellers: this.travellersOk(g) ? travellerList(g.script).map((id) => ({ id, name: ROLES[id].name, ability: ROLES[id].ability, taken: !!g.travellerOf(id), rec: TRAVELLER_REC[g.script]?.includes(id) ?? false })) : null,
+      travellerRecMissing: this.travellersOk(g) ? (TRAVELLER_REC_ALL[g.script] ?? []).filter((n) => !TRAVELLER_IDS.some((id) => ROLES[id].name === n)) : null,
       canTravel: spectator && !this.ended && g.phase === 'day' && this.travellersOk(g) && uid !== this.stId && g.players.length < 20,
       exile: this.exile ? { target: this.exile.target, by: this.exile.by, until: this.exile.until, count: this.exile.yes.size, mine: this.exile.yes.has(uid), need: Math.ceil(g.players.filter((q) => !q.left).length / 2) } : null,
       exiledToday: Object.keys(this.exiled ?? {}).filter((k) => k.startsWith(`${g.day}:`)).map((k) => k.slice(k.indexOf(':') + 1)),
@@ -3450,7 +3496,7 @@ export class Room {
       canAmnesiac: day && p.alive && p.role === 'amnesiac' && g.amnesiacDay?.[uid] !== g.day,
       canSlay: day && p.alive && (['slayer', 'amn_gun', 'amn_judge'].includes(ab) || g.extraAbility(p) === 'slayer' || amn) && !g.shooters?.includes(uid),
       canGun: day && p.alive && p.role === 'gunslinger' && g.gunDay !== g.day && (this.voteHistory ?? []).some((v) => v.day === g.day && !v.exile) && !this.vote,
-      canJudge: day && p.alive && p.role === 'judge' && !g.judgeUsed && !!(this.vote ?? this.pendingNom) && (this.vote ?? this.pendingNom).nominator !== uid,
+      canJudge: day && p.alive && p.role === 'judge' && !g.judgeUsed && this.judgeDay !== g.day && !!this.judgeTarget() && this.judgeTarget().nom.nominator !== uid,
       isTraveller: !!p.traveller,
       canPsycho: day && p.alive && ab === 'psychopath' && g.psychoDay?.[uid] !== g.day && !this.noms && !this.pendingNom && !this.vote && !this.dusking && this.duskDay !== g.day,
       canPardon: day && p.alive && (ab === 'amn_pardon' || amn) && !g.used?.[`pardon-${uid}`] && !!g.block && !this.vote && !this.pendingNom,
