@@ -3,7 +3,7 @@
 import { Game, shuffle, balancedTB, setupScoreTB, rollRoles, rollRagnarok } from '../engine/game.js';
 import { balancedBMR, setupScore, rollBMR } from '../engine/bmr.js';
 import { balancedSNV, setupScoreSNV, rollSNV, rollTeensy, rollMixed, balancedMixed, MAX_DECLARES, AMNESIAC_DAY, seatMarionette, rollRiot } from '../engine/snv.js';
-import { TRAVELLER_IDS, ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, engineOf, inScript, rolesOf, playersOf, ragnarokWolves } from '../engine/roles.js';
+import { TRAVELLER_IDS, SCRIPT_TRAVELLERS, travellersOf, ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, engineOf, inScript, rolesOf, playersOf, ragnarokWolves } from '../engine/roles.js';
 import { getMap, houseAt, houseCenter, doorPoint, pathLength, positionAt, speedOf } from '../shared/map.js';
 import { CHARACTERS, CHARACTER_IDS } from '../shared/characters.js';
 import { cleanOutfit } from '../shared/outfit.js';
@@ -82,18 +82,9 @@ export class UserError extends Error {}
 const KNOCK_STAY = 70; // 敲门的人目的地离门口这么近（像素）就还算站在门口
 const newId = () => Math.random().toString(36).slice(2, 8);
 
-// 每个剧本能用的旅行者（2026-11-16 用户：只显示官方推荐的，全按官方百科）。
-// 三个基础剧本照集石百科「旅行者」页的推荐（各五个）；社区剧本照它们发布的剧本 JSON 里列的旅行者。
-export const SCRIPT_TRAVELLERS = {
-  tb: ['bureaucrat', 'beggar', 'gunslinger', 'thief', 'scapegoat'],
-  bmr: ['judge', 'matron', 'voudon', 'apprentice', 'bishop'],
-  snv: ['deviant', 'bonecollector', 'barista', 'harlot', 'butcher'],
-  bs7: ['gnome', 'bureaucrat', 'scapegoat', 'harlot'],                       // TPI 官方仓库 wc25/seat7/script.json、集石百科「七步成诗」页
-  cat: ['barista', 'harlot', 'bonecollector', 'apprentice', 'beggar'],        // botcscripts 第 3 号 v11.1.10
-  // 其余社区剧本和两个小剧本（无上愉悦、窃窃私语）发布的剧本里都没列旅行者：不开旅行者
-};
 /** 这个剧本能选的旅行者（只列推荐的；没列的剧本没有旅行者）。 */
-const travellerList = (script) => (SCRIPT_TRAVELLERS[script] ?? []).filter((id) => TRAVELLER_IDS.includes(id));
+const travellerList = travellersOf;
+export { SCRIPT_TRAVELLERS };
 
 export const DEFAULT_SETTINGS = {
   script: 'tb',          // 剧本：tb 暗流涌动 / bmr 黯月初升 / snv 梦殒春宵

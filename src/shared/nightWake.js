@@ -12,6 +12,11 @@ import { ROLES } from '../engine/roles.js';
 const W = 'wake'; const IF = 'if'; const ST = 'st';
 
 const OVERRIDES = {
+  // 旅行者（2026-11-16）
+  apprentice: { first: W, other: W, note: '他加入后的首个夜晚睁眼，得知获得的能力' },
+  barista: { first: IF, other: IF, note: '咖啡师本人不醒；说书人选中的那名玩家醒来，得知是哪种效果' },
+  harlot: { other: IF, note: '流莺睁眼选人；被选的人也会被叫醒，问他同不同意' },
+  bonecollector: { other: IF, note: '每局一次：用过以后不再醒' },
   // 暗流涌动
   undertaker: { other: IF, note: '今天有人被处决才醒' },
   ravenkeeper: { other: IF, note: '当晚死了才醒' },

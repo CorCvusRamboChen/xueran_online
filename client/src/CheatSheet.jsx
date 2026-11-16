@@ -2,7 +2,7 @@
 // 小地图左边的「技能表」按钮切过来（没有小地图的场景，按钮在音效那一排），卡片标题栏上的「收起」切回去。
 // 每个角色只写一句话简述（roleShort.js），点一行才展开技能全文；「展开 / 缩小」换大小（双击标题栏也行）；按住标题栏能拖到任何地方。位置、大小、开没开着都存在本机。
 import { useEffect, useRef, useState } from 'react';
-import { ROLES, SCRIPTS, TEAM_NAME, rolesOf } from '../../src/engine/roles.js';
+import { ROLES, SCRIPTS, TEAM_NAME, rolesOf, travellersOf } from '../../src/engine/roles.js';
 import { ATTR } from './flavor.js';
 import { TEAMS } from './Lobby.jsx';
 import { ROLE_SHORT } from './roleShort.js';
@@ -29,7 +29,7 @@ export function useSheetMode() {
 
 export function CheatSheet({ s, onClose }) {
   const sc = SCRIPTS[s.script] ? s.script : 'tb';
-  const ids = rolesOf(sc);
+  const ids = [...rolesOf(sc), ...travellersOf(sc)]; // 旅行者排在最后
   const mine = s.self?.role?.id;
   const [big, setBig] = useState(() => !!load().big);
   const [pos, setPos] = useState(() => load().pos ?? null); // null = 停在小地图的位置
@@ -73,7 +73,7 @@ export function CheatSheet({ s, onClose }) {
         <button type="button" onClick={onClose} title="收起技能表">收起</button>
       </header>
       <div className="cs-body">
-        {TEAMS.map((t) => (
+        {[...TEAMS, 'traveller'].filter((t) => ids.some((id) => ROLES[id].team === t)).map((t) => (
           <section key={t} style={{ '--attr': ATTR[t].color }}>
             <h4>{TEAM_NAME[t]}</h4>
             {ids.filter((id) => ROLES[id].team === t).map((id) => (

@@ -8,7 +8,7 @@ import { AVATAR_3D_ON } from './display.js';
 import { Tag, Panel, Btn } from './ui.jsx';
 import { ClockTower, Tree, Lamp, House, MAP_COLORS as C, INK } from './art/TownArt.jsx';
 import { SCENE_ART, ROLE_ART } from './art.js';
-import { ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, rolesOf, inScript, engineOf, playersOf } from '../../src/engine/roles.js';
+import { ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, rolesOf, inScript, engineOf, playersOf, travellersOf } from '../../src/engine/roles.js';
 import { AvalonDist, AvalonSettings, AvalonShowcase } from './Avalon.jsx';
 import { MarkDist, MarkSettings, MarkShowcase } from './Mark.jsx';
 import { ATTR } from './flavor.js';
@@ -636,6 +636,7 @@ const TEAM_HINT = {
   outsider: '善良阵营，但能力往往帮倒忙。',
   minion: '邪恶阵营。知道谁是恶魔，帮他藏身、搅乱信息。',
   demon: '邪恶阵营的核心。每晚杀一个人；恶魔死了，善良就赢了。',
+  traveller: '开局后才来的人可以当旅行者加入：阵营由说书人决定，角色公开；别人只能「流放」他，不能处决他。不算进人数配置。',
 };
 
 /** 首页：暗流涌动全部 22 个角色的技能。可以按阵营筛选，点一张看完整的能力牌。 */
@@ -670,20 +671,22 @@ export function NightOrder({ script }) {
 
 export function RoleShowcase({ compact = false, script = 'tb' }) {
   const sc = SCRIPTS[script] ? script : 'tb';
-  const ids = rolesOf(sc);
+  const travellers = travellersOf(sc); // 这个剧本的旅行者（官方推荐 / 剧本里列的）
+  const ids = [...rolesOf(sc), ...travellers];
+  const teams = travellers.length ? [...TEAMS, 'traveller'] : TEAMS;
   const [team, setTeam] = useState('all');
   const [open, setOpen] = useState(null);
-  const shown = team === 'night' ? [] : TEAMS.filter((t) => team === 'all' || team === t);
+  const shown = team === 'night' ? [] : teams.filter((t) => team === 'all' || team === t);
   return (
     <section className={compact ? 'roles-compact' : 'lobby-roles glass pnl'}>
       <header className="roles-head">
         <div>
           <h2>{SCRIPTS[sc].name} · 全部角色</h2>
-          <p className="muted">这个剧本一共 {ids.length} 个角色，每局按人数抽一部分。开局前先认识一下大家可能拿到什么。</p>
+          <p className="muted">这个剧本一共 {ids.length - travellers.length} 个角色，每局按人数抽一部分。{travellers.length ? `另有 ${travellers.length} 个旅行者，给开局后才来的人。` : '这个剧本没有旅行者。'}开局前先认识一下大家可能拿到什么。</p>
         </div>
         <div className="seg roles-tabs">
           <button type="button" className={team === 'all' ? 'on' : ''} onClick={() => setTeam('all')}>全部</button>
-          {TEAMS.map((t) => (
+          {teams.map((t) => (
             <button key={t} type="button" className={team === t ? 'on' : ''} onClick={() => setTeam(t)}>{TEAM_NAME[t]}</button>
           ))}
           <button type="button" className={team === 'night' ? 'on' : ''} onClick={() => setTeam('night')}>夜间顺序</button>

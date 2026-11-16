@@ -351,6 +351,17 @@ const TRAVELLERS = {
     ability: '每个白天，在首次处决后，你可以再次发起提名。' },
 };
 export const TRAVELLER_IDS = Object.keys(TRAVELLERS);
+// 每个剧本的旅行者（2026-11-16 用户：只用官方的，全按集石百科）：三个基础剧本照百科「旅行者」页的推荐（各五个），
+// 社区剧本照它们发布的剧本 JSON 里列的。没列的剧本没有旅行者。大厅「全部角色」、技能表、夜间顺序、加入面板都读这里。
+export const SCRIPT_TRAVELLERS = {
+  tb: ['bureaucrat', 'beggar', 'gunslinger', 'thief', 'scapegoat'],
+  bmr: ['judge', 'matron', 'voudon', 'apprentice', 'bishop'],
+  snv: ['deviant', 'bonecollector', 'barista', 'harlot', 'butcher'],
+  bs7: ['gnome', 'bureaucrat', 'scapegoat', 'harlot'],                // TPI 官方仓库 wc25/seat7/script.json、集石百科「七步成诗」页
+  cat: ['barista', 'harlot', 'bonecollector', 'apprentice', 'beggar'], // botcscripts 第 3 号 v11.1.10
+};
+/** 这个剧本的旅行者（没列的剧本是空的）。 */
+export const travellersOf = (script) => (SCRIPT_TRAVELLERS[script] ?? []).filter((id) => TRAVELLER_IDS.includes(id));
 
 // 不是角色，只是夜里的一个选择：哈迪寂亚选中的人悄悄决定活还是死（选「角色」ah_live / ah_die）。结算在 engine/snv.js
 const PROMPT_ONLY = {

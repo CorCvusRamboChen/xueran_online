@@ -1,3 +1,4 @@
+import { travellersOf } from '../engine/roles.js';
 // 三个剧本的夜晚顺序（照官方英文 App 的夜晚总表 nightsheet.json；2026-11-11 用户定：和集石百科不一样的地方以英文新表为准）：前端「角色」页的夜间顺序说明用，黯月初升和梦殒春宵的结算顺序（engine/bmr.js、engine/snv.js）也读这里。
 // 每一步：[角色 id 或步骤 id, 这一步做什么]。不是角色的步骤（爪牙信息、恶魔信息）在 STEP_NAMES 里起名字。
 
@@ -85,7 +86,6 @@ export const NIGHT_ORDER = {
   },
   snv: {
     first: [
-      ['barista', '（旅行者）说书人选一名玩家：直到黄昏清醒健康并拿正确信息，或能力生效两次'],
       ['philosopher', '（每局一次）选一个善良角色，获得它的能力'],
       ['minioninfo', '7 人及以上：爪牙睁眼互认，并得知谁是恶魔'],
       ['demoninfo', '7 人及以上：恶魔得知爪牙是谁，拿到 3 个不在场的善良角色当伪装'],
@@ -99,9 +99,6 @@ export const NIGHT_ORDER = {
       ['mathematician', '得知有几个人的能力没有正常生效'],
     ],
     other: [
-      ['barista', '（旅行者）说书人选一名玩家：直到黄昏清醒健康并拿正确信息，或能力生效两次'],
-      ['harlot', '（旅行者）选一名存活玩家：他同意就得知他的角色，两人可能都死'],
-      ['bonecollector', '（旅行者，每局一次）选一名死亡玩家：他重新获得能力到黄昏'],
       ['philosopher', '（每局一次）选一个善良角色，获得它的能力'],
       ['snakecharmer', '选一名存活玩家：选中恶魔就互换角色和阵营'],
       ['witch', '选一名玩家：他明天发起提名就会死'],
@@ -562,15 +559,40 @@ NIGHT_ORDER.mo = {
   ],
 };
 
+// 旅行者在夜间顺序里的位置（官方英文总表 nightsheet.json）：都排在夜晚最前面，只加这个剧本有的旅行者
+const TRAVELLER_NIGHT = {
+  first: [
+    ['apprentice', '（旅行者）首个夜晚：善良的获得一个镇民能力，邪恶的获得一个爪牙能力'],
+    ['barista', '（旅行者）说书人选一名玩家：直到黄昏清醒健康并拿正确信息，或能力生效两次'],
+    ['bureaucrat', '（旅行者）选一名别的玩家：他明天的票算三票'],
+    ['thief', '（旅行者）选一名别的玩家：他明天的票算负数'],
+  ],
+  other: [
+    ['barista', '（旅行者）说书人选一名玩家：直到黄昏清醒健康并拿正确信息，或能力生效两次'],
+    ['bureaucrat', '（旅行者）选一名别的玩家：他明天的票算三票'],
+    ['thief', '（旅行者）选一名别的玩家：他明天的票算负数'],
+    ['harlot', '（旅行者）选一名存活玩家：他同意就得知他的角色，两人可能都死'],
+    ['bonecollector', '（旅行者，每局一次）选一名死亡玩家：他重新获得能力到黄昏'],
+  ],
+};
+for (const [script, o] of Object.entries(NIGHT_ORDER)) {
+  const tr = travellersOf(script);
+  for (const k of ['first', 'other']) {
+    if (!o[k]) continue;
+    const add = TRAVELLER_NIGHT[k].filter(([id]) => tr.includes(id) && !o[k].some(([x]) => x === id));
+    o[k].unshift(...add);
+  }
+}
+
 /**
  * 小剧本的结算步骤（engine/snv.js 用）：这套引擎认得的所有角色按官方总表排好；不在场的步骤自动跳过。
  * 失忆者、食人族拿到的能力也按这张表的位置醒。
  */
 export const MIX_STEPS = {
-  first: ['barista', 'philosopher', 'sailor', 'engineer', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'pukka', 'pixie', 'huntsman',
+  first: ['apprentice', 'barista', 'bureaucrat', 'thief', 'philosopher', 'sailor', 'engineer', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'pukka', 'pixie', 'huntsman',
     'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'grandmother', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress', 'noble', 'balloonist', 'shugenja', 'villageidiot',
     'butler', 'spy', 'ogre', 'highpriestess', 'general', 'chambermaid', 'mathematician'],
-  other: ['barista', 'harlot', 'bonecollector', 'poppygrower', 'philosopher', 'sailor', 'engineer', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist',
+  other: ['barista', 'bureaucrat', 'thief', 'harlot', 'bonecollector', 'poppygrower', 'philosopher', 'sailor', 'engineer', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist',
     'imp', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'alhadikhia', 'assassin', 'godfather', 'gossip',
     'barber', 'sweetheart', 'sage', 'professor', 'huntsman', 'farmer', 'tinker', 'moonchild', 'grandmother', 'ravenkeeper', // 照官方英文总表（11-11 用户定：和集石百科不一样时以英文新表为准）
     'washerwoman', 'librarian', 'investigator', 'chef', 'clockmaker', 'noble', 'shugenja', 'empath', 'fortuneteller', 'undertaker', 'dreamer', 'amn_detect', 'amn_echo', 'flowergirl', 'towncrier', 'oracle', 'seamstress',

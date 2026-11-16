@@ -83,7 +83,7 @@ export function AbilityCard({ id, compact = false }) {
         <small>{r.en.toUpperCase()}</small>
       </header>
       <div className="acard-body">
-        <p className="acard-kicker">{attr.name} · {TEAM_NAME[r.team]} · {isEvilRole(id) ? '邪恶' : '善良'}</p>
+        <p className="acard-kicker">{attr.name} · {TEAM_NAME[r.team]} · {r.team === 'traveller' ? '阵营由说书人决定' : isEvilRole(id) ? '邪恶' : '善良'}</p>
         <p className="acard-text"><Glossed text={r.ability} /></p>
         {!compact && (
           <>
