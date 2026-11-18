@@ -235,7 +235,7 @@ function FabledChip({ id, size }) {
       <button type="button" className="fabled-face" style={{ width: size, height: size }} onClick={() => setOpen(!open)} title={`传奇角色 · ${f.name}：${f.ability}`}>
         <span>{[...f.name][0]}</span>
       </button>
-      <div className="token-name">{f.name}</div>
+      <div className="token-name">{f.name}<sub>传奇</sub></div>
       {open && (
         <div className="fabled-pop" role="dialog" aria-label={f.name}>
           <b>{f.name} <i>{f.en}</i></b>

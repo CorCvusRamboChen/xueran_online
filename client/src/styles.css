@@ -1993,3 +1993,11 @@ span.lr-newbie { cursor: default; }
 .extras .ex-card i { font-style: italic; color: var(--muted); font-size: 12px; margin-left: 4px; }
 .extras .ex-card p { margin: 3px 0; font-size: 13px; line-height: 1.5; }
 .extras ul { margin: 4px 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+
+/* 传奇角色的「传奇」下标：牌子右下角一个小签，顶栏说明里名字后面一个下标 */
+.fabled-chip .token-name sub { font-size: 8px; margin-left: 1px; color: #a88c58; }
+.fab-name { color: #c9a86a; }
+.fab-name sub { font-size: 8px; margin-left: 1px; color: #a88c58; }
+/* 顶栏说明长的剧本：说明另起一行，票数条往下让 */
+.board-bar.two .bb-note { position: absolute; top: calc(100% - 1px); left: 50%; transform: translateX(-50%); white-space: nowrap; background: rgba(8, 10, 10, .86); border: 1px solid var(--line); border-top: 0; padding: 2px 10px 3px; }
+.scene:has(.board-bar.two) .vote-stats, .town:has(.board-bar.two) .vote-stats { top: 66px; }
