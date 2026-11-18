@@ -1918,3 +1918,12 @@ span.lr-newbie { cursor: default; }
 .traveller-opt.on { border-color: #c9a86a; background: rgba(201,168,106,.12); }
 .traveller-opt:disabled { opacity: .45; cursor: not-allowed; }
 .traveller-rec { font-style: normal; font-size: 11px; font-weight: 600; margin-left: 6px; padding: 1px 6px; background: #c9a86a; color: #1a1408; }
+
+/* 正在说话：头像右下角的麦克风 + 三根跳动的声波（2026-11-18） */
+.speak-badge { position: absolute; right: -9px; top: -9px; z-index: 3; display: inline-flex; align-items: center; gap: 1.5px; height: 21px; padding: 0 5px 0 3px; border-radius: 11px; background: #3fd47a; box-shadow: 0 0 0 2px rgba(0, 0, 0, .55), 0 0 10px rgba(63, 212, 122, .8); pointer-events: none; }
+.speak-badge svg { width: 15px; height: 15px; fill: #0c2416; stroke: #0c2416; }
+.speak-badge i { display: block; width: 2.5px; height: 11px; border-radius: 1px; background: #0c2416; transform-origin: center; animation: speak-wave .7s ease-in-out infinite; }
+.speak-badge i:nth-child(3) { animation-delay: .15s; }
+.speak-badge i:nth-child(4) { animation-delay: .3s; }
+@keyframes speak-wave { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .speak-badge i { animation: none; transform: scaleY(.7); } }

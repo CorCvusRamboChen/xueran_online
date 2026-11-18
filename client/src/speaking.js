@@ -12,6 +12,8 @@ export function setSpeaking(id, v) {
   emit(id);
 }
 export function clearSpeaking() { on.clear(); emit(null); }
+// 本地调试：浏览器里没有 Discord，用 window.__botcSpeaking('玩家 id', true) 假装某人在说话看效果
+if (typeof window !== 'undefined') window.__botcSpeaking = setSpeaking;
 
 export function useSpeaking(id) {
   const [, tick] = useState(0);

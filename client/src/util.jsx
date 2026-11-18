@@ -55,7 +55,18 @@ export function Portrait({ p, size, frame = 'var(--cream)', prefer = 'avatar', s
       {src
         ? <img src={src} alt="" onError={() => setFailed((x) => x + 1)} />
         : <div className="portrait-paint" style={{ background: `hsl(${ch ? ch.hue : hue(p.id)} 28% 38%)`, fontSize: w * 0.5 }}>{initial}</div>}
+      {speaking && w >= 26 && <SpeakBadge />}
     </div>
+  );
+}
+
+/** 正在说话：头像右下角的麦克风 + 跳动的声波（2026-11-18 用户：集合时看得出谁在说话）。 */
+function SpeakBadge() {
+  return (
+    <span className="speak-badge" aria-label="正在说话" title="正在说话">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" /><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5M5.5 14.5h5" fill="none" strokeWidth="1.6" strokeLinecap="round" /></svg>
+      <i /><i /><i />
+    </span>
   );
 }
 
