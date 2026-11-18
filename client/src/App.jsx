@@ -283,7 +283,7 @@ function Game({ s, act, ask }) {
   const rk = night && me?.ravenkeeper;
   const pickSpec = rk ? { count: 1, options: s.players.map((p) => p.id) }
     : prompt ? { count: prompt.count, options: prompt.options }
-      : mode ? { count: MODES[mode].max ?? 1, options: s.players.map((p) => p.id).filter((id) => mode !== 'pull' || id !== s.me) } : null; // 官方：可以提名自己
+      : mode ? { count: MODES[mode].max ?? 1, options: [...s.players.map((p) => p.id).filter((id) => mode !== 'pull' || id !== s.me), ...(mode === 'nominate' && s.stNominable && !s.stNominated ? ['storyteller'] : [])] } : null; // 官方：可以提名自己；有无神论者的剧本也能提名说书人
 
   const pickKey = `${s.phase}-${s.night}-${s.day}-${mode}-${!!prompt}-${rk}`;
   useEffect(() => { setPicked([]); setPickedRole(null); }, [pickKey]);
@@ -941,12 +941,13 @@ export function Picker({ s, options, picked, onTap }) {
   return (
     <div className="picker">
       {options.map((id) => {
-        const p = s.players.find((x) => x.id === id);
+        const p = id === 'storyteller' ? ST_FACE : s.players.find((x) => x.id === id); // 有无神论者的剧本：说书人也能选
+        if (!p) return null;
         const on = picked.includes(id);
         return (
           <button key={id} type="button" className={`pick ${on ? 'on' : ''} ${p.alive ? '' : 'dead'}`} onClick={() => onTap(p)}>
             <Portrait p={p} size={34} frame={on ? 'var(--red)' : '#f4f4f0'} />
-            <span>{p.seat}号 {p.id === s.me ? '你' : p.name}</span>
+            <span>{p.id === 'storyteller' ? '说书人' : `${p.seat}号 ${p.id === s.me ? '你' : p.name}`}</span>
           </button>
         );
       })}

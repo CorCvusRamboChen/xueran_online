@@ -3572,6 +3572,8 @@ export class Room {
       bishop: !!g.bishopOn?.(),
       exiledToday: Object.keys(this.exiled ?? {}).filter((k) => k.startsWith(`${g.day}:`)).map((k) => k.slice(k.indexOf(':') + 1)),
       stNominable: g.engine === 'snv' && inScript('atheist', g.script), // 有无神论者的剧本：可以提名说书人
+      // 说书人也坐在台上（2026-11-18 用户）：真人说书显示他的头像，AI 说书显示 ★；有无神论者的剧本可以直接点他提名
+      storyteller: this.stId ? { id: this.stId, name: this.users.get(this.stId)?.name ?? '说书人', avatar: this.users.get(this.stId)?.avatar ?? null, human: true, mic: this.mics?.[this.stId] ?? null } : { id: 'storyteller', name: 'AI 说书人', avatar: null, human: false },
       stNominated: !!g.nominees?.has('storyteller'),
       rps: this.rps ? { a: this.rps.a, b: this.rps.b, until: this.rps.until, mine: [this.rps.a, this.rps.b].includes(uid), hand: this.rps.picks[uid] ?? null } : null, // 精神病患者猜拳
       boom: g.boom?.until ? { until: g.boom.until, alive: g.boom.alive, mine: g.boom.points[uid] ?? null, count: Object.keys(g.boom.points).length } : null, // 炸弹人倒数

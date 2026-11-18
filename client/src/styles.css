@@ -1919,14 +1919,14 @@ span.lr-newbie { cursor: default; }
 /* 正在说话：头像右下角的麦克风 + 三根跳动的声波（2026-11-18） */
 .speak-badge { position: absolute; right: -9px; top: -9px; z-index: 3; display: inline-flex; align-items: center; gap: 1.5px; height: 21px; padding: 0 5px 0 3px; border-radius: 11px; background: #3fd47a; box-shadow: 0 0 0 2px rgba(0, 0, 0, .55), 0 0 10px rgba(63, 212, 122, .8); pointer-events: none; }
 .speak-badge svg { width: 15px; height: 15px; fill: #0c2416; stroke: #0c2416; }
-.speak-badge i { display: block; width: 2.5px; height: 11px; border-radius: 1px; background: #0c2416; transform-origin: center; animation: speak-wave .7s ease-in-out infinite; }
-.speak-badge i:nth-child(3) { animation-delay: .15s; }
-.speak-badge i:nth-child(4) { animation-delay: .3s; }
+.speak-badge .sb-bar { display: block; width: 2.5px; height: 11px; border-radius: 1px; background: #0c2416; transform-origin: center; animation: speak-wave .7s ease-in-out infinite; }
+.speak-badge .sb-bar:nth-child(3) { animation-delay: .15s; }
+.speak-badge .sb-bar:nth-child(4) { animation-delay: .3s; }
 @keyframes speak-wave { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
-@media (prefers-reduced-motion: reduce) { .speak-badge i { animation: none; transform: scaleY(.7); } }
+@media (prefers-reduced-motion: reduce) { .speak-badge .sb-bar { animation: none; transform: scaleY(.7); } }
 .speak-badge.small { right: -6px; top: -7px; height: 14px; padding: 0 2px; gap: 0; }
 .speak-badge.small svg { width: 10px; height: 10px; }
-.speak-badge.small i { display: none; }
+.speak-badge.small .sb-bar { display: none; }
 
 /* 闭着麦：头像右上角红色的划线麦克风（被闭麦实心红，自己闭麦暗红描边） */
 .mute-badge { position: absolute; right: -8px; top: -8px; z-index: 3; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #c0392b; box-shadow: 0 0 0 2px rgba(0, 0, 0, .55); pointer-events: none; }
@@ -1935,3 +1935,9 @@ span.lr-newbie { cursor: default; }
 .mute-badge.self svg { fill: #e8a59c; stroke: #e8a59c; }
 .mute-badge.small { right: -6px; top: -6px; width: 14px; height: 14px; }
 .mute-badge.small svg { width: 9px; height: 9px; }
+
+/* 说书人的座位：圈的左上角外面，金色 */
+.st-seat .token-name { color: #e8c66a; }
+.st-star { display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, #3a3020, #14110b); border: 2px solid #e8c66a; color: #e8c66a; font-size: 26px; box-shadow: 0 3px 10px rgba(0, 0, 0, .5); }
+/* 左下角存活条：头像缩小时麦克风标记也跟着缩，别盖住座位号 */
+.as-face .speak-badge, .as-face .mute-badge { right: -6px; top: -6px; }

@@ -134,6 +134,7 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
           <button type="button" className="tl-cancel" onClick={() => setFrom(null)}>取消</button>
         </div>
       )}
+      {s.storyteller && <StSeat s={s} pickable={pickable} picked={picked} vote={vote} tk={tk} onTap={onTap} />}
       {s.players.map((p, i) => {
         const a = rad(i);
         const can = !pickable || pickable.includes(p.id);
@@ -190,6 +191,29 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
         );
       })}
     </div>
+  );
+}
+
+/**
+ * 说书人的座位（2026-11-18 用户：说书人在台上也要展示）：放在圈的左下角外面（左上角有存活人数的信息条），不占玩家的座位。
+ * 真人说书显示他的头像（说话、闭麦标记照常）；AI 说书显示 ★。有无神论者的剧本可以在提名时点他（被提名 / 上处决台也标出来）。
+ */
+function StSeat({ s, pickable, picked, vote, tk, onTap }) {
+  const st = s.storyteller;
+  const target = 'storyteller';
+  const can = !!pickable?.includes(target);
+  const onBlock = s.block === target || vote?.nominee === target;
+  const cls = ['token', 'st-seat', can && 'pickable', pickable && !can && 'disabled', picked.includes(target) && 'picked', onBlock && 'on-block'].filter(Boolean).join(' ');
+  const face = st.human ? { id: st.id, name: st.name, avatar: st.avatar, mic: st.mic } : { id: 'storyteller', name: '说书人', avatar: null };
+  return (
+    <button type="button" className={cls} style={{ left: '8%', top: '88%' }} onClick={() => can && onTap?.({ id: target })}
+      title={`说书人：${st.name}${s.stNominable ? '\n这个剧本有无神论者：可以提名说书人' : ''}`}>
+      <div className="token-face">
+        {st.human ? <Portrait p={face} size={Math.round(tk * 0.85)} frame="#e8c66a" /> : <div className="st-star" style={{ width: Math.round(tk * 0.85), height: Math.round(tk * 0.85) }}>★</div>}
+      </div>
+      <div className="token-name">{st.human ? `说书人 · ${st.name}` : 'AI 说书人'}</div>
+      {(s.stNominated || onBlock) && <div className="token-tags">{onBlock ? '处决台上' : '被提名'}</div>}
+    </button>
   );
 }
 

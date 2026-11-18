@@ -48,7 +48,7 @@ export function AliveStrip({ s, watching = null, onWatch = null }) {
               onClick={() => onWatch?.(p.id)}
               onContextMenu={(e) => { e.preventDefault(); setMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}>
               <PeltStack items={s.pelted?.[p.id]} size={20} />
-              <Portrait p={p} size={44} prefer="avatar" speak={false} frame={p.id === s.me ? 'var(--mot)' : allies[p.id] ? 'var(--phy)' : TAGS[marks[p.id]?.tag]?.color ?? '#f4f4f0'} />
+              <Portrait p={p} size={44} prefer="avatar" frame={p.id === s.me ? 'var(--mot)' : allies[p.id] ? 'var(--phy)' : TAGS[marks[p.id]?.tag]?.color ?? '#f4f4f0'} />
               <i>{p.seat}</i>
               {allies[p.id] ? <span className="mark-badge ally">队友·{allies[p.id]}</span> : <MarkBadge mark={marks[p.id]} />}
             </button>
