@@ -765,7 +765,6 @@ body:has(.lobby) { padding-top: 0; } /* 大厅背景图铺到灵动岛底下，�
 .splash-retry { background: var(--paper); color: #111; border: 0; font: 900 15px/1 var(--sans); letter-spacing: 2px; padding: 12px 22px; cursor: pointer; }
 
 /* 说话中：头像绿框 */
-.portrait.speaking { box-shadow: 0 0 0 2px #3fd47a, 0 0 14px rgba(63, 212, 122, .75); }
 /* 右上角：要你做事时高亮 */
 .dock-hot > section:first-of-type { outline: 2px solid var(--mot); outline-offset: -2px; animation: dock-pulse 1.6s ease-in-out infinite; }
 @keyframes dock-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(238, 196, 90, 0); } 50% { box-shadow: 0 0 22px 2px rgba(238, 196, 90, .55); } }
@@ -811,7 +810,6 @@ body:has(.lobby) { padding-top: 0; } /* 大厅背景图铺到灵动岛底下，�
 .invite-people button:hover { border-color: var(--mot); }
 
 /* 地图上小人头顶的头像：说话时绿光更明显 */
-.float .portrait.speaking { box-shadow: 0 0 0 2px #3fd47a, 0 0 10px 3px rgba(63, 212, 122, .9); transform: scale(1.12); }
 /* 处决的绞刑架动画 */
 .gallows { width: min(220px, 42vw); height: auto; margin-bottom: 6px; overflow: visible; }
 .g-frame path { stroke-dasharray: 1; stroke-dashoffset: 1; animation: g-draw .7s cubic-bezier(.6, 0, .3, 1) forwards; }
@@ -871,7 +869,6 @@ body:has(.lobby) { padding-top: 0; } /* 大厅背景图铺到灵动岛底下，�
 .past-game summary { cursor: pointer; font: 700 13px var(--sans); margin-bottom: 6px; }
 
 /* 地图小人的说话绿框窄一点 */
-.float .portrait.speaking { box-shadow: 0 0 0 1px #3fd47a, 0 0 5px 1px rgba(63, 212, 122, .7); transform: none; }
 /* 地图小人：头像可以点（做标记） */
 .walker .float { pointer-events: auto; cursor: pointer; }
 .walker .float .mark-badge { bottom: calc(-11px - var(--i, 0) * 12px); font-size: 8px; }
@@ -1927,3 +1924,6 @@ span.lr-newbie { cursor: default; }
 .speak-badge i:nth-child(4) { animation-delay: .3s; }
 @keyframes speak-wave { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
 @media (prefers-reduced-motion: reduce) { .speak-badge i { animation: none; transform: scaleY(.7); } }
+.speak-badge.small { right: -6px; top: -7px; height: 14px; padding: 0 2px; gap: 0; }
+.speak-badge.small svg { width: 10px; height: 10px; }
+.speak-badge.small i { display: none; }

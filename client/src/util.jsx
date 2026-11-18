@@ -51,19 +51,19 @@ export function Portrait({ p, size, frame = 'var(--cream)', prefer = 'avatar', s
   const square = !!src && src === p.avatar;
   const w = size; const h = square ? size : Math.round(size * 1.2);
   return (
-    <div className={`portrait ${square ? 'is-avatar' : ''} ${speaking ? 'speaking' : ''}`} style={{ width: w, height: h, '--frame': speaking ? '#3fd47a' : frame }}>
+    <div className={`portrait ${square ? 'is-avatar' : ''} ${speaking ? 'speaking' : ''}`} style={{ width: w, height: h, '--frame': frame }}>{/* 说话不改边框（边框是大家的标记颜色），只加右上角的麦克风 */}
       {src
         ? <img src={src} alt="" onError={() => setFailed((x) => x + 1)} />
         : <div className="portrait-paint" style={{ background: `hsl(${ch ? ch.hue : hue(p.id)} 28% 38%)`, fontSize: w * 0.5 }}>{initial}</div>}
-      {speaking && w >= 26 && <SpeakBadge />}
+      {speaking && <SpeakBadge small={w < 30} />}
     </div>
   );
 }
 
 /** 正在说话：头像右下角的麦克风 + 跳动的声波（2026-11-18 用户：集合时看得出谁在说话）。 */
-function SpeakBadge() {
+function SpeakBadge({ small = false }) {
   return (
-    <span className="speak-badge" aria-label="正在说话" title="正在说话">
+    <span className={`speak-badge ${small ? 'small' : ''}`} aria-label="正在说话" title="正在说话">
       <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" /><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5M5.5 14.5h5" fill="none" strokeWidth="1.6" strokeLinecap="round" /></svg>
       <i /><i /><i />
     </span>
