@@ -1,6 +1,6 @@
 // 金币和「惩罚聊场外」：白天花金币朝某人扔烂番茄、放乌鸦、套毒舌笼头，东西叠在他头上直到这局结束。
 // 只买面子，不影响结算。道具定义在 src/shared/pelt.js，扔的规则在 server/room.js 的 pelt()。
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PELT_ITEMS } from '../../src/shared/pelt.js';
 import { Panel, Btn } from './ui.jsx';
 
@@ -21,6 +21,16 @@ export function PeltIcon({ item, size = 16 }) {
       <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
         <path d="M2 11c2.5-.3 4-1.6 5-3.6C8 5.2 9.6 4 11.4 4.3c1 .2 1.6.8 2 1.6l1.6.3-1.4.8c-.3 2.4-2 4.4-4.4 5.1L7.5 14H6l.7-1.8C5 12.6 3.4 12.3 2 11Z" fill="#17161c" stroke="#d8d2c2" strokeWidth=".7" strokeLinejoin="round" />
         <circle cx="11.6" cy="5.6" r=".7" fill="#d9c27a" />
+      </svg>
+    );
+  }
+  if (item === 'flower') { // 一束紫罗兰
+    return (
+      <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M8 15V8.5M8 11 5.5 9.5M8 12.5l2.6-1.6" stroke="#4f7a34" strokeWidth="1.3" strokeLinecap="round" fill="none" />
+        <circle cx="5" cy="5" r="2.3" fill="#8a5cc4" /><circle cx="11" cy="5" r="2.3" fill="#9c6fd6" /><circle cx="8" cy="3.4" r="2.3" fill="#b38ae6" />
+        <circle cx="8" cy="7" r="2.1" fill="#7d4fb8" />
+        <circle cx="5" cy="5" r=".7" fill="#f2d36b" /><circle cx="11" cy="5" r=".7" fill="#f2d36b" /><circle cx="8" cy="3.4" r=".7" fill="#f2d36b" /><circle cx="8" cy="7" r=".7" fill="#f2d36b" />
       </svg>
     );
   }
@@ -60,6 +70,41 @@ export function PeltButton({ s, setMode }) {
   );
 }
 
+/**
+ * 扔东西的动画（2026-11-18 用户：要有动画，大家都能看到）：服务器把最近几秒扔的东西发给所有人（s.peltFx），
+ * 这里从扔的人的头像飞到被扔的人的头像上，落地时炸开（番茄溅汁、紫罗兰花瓣、乌鸦扑腾、笼头哐当）。
+ * 头像用 data-pid 找（广场座位、左下角存活条、镇民页都有）；找不到扔的人就从屏幕下方飞进来。
+ */
+export function PeltFx({ s }) {
+  const seen = useRef(new Set());
+  const [flying, setFlying] = useState([]);
+  useEffect(() => {
+    const now = Date.now();
+    for (const f of s?.peltFx ?? []) {
+      if (seen.current.has(f.id)) continue;
+      seen.current.add(f.id);
+      if (now - f.at > 4000) continue; // 进来时已经扔过一会儿了：不补放
+      const box = (id) => [...document.querySelectorAll(`[data-pid="${CSS.escape(id)}"] .portrait`)].map((el) => el.getBoundingClientRect()).find((r) => r.width > 0 && r.bottom > 0 && r.top < innerHeight);
+      const to = box(f.target);
+      if (!to) continue;
+      const from = box(f.by) ?? { left: innerWidth / 2, top: innerHeight + 20, width: 0, height: 0 };
+      const fx = { ...f, x0: from.left + from.width / 2, y0: from.top + from.height / 2, x1: to.left + to.width / 2, y1: to.top + to.height * 0.25 };
+      setFlying((cur) => [...cur, fx]);
+      setTimeout(() => setFlying((cur) => cur.filter((x) => x.id !== f.id)), 1700);
+    }
+  }, [s?.peltFx]);
+  return (
+    <div className="pelt-fx" aria-hidden="true">
+      {flying.map((f) => (
+        <span key={f.id} className={`pf-one pf-${f.item}`} style={{ '--x0': `${f.x0}px`, '--y0': `${f.y0}px`, '--x1': `${f.x1}px`, '--y1': `${f.y1}px` }}>
+          <span className="pf-fly"><PeltIcon item={f.item} size={34} /></span>
+          <span className="pf-burst">{Array.from({ length: 8 }, (_, i) => <i key={i} style={{ '--a': `${i * 45}deg` }} />)}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /** 选人、选东西、扔。 */
 export function PeltPanel({ s, act, onClose }) {
   const [target, setTarget] = useState(null);
@@ -70,10 +115,10 @@ export function PeltPanel({ s, act, onClose }) {
   const throwIt = async () => { if (await act('pelt', { target, item })) onClose(); };
   return (
     <Panel title="惩罚场外" tone="phy" extra={<span className="muted">金币 {s.coins ?? 0} 枚 · 今天还能扔 {Math.max(0, s.peltLeft ?? 0)} 次</span>}>
-      <p className="lead">有人聊场外？花金币朝他扔点东西：叠在他头上，直到这局结束。全场都看得到是你扔的。不影响游戏。</p>
+      <p className="lead">有人聊场外？花金币朝他扔点东西；说得精彩、玩得漂亮，就扔一束<b>鲜花</b>给他叫好。东西叠在他头上直到这局结束，扔的时候全场都看得到它飞过去。不影响游戏。</p>
       <div className="pelt-items">
         {Object.entries(PELT_ITEMS).map(([k, x]) => (
-          <button key={k} type="button" className={`pelt-item ${item === k ? 'on' : ''}`} aria-pressed={item === k} onClick={() => setItem(k)} title={x.flavor}>
+          <button key={k} type="button" className={`pelt-item ${x.praise ? 'praise' : ''} ${item === k ? 'on' : ''}`} aria-pressed={item === k} onClick={() => setItem(k)} title={x.flavor}>
             <PeltIcon item={k} size={22} /><b>{x.name}</b><small>{x.cost} 枚</small>
           </button>
         ))}

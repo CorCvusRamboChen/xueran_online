@@ -43,7 +43,7 @@ export function AliveStrip({ s, watching = null, onWatch = null }) {
         {s.players.map((p) => {
           const h = houseOf(p.id);
           return (
-            <button key={p.id} type="button" title={`${p.seat}号 ${p.name}${h ? ` · 在${h.name}${h.locked ? '（锁门）' : ''}` : ''}（右键做标记）`}
+            <button key={p.id} type="button" data-pid={p.id} title={`${p.seat}号 ${p.name}${h ? ` · 在${h.name}${h.locked ? '（锁门）' : ''}` : ''}（右键做标记）`}
               className={['as-face', watching === p.id && 'on', p.id === s.me && 'me', !p.alive && 'dead', h && 'inside', h?.locked && 'locked'].filter(Boolean).join(' ')}
               onClick={() => onWatch?.(p.id)}
               onContextMenu={(e) => { e.preventDefault(); setMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}>

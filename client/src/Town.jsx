@@ -153,6 +153,7 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
           <button
             key={p.id}
             type="button"
+            data-pid={p.id}
             className={cls}
             style={{ left: `${50 + Rx * Math.cos(a)}%`, top: `${50 + Ry * Math.sin(a)}%` }}
             onClick={() => tap(p)}

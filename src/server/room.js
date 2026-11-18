@@ -321,6 +321,7 @@ export class Room {
       case 'skipNom': this.skipNom(uid); break;
       case 'riotPass': this.riotPass(uid); break;
       case 'pelt': this.pelt(uid, p.target, p.item); break;
+      case 'mvp': this.voteMvp(uid, p.target); break;
       case 'traveller': this.joinTraveller(uid, p.role); break;
       case 'travellerLeave': this.leaveTraveller(uid); break;
       case 'exile': this.proposeExile(uid, p.target); break;
@@ -555,6 +556,7 @@ export class Room {
   async start() {
     if (this.game) throw new UserError('游戏已经开始了');
     this.pelted = {}; this.pelts = {}; // 惩罚场外：头上叠的东西每局重来
+    this.peltFx = []; if (this.mvp) { this.cancel(this.mvp.timer); this.mvp = null; } // 上一局的扔东西动画、MVP 投票
     this.talk = []; // 将军、政客用的每天发言
     if (this.lobby.length < MIN_PLAYERS) throw new UserError(`至少需要 ${MIN_PLAYERS} 名玩家`);
     const seats = this.settings.shuffle ? shuffle(this.lobby, Math.random) : [...this.lobby];
@@ -1692,7 +1694,44 @@ export class Room {
     try { this.wallet.spendCoins(uid, it.cost, `${it.name} → ${g.name(target)}`); } catch (e) { throw new UserError(e.message); }
     this.pelts[key] = (this.pelts[key] ?? 0) + 1;
     (this.pelted[target] ??= []).push({ item, by: uid });
-    this.pub(`**${g.name(uid)}** 嫌 **${g.name(target)}** 聊场外，${it.verb}。`, 'vote');
+    // 全场都看得到的动画：最近几秒扔的东西发给所有客户端，从扔的人飞到被扔的人头上（2026-11-18 用户）
+    const now = Date.now();
+    this.peltFx = [...(this.peltFx ?? []).filter((f) => now - f.at < 6000), { id: `${now}-${uid}`, item, by: uid, target, at: now }];
+    this.pub(it.praise ? `**${g.name(uid)}** ${it.verb}给 **${g.name(target)}**。` : `**${g.name(uid)}** 嫌 **${g.name(target)}** 聊场外，${it.verb}。`, 'vote');
+  }
+
+  // ───────────── 赛后 MVP 投票（2026-11-18 用户）─────────────
+  /** 游戏结束：这局的真人每人投一票选 MVP（不能投自己），90 秒或者都投完就公布。 */
+  openMvp(g) {
+    const voters = (g.players ?? []).filter((p) => !this.isFake(p.id) && !p.left).map((p) => p.id);
+    if (voters.length < 2 || this.tutorial) { this.mvp = null; return; }
+    const m = this.mvp = { voters, votes: new Map(), until: Date.now() + 90_000, result: null };
+    m.timer = this.later(90_000, () => this.finishMvp(m));
+    this.announce('游戏结束了：给这局表现最好的人投一票吧（**MVP**，不能投自己），90 秒后公布。', 'end');
+  }
+
+  voteMvp(uid, target) {
+    const m = this.mvp; const g = this.game;
+    if (!m || m.result) throw new UserError('现在没有 MVP 投票');
+    if (!m.voters.includes(uid)) throw new UserError('只有这局的玩家能投');
+    if (!g?.players?.some((p) => p.id === target)) throw new UserError('要投给这局的一名玩家');
+    if (target === uid) throw new UserError('不能投自己');
+    m.votes.set(uid, target);
+    if (m.voters.every((id) => m.votes.has(id))) this.finishMvp(m);
+  }
+
+  finishMvp(m) {
+    if (this.mvp !== m || m.result) return;
+    this.cancel(m.timer);
+    const g = this.game;
+    const count = {};
+    for (const t of m.votes.values()) count[t] = (count[t] ?? 0) + 1;
+    const top = Math.max(0, ...Object.values(count));
+    const ids = top ? Object.keys(count).filter((id) => count[id] === top) : [];
+    m.result = { ids, votes: top, count };
+    const nm = (id) => g?.name?.(id) ?? id;
+    this.announce(ids.length ? `🏆 本局 MVP：${ids.map((id) => `**${nm(id)}**`).join('、')}（${top} 票）` : '本局 MVP：没有人投票。', 'end');
+    this.changed();
   }
 
   // ───────────── 夜半狂欢：精神病患者 ─────────────
@@ -3129,6 +3168,7 @@ export class Room {
     this.announce(`${won[g.winner]} ${g.winReason}`, 'end');
     await this.judgePoliticianNow(g);
     if (!this.tutorial) this.onEnded?.(this); // 永久存档这一局
+    this.openMvp(g);
     this.narrate('end', { team: g.winner, reason: g.winReason });
     this.changed();
     await this.endRoam();
@@ -3576,7 +3616,9 @@ export class Room {
       exiledToday: Object.keys(this.exiled ?? {}).filter((k) => k.startsWith(`${g.day}:`)).map((k) => k.slice(k.indexOf(':') + 1)),
       stNominable: g.engine === 'snv' && inScript('atheist', g.script), // 有无神论者的剧本：可以提名说书人
       // 说书人也坐在台上（2026-11-18 用户）：真人说书显示他的头像，AI 说书显示 ★；有无神论者的剧本可以直接点他提名
-      storyteller: this.stId ? { id: this.stId, name: this.users.get(this.stId)?.name ?? '说书人', avatar: this.users.get(this.stId)?.avatar ?? null, human: true, mic: this.mics?.[this.stId] ?? null } : { id: 'storyteller', name: 'AI 说书人', avatar: null, human: false },
+      peltFx: (this.peltFx ?? []).filter((f) => Date.now() - f.at < 6000).map(({ id, item, by, target, at }) => ({ id, item, by, target, at })),
+      mvp: this.mvp ? { until: this.mvp.until, mine: this.mvp.votes.get(uid) ?? null, count: this.mvp.votes.size, need: this.mvp.voters.length, canVote: this.mvp.voters.includes(uid), result: this.mvp.result } : null,
+      storyteller: !(g.engine === 'snv' && inScript('atheist', g.script)) ? null : this.stId ? { id: this.stId, name: this.users.get(this.stId)?.name ?? '说书人', avatar: this.users.get(this.stId)?.avatar ?? null, human: true, mic: this.mics?.[this.stId] ?? null } : { id: 'storyteller', name: 'AI 说书人', avatar: null, human: false },
       stNominated: !!g.nominees?.has('storyteller'),
       rps: this.rps ? { a: this.rps.a, b: this.rps.b, until: this.rps.until, mine: [this.rps.a, this.rps.b].includes(uid), hand: this.rps.picks[uid] ?? null } : null, // 精神病患者猜拳
       boom: g.boom?.until ? { until: g.boom.until, alive: g.boom.alive, mine: g.boom.points[uid] ?? null, count: Object.keys(g.boom.points).length } : null, // 炸弹人倒数

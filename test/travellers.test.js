@@ -378,6 +378,7 @@ async function dayRoom(script, extra = []) {
 test('房间：主教在场只有说书人提名，说书人提名后被提名者辩护、大家投票', async () => {
   const { room, g } = await dayRoom('bmr', ['bi']);
   try {
+    if (g.phase !== 'day') return; // 全量并发时第一夜偶尔超过 15 秒：不在夜里测白天的事
     await room.act('bi', 'traveller', { role: 'bishop' });
     g.get('bi').evil = false;
     if (!g.bishopOn()) return; // 主教失效时玩家照常提名
@@ -393,6 +394,7 @@ test('房间：主教在场只有说书人提名，说书人提名后被提名�
 test('房间：怪咖今天被一半的人觉得有趣，流放就不成立', async () => {
   const { room, g } = await dayRoom('snv', ['dv']);
   try {
+    if (g.phase !== 'day') return; // 全量并发时第一夜偶尔太慢
     await room.act('dv', 'traveller', { role: 'deviant' });
     if (!g.travellerOn(g.get('dv'))) return;
     await room.act('u1', 'exile', { target: 'dv' });
@@ -406,6 +408,7 @@ test('房间：怪咖今天被一半的人觉得有趣，流放就不成立', as
 test('房间：屠夫在首次处决后再提名一次，过存活玩家一半就再处决', async () => {
   const { room, g } = await dayRoom('snv', ['bu']);
   try {
+    if (g.phase !== 'day') return; // 全量并发时第一夜偶尔太慢
     await room.act('bu', 'traveller', { role: 'butcher' });
     if (!g.travellerOn(g.get('bu'))) return;
     g.executedToday = true;

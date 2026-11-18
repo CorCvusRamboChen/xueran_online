@@ -1943,3 +1943,29 @@ span.lr-newbie { cursor: default; }
 .as-face .speak-badge, .as-face .mute-badge { right: -6px; top: -6px; }
 /* 「镇民」页的小魔典：头像小，麦克风标记跟着缩一点 */
 .mg-token .speak-badge, .mg-token .mute-badge { right: -7px; top: -7px; }
+
+/* 扔东西的动画：沿一条弧线从扔的人飞到被扔的人头上，落下时炸开（全场都看得到） */
+.pelt-fx { position: fixed; inset: 0; pointer-events: none; z-index: 2000; }
+.pf-one { position: absolute; left: 0; top: 0; }
+.pf-fly { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .6)); animation: pf-x 0.9s cubic-bezier(.3, .1, .4, 1) forwards; }
+.pf-fly > svg { display: block; animation: pf-y 0.9s cubic-bezier(.2, 0, .8, 1) forwards, pf-spin 0.9s linear forwards; }
+@keyframes pf-x { from { left: var(--x0); top: var(--y0); } to { left: var(--x1); top: var(--y1); } }
+@keyframes pf-y { 0% { transform: translateY(0) scale(1.2); } 45% { transform: translateY(-90px) scale(1.5); } 85% { transform: translateY(0) scale(1.15); opacity: 1; } 100% { transform: translateY(0) scale(.6); opacity: 0; } }
+@keyframes pf-spin { to { rotate: 540deg; } }
+.pf-flower .pf-fly > svg, .pf-raven .pf-fly > svg { animation: pf-y 0.9s cubic-bezier(.2, 0, .8, 1) forwards; } /* 花和乌鸦不翻跟头 */
+.pf-burst { position: absolute; left: var(--x1); top: var(--y1); }
+.pf-burst i { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; opacity: 0; animation: pf-burst .7s ease-out .85s forwards; transform: rotate(var(--a)); }
+@keyframes pf-burst { 0% { opacity: 1; transform: rotate(var(--a)) translateX(0) scale(1); } 100% { opacity: 0; transform: rotate(var(--a)) translateX(34px) scale(.4); } }
+.pf-tomato .pf-burst i { background: #c0392b; }
+.pf-flower .pf-burst i { background: #b38ae6; border-radius: 60% 0 60% 0; width: 10px; height: 10px; }
+.pf-flower .pf-burst i:nth-child(odd) { background: #f2d36b; }
+.pf-raven .pf-burst i { background: #17161c; border-radius: 2px 8px; }
+.pf-bridle .pf-burst i { background: #c8ccd2; width: 3px; height: 10px; border-radius: 1px; }
+@media (prefers-reduced-motion: reduce) { .pf-fly, .pf-fly > svg { animation-duration: .01s; } .pf-burst i { animation-duration: .2s; } }
+.pelt-item.praise.on { border-color: #9c6fd6; background: rgba(156, 111, 214, .15); }
+
+/* 赛后 MVP 投票 */
+.mvp-picks { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.mvp-pick { display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 4px; border: 1px solid var(--line, #3a3a3a); background: rgba(255,255,255,.03); color: inherit; cursor: pointer; }
+.mvp-pick.on { border-color: #e8c66a; background: rgba(232, 198, 106, .15); }
+.mvp-result { font: 900 18px/1.4 var(--serif); color: #e8c66a; }

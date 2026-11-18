@@ -12,7 +12,7 @@ import { AvalonGame } from './Avalon.jsx';
 import { MarkGame } from './Mark.jsx';
 import { Line, Portrait, clock, syncClock, serverNow, gameClock, useTick, useCountdown, cnNum } from './util.jsx';
 import { Tag, Panel, Btn, Stat, Check, Faces, HudBar } from './ui.jsx';
-import { PeltButton, PeltPanel } from './Pelt.jsx';
+import { PeltButton, PeltPanel, PeltFx } from './Pelt.jsx';
 import { TravellerJoin, TravellerActions, ExilePanel, JudgeButtons, ButcherPanel, GnomeButton } from './Travellers.jsx';
 import { tick } from './world/footsteps.js';
 import { ATTR, FLAVOR, ROLE_NAMES, ROLE_TEAM, voiceOf } from './flavor.js';
@@ -408,6 +408,7 @@ function Game({ s, act, ask }) {
 
   return (
     <div className="game">
+      <PeltFx s={s} />{/* 扔东西的动画：全场都看得到 */}
       <section className="scene">
         {!roaming && <Tag className="where">{place}</Tag>}
         {s.spectator && s.phase !== 'ended' && (
@@ -937,6 +938,30 @@ function MoonchildPanel({ s, act, fake }) {
   );
 }
 
+/** 赛后 MVP 投票（2026-11-18 用户）：这局的真人每人一票，不能投自己；都投完或 90 秒后公布。 */
+function MvpVote({ s, act, g }) {
+  const m = s.mvp;
+  const secs = useCountdown(m?.until);
+  if (!m) return null;
+  if (m.result) {
+    return <div className="mvp-box"><p className="mvp-result">🏆 本局 MVP：{m.result.ids.length ? m.result.ids.map((id) => `${g(id)?.seat ?? ''}号 ${g(id)?.name ?? ''}`).join('、') : '没有人投票'}{m.result.votes ? `（${m.result.votes} 票）` : ''}</p></div>;
+  }
+  return (
+    <div className="mvp-box">
+      <p className="lead"><b>投一票选 MVP</b>：这局谁表现最好？（不能投自己）{secs != null && <span className="muted"> · 还有 {secs} 秒 · 已投 {m.count}/{m.need}</span>}</p>
+      {m.canVote ? (
+        <div className="mvp-picks">
+          {s.players.filter((p) => p.id !== s.me && !p.left).map((p) => (
+            <button key={p.id} type="button" className={`mvp-pick ${m.mine === p.id ? 'on' : ''}`} aria-pressed={m.mine === p.id} onClick={() => act('mvp', { target: p.id })}>
+              <Portrait p={p} size={26} speak={false} /><span>{p.seat}号 {p.name}</span>
+            </button>
+          ))}
+        </div>
+      ) : <p className="muted">这局的玩家正在投票……</p>}
+    </div>
+  );
+}
+
 export function Picker({ s, options, picked, onTap }) {
   return (
     <div className="picker">
@@ -966,6 +991,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
         <p className="lead">{s.winner?.reason}</p>
         <p className="muted">魔典已经公开，每个人的真实身份写在肖像下面。</p>
         {s.isHost && <div className="btn-row"><Btn kind="primary" onClick={() => act('end')}>再来一局</Btn></div>}
+        <MvpVote s={s} act={act} g={g} />
         {s.timeline?.length > 0 ? <Replay timeline={s.timeline} /> : s.journal?.length > 0 && (
           <details className="st-journal">
             <summary>说书人手记 · {s.journal.length} 条判定</summary>
@@ -1661,7 +1687,7 @@ export function Roster({ s, onTap }) {
           const mine = p.id === s.me;
           const frame = allies[p.id] ? 'var(--phy)' : mine ? 'var(--mot)' : TAGS[m.tag]?.color ?? '#f4f4f0';
           return (
-            <button key={p.id} type="button" className={`mg-token ${p.alive ? '' : 'dead'} ${from === p.id ? 'from' : ''}`} style={{ left: x, top: y, '--tk': `${tk}px` }}
+            <button key={p.id} type="button" data-pid={p.id} className={`mg-token ${p.alive ? '' : 'dead'} ${from === p.id ? 'from' : ''}`} style={{ left: x, top: y, '--tk': `${tk}px` }}
               onClick={() => tap(p)}
               onContextMenu={(e) => { e.preventDefault(); stopHold(); openMenu(p, e.clientX, e.clientY); }}
               onPointerDown={(e) => { if (e.pointerType === 'mouse') return; const at = { x: e.clientX, y: e.clientY }; hold.current = { t: setTimeout(() => { hold.current = { fired: true }; openMenu(p, at.x, at.y); }, 500) }; }}
