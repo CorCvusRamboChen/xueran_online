@@ -907,19 +907,32 @@ export class Storyteller {
    * 健康：善良落后就给能直接帮到忙的（处决某个邪恶、保住某个说真话的人），领先就给模糊一点的；失效时给坏建议。
    */
   fishermanAdvice(p, lie) {
+    // 2026-11-18 用户：渔夫太直接了。集石百科：给「去做什么」的建议，范例是「你不应该相信小八」「让声称自己是外来者的玩家活着」；
+    // 不单独点名恶魔，要点到邪恶玩家时和善良玩家放在一起说，让他自己去想。
     const g = this.g;
     const alive = g.players.filter((q) => q.alive && q.id !== p.id);
     const evil = alive.filter((q) => g.evilOf(q));
     const good = alive.filter((q) => !g.evilOf(q));
     const b = this.balance();
     const name = (q) => g.name(q.id);
+    const mine = !g.evilOf(p); // 渔夫的阵营：建议帮他这一边
+    const friends = mine ? good : evil; const foes = mine ? evil : good;
+    const broken = friends.filter((q) => g.snvBroken?.(q)); // 自己人里信息不可靠的（醉酒中毒）
     let text;
-    if (lie && good.length) text = `处决 ${name(this.choose('fishBad', good, { who: p.id }))}。`;
-    else if (!evil.length || !good.length) text = '相信你自己的判断，不要被别人带着走。';
-    else if (b < 0 && this.roll('fishStrong', { balance: b }, { who: p.id })) {
-      const demon = evil.find((q) => ROLES[q.role].team === 'demon');
-      text = demon ? `别让 ${name(demon)} 活过明天。` : `盯紧 ${name(this.choose('fishEvil', evil, { who: p.id }))}。`;
-    } else text = this.choose('fishSoft', ['trust', 'outsider'], { who: p.id }) === 'trust' ? `相信 ${name(this.choose('fishTrust', good, { who: p.id }))}。` : '今天别急着处决声称自己是外来者的人。';
+    if (lie && foes.length) text = `相信 ${name(this.choose('fishBad', foes, { who: p.id }))}。`; // 失效：让他相信对面的人
+    else if (!foes.length || !friends.length) text = '相信你自己的判断，不要被别人带着走。';
+    else {
+      const kinds = ['trust', 'outsider', ...(broken.length ? ['distrust'] : []), ...(b < 0 === mine ? ['pair'] : [])]; // 自己这边落后时多给一种更有用的
+      const k = this.choose('fishKind', kinds, { who: p.id });
+      if (k === 'distrust') text = `你不应该相信 ${name(this.choose('fishDistrust', broken, { who: p.id }))}。`;
+      else if (k === 'pair') {
+        const a = this.choose('fishFoe', foes.filter((q) => ROLES[q.role].team !== 'demon').length ? foes.filter((q) => ROLES[q.role].team !== 'demon') : foes, { who: p.id });
+        const c = this.choose('fishMate', friends, { who: p.id });
+        const [x, y] = [a, c].sort((m, n) => m.seat - n.seat);
+        text = `多留意 ${name(x)} 和 ${name(y)} 的说法，他们之中有人在骗你。`;
+      } else if (k === 'outsider') text = '让声称自己是外来者的玩家活着。';
+      else text = `相信 ${name(this.choose('fishTrust', friends, { who: p.id }))}。`;
+    }
     this.note(`渔夫 ${g.name(p.id)} 的建议${lie ? '（失效，给了坏建议）' : ''}：${text}`, b);
     return text;
   }

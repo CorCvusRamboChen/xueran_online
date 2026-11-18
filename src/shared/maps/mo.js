@@ -9,6 +9,7 @@ export default {
   place: '黯月驿站 · 午夜的旋转木马',
   weather: 'festival',
   roofSnow: 0,
-  fog: { ...BMR.fog, color: 0xa88ad8, ground: 0.2, haze: 0.24, mist: 0.05 },
-  tone: { ...BMR.tone, map: { brightness: 0.92, contrast: 1.08, saturate: 1.2, sepia: 0.1, hue: 40 }, houses: { brightness: 0.96, contrast: 1.06, saturate: 1.15, sepia: 0.08, hue: 32 } },
+  // 2026-11-18 用户：太绿了。黯月初升的底图是深秋的橙色，原来色相转 +40 度把橙色转成了黄绿；改成往品红那边转、压暗、降饱和，再加浓一点的紫雾
+  fog: { ...BMR.fog, color: 0x8a6ad8, ground: 0.26, haze: 0.3, mist: 0.06 },
+  tone: { ...BMR.tone, map: { brightness: 0.8, contrast: 1.1, saturate: 0.8, sepia: 0, hue: -40 }, houses: { brightness: 0.86, contrast: 1.08, saturate: 0.9, sepia: 0, hue: -34 } },
 };
