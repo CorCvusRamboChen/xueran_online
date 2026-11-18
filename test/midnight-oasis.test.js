@@ -255,3 +255,22 @@ test('灵言师的关键词：默认简单（日常词）；房间设置关掉�
   const back = Game.fromJSON(JSON.parse(JSON.stringify(easy.toJSON())));
   assert.equal(back.mezEasy, true, '读档后还记得');
 });
+
+test('房间设置：选夜半狂欢默认入夜闭麦闭耳；换回别的剧本撤掉；房主自己改过就不再自动改', async () => {
+  const { Room } = await import('../src/server/room.js');
+  const room = new Room({ key: 'nq', guildId: 'g', hostId: 'u1', voice: null });
+  assert.equal(room.settings.nightDeafen, false);
+  await room.act('u1', 'settings', { script: 'mo' });
+  assert.equal(room.settings.nightDeafen, true, '夜半狂欢默认入夜闭麦');
+  await room.act('u1', 'settings', { script: 'tb' });
+  assert.equal(room.settings.nightDeafen, false, '换走撤掉自动打开的');
+  await room.act('u1', 'settings', { script: 'mo' });
+  await room.act('u1', 'settings', { nightDeafen: false });
+  await room.act('u1', 'settings', { script: 'snv' });
+  await room.act('u1', 'settings', { script: 'mo' });
+  assert.equal(room.settings.nightDeafen, true, '再选一次夜半狂欢又默认打开');
+  await room.act('u1', 'settings', { nightDeafen: true });
+  await room.act('u1', 'settings', { script: 'tb' });
+  assert.equal(room.settings.nightDeafen, true, '房主自己打开的，换剧本不动');
+  await room.teardown?.();
+});

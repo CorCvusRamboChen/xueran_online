@@ -86,6 +86,9 @@ const newId = () => Math.random().toString(36).slice(2, 8);
 const travellerList = travellersOf;
 export { SCRIPT_TRAVELLERS };
 
+// 默认入夜闭麦闭耳的剧本：夜半狂欢（哈迪寂亚结算时全场要安静）
+const NIGHT_QUIET = new Set(['mo']);
+
 export const DEFAULT_SETTINGS = {
   script: 'tb',          // 剧本：tb 暗流涌动 / bmr 黯月初升 / snv 梦殒春宵
   preset: null,          // 旧设置（只认官方八人推荐的某一套），现在用 setupMode
@@ -485,7 +488,7 @@ export class Room {
       if (p.mode === 'human') this.lobby = this.lobby.filter((x) => x.id !== this.hostId);
     }
     if (typeof p.shuffle === 'boolean') s.shuffle = p.shuffle;
-    if (typeof p.nightDeafen === 'boolean') s.nightDeafen = p.nightDeafen;
+    if (typeof p.nightDeafen === 'boolean') { s.nightDeafen = p.nightDeafen; s.nightDeafenAuto = false; } // 房主自己定了，就不再自动改
     if (typeof p.mezEasy === 'boolean') s.mezEasy = p.mezEasy;
     if (typeof p.nominatorVotes === 'boolean') s.nominatorVotes = p.nominatorVotes;
     if (typeof p.speechMute === 'boolean') s.speechMute = p.speechMute;
@@ -496,7 +499,15 @@ export class Room {
     if (typeof p.hearMadness === 'boolean') s.hearMadness = p.hearMadness;
     this.av.updateSettings(p);
     this.mk.updateSettings(p);
-    if (SCRIPTS[p.script]) { if (s.script !== p.script) s.preset = null; s.script = p.script; }
+    if (SCRIPTS[p.script]) {
+      if (s.script !== p.script) {
+        s.preset = null;
+        // 夜半狂欢默认入夜闭麦闭耳（2026-11-19 用户：哈迪寂亚结算时官方要求全场安静）。换走时只撤掉自动打开的那次，房主自己开的不动
+        if (NIGHT_QUIET.has(p.script) && !s.nightDeafen) { s.nightDeafen = true; s.nightDeafenAuto = true; }
+        else if (!NIGHT_QUIET.has(p.script) && s.nightDeafenAuto) { s.nightDeafen = false; s.nightDeafenAuto = false; }
+      }
+      s.script = p.script;
+    }
     if (['preset', 'ai', 'random'].includes(p.setupMode)) s.setupMode = p.setupMode;
     if ('preset' in p) s.preset = p.preset == null ? null : Math.max(0, Math.min((SETUPS[s.script]?.length ?? 1) - 1, Number(p.preset) || 0));
     if (typeof p.minionBluffs === 'boolean') s.minionBluffs = p.minionBluffs;
