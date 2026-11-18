@@ -1941,3 +1941,5 @@ span.lr-newbie { cursor: default; }
 .st-star { display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, #3a3020, #14110b); border: 2px solid #e8c66a; color: #e8c66a; font-size: 26px; box-shadow: 0 3px 10px rgba(0, 0, 0, .5); }
 /* 左下角存活条：头像缩小时麦克风标记也跟着缩，别盖住座位号 */
 .as-face .speak-badge, .as-face .mute-badge { right: -6px; top: -6px; }
+/* 「镇民」页的小魔典：头像小，麦克风标记跟着缩一点 */
+.mg-token .speak-badge, .mg-token .mute-badge { right: -7px; top: -7px; }

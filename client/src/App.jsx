@@ -1667,7 +1667,7 @@ export function Roster({ s, onTap }) {
               onPointerDown={(e) => { if (e.pointerType === 'mouse') return; const at = { x: e.clientX, y: e.clientY }; hold.current = { t: setTimeout(() => { hold.current = { fired: true }; openMenu(p, at.x, at.y); }, 500) }; }}
               onPointerUp={stopHold} onPointerLeave={stopHold}
               title={`${p.seat}号 ${p.name}${m.note ? `\n笔记：${m.note}` : ''}`}>
-              <Portrait p={p} size={tk} frame={frame} speak={false} />
+              <Portrait p={p} size={tk} frame={frame} />{/* 「镇民」页也显示说话 / 闭麦（2026-11-18 用户） */}
               <span className="mg-seat">{p.seat}</span>
               {!p.alive && <span className="mg-dead">{p.ghostVote ? '亡·余票' : '亡'}</span>}
               {m.note && <i className="mg-note">记</i>}
