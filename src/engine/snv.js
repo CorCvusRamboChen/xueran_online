@@ -1401,8 +1401,9 @@ ${this.grimoire()}
           if (pool.some((q) => q.role === c.role)) { this.record('st', `${ROLES[c.role].name}本来就在场：没有变化`); continue; }
           const live = pool.filter((q) => q.alive);
           // 官方：选的是「哪些爪牙在场」。这里一次只选一个角色：恶魔整个换掉；爪牙由说书人挑一名换成它
-          // 官方：选恶魔角色 → 恶魔变成它；选爪牙角色 → 所有爪牙都变成它
-          const ts = isDemon ? [live[0] ?? pool[0]].filter(Boolean) : (live.length ? live : pool);
+          // 官方：选恶魔 → 恶魔变成它；选爪牙要选「和本局爪牙人数一样多」的角色。界面一次只选一个角色，
+          // 按「选的数量不对时，说书人以公平可行的方式改变一定数量的邪恶玩家」：说书人挑一名爪牙换成它（全换会出现重复角色）
+          const ts = isDemon ? [live[0] ?? pool[0]].filter(Boolean) : [this.st.choose('engineerMinion', live.length ? live : pool, { who: p.id })].filter(Boolean);
           if (!ts.length) continue;
           for (const t of ts) {
             this.changeRole(t, c.role);
@@ -2149,9 +2150,9 @@ ${this.grimoire()}
     if (!a) throw new Error('提名者不在游戏中');
     if (!this.visAlive(a)) throw new Error('死亡玩家不能提名');
     if (this.golemBlocked?.(a)) throw new Error('你整局只能提名一次，已经用掉了'); // 魔像：提名说书人也算那一次（官方）
-    if (this.has(a, 'golem') && a.role === 'golem') this.used[`golem-${a.id}`] = true;
     if (this.nominators.has(a.id)) throw new Error('你今天已经提名过了');
     if (this.nominees.has(ST_NOMINEE)) throw new Error('说书人今天已经被提名过了');
+    if (this.has(a, 'golem') && a.role === 'golem') this.used[`golem-${a.id}`] = true; // 检查都过了才算用掉
     this.nominators.add(a.id);
     this.nominees.add(ST_NOMINEE);
     (this.nomBy ??= {})[ST_NOMINEE] = a.id;

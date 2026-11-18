@@ -214,10 +214,12 @@ export class Game {
       'balloon', 'leviGood', 'goblinMark', 'amnesiacDay', 'amnesiacKnown', 'woke', 'pardonDay',
       'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7', 'lunaticTold', 'lunaticTellTo', 'heard',
       'pixie', 'mez', 'execHist', 'nomBy', 'blockVoters', 'politicianDone', 'fibbinUsed', 'riotChain',
-      'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared', 'aiLead', 'politicianEval', 'scapegoatDay', 'gunDay', 'judgeUsed'];
+      'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared', 'aiLead', 'politicianEval', 'scapegoatDay', 'gunDay', 'judgeUsed',
+      'leviDue', 'goblinClaimDay', 'widowTold', 'baristaFx', 'harlotAsk', 'matronDay', 'butcherDay'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
+    out.acted = [...(this.acted ?? [])]; // 侍女：今晚为能力醒来的人（Set）
     out.st = this.st.toJSON();
     return out;
   }
@@ -226,11 +228,12 @@ export class Game {
     const g = Object.create(Game.prototype);
     g.rng = rng;
     g.st = new Storyteller(g, rng);
-    const { nominators, nominees, journal, st, ...rest } = data;
+    const { nominators, nominees, journal, st, acted, ...rest } = data;
     Object.assign(g, structuredClone(rest));
     g.timeline ??= [];
     g.nominators = new Set(nominators);
     g.nominees = new Set(nominees);
+    g.acted = new Set(acted ?? []);
     g.st.load(st ?? { journal });
     // 旧存档补字段
     g.evilInfo ??= g.players.length >= 7;

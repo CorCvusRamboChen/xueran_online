@@ -201,7 +201,7 @@ export class Storyteller {
       this.note(`小局：把占卜师 ${this.g.name(ft.id)} 自己定为红鲱鱼`);
       return ft.id;
     }
-    const good = this.g.players.filter((p) => !isEvilRole(p.role));
+    const good = this.g.players.filter((p) => !(this.g.evilOf ? this.g.evilOf(p) : isEvilRole(p.role)) && !p.traveller); // 按现在的阵营：被灵言师转成邪恶的不算
     const townsfolk = good.filter((p) => ROLES[p.role].team === 'townsfolk' && p.role !== 'fortuneteller');
     const pool = townsfolk.length ? townsfolk : good;
     const p = this.draw('redHerring', pool, () => ({}));
@@ -767,7 +767,14 @@ export class Storyteller {
     return plan;
   }
 
-  /** 处决这个人会不会当场定胜负：疯狂的处决是"可能"，官方说可以放过，别让这种判定决定一局。 */
+  /**
+   * 疯狂的处决会不会让邪恶当场获胜（善良双子、只剩 3 人时处决非恶魔）：官方「『可能』意味着你可以选择不这么做，
+   * 以防止邪恶玩家通过这种策略获胜」，这种时候放过。处决的是恶魔（善良会赢）不放过：《给说书人的建议》第 6 条，
+   * 「你可以通过处决一名应该『疯狂』但没有照做的玩家来结束游戏」。
+   */
+  evilWinsBy(p) { return this.decidesGame(p) && ROLES[p.role]?.team !== 'demon'; }
+
+  /** 处决这个人会不会当场定胜负。 */
   decidesGame(p) {
     const g = this.g;
     if (!p.alive) return p.id === g.twinGoodId(); // 处决死人不改变存活人数，只有善良的双子还能定胜负
@@ -778,7 +785,7 @@ export class Storyteller {
   /** 畸形秀演员声称自己是外来者：要不要处决。"可能"被处决：大多会罚，新手宽一点；会直接定胜负的不罚。how：{ voice: true } 是语音转写听到的。 */
   mutantExecuted(p, how = {}) {
     const g = this.g;
-    if (this.decidesGame(p) && g.evilOf(p)) { // 官方：可以用处决没疯狂的玩家结束游戏；只对邪恶放过（洗脑师页：别让邪恶靠这个获胜）
+    if (this.evilWinsBy(p)) { // 处决会让邪恶当场获胜：放过（官方）；处决恶魔照常
       this.decide('mutant', { who: p.id, options: [false], chosen: false, prob: 1, forced: 'decidesGame' });
       this.note(`畸形秀演员 ${g.name(p.id)} 声称自己是外来者，但处决他会直接定胜负：放过`);
       return false;
@@ -791,7 +798,7 @@ export class Storyteller {
   /** 被洗脑的人没有声明：要不要罚。邪恶的少罚（官方：别让邪恶靠这个获胜），新手也少罚；会直接定胜负的不罚。how：依据是什么，见 dice.js 的 madness。 */
   madnessPenalty(p, how = {}) {
     const g = this.g;
-    if (this.decidesGame(p) && g.evilOf(p)) { // 《给说书人的建议》第 6 条：可以处决没疯狂的玩家来结束游戏；只对邪恶放过
+    if (this.evilWinsBy(p)) { // 处决会让邪恶当场获胜：放过（官方）；处决恶魔照常（《给说书人的建议》第 6 条）
       this.decide('madness', { who: p.id, options: [false], chosen: false, prob: 1, forced: 'decidesGame' });
       this.note(`${g.name(p.id)} 没有疯狂证明，但处决他会直接定胜负：放过`);
       return false;

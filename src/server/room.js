@@ -1936,7 +1936,7 @@ export class Room {
   madAtNight() {
     const g = this.game;
     for (const { id, why } of g.madNight?.splice(0) ?? []) {
-      if (g.winner || (g.st.decidesGame(g.get(id)) && g.evilOf(g.get(id))) || !g.madExecute(id, why, { night: true })) continue; // 只放过邪恶（官方） // 记下以后人数又变了，要再看一次
+      if (g.winner || g.st.evilWinsBy(g.get(id)) || !g.madExecute(id, why, { night: true })) continue; // 会让邪恶当场获胜就放过（官方） // 记下以后人数又变了，要再看一次
       this.pub(`夜幕降临。**${g.name(id)}** 没有疯狂地证明自己，也被处决了。`, 'death');
       if (this.canFakeMoonchild(id)) this.moonchildFakes.add(id);
     }
@@ -2555,7 +2555,7 @@ export class Room {
     if (this.stId || !open() || !p?.alive || g.broken(p) || g.block === id || this.mutantRolled?.[id] === g.day) return;
     // 自己说出「畸形秀」就直接处决：不问模型、不掷骰子（2026-11-12 用户：说了畸形秀就要处死）。转写常把畸写成奇
     if (MUTANT_WORD.test(text)) {
-      if (g.st.decidesGame(p) && g.evilOf(p)) return; // 官方：「可能」是为了不让邪恶靠这个获胜
+      if (g.st.evilWinsBy(p)) return; // 官方：「可能」是为了不让邪恶靠这个获胜
       (this.mutantRolled ??= {})[id] = g.day;
       const lines = this.heardLines(id).slice(-5);
       if (lines.at(-1) !== text) lines.push(text);
@@ -3380,7 +3380,7 @@ export class Room {
     this.settings = { ...DEFAULT_SETTINGS, ...s.settings };
     if ((s.settings?.settingsVersion ?? 1) < 2) Object.assign(this.settings, { nightDeafen: false, hideVotes: false, settingsVersion: 2 });
     if ((this.settings.settingsVersion ?? 1) < 3) Object.assign(this.settings, { muteSpectators: false, settingsVersion: 3 });
-    if ((this.settings.settingsVersion ?? 1) < 4) Object.assign(this.settings, { smallNoBaron: false, minionBluffs: false, settingsVersion: 4 });
+    if ((this.settings.settingsVersion ?? 1) < 4 && !s.game) Object.assign(this.settings, { smallNoBaron: false, minionBluffs: false, settingsVersion: 4 }); // 进行中的局不改（爪牙已经看过伪装），下次读档再改
     for (const u of s.users ?? []) this.users.set(u.id, u);
     this.lobby = s.lobby ?? [];
     this.roleAssign = s.roleAssign ?? {};

@@ -37,9 +37,9 @@ test('疯狂判定的手记不写局势：终局复盘里看不出是按谁领�
   assert.doesNotMatch(g.timeline.at(-1).text, /局势/);
 });
 
-test('会直接定胜负的放过，也记进日志，并说明是强制的', () => {
+test('会让邪恶当场获胜的放过，也记进日志，并说明是强制的', () => {
   const g = mk(['oracle', 'artist', 'eviltwin', 'savant', 'fanggu', 'klutz', 'mutant', 'sage']);
-  assert.equal(g.st.madnessPenalty(g.get('p5')), false);
+  assert.equal(g.st.madnessPenalty(g.get(g.twinGoodId())), false); // 善良双子：处决就是邪恶赢
   const d = g.st.decisions.at(-1);
   assert.equal(d.forced, 'decidesGame');
   assert.equal(d.prob, 1);
