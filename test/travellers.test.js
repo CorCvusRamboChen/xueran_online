@@ -214,8 +214,11 @@ test('房间（官方）：黯月初升只列它的五个旅行者；法官强�
     await room.act('u1', 'nominate', { target: 'bot-3' });
     await room.act('ju', 'judge', { pass: true });
     await until(() => g.phase !== 'day' || room.ended, 9000); // 机器人辩护要 3 秒
-    assert.equal(g.get('bot-3').alive, false, '被法官强制处决');
+    // 随机发的角色可能处决打不死（弄臣、水手、茶艺师保护……）：只看他确实被处决了、白天也结束了
+    const name = g.name('bot-3');
     assert.ok(room.log.some((l) => /法官强制成功/.test(l.text)));
+    assert.ok(room.log.some((l) => l.text.includes(name) && /被处决/.test(l.text)), '被法官强制处决');
+    assert.notEqual(g.phase, 'day', '白天结束了');
   } finally { await room.teardown(); }
 });
 
