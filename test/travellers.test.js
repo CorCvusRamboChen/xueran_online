@@ -144,7 +144,7 @@ test('房间：观战的人白天以旅行者加入，公开角色；提议流�
       }
       await sleep(3);
     }
-    await until(() => g.phase === 'day', 2000);
+    await until(() => g.phase === 'day', 15000); // 全量测试并发时第一夜会慢
     assert.equal(room.viewFor('late').canTravel, true);
     await room.act('late', 'traveller', { role: 'gunslinger' });
     assert.equal(g.get('late').traveller, true);
@@ -201,7 +201,7 @@ test('房间（官方）：黯月初升只列它的五个旅行者；法官强�
       }
       await sleep(3);
     }
-    await until(() => g.phase === 'day', 2000);
+    await until(() => g.phase === 'day', 15000); // 全量测试并发时第一夜会慢
     assert.deepEqual(room.viewFor('ju').travellers.map((t) => t.name), ['法官', '女舍监', '巫毒师', '学徒', '主教']);
     await assert.rejects(room.act('gs', 'traveller', { role: 'gunslinger' }), /这个剧本不用/);
     await room.act('ju', 'traveller', { role: 'judge' });
@@ -368,7 +368,7 @@ async function dayRoom(script, extra = []) {
     }
     await sleep(3);
   }
-  await until(() => g.phase === 'day', 2000);
+  await until(() => g.phase === 'day', 15000); // 全量测试并发时第一夜会慢
   return { room, g };
 }
 

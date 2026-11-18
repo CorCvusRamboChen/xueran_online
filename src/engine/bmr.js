@@ -567,7 +567,7 @@ export const BMR_METHODS = {
           if (!prompted.has(p.id)) break;
           this.wokeTonight.add(p.id);
           const t = this.choiceOf(p)?.targets[0]; if (!t) break;
-          if (t.alive) { this.record('st', `教授选的 ${this.tag(t.id)} 已经活着（刚被反刍）——不算用掉，以后还能用`); break; }
+          if (t.alive && !t.apparentDead) { this.record('st', `教授选的 ${this.tag(t.id)} 已经活着（刚被反刍）——不算用掉，以后还能用`); break; } // 假死的僵怖按选中恶魔算：用掉、无事发生
           this.used[p.id] = true;
           if (broken(p) || team(t) !== 'townsfolk') { this.record('st', `教授选了 ${this.tag(t.id)}——没有复活`); break; }
           this.revive(t, '教授');
@@ -740,7 +740,7 @@ export const BMR_METHODS = {
     if (res === 'died' && team(p) === 'minion') {
       const min = this.players.find((q) => this.abHolder(q, 'minstrel') && q.alive && !this.bmrBroken(q));
       if (min) {
-        for (const q of this.players) if (q.id !== min.id) this.fx.push({ kind: 'drunk', target: q.id, source: min.id, until: this.day + 1, why: '吟游诗人' });
+        for (const q of this.players) if (q.id !== min.id && !q.traveller) this.fx.push({ kind: 'drunk', target: q.id, source: min.id, until: this.day + 1, why: '吟游诗人' }); // 旅行者不醉（官方）
         this.record('st', '爪牙死于处决：除吟游诗人外所有人醉酒，直到明天黄昏');
       }
     }

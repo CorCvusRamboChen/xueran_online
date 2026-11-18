@@ -17,8 +17,8 @@ const VETERAN = 0.4;  // 老手从严
 
 /** 要不要做：掷一次。 */
 export const DICE = {
-  misregister: { base: 0.3, balance: 1.3 },         // 两种错误登记都帮邪恶：善良领先时多发生
-  mayorBounce: { base: 0.5, balance: -1.7 },        // 替死保护镇长，帮善良：善良领先时少替
+  misregister: { base: 0.6, balance: 1.3 },        // 陌客页「你通常会被当作邪恶玩家」、间谍页「通常是说书人在说谎」（11-18 照百科从 0.3 提到 0.6）         // 两种错误登记都帮邪恶：善良领先时多发生
+  mayorBounce: { base: 0.85, balance: -1.0 },      // 镇长页「我们建议你让镇长活到最后一天」（11-18 从 0.5 提到 0.85）        // 替死保护镇长，帮善良：善良领先时少替
   mayorBounceMinion: { base: 0.5 },                 // 邪恶大优时让爪牙替死
   deadLies: { base: 0.5, balance: 1 },
   // 官方《给说书人的建议》：邪恶碾压时「你可以在一些夜晚给一名酒鬼共情者提供正确的信息」。只在邪恶明显领先时掷（storyteller.drunkTruth）
@@ -60,7 +60,7 @@ export const DICE = {
   // 旅行者的阵营（官方：大多数是善良；一名可以是邪恶，三名以上才考虑更多）。善良领先时多给邪恶；已经有邪恶旅行者就少给
   travellerEvil: { base: 0.2, balance: 1.2, evilTravellers: -2.5 },
   // 替罪羊：同阵营的人被处决，说书人决定他替不替（官方「可能」）。不看局势
-  scapegoat: { base: 0.4, demon: 2.6 },
+  scapegoat: { base: 0.15, demon: 3.6, late: 1.2 }, // 替罪羊页：邪恶替罪羊「几乎总是会等到恶魔被处决的时候」，善良的留到中后期
   harlotDeath: { base: 0.3 }, // 流莺：同意以后两人一起死的机会（官方：说书人选最有趣、最平衡的做法） // 官方：邪恶替罪羊大多数情况下要用能力阻止邪恶输掉（被处决的是恶魔时约九成替死）
   priestessGood: { base: 0.75 },                    // 善良落后：女祭司多被指向拿着真信息的善良玩家
   priestessEvil: { base: 0.5 },                     // 善良领先：女祭司常被指向一个邪恶玩家（听他满嘴假话）

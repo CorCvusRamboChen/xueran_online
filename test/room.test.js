@@ -792,9 +792,9 @@ test('7 人以下不发男爵：开着时 5、6 人局随机不出男爵；房�
   }
   assert.ok(buildRoles(['a', 'b', 'c', 'd', 'e'], { a: 'baron' }, 'tb', Math.random, { noBaron: true }).includes('baron'), '指定了就给');
   const { room } = setup('auto');
-  assert.equal(room.settings.smallNoBaron, true, '默认开');
-  await room.act('u1', 'settings', { smallNoBaron: false });
-  assert.equal(room.settings.smallNoBaron, false);
+  assert.equal(room.settings.smallNoBaron, false, '11-18 起默认关（官方 5、6 人局可以有男爵）');
+  await room.act('u1', 'settings', { smallNoBaron: true });
+  assert.equal(room.settings.smallNoBaron, true);
 });
 
 test('造谣者自由声明：只有真造谣者的才问 AI；判为真今晚有人死；没配 AI 不能自由说', async () => {

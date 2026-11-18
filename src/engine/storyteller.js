@@ -778,7 +778,7 @@ export class Storyteller {
   /** 畸形秀演员声称自己是外来者：要不要处决。"可能"被处决：大多会罚，新手宽一点；会直接定胜负的不罚。how：{ voice: true } 是语音转写听到的。 */
   mutantExecuted(p, how = {}) {
     const g = this.g;
-    if (this.decidesGame(p)) {
+    if (this.decidesGame(p) && g.evilOf(p)) { // 官方：可以用处决没疯狂的玩家结束游戏；只对邪恶放过（洗脑师页：别让邪恶靠这个获胜）
       this.decide('mutant', { who: p.id, options: [false], chosen: false, prob: 1, forced: 'decidesGame' });
       this.note(`畸形秀演员 ${g.name(p.id)} 声称自己是外来者，但处决他会直接定胜负：放过`);
       return false;
@@ -791,7 +791,7 @@ export class Storyteller {
   /** 被洗脑的人没有声明：要不要罚。邪恶的少罚（官方：别让邪恶靠这个获胜），新手也少罚；会直接定胜负的不罚。how：依据是什么，见 dice.js 的 madness。 */
   madnessPenalty(p, how = {}) {
     const g = this.g;
-    if (this.decidesGame(p)) {
+    if (this.decidesGame(p) && g.evilOf(p)) { // 《给说书人的建议》第 6 条：可以处决没疯狂的玩家来结束游戏；只对邪恶放过
       this.decide('madness', { who: p.id, options: [false], chosen: false, prob: 1, forced: 'decidesGame' });
       this.note(`${g.name(p.id)} 没有疯狂证明，但处决他会直接定胜负：放过`);
       return false;
@@ -922,7 +922,8 @@ export class Storyteller {
     if (lie && foes.length) text = `相信 ${name(this.choose('fishBad', foes, { who: p.id }))}。`; // 失效：让他相信对面的人
     else if (!foes.length || !friends.length) text = '相信你自己的判断，不要被别人带着走。';
     else {
-      const kinds = ['trust', 'outsider', ...(broken.length ? ['distrust'] : []), ...(b < 0 === mine ? ['pair'] : [])]; // 自己这边落后时多给一种更有用的
+      const realOut = alive.some((q) => ROLES[q.role].team === 'outsider' && !g.evilOf(q)); // 官方范例里声称外来者的都是真外来者
+      const kinds = ['trust', ...(realOut && mine ? ['outsider'] : []), ...(broken.length ? ['distrust'] : [])]; // 渔夫页：「两人之中有恶魔」这类不是建议，不给
       const k = this.choose('fishKind', kinds, { who: p.id });
       if (k === 'distrust') text = `你不应该相信 ${name(this.choose('fishDistrust', broken, { who: p.id }))}。`;
       else if (k === 'pair') {
@@ -1100,7 +1101,8 @@ export class Storyteller {
     const evil = others.filter((q) => g.evilOf(q));
     const goodInfo = others.filter((q) => !g.evilOf(q) && ROLES[q.role].team === 'townsfolk' && !g.snvBroken?.(q));
     const pool = b < -0.15 ? (goodInfo.length && this.roll('priestessGood', {}, { who: p.id }) ? goodInfo : evil.length ? evil : others)
-      : b > 0.15 ? (evil.length && this.roll('priestessEvil', {}, { who: p.id }) ? evil : others) : others;
+      : b > 0.15 ? (evil.length && this.roll('priestessEvil', {}, { who: p.id }) ? evil : others)
+        : goodInfo.length ? goodInfo : others; // 势均力敌：女祭司页要挑「对女祭司和善良阵营更加有利」的人
     return this.choose('priestess', pool.length ? pool : others, { who: p.id, b });
   }
 

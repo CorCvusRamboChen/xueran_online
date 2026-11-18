@@ -249,7 +249,8 @@ export const TRAVELLER_METHODS = {
     if (!s || s.id === p.id || !this.travellerOn(s) || this.evilOf(s) !== this.evilOf(p) || this.scapegoatDay === this.day) return p;
     this.scapegoatDay = this.day;
     const demon = this.evilOf(s) && ROLES[p.role]?.team === 'demon' ? 1 : 0; // 邪恶替罪羊替恶魔挡刀：不挡邪恶就输了
-    if (!this.st.roll('scapegoat', { demon }, { who: s.id, instead: p.id })) return p;
+    const late = !this.evilOf(s) && this.day >= 3 ? 1 : 0; // 善良替罪羊：一般留到中后期（替罪羊页的提示）
+    if (!this.st.roll('scapegoat', { demon, late }, { who: s.id, instead: p.id })) return p;
     this.record('st', `替罪羊 ${this.tag(s.id)} 代替 ${this.tag(p.id)} 被处决`);
     return s;
   },

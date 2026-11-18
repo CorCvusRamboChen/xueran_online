@@ -111,12 +111,12 @@ export const DEFAULT_SETTINGS = {
   smallEvilInfo: false,  // 房规：6 人及以下也让恶魔和爪牙互认、恶魔拿伪装（官方不给）
   deadDrunk: false,      // 房规：夜里被杀的信息角色照样拿当晚的信息，但按醉酒处理（官方：死了就没有能力，不再醒）
   lunaticGhost: false,   // 房规（黯月初升）：以为自己是僵怖的疯子死后仍在没人死的夜里被叫醒，维持假象（官方：死了就失去能力，不再醒）
-  smallNoBaron: true,    // 房规：暗流涌动 7 人以下不随机发男爵（小局多两个外来者太难打）；房主指定的照给
-  minionBluffs: true,    // 房规：爪牙和恶魔共用 3 个伪装（官方只给恶魔，恶魔再私下告诉队友）
+  smallNoBaron: false,    // 房规：暗流涌动 7 人以下不随机发男爵（小局多两个外来者太难打）；房主指定的照给
+  minionBluffs: false,    // 房规：爪牙和恶魔共用 3 个伪装（官方只给恶魔，恶魔再私下告诉队友）
   hideVotes: false,      // 房规：投票过程中只看得到自己举没举手，投完公开（官方是实时公开举手，默认照官方）
   spectatorGrimoire: false, // 观战的人能看魔典（所有人身份）——会漏信息，默认关
   muteSpectators: false,    // 开局后观战的人在语音里被服务器闭麦（免得漏信息）；离开或终局自动解除。2026-11-16 用户：默认不闭麦
-  settingsVersion: 3,       // 2：闭麦闭耳、隐藏票型改成默认关；3：观战闭麦改成默认关（老房间读档时改一次，之后房主怎么设就怎么样）
+  settingsVersion: 4,       // 4：7 人以下不发男爵、爪牙共用伪装改成默认关（11-18 用户：全按官方百科）       // 2：闭麦闭耳、隐藏票型改成默认关；3：观战闭麦改成默认关（老房间读档时改一次，之后房主怎么设就怎么样）
   ...AVALON_SETTINGS,       // 娱乐模式阿瓦隆的设置，见 server/avalon.js
   ...MARK_SETTINGS,         // 娱乐模式暗印的设置（调包、遗言开关），见 server/mark.js
 };
@@ -1078,7 +1078,7 @@ export class Room {
     if (!this.stId) { this.pauseNoms(); this.nomStage('accuse'); }
     // 机器人哥布林被提名：多半当场声明身份
     const nominee = g.get(target);
-    if (this.isFake(target) && g.engine === 'snv' && g.abilityOf(nominee) === 'goblin' && nominee.alive && g.st.roll('goblinClaim', {}, { who: target })) this.goblin(target);
+    if (this.isFake(target) && g.engine === 'snv' && g.abilityOf(nominee) === 'goblin' && nominee.alive && g.st.roll('goblinClaim', {}, { who: target })) { try { this.goblin(target); } catch { /* 今天已经声明过 */ } }
   }
 
   // ───────────── 自动说书：提名环节 ─────────────
@@ -1367,7 +1367,7 @@ export class Room {
       const r = await ask(g.factsSNV(), this.talkText(g), losers.map((q) => ({ seat: q.seat, name: q.name }))).catch(() => null);
       if (!r || this.game !== g) continue;
       const pick = losers.find((q) => q.seat === r.seat);
-      if (!pick) continue;
+      if (!pick) { if (r.seat === 0) g.politicianVerdict(e.id, false, r.reason); continue; } // 0：集体的决定，没有突出的责任人（政客页范例二）
       if (g.politicianVerdict(e.id, pick.id === e.id, r.reason) && pick.id === e.id) this.announce(`**${g.name(e.id)}** 是政客：说书人判他对本方落败负最大责任，他转变阵营，和赢的一方一起获胜。`, 'end');
     }
   }
@@ -1936,7 +1936,7 @@ export class Room {
   madAtNight() {
     const g = this.game;
     for (const { id, why } of g.madNight?.splice(0) ?? []) {
-      if (g.winner || g.st.decidesGame(g.get(id)) || !g.madExecute(id, why, { night: true })) continue; // 记下以后人数又变了，要再看一次
+      if (g.winner || (g.st.decidesGame(g.get(id)) && g.evilOf(g.get(id))) || !g.madExecute(id, why, { night: true })) continue; // 只放过邪恶（官方） // 记下以后人数又变了，要再看一次
       this.pub(`夜幕降临。**${g.name(id)}** 没有疯狂地证明自己，也被处决了。`, 'death');
       if (this.canFakeMoonchild(id)) this.moonchildFakes.add(id);
     }
@@ -2115,7 +2115,7 @@ export class Room {
     const g = this.requireSNV();
     if (!inScript('goblin', g.script)) throw new UserError('这个剧本没有哥布林');
     if (this.pendingNom?.nominee !== uid || this.vote) throw new UserError('只有被提名、还没开始投票时才能这样声明');
-    if (g.claims?.[uid] === 'goblin') throw new UserError('你已经声明过了');
+    if (g.claims?.[uid] === 'goblin' && g.goblinClaimDay?.[uid] === g.day) throw new UserError('你今天已经声明过了');
     g.goblinClaim(uid);
     this.pub(`**${g.name(uid)}** 公开声明：「我是哥布林！」——如果今天处决他，而他真是哥布林，邪恶阵营获胜。`, 'vote');
     this.narrate('gossip', { a: g.name(uid), text: '我是哥布林' });
@@ -2400,9 +2400,10 @@ export class Room {
     };
     if (!(this.judgeReady ?? judgeAvailable)()) { answer('unknown'); return; }
     if (looksInjected(text)) { this.stNote(`艺术家 ${g.name(uid)} 的问题像在指挥大模型，没交给模型，答「我不知道」`); answer('unknown'); return; }
-    // 问得有歧义（「1-5」可能是 1 到 5 号，也可能是 1 号和 5 号）或看不懂：不答，让他重新问，这次不算用掉（2026-11-12 用户定）。
+    // 问得有歧义（「1-5」可能是 1 到 5 号，也可能是 1 号和 5 号）、看不懂、或者不是是非题：不答，让他重新问，这次不算用掉
+    // （2026-11-12 用户定；艺术家页：「如果你不能用这三种答案进行回答，让他重新问一个问题」）。
     // 模型的理由记进说书人记录（以前丢掉了，事后看不出它怎么理解的问题）；理由不给玩家看，免得漏出真实情况
-    (this.judge ?? judgeStatement)(`（这是一个是非问题：答案为"是"就判 true，为"不是"就判 false。玩家说的数字一般指座位号。如果这个问题有歧义——同一句话能读出两种意思、两种意思的答案不一样，比如「1-5」可能是 1 号到 5 号、也可能是 1 号和 5 号——或者看不懂在问什么，判 unknown，reason 以「歧义：」开头说明哪里有歧义）${text}`, g.factsSNV())
+    (this.judge ?? judgeStatement)(`（这是一个是非问题：答案为"是"就判 true，为"不是"就判 false。玩家说的数字一般指座位号。如果这个问题有歧义——同一句话能读出两种意思、两种意思的答案不一样，比如「1-5」可能是 1 号到 5 号、也可能是 1 号和 5 号——或者看不懂在问什么，或者根本不是能用「是 / 不是 / 我不知道」回答的问题（比如「有几个爪牙」「谁是恶魔」），判 unknown，reason 以「歧义：」开头说明为什么要重问）${text}`, g.factsSNV())
       .then((res) => {
         if (this.game !== g) return;
         if (res?.reason) { this.stNote(`艺术家 ${g.name(uid)} 问「${text}」，说书人的理解：${res.reason}（${res.verdict}）`); g.record('st', `艺术家的问题「${text}」，说书人判 ${res.verdict}：${res.reason}`); }
@@ -2554,6 +2555,7 @@ export class Room {
     if (this.stId || !open() || !p?.alive || g.broken(p) || g.block === id || this.mutantRolled?.[id] === g.day) return;
     // 自己说出「畸形秀」就直接处决：不问模型、不掷骰子（2026-11-12 用户：说了畸形秀就要处死）。转写常把畸写成奇
     if (MUTANT_WORD.test(text)) {
+      if (g.st.decidesGame(p) && g.evilOf(p)) return; // 官方：「可能」是为了不让邪恶靠这个获胜
       (this.mutantRolled ??= {})[id] = g.day;
       const lines = this.heardLines(id).slice(-5);
       if (lines.at(-1) !== text) lines.push(text);
@@ -3378,6 +3380,7 @@ export class Room {
     this.settings = { ...DEFAULT_SETTINGS, ...s.settings };
     if ((s.settings?.settingsVersion ?? 1) < 2) Object.assign(this.settings, { nightDeafen: false, hideVotes: false, settingsVersion: 2 });
     if ((this.settings.settingsVersion ?? 1) < 3) Object.assign(this.settings, { muteSpectators: false, settingsVersion: 3 });
+    if ((this.settings.settingsVersion ?? 1) < 4) Object.assign(this.settings, { smallNoBaron: false, minionBluffs: false, settingsVersion: 4 });
     for (const u of s.users ?? []) this.users.set(u.id, u);
     this.lobby = s.lobby ?? [];
     this.roleAssign = s.roleAssign ?? {};
@@ -3710,7 +3713,7 @@ export class Room {
       canPsycho: day && p.alive && ab === 'psychopath' && g.psychoDay?.[uid] !== g.day && !this.noms && !this.pendingNom && !this.vote && !this.dusking && this.duskDay !== g.day,
       canPardon: day && p.alive && (ab === 'amn_pardon' || amn) && !g.used?.[`pardon-${uid}`] && !!g.block && !this.vote && !this.pendingNom,
       // 被提名、还没开始投票：可以公开声明自己是哥布林（谁都可以这么说）
-      canGoblin: day && inScript('goblin', g.script) && this.pendingNom?.nominee === uid && !this.vote && g.claims?.[uid] !== 'goblin',
+      canGoblin: day && inScript('goblin', g.script) && this.pendingNom?.nominee === uid && !this.vote && !(g.claims?.[uid] === 'goblin' && g.goblinClaimDay?.[uid] === g.day), // 每天都能重新声明（官方）
       // 谁都可以公开猜落难少女（每人一次，诈身份用）；只有真爪牙的第一次猜测算数
       canDamsel: day && inScript('damsel', g.script) && !g.damselTried?.[uid],
       harpy: g.harpyMad?.id === uid && g.harpyMad.night === g.night && g.phase === 'day' ? { target: g.harpyMad.target, name: g.name(g.harpyMad.target), claimed: !!g.harpyMad.claimed } : null,

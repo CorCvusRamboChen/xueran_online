@@ -565,7 +565,7 @@ export class Game {
     if (!p.alive) return;
     if (this.script === 'bmr') { this.bmrDie(p, cause, messages); return; }
     if (this.engine === 'snv') { this.snvDie(p, cause, messages); return; }
-    const aliveBefore = this.aliveCount();
+    const aliveBefore = this.townAlive?.() ?? this.aliveCount(); // 红唇女郎的「五名玩家存活」不算旅行者（官方）
     p.alive = false;
     if (this.phase === 'night') this.nightDeaths.push(p.id);
     if (this.phase === 'night' && cause === 'demon') (this.demonKills ??= []).push(p.id); // 夜里被恶魔破门杀死的（前端播破门动画）
@@ -779,7 +779,7 @@ export class Game {
       executed = this.block;
       this.execute(this.get(executed));
     }
-    if (!this.winner && !this.executedToday && this.townAlive() === 3) {
+    if (!this.winner && !this.executedToday && this.aliveCount() === 3) {
       const mayor = this.byRole('mayor');
       if (mayor?.alive && !this.broken(mayor)) this.setWinner('good', `只剩三人且无人被处决，镇长 ${this.name(mayor.id)} 带领善良获胜`);
     }

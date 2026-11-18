@@ -542,11 +542,13 @@ test('洗脑师：不够疯狂被处决，算当天的处决；失效时目标�
   assert.equal(h.madnessDue().length, 0);
 });
 
-test('说书人不用疯狂直接定胜负：善良双子、恶魔都放过', () => {
+test('疯狂处决会定胜负时：邪恶（恶魔）放过；善良的照样可能处决（《给说书人的建议》第 6 条）', () => {
   const g = mk(['oracle', 'artist', 'eviltwin', 'savant', 'fanggu', 'klutz', 'mutant', 'sage']);
   night(g, {}); day(g);
-  assert.equal(g.st.madnessPenalty(g.get(g.twin.b)), false);
-  assert.equal(g.st.madnessPenalty(g.get('p5')), false);
+  assert.equal(g.st.madnessPenalty(g.get('p5')), false, '恶魔放过');
+  let punished = 0;
+  for (let k = 0; k < 40; k++) if (g.st.madnessPenalty(g.get(g.twinGoodId()))) punished++;
+  assert.ok(punished > 0, '善良双子不再一律放过');
 });
 
 test('麻脸巫婆：角色不在场才变，阵营不变；首夜不行动', () => {
@@ -931,12 +933,14 @@ test('审查回归：麻脸巫婆把死掉的邪恶玩家变成恶魔，不杀�
   assert.deepEqual(g.st.pitPlan(t, false, [g.get('p5')]).kill, []);
 });
 
-test('审查回归：疯狂处决不让一局当场定胜负', () => {
+test('疯狂处决：剩 3 人时邪恶玩家没疯狂也放过（别让邪恶靠这个赢）；善良的可以处决来结束游戏（官方）', () => {
   const g = mk(['mutant', 'oracle', 'witch', 'artist', 'fanggu', 'klutz', 'sweetheart', 'savant']);
-  for (const id of ['p4', 'p6', 'p7', 'p8', 'p3']) g.get(id).alive = false;
+  for (const id of ['p4', 'p6', 'p7', 'p8', 'p2']) g.get(id).alive = false;
   assert.equal(g.aliveCount(), 3);
-  assert.equal(g.st.mutantExecuted(g.get('p1')), false, '3 人时处决就是邪恶赢');
-  assert.equal(g.st.madnessPenalty(g.get('p2')), false);
+  assert.equal(g.st.madnessPenalty(g.get('p3')), false, '女巫（邪恶）放过');
+  let n = 0;
+  for (let k = 0; k < 40; k++) if (g.st.mutantExecuted(g.get('p1'))) n++;
+  assert.ok(n > 0, '畸形秀演员（善良）照样可能被处决');
 });
 
 test('审查回归：真人说书时畸形秀演员不被 AI 处决；呆瓜黄昏不被静默代选', () => {
