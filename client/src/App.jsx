@@ -27,7 +27,7 @@ import { WerewolfGame } from './Werewolf.jsx';
 import { RoleIndex } from './RoleIndex.jsx';
 import { Replay, KeyInfo } from './replay.jsx';
 import { savedOutfit } from './Wardrobe.jsx';
-import { DISTRIBUTION, ROLES as ROLE_DEFS, SCRIPTS, engineOf, inScript, rolesOf, ragnarokWolves } from '../../src/engine/roles.js';
+import { DISTRIBUTION, ROLES as ROLE_DEFS, SCRIPTS, engineOf, inScript, rolesOf, ragnarokWolves, FABLED, fabledOf, travellersOf } from '../../src/engine/roles.js';
 const ROLE_ABILITY = Object.fromEntries(Object.entries(ROLE_DEFS).map(([id, r]) => [id, r.ability]));
 
 /**
@@ -394,6 +394,7 @@ function Game({ s, act, ask }) {
     { id: 'votes', icon: 'roster', label: '关键信息', dot: s.votes?.length && tab !== 'votes' && s.votes.at(-1).at > Date.now() - 60_000 ? '' : 0 },
     { id: 'roster', icon: 'roster', label: '镇民' },
     { id: 'roles', icon: 'grim', label: '角色' },
+    { id: 'extras', icon: 'grim', label: '传奇·旅行者' }, // 2026-11-19 用户：角色右边介绍传奇角色和旅行者
     s.isST && { id: 'grim', icon: 'grim', label: '魔典', dot: s.st?.pendingInfo.length || 0 },
     s.isHost && { id: 'menu', icon: 'menu', label: s.isST ? '说书人' : '房主' },
   ].filter(Boolean);
@@ -473,6 +474,7 @@ function Game({ s, act, ask }) {
           {shown === 'roster' && <Roster s={s} onTap={s.isST ? (p) => setSheet(p.id) : null} />}
           {shown === 'roster' && <Watchers s={s} />}
           {shown === 'roles' && <RoleIndex s={s} />}
+          {shown === 'extras' && <ExtrasInfo s={s} />}
           {shown === 'grim' && s.isST && <StDesk s={s} act={act} name={name} />}
         </div>
       </aside>
@@ -935,6 +937,35 @@ function MoonchildPanel({ s, act, fake }) {
       <Picker s={s} options={alive} picked={t ? [t] : []} onTap={(p) => setT(p.id)} />
       <div className="btn-row"><Btn kind="primary" disabled={!t} onClick={() => act('moonchild', { target: t })}>公开选择</Btn>{fake && <Btn onClick={() => act('moonchildSkip')}>不选</Btn>}</div>
     </Panel>
+  );
+}
+
+/** 「传奇·旅行者」页：这个剧本的传奇角色（全场规则）和旅行者（开局后来的人用的角色），各自是什么、怎么玩。 */
+function ExtrasInfo({ s }) {
+  const fab = fabledOf(s.script);
+  const trs = travellersOf(s.script);
+  const joined = s.players.filter((p) => p.traveller);
+  return (
+    <section className="extras">
+      <h4>传奇角色</h4>
+      <p className="muted">传奇角色不是哪个玩家的身份，是说书人给这一局加的全场规则（集石百科）：没人拿这张牌，它不会死、不会醉酒中毒；说书人会告诉大家加了哪些，但不会说它这局具体造成了什么。</p>
+      {fab.length ? fab.map((id) => (
+        <div key={id} className="ex-card"><b>{FABLED[id].name}<i>{FABLED[id].en}</i></b><p>{FABLED[id].ability}</p><p className="muted">{FABLED[id].detail}</p></div>
+      )) : <p>这个剧本没有传奇角色。</p>}
+      <h4>旅行者</h4>
+      <p className="muted">给开局后才来、或者要提前走的人用的角色（集石百科）。</p>
+      {!trs.length && <p>这个剧本发布时没有列旅行者，所以这局不开：开局后来的人只能观战。下面是有旅行者的剧本（暗流涌动、黯月初升、梦殒春宵等）的规则。</p>}
+      <ul>
+        <li>观战的人随时可以加入（存活玩家 7 人以上时），坐在圈的最后；夜里加入的下一晚才行动。</li>
+        <li>角色公开，阵营由说书人决定（大多是善良）；邪恶旅行者会得知恶魔是谁。</li>
+        <li>不能被提名处决，只能被「流放」：任何人（死人也行）都能提议，所有人举手，过所有玩家的一半就流放。流放不是处决，角色能力挡不住。</li>
+        <li>随时可以自己离开；「只剩两人」不算旅行者。</li>
+      </ul>
+      {joined.length > 0 && <p>这局加入的旅行者：{joined.map((p) => `${p.seat}号 ${p.name}（${p.travellerRole}${p.left ? '，已离开' : p.alive ? '' : '，已出局'}）`).join('、')}</p>}
+      {trs.length ? trs.map((id) => (
+        <div key={id} className="ex-card"><b>{ROLE_DEFS[id].name}<i>{ROLE_DEFS[id].en}</i></b><p>{ROLE_DEFS[id].ability}</p></div>
+      )) : null}
+    </section>
   );
 }
 

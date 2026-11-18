@@ -360,6 +360,19 @@ export const SCRIPT_TRAVELLERS = {
   bs7: ['gnome', 'bureaucrat', 'scapegoat', 'harlot'],                // TPI 官方仓库 wc25/seat7/script.json、集石百科「七步成诗」页
   cat: ['barista', 'harlot', 'bonecollector', 'apprentice', 'beggar'], // botcscripts 第 3 号 v11.1.10
 };
+// 传奇角色（集石百科「传奇角色」页）：不是玩家拿的角色，是说书人给这一局加的全场规则；会告诉所有人加了哪些。
+// 剧本里用 sentinel / ivory / fibbin 标记（夜半狂欢：哨兵、圣洁之魂；裁缝与暴乱：骗人精）
+export const FABLED = {
+  sentinel: { name: '哨兵', en: 'Sentinel', flag: 'sentinel', ability: '可能会额外增加或减少一个外来者。',
+    detail: '开局配置时，说书人三选一：多 1 个外来者（少 1 个镇民）、少 1 个外来者（多 1 个镇民），或者不变。外来者人数因此说不准，邪恶伪装外来者更安全。' },
+  spiritofivory: { name: '圣洁之魂', en: 'Spirit of Ivory', flag: 'ivory', ability: '邪恶玩家的数量最多只会比初始设置多一名。',
+    detail: '第一次有人转成邪恶照常生效；已经多出一名邪恶后，再有人要转成邪恶就不转（保持善良）。有邪恶转回善良时，限制重新放开。交换阵营不算多出邪恶。' },
+  fibbin: { name: '骗人精', en: 'Fibbin', flag: 'fibbin', ability: '每局游戏限一次，一名善良玩家可能会得知错误的信息。',
+    detail: '说书人整局最多用一次：让某个善良玩家拿到一条假信息。用掉以后，所有善良玩家的信息都按正常处理。' },
+};
+/** 这个剧本加了哪些传奇角色（id 列表）。 */
+export const fabledOf = (script) => Object.keys(FABLED).filter((id) => SCRIPTS[script]?.[FABLED[id].flag]);
+
 /** 这个剧本的旅行者（没列的剧本是空的）。 */
 export const travellersOf = (script) => (SCRIPT_TRAVELLERS[script] ?? []).filter((id) => TRAVELLER_IDS.includes(id));
 
