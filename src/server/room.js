@@ -2888,7 +2888,7 @@ export class Room {
     if (!yes) return;
     st.allow.add(who);
     const c = houseCenter(r.houses.find((h) => h.id === hid));
-    this.move(who, c.x + (Math.random() - 0.5) * 50, c.y + (Math.random() - 0.5) * 30, { force: true });
+    this.move(who, c.x + (Math.random() - 0.5) * 50, c.y + (Math.random() - 0.5) * 30, { force: true, run: true }); // 放进门：跑进去
   }
 
   /** 屋里的人邀请别人进来私聊（对方点「过去」就自动走进来，锁着门也能进）。60 秒没回应作废。 */
@@ -2917,7 +2917,7 @@ export class Room {
     if (!st.ids.size) throw new UserError('屋里已经没人了');
     st.allow.add(uid);
     const c = houseCenter(r.houses.find((h) => h.id === inv.house));
-    this.move(uid, c.x + (Math.random() - 0.5) * 50, c.y + (Math.random() - 0.5) * 30, { force: true });
+    this.move(uid, c.x + (Math.random() - 0.5) * 50, c.y + (Math.random() - 0.5) * 30, { force: true, run: true }); // 接受邀请：按跑的速度过去（2026-11-18 用户）
     return null;
   }
 
