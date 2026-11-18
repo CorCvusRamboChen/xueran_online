@@ -1927,3 +1927,11 @@ span.lr-newbie { cursor: default; }
 .speak-badge.small { right: -6px; top: -7px; height: 14px; padding: 0 2px; gap: 0; }
 .speak-badge.small svg { width: 10px; height: 10px; }
 .speak-badge.small i { display: none; }
+
+/* 闭着麦：头像右上角红色的划线麦克风（被闭麦实心红，自己闭麦暗红描边） */
+.mute-badge { position: absolute; right: -8px; top: -8px; z-index: 3; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #c0392b; box-shadow: 0 0 0 2px rgba(0, 0, 0, .55); pointer-events: none; }
+.mute-badge svg { width: 13px; height: 13px; fill: #fff; stroke: #fff; }
+.mute-badge.self { background: #3a1512; box-shadow: 0 0 0 2px #c0392b; }
+.mute-badge.self svg { fill: #e8a59c; stroke: #e8a59c; }
+.mute-badge.small { right: -6px; top: -6px; width: 14px; height: 14px; }
+.mute-badge.small svg { width: 9px; height: 9px; }

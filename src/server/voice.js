@@ -36,7 +36,7 @@ export function discordPlatform(client) {
     hasGuild: (gid) => !!g(gid),
     state(gid, uid) {
       const vs = g(gid)?.voiceStates.cache.get(uid);
-      return vs ? { channelId: vs.channelId ?? null, serverMute: !!vs.serverMute, serverDeaf: !!vs.serverDeaf } : null;
+      return vs ? { channelId: vs.channelId ?? null, serverMute: !!vs.serverMute, serverDeaf: !!vs.serverDeaf, selfMute: !!vs.selfMute, selfDeaf: !!vs.selfDeaf } : null;
     },
     edit: (gid, uid, patch) => g(gid).members.edit(uid, patch),
     async isVoiceChannel(gid, id) {
@@ -104,9 +104,11 @@ export class VoiceHub {
     }
 
     this.p.onReady(() => this.syncAll());
+    this.watchers = new Set(); // 有人语音状态变了（房间用来实时显示谁被闭麦）
     this.p.onVoice((gid, uid) => {
       const k = `${gid}:${uid}`;
       if (this.held.has(k)) this.sync(k, null, true).catch((e) => console.warn('[voice]', e.message));
+      for (const f of this.watchers) { try { f(gid, uid); } catch { /* 房间自己的事 */ } }
     });
     if (sweepMs) {
       this.sweeper = setInterval(() => this.sweep().catch(() => {}), sweepMs);
@@ -239,6 +241,9 @@ export class VoiceHub {
   }
 
   /** 给某一局用的语音控制器（Room 只认这几个方法）。roomKey 用来记账和认频道范围。 */
+  /** 订阅「某人的语音状态变了」：fn(guildId, userId)。 */
+  watch(fn) { this.watchers.add(fn); return () => this.watchers.delete(fn); }
+
   forGuild(guildId, roomKey = guildId) {
     const hub = this;
     const p = this.p;
@@ -249,6 +254,17 @@ export class VoiceHub {
     const moveTo = (id, channel) => p.edit(guildId, id, { channel });
 
     return {
+      /** 这些人现在的麦克风：'server' 被服务器闭麦（机器人或管理员）、'self' 自己闭麦 / 闭耳、null 能说话或不在语音里。 */
+      async micStates(ids) {
+        if (!p.hasGuild(guildId)) return {};
+        const out = {};
+        for (const id of ids) {
+          const s = await p.state(guildId, id);
+          out[id] = !s?.channelId ? null : s.serverMute || s.serverDeaf ? 'server' : s.selfMute || s.selfDeaf ? 'self' : null;
+        }
+        return out;
+      },
+
       /** 登记本局管着哪些频道（Room.managedChannels）。不在这些频道里的人，机器人不闭麦、不拉。 */
       setScope(fn) { hub.scopes.set(roomKey, fn); },
       forget() { hub.scopes.delete(roomKey); },

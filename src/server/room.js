@@ -265,6 +265,7 @@ export class Room {
   async act(uid, type, p = {}) {
     if (uid === this.hostId) this.hostSeen = Date.now();
     this.lastSeen.set(uid, Date.now());
+    if (type === 'join' || type === 'start' || type === 'hello') this.micChanged(); // 一开始就查一遍谁闭着麦（之后靠语音状态变化推过来）
     // 走路很频繁，只推送位置，不推完整状态
     if (type === 'move') return this.move(uid, p.x, p.y, { run: !!p.run });
     if (type === 'marks') return this.recordMarks(uid, p); // 没有状态要推给别人
@@ -1603,6 +1604,24 @@ export class Room {
       }
     } else this.announce('屠夫没有再提名。', 'vote');
     st.done?.();
+  }
+
+  /** 语音状态变了：稍等一下（一次闭一群人会连着来好几条）再查一遍谁被闭麦。 */
+  micChanged() {
+    if (this.micTimer) return;
+    this.micTimer = setTimeout(() => { this.micTimer = null; this.refreshMics().catch(() => {}); }, 300);
+    this.micTimer.unref?.();
+  }
+
+  /** 查一遍这局真人的麦克风状态，有变化就推给大家（头像右上角的闭麦标记）。 */
+  async refreshMics() {
+    if (!this.voice?.micStates) return;
+    const ids = [...new Set([...(this.game?.players ?? []).map((p) => p.id), ...this.lobby.map((p) => p.id), this.stId, this.hostId].filter((id) => id && !this.isFake(id)))];
+    const st = await this.voice.micStates(ids);
+    const next = Object.fromEntries(Object.entries(st).filter(([, v]) => v));
+    if (JSON.stringify(next) === JSON.stringify(this.mics ?? {})) return;
+    this.mics = next;
+    this.changed();
   }
 
   /** 乞丐：死人把自己的投票标记交给乞丐（公开），乞丐私下得知他的阵营。 */
@@ -3537,6 +3556,7 @@ export class Room {
         fake: this.isFake(p.id), seat7: !!p.seat7,
         nominated: g.nominees.has(p.id), nominator: g.nominators.has(p.id), shot: (g.shooters ?? []).includes(p.id),
         traveller: !!p.traveller, left: !!p.left, travellerRole: p.traveller ? ROLES[p.role].name : null, // 旅行者的角色是公开的（阵营不公开）
+        mic: this.mics?.[p.id] ?? null, // 'server' 被闭麦 / 'self' 自己闭麦
         online: this.online.has(p.id),
         ...(showRoles ? this.grimEntry(p) : {}),
       })),

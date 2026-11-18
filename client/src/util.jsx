@@ -55,7 +55,7 @@ export function Portrait({ p, size, frame = 'var(--cream)', prefer = 'avatar', s
       {src
         ? <img src={src} alt="" onError={() => setFailed((x) => x + 1)} />
         : <div className="portrait-paint" style={{ background: `hsl(${ch ? ch.hue : hue(p.id)} 28% 38%)`, fontSize: w * 0.5 }}>{initial}</div>}
-      {speaking && <SpeakBadge small={w < 30} />}
+      {speaking ? <SpeakBadge small={w < 30} /> : p.mic ? <MuteBadge kind={p.mic} small={w < 30} /> : null}
     </div>
   );
 }
@@ -66,6 +66,16 @@ function SpeakBadge({ small = false }) {
     <span className={`speak-badge ${small ? 'small' : ''}`} aria-label="正在说话" title="正在说话">
       <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" /><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5M5.5 14.5h5" fill="none" strokeWidth="1.6" strokeLinecap="round" /></svg>
       <i /><i /><i />
+    </span>
+  );
+}
+
+/** 闭着麦：头像右上角红色的划线麦克风（2026-11-18 用户：实时显示谁被闭麦）。server 被闭麦（机器人或管理员），self 自己闭麦。 */
+function MuteBadge({ kind, small = false }) {
+  const label = kind === 'server' ? '被闭麦' : '自己闭麦';
+  return (
+    <span className={`mute-badge ${kind} ${small ? 'small' : ''}`} aria-label={label} title={label}>
+      <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" /><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5M5.5 14.5h5" fill="none" strokeWidth="1.6" strokeLinecap="round" /><path d="M2.5 2.5l11 11" strokeWidth="1.8" strokeLinecap="round" /></svg>
     </span>
   );
 }

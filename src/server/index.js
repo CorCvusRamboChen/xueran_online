@@ -299,6 +299,10 @@ async function discordUser(token, guildId) {
 
 // ───────────── 房间与 WebSocket ─────────────
 const rooms = new Map();   // "guild:channel" → Room
+// 有人的语音状态变了（闭麦、解除、进出语音）：这个服务器里有他的房间刷新一下「谁被闭麦」（2026-11-18 用户要实时显示）
+for (const [h, prefix] of [[hub, ''], [partnerHub, ''], [kookHub, KOOK_PREFIX]]) {
+  h?.watch?.((gid, uid) => { for (const r of rooms.values()) if (r.guildId === `${prefix}${gid}` && (r.game?.get(uid) || r.users?.has(uid))) r.micChanged?.(); });
+}
 const sockets = new Map(); // Room → Set<ws>
 
 function broadcast(room) {
