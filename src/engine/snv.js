@@ -162,6 +162,11 @@ export function rollMixed(script, n, rng, { exclude = null } = {}) {
  * 官方能给任何不在场的善良角色（不能给酒鬼等几个），这里只挑被动的和自动拿信息的。
  */
 /** 灵言师的关键词：平时聊天不太会说、但能想办法引人说出口的词（官方建议用生僻词）。 */
+// 灵言师的关键词（2026-11-19 用户：太难了，加难度设置、默认简单）。集石百科没有官方词库，只说「选绝对不会被无意说出的非常见词语」。
+// 简单：日常话题词，灵言师可以借闲聊把话题带过去（避开游戏里本来就常说的词：夜晚、投票、处决、死、睡觉……）
+export const MEZ_WORDS_EASY = ['下雨', '月亮', '生日', '蛋糕', '足球', '火锅', '咖啡', '猫咪', '周末', '旅游', '奶茶', '电影', '冰淇淋', '跑步', '雪人',
+  '游泳', '饺子', '西瓜', '烧烤', '早餐', '小狗', '海边', '唱歌', '巧克力', '红包', '春节', '彩虹', '面条', '篮球', '动物园'];
+// 普通：不常见的具体名词，聊血染时几乎不会碰上（官方口径；比官方范例「君士坦丁堡」好认，语音转写认得准）
 export const MEZ_WORDS = ['琥珀', '灯塔', '狐狸', '樱桃', '风筝', '珊瑚', '萤火虫', '冰糖', '望远镜', '海螺', '蒲公英', '雪橇', '石榴', '鹦鹉', '指南针', '薄荷',
   '仙人掌', '火烈鸟', '万花筒', '橄榄', '企鹅', '彩虹', '棉花糖', '向日葵', '水晶球', '松鼠', '秋千', '柠檬', '热气球', '章鱼'];
 
@@ -335,7 +340,7 @@ export const SNV_METHODS = {
       this.boffin = proof.length && this.st.roll('boffinProof') ? this.st.choose('boffin', proof) : free.length ? this.st.choose('boffin', free) : null;
     }
     this.pixie = {};          // 小精灵：id → { role 被告知的镇民角色, target 那个镇民是谁（可能没有：醉酒时给了不在场的）, mad 疯狂过没有 }
-    this.mez = inPlay.has('mezepheles') ? { word: this.st.choose('mezWord', MEZ_WORDS), used: false, hit: null } : null; // 灵言师的关键词
+    this.mez = inPlay.has('mezepheles') ? { word: this.st.choose('mezWord', this.mezEasy ? MEZ_WORDS_EASY : MEZ_WORDS), used: false, hit: null } : null; // 灵言师的关键词
     this.execHist = [];       // 处决记录（政客终局判责任用）：{ day, id, by 提名者, voters }
     this.twinSync(null);
   },
@@ -1411,7 +1416,7 @@ ${this.grimoire()}
             this.record('st', `${this.tag(t.id)} 被工程师变成了${ROLES[c.role].name}`);
             changed.push(t.id);
           }
-          if (c.role === 'mezepheles' && !this.mez) this.mez = { word: this.st.choose('mezWord', MEZ_WORDS), used: false, hit: null };
+          if (c.role === 'mezepheles' && !this.mez) this.mez = { word: this.st.choose('mezWord', this.mezEasy ? MEZ_WORDS_EASY : MEZ_WORDS), used: false, hit: null };
         } break;
         case 'alhadikhia': {
           if (this.atheist) { if (!first && mid?.as !== 'ah_choice') this.atheistKill(messages); break; }

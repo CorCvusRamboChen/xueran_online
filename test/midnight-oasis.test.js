@@ -242,3 +242,16 @@ test('房间：提名说书人走完提名、投票、黄昏', async () => {
   const { g } = await playRoom({ n: 7, stNom: true });
   assert.ok(g.winner);
 });
+
+test('灵言师的关键词：默认简单（日常词）；房间设置关掉是普通（不常见的词）', async () => {
+  const { Game, makeRng } = await import('../src/engine/game.js');
+  const { MEZ_WORDS, MEZ_WORDS_EASY } = await import('../src/engine/snv.js');
+  const ps = Array.from({ length: 8 }, (_, i) => ({ id: `p${i + 1}`, name: `玩家${i + 1}` }));
+  const roles = ['noble', 'snakecharmer', 'balloonist', 'huntsman', 'drunk', 'mezepheles', 'poisoner', 'vigormortis'];
+  const easy = new Game(ps, { roles, rng: makeRng(1), script: 'mo' });
+  assert.ok(MEZ_WORDS_EASY.includes(easy.mez.word));
+  const hard = new Game(ps, { roles, rng: makeRng(1), script: 'mo', mezEasy: false });
+  assert.ok(MEZ_WORDS.includes(hard.mez.word));
+  const back = Game.fromJSON(JSON.parse(JSON.stringify(easy.toJSON())));
+  assert.equal(back.mezEasy, true, '读档后还记得');
+});

@@ -95,6 +95,7 @@ export const DEFAULT_SETTINGS = {
   chooseSeconds: 45,     // 夜里选人时限（大家都选完就立刻结算，没选完的等到时限替他随机选）
   voteSeconds: 3,        // 投票时钟每人停留
   voteCountdown: 8,      // 时钟开始转动前的倒计时
+  mezEasy: true,         // 灵言师的关键词：简单（日常话题词，好引导）；关掉是普通（不常见的词，官方口径）（2026-11-19 用户：默认简单）
   nightDeafen: false,    // 夜里服务器闭麦+闭耳（默认关：大家自觉闭麦，开了有时会卡入夜）
   pauseMs: 4000,         // 结算后到下一阶段的停顿
   killSceneMs: 11000,    // 暗流涌动：夜晚结算后到天亮的时间，留给恶魔"变身 + 冲刺"和受害者"被破门"两段动画
@@ -485,6 +486,7 @@ export class Room {
     }
     if (typeof p.shuffle === 'boolean') s.shuffle = p.shuffle;
     if (typeof p.nightDeafen === 'boolean') s.nightDeafen = p.nightDeafen;
+    if (typeof p.mezEasy === 'boolean') s.mezEasy = p.mezEasy;
     if (typeof p.nominatorVotes === 'boolean') s.nominatorVotes = p.nominatorVotes;
     if (typeof p.speechMute === 'boolean') s.speechMute = p.speechMute;
     if (typeof p.smallEvilInfo === 'boolean') s.smallEvilInfo = p.smallEvilInfo;
@@ -593,7 +595,7 @@ export class Room {
     }
     // 提线木偶要坐在恶魔旁边：房主指定了角色的座位不动（引擎开局还会再检查一次，那时已经相邻就不挪）
     if (roles?.includes('marionette')) roles = seatMarionette([...roles], Math.random, new Set(seats.map((p, i) => (assign[p.id] ? i : -1)).filter((i) => i >= 0)));
-    this.game = new Game(seats.map(({ id, name }) => ({ id, name })), { roles, drunkAs: custom ? null : preset?.drunkAs, script, noBaron, evilInfo: seats.length >= 7 || this.settings.smallEvilInfo, deadDrunk: !this.tutorial && !!this.settings.deadDrunk, lunaticGhost: !!this.settings.lunaticGhost, newbies: [...newbies] });
+    this.game = new Game(seats.map(({ id, name }) => ({ id, name })), { roles, drunkAs: custom ? null : preset?.drunkAs, script, noBaron, evilInfo: seats.length >= 7 || this.settings.smallEvilInfo, deadDrunk: !this.tutorial && !!this.settings.deadDrunk, lunaticGhost: !!this.settings.lunaticGhost, newbies: [...newbies], mezEasy: this.settings.mezEasy !== false });
     this.duskDay = null;
     this.ragCur = null; this.ragQ = []; this.ragThen = null; // 诸神黄昏的开枪队列：上一局剩下的不要带过来
     this.game.records = this.readRecords(seats);

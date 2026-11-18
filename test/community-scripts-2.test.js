@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Game, makeRng } from '../src/engine/game.js';
-import { rollMixed, MEZ_WORDS } from '../src/engine/snv.js';
+import { rollMixed, MEZ_WORDS, MEZ_WORDS_EASY } from '../src/engine/snv.js';
 import { ROLES, rolesOf, engineOf, SCRIPTS } from '../src/engine/roles.js';
 import { MIX_STEPS, NIGHT_ORDER, STEP_NAMES, NOT_STEPS } from '../src/shared/nightOrder.js';
 import { getMap } from '../src/shared/map.js';
@@ -47,7 +47,7 @@ test('四个剧本：角色都在、用通用引擎、各有一张基础图的�
 test('灵言师：首夜得知关键词；第一个说出它的善良玩家当晚变邪恶；邪恶说了不算；之后不能再转', () => {
   const g = mk(['noble', 'librarian', 'fortuneteller', 'oracle', 'monk', 'mezepheles', 'imp'], 'trust');
   const r = night(g, { p3: ['p1', 'p2'] });
-  assert.ok(MEZ_WORDS.includes(g.mez.word));
+  assert.ok(MEZ_WORDS_EASY.includes(g.mez.word), '默认简单词库');
   assert.match(text(r.messages, 'p6'), new RegExp(`关键词是「\\*\\*${g.mez.word}`));
   g.dawn();
   assert.equal(g.mezHeard('p7', `我觉得${g.mez.word}很好`), false, '恶魔说了不算');

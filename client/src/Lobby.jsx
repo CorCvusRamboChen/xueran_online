@@ -204,7 +204,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
               hhr: '《哈罗德的复仇》（Harold Holt\'s Revenge，作者 Theo，官方推荐）：恶魔是不杀人的利维坦——处决两个好人或撑到第五天邪恶就赢；洗脑师、麻脸巫婆、哥布林、提线木偶轮番搅局，政客可能在终局倒戈。地图是涨潮的海港。',
               pie: '《洋葱派》（Onion Pies，作者 Tej，官方推荐）：底子是暗流涌动，新手也能上手；多了小精灵（疯狂地扮演一个镇民，他死了你接手）、食人魔（跟着选的人站队、自己不知道站哪边）和提线木偶。地图是烤派的冬夜。',
               trust: '《大诚小镇》（Trust，作者 Milk）：醉酒中毒很少、信息大多可信，难的是信谁——政客、灵言师（说出他的关键词就变邪恶，大家都会收到收音页）、提线木偶、疯子。地图是守信的晚钟。',
-              mo: '《夜半狂欢》（The Midnight Oasis，作者 Zets，钟楼剧本博物馆美术）：「旋转木马」实验角色的快速上手剧本，7–15 人。工程师能把恶魔或爪牙换成别的角色；罂粟种植者活着时坏人互相不认识；精神病患者白天直接杀人，被处决还要猜拳；恶魔哈迪寂亚选三个人，让他们自己选活还是死，三个都活就都死。偶尔整局没有邪恶（无神论者），这时要处决说书人才赢。传奇角色哨兵、圣洁之魂。',
+              mo: '《夜半狂欢》（The Midnight Oasis，作者 Zets，钟楼剧本博物馆美术）：「旋转木马」实验角色的快速上手剧本，7–15 人。工程师能把恶魔或爪牙换成别的角色；罂粟种植者活着时坏人互相不认识；精神病患者白天直接杀人，被处决还要猜拳；恶魔哈迪寂亚选三个人，让他们自己选活还是死，三个都活就都死。偶尔整局没有邪恶（无神论者），这时要处决说书人才赢；但没有无神论者时处决说书人，邪恶当场获胜。传奇角色哨兵、圣洁之魂。',
               sar: '《裁缝与暴乱》（作者 Sui，杭州说书人圈子里流传的极速板子）：所有善良都是女裁缝（整局一次，夜里看两个人是不是同一阵营），所有邪恶都是暴乱。白天谁被提名谁当场死，不投票，死的人还能立刻接着提名——第三天必须提名，第三天结束暴乱还活着就是邪恶赢。没有夜刀，也没有别的信息，第一天就吵成一团。传奇角色骗人精：整局一次，一名善良玩家可能拿到错误信息。',
               booz: '《瞒天过海》（Boozling v9，作者 Lau）：2022 年剧本世界杯冠军，集石有官方中文名，中文社区常拿来当新手进阶剧本。好人多是限次能力：猎手一枪、渔夫一问、巡山人能把落难少女救走、魔像整局只能提名一次（提的不是恶魔就当场死）；坏人靠洗脑师、提线木偶、诺-达鲺和酒鬼把信息搅乱。地图是醉醺醺的旅店。',
               twv: '《暗流紫罗兰》（Trouble with Violets，作者 Ben Burns）：暗流涌动的全部好人，对上梦殒春宵的全部坏人。好人信息直白，坏人会换角色、换阵营、让信息全错，邪恶偏强。地图是落雪的紫罗兰花园。',
@@ -282,6 +282,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                   <Select label="选人时限" value={st.chooseSeconds} options={[30, 45, 60, 90, 120]} unit="秒" onChange={(v) => set({ chooseSeconds: v })} />
                   {['tb', 'bmr'].includes(engineOf(st.script)) && <Toggle rule label="夜里死了仍拿信息（醉酒）" on={!!st.deadDrunk} onChange={(v) => set({ deadDrunk: v })} />}
                   {st.script === 'bmr' && <Toggle rule label="疯子（以为是僵怖）死后照样醒" on={!!st.lunaticGhost} onChange={(v) => set({ lunaticGhost: v })} />}
+                  {inScript('mezepheles', st.script) && <Toggle rule label={st.mezEasy !== false ? '灵言师的关键词：简单（日常词，好引导）' : '灵言师的关键词：普通（不常见的词，官方口径）'} on={st.mezEasy !== false} onChange={(v) => set({ mezEasy: v })} />}
                   {(inScript('mutant', st.script) || inScript('cerenovus', st.script)) && s.hearAvailable && <Toggle label="语音判定疯狂（机器人留在广场转写被疯狂的人，开局前告诉大家）" on={!!st.hearMadness} onChange={(v) => set({ hearMadness: v })} />}
                 </div>
               </div>
