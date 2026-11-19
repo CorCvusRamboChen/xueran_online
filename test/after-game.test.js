@@ -16,6 +16,7 @@ async function endedRoom(settings = {}) {
   for (const [id, name] of [['u1', '阿一'], ['u2', '阿二']]) room.users.set(id, { id, name, avatar: null });
   await room.act('u1', 'join'); await room.act('u2', 'join');
   await room.act('u1', 'addBots', { count: 5 });
+  room.roleAssign = { u2: 'poisoner' }; // 夜半狂欢有 15% 是无神论者局（没有邪恶，就没有「输的一方」）：指定一个爪牙
   await room.act('u1', 'start');
   return room;
 }

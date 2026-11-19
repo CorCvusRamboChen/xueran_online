@@ -150,6 +150,6 @@ test('房间：设置里选小怪宝，开局的局记下换了恶魔、视图�
     assert.equal(g.demonSwap, 'lilmonsta');
     assert.ok(!g.players.some((q) => q.role === 'vigormortis'), '没有亡骨魔');
     assert.equal(room.viewFor('u1').demonSwap, 'lilmonsta');
-    if (!g.players.some((q) => q.role === 'alhadikhia')) assert.ok(g.monsta, '没抽到哈迪寂亚就是小怪宝局');
+    if (!g.atheist && !g.players.some((q) => q.role === 'alhadikhia')) assert.ok(g.monsta, '没抽到哈迪寂亚（也不是无神论者局）就是小怪宝局');
   } finally { await room.teardown(); }
 });
