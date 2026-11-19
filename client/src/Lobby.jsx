@@ -18,6 +18,7 @@ import { AbilityCard } from './AbilityCard.jsx';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FeedbackBoard } from './Feedback.jsx';
+import { StSetup } from './StSetup.jsx';
 import { Replay, VoteHistory } from './replay.jsx';
 import { SETUPS, presetsFor, PRESET_SHARE } from '../../src/shared/setups.js';
 import { Glossed } from './terms.jsx';
@@ -126,10 +127,13 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
             {!(human && host) && (joined
               ? <Btn kind="secondary" className="menu-item" onClick={() => act('leave')}>离开座位</Btn>
               : <Btn kind="primary" className="menu-item" onClick={async () => { if (await act('join') && onDiscordMobile() && !hintSeen()) setBrowserHint(true); }}>加入游戏</Btn>)}
-            {host && <Btn kind={n >= lo && n <= hi ? 'primary' : 'secondary'} className="menu-item" disabled={n < lo || n > hi} onClick={() => act('start')}>开始游戏{n < lo ? `（还差 ${lo - n} 人）` : n > hi ? `（这个剧本最多 ${hi} 人）` : ''}</Btn>}
+            {s.drafting && !s.draft && <p className="menu-wait">说书人正在排版：定座位和角色，马上发身份……</p>}
+            {s.draft && <StSetup d={s.draft} act={act} />}
+            {host && s.draft && <Btn kind="primary" className="menu-item" disabled>正在排版……</Btn>}
+            {host && !s.draft && <Btn kind={n >= lo && n <= hi ? 'primary' : 'secondary'} className="menu-item" disabled={n < lo || n > hi} onClick={() => act('start')}>{human ? '开始排版' : '开始游戏'}{n < lo ? `（还差 ${lo - n} 人）` : n > hi ? `（这个剧本最多 ${hi} 人）` : ''}</Btn>}
             {soloMode && host && <SoloBots s={s} act={act} />}
             {!host && !s.hostOnline && <Btn className="menu-item" onClick={() => act('claimHost')}>房主不在，接管房主</Btn>}
-            {!host && s.hostOnline && <p className="menu-wait">等房主{s.hostName ? `「${s.hostName}」` : ''}开始……</p>}
+            {!host && s.hostOnline && !s.drafting && <p className="menu-wait">等房主{s.hostName ? `「${s.hostName}」` : ''}开始……</p>}
             {!host && s.hostOnline && <Btn kind="secondary" className="menu-item" onClick={() => act('claimHost')}>房主没反应？接管房主</Btn>}
             {onTutorial && <Btn className="menu-item menu-tut" onClick={() => setIntro(true)}>新手教程（1 分钟动画 + 练习局）</Btn>}
             <VolumeButton className="btn btn-secondary menu-item menu-vol" label="设置" />
@@ -289,7 +293,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                 <button type="button" className={human ? 'on' : ''} onClick={() => set({ mode: 'human' })}>真人说书</button>
               </div>
             </div>
-            <p className="muted setting-note">{human ? '房主看魔典、审核每条夜间信息；机器人负责发身份、叫人、跑流程。' : 'AI 房主全自动：发身份、夜里叫人、像真人说书人一样做判定、给提名和投票计时、用语音播报旁白，不需要人主持。'}</p></>}
+            <p className="muted setting-note">{human ? '房主当说书人：开局先排版（座位、角色、伪装），之后叫人、计时、提名投票、照规则算的信息都由机器人跑；只有要你拿主意的才找你——醉酒中毒的假信息、疯狂、艺术家这类问题，都带 AI 的建议。' : 'AI 房主全自动：发身份、夜里叫人、像真人说书人一样做判定、给提名和投票计时、用语音播报旁白，不需要人主持。'}</p></>}
             {/* 四组：左边开局和夜晚，右边白天和观战。「房规」是和官方规则不一样的地方，标个小标签 */}
             <div className="setting-wrap"><div className="setting-groups">
               <div className="setting-col">

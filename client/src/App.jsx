@@ -419,7 +419,7 @@ function Game({ s, act, ask }) {
     { id: 'roster', icon: 'roster', label: '镇民' },
     { id: 'roles', icon: 'grim', label: '角色' },
     { id: 'extras', icon: 'grim', label: '传奇·旅行者' }, // 2026-11-19 用户：角色右边介绍传奇角色和旅行者
-    s.isST && { id: 'grim', icon: 'grim', label: '魔典', dot: s.st?.pendingInfo.length || 0 },
+    s.isST && { id: 'grim', icon: 'grim', label: '魔典', dot: stTodo(s.st) },
     s.isHost && { id: 'menu', icon: 'menu', label: s.isST ? '说书人' : '房主' },
   ].filter(Boolean);
   const myVoteOpen = !!s.vote && !!me && (me.alive || me.ghostVote) && !s.vote.locked.includes(s.me);
@@ -1781,33 +1781,99 @@ export function Roster({ s, onTap }) {
 }
 
 // ───────────────────────── 说书人 ─────────────────────────
+/** 说书台上要说书人拿主意的事有几件（「魔典」标签上的红点）。 */
+const stTodo = (st) => (st ? st.pendingInfo.length + (st.artistAsks?.length ?? 0) + (st.asks?.length ?? 0) : 0);
+
+/**
+ * 说书台（2026-11-20 用户：房主当说书人时，系统性的不用他来，需要人脑抉择的地方由他决定）。
+ * 叫人、计时、提名投票、照规则算的信息都由机器人跑；这里只放要他拿主意的：
+ * 上面「待你决定」——醉酒中毒的假信息、误登记影响的信息、艺术家 / 渔夫 / 失忆者的问题、AI 听到的疯狂（都带 AI 的建议）；
+ * 夜里结算完停在天亮前时，列出 AI 今晚替他做的判定，看完点「天亮」（不点也会到点自动天亮）。
+ */
 function StDesk({ s, act, name }) {
   const st = s.st;
   const night = s.phase === 'night';
+  const todo = stTodo(st);
+  const left = useCountdown(st.held);
   return (
     <div className="desk">
       {night && (
-        <Panel title="今夜" tone="mot">
-          {st.waiting.length > 0 && <p className="lead">还在等：{st.waiting.map(name).join('、')}</p>}
+        <Panel title="今夜" tone="mot" extra={st.held ? <span className="muted">{left > 0 ? `${left} 秒后自动天亮` : '马上天亮'}</span> : null}>
+          {!st.resolved && st.waiting.length > 0 && <p className="lead">还在等：{st.waiting.map(name).join('、')}（到时间没选的随机）</p>}
+          {!st.resolved && !st.waiting.length && <p className="lead">大家都选好了，正在结算……</p>}
           {st.rkPending && <p className="lead">守鸦人 {name(st.rkPending)} 正在选人。</p>}
-          <div className="btn-row"><Btn kind="primary" onClick={() => act('dawn')}>{st.resolved ? '天亮' : '结算这一夜'}</Btn></div>
-        </Panel>
-      )}
-      {st.artistAsks?.map((q) => (
-        <Panel key={q.uid} title="艺术家的问题" tone="mot">
-          <p className="lead">{name(q.uid)}：{q.text}</p>
+          {st.resolved && <p className="lead">{!st.pendingInfo.length ? '结算完了：看一眼 AI 替你做的判定，没问题就天亮。' : st.notes?.length ? `结算完了：还有 ${st.pendingInfo.length} 条信息等你过目，再看一眼 AI 替你做的判定，然后点「天亮」。` : `结算完了：还有 ${st.pendingInfo.length} 条信息等你过目，处理完就天亮。`}</p>}
+          {st.notes?.length > 0 && (
+            <div className="st-notes">
+              <Tag>AI 今晚替你做的判定</Tag>
+              <ul>{st.notes.map((t, i) => <li key={i}>{t}</li>)}</ul>
+              <p className="muted">不同意的话，天亮前点肖像改：杀死、复活、下毒、改角色。</p>
+            </div>
+          )}
           <div className="btn-row">
-            {[['true', '是'], ['false', '不是'], ['unknown', '我不知道']].map(([v, label]) => (
-              <Btn key={v} onClick={() => act('st', { action: 'artistAnswer', target: q.uid, text: v })}>{label}</Btn>
-            ))}
+            {st.pendingInfo.length > 1 && <Btn onClick={() => act('info', { action: 'sendAll' })}>全部照建议发</Btn>}
+            <Btn kind="primary" onClick={() => act('dawn')}>{st.resolved ? '天亮' : '现在就结算'}</Btn>
           </div>
         </Panel>
-      ))}
-      {st.pendingInfo.length > 0 && <Tag>待发的信息 · {st.pendingInfo.length}</Tag>}
+      )}
+      {todo > 0 && <Tag tone="mot">待你决定 · {todo}</Tag>}
       {st.pendingInfo.map((m) => <InfoItem key={m.id} m={m} name={name} act={act} />)}
+      {st.artistAsks?.map((q) => (
+        <div key={q.uid} className="info-item ask-item">
+          <div className="info-head"><b>{name(q.uid)}</b><Check color="var(--mot)">艺术家的问题</Check></div>
+          <p className="lead">{q.text}</p>
+          <AiSays v={q.suggest === 'retry' ? '问得有歧义，让他重问' : { true: '是', false: '不是', unknown: '我不知道' }[q.suggest]} />
+          <div className="btn-row">
+            {[['true', '是'], ['false', '不是'], ['unknown', '我不知道'], ['retry', '有歧义，请他重问']].map(([v, label]) => (
+              <Btn key={v} kind={q.suggest === v ? 'primary' : 'secondary'} onClick={() => act('st', { action: 'artistAnswer', target: q.uid, text: v })}>{label}</Btn>
+            ))}
+          </div>
+        </div>
+      ))}
+      {st.asks?.map((a) => <AskItem key={a.id} a={a} name={name} act={act} />)}
+      {!night && todo === 0 && <p className="muted">现在没有要你拿主意的事。流程（自由活动、提名、投票、黄昏）机器人在跑，你可以在「房主」菜单里提前推进。</p>}
       {s.bluffs && <p className="muted">恶魔的伪装：{s.bluffs.join('、')}</p>}
       <p className="muted">点肖像（或「镇民」面板）可以杀死、复活、下毒、改角色、私下传话。</p>
       <ul className="history">{[...st.log].reverse().map((l) => <li key={l.id}><Line who="魔典" color="var(--mot)" text={l.text} /></li>)}</ul>
+    </div>
+  );
+}
+
+const AiSays = ({ v }) => <p className="ai-says">{v == null ? 'AI 还在想……' : <>AI 建议：<b>{v}</b></>}</p>;
+
+/** 一件要说书人拿主意的事：渔夫要建议、失忆者猜能力、AI 听到的疯狂。 */
+function AskItem({ a, name, act }) {
+  const [text, setText] = useState(a.suggest ?? '');
+  useEffect(() => { if (a.suggest && !text) setText(a.suggest); }, [a.suggest]);
+  const go = (answer, extra = {}) => act('stAsk', { id: a.id, answer, ...extra });
+  const head = { fisherman: '渔夫来请教建议', amnesiac: '失忆者猜自己的能力', mad: '疯狂：要不要处决' }[a.kind];
+  return (
+    <div className={`info-item ask-item ask-${a.kind}`}>
+      <div className="info-head"><b>{name(a.who)}</b><Check color="var(--mot)">{head}</Check></div>
+      {a.hint && <p className="ask-why">{a.hint}</p>}
+      {a.kind === 'fisherman' && <>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder={a.suggest == null ? 'AI 还在想……也可以直接写' : '给他一句建议'} />
+        <div className="btn-row">
+          <Btn kind="primary" disabled={!text.trim()} onClick={() => go('send', { text })}>发给他</Btn>
+          <Btn kind="ghost" onClick={() => go('drop')}>不理</Btn>
+        </div>
+      </>}
+      {a.kind === 'amnesiac' && <>
+        <p className="lead">他猜：{a.text}</p>
+        <p className="muted">他的能力其实是：{a.truth}</p>
+        <AiSays v={a.suggest} />
+        <div className="btn-row">
+          {['无关', '有关', '接近', '完美'].map((v) => <Btn key={v} kind={a.suggest === v ? 'primary' : 'secondary'} onClick={() => go(v)}>{v}</Btn>)}
+        </div>
+      </>}
+      {a.kind === 'mad' && <>
+        <p className="lead">{a.why}</p>
+        <p className="muted">AI 听到的（或他公开声明的）。处决算今天的处决；夜里处决当场公布。</p>
+        <div className="btn-row">
+          <Btn kind="primary" onClick={() => go('execute')}>处决他</Btn>
+          <Btn onClick={() => go('spare')}>放过</Btn>
+        </div>
+      </>}
     </div>
   );
 }
@@ -1820,9 +1886,10 @@ function InfoItem({ m, name, act }) {
   return (
     <div className="info-item">
       <div className="info-head"><b>{name(m.playerId)}</b><Check color={v.color}>{v.who}</Check></div>
+      {m.why && <p className="ask-why">{m.why}</p>}
       <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} />
       <div className="btn-row">
-        <Btn kind="primary" onClick={() => act('info', { id: m.id, action: 'send', text: text === plain ? m.text : text })}>{text === plain ? '发送' : '发送改过的'}</Btn>
+        <Btn kind="primary" onClick={() => act('info', { id: m.id, action: 'send', text: text === plain ? m.text : text })}>{text === plain ? '照这样发' : '发送改过的'}</Btn>
         <Btn kind="ghost" onClick={() => act('info', { id: m.id, action: 'drop' })}>不发</Btn>
       </div>
     </div>

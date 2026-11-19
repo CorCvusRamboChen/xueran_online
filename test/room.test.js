@@ -46,6 +46,7 @@ async function untilDay(room) {
       }
     }
     if (room.rkPending && !room.isFake(room.rkPending)) await room.act(room.rkPending, 'ravenkeeper', { target: g.players[0].id });
+    if (room.held) await room.act(room.hostId, 'dawn').catch(() => {}); // 真人说书：停在天亮前等说书人
     await sleep(3);
   }
 }
@@ -105,12 +106,17 @@ test('自动说书：整局跑完；夜里闭耳、白天解除；天亮后自�
   assert.equal(room.lobby.length, 8, '回大厅保留玩家');
 });
 
-test('真人说书：信息待审核；夜里单独叫人会先解除闭耳', async () => {
+test('真人说书：先排版再发身份；照规则算的信息直接发，要判断的才停在天亮前；夜里单独叫人会先解除闭耳', async () => {
   const { room, voice } = setup('human');
   await assert.rejects(room.act('u1', 'join'), /说书人不能/);
   await room.act('u2', 'join');
   await room.act('u1', 'addBots', { count: 6 });
   await room.act('u1', 'start');
+  assert.equal(room.game, null, '排版时还没开局');
+  assert.ok(room.viewFor('u1').draft?.seats.every((x) => x.role), '说书人看得到排好的版');
+  assert.equal(room.viewFor('u2').draft, null, '玩家看不到排版');
+  assert.equal(room.viewFor('u2').drafting, true);
+  await room.act('u1', 'draft', { op: 'go' });
   assert.deepEqual(voice.calls[0], ['sleep', true, ['u2']], '说书人不闭耳');
 
   const st = room.viewFor('u1');
@@ -123,23 +129,28 @@ test('真人说书：信息待审核；夜里单独叫人会先解除闭耳', as
   await room.act('u1', 'gather');
   assert.equal(voice.asleep.has('u2'), true, '回来后重新闭耳');
 
-  // u2 有夜晚行动就选，然后等结算（真人模式结算完不会自己天亮）
+  // 所有信息都要过目（模拟醉酒中毒）：停在天亮前，改过的照改过的发
+  room.infoWhy = () => '测试：都要过目';
   const pr = room.viewFor('u2').self.prompt;
   if (pr) await room.act('u2', 'choose', { night: pr.night, targets: pr.options.slice(0, pr.count) });
-  for (let k = 0; k < 200 && !room.resolving; k++) await sleep(3);
-  if (room.rkPending === 'u2') await room.act('u2', 'ravenkeeper', { target: 'u2' });
-  await sleep(30);
-  assert.equal(room.game.phase, 'night', '真人模式等说书人天亮');
-  assert.ok(room.viewFor('u1').st.resolved);
-  const pending = room.viewFor('u1').st.pendingInfo;
-  const mine = pending.find((m) => m.playerId === 'u2');
-  const before = room.viewFor('u2').self.inbox.length;
-  if (mine) {
-    await room.act('u1', 'info', { id: mine.id, action: 'send', text: '改过的信息' });
-    assert.equal(room.viewFor('u2').self.inbox.at(-1).text, '改过的信息');
-  } else assert.equal(before, room.viewFor('u2').self.inbox.length, '没审核的信息不会自己发出去');
-  await assert.rejects(room.act('u2', 'dawn'), /只有说书人/);
-  await room.act('u1', 'dawn');
+  for (let k = 0; k < 300 && !room.held && room.game.phase === 'night'; k++) {
+    if (room.rkPending === 'u2') await room.act('u2', 'ravenkeeper', { target: 'u2' }).catch(() => {});
+    await sleep(3);
+  }
+  if (room.held) {
+    assert.equal(room.game.phase, 'night', '等说书人看完');
+    const view = room.viewFor('u1').st;
+    assert.ok(view.held > Date.now(), '有自动天亮的时刻');
+    const mine = view.pendingInfo.find((m) => m.playerId === 'u2');
+    if (mine) {
+      assert.equal(mine.why, '测试：都要过目');
+      await room.act('u1', 'info', { id: mine.id, action: 'send', text: '改过的信息' });
+      assert.equal(room.viewFor('u2').self.inbox.at(-1).text, '改过的信息');
+    }
+    await assert.rejects(room.act('u2', 'dawn'), /只有说书人/);
+    if (room.game.phase === 'night') await room.act('u1', 'dawn').catch(() => {});
+  }
+  for (let k = 0; k < 200 && room.game.phase === 'night' && !room.ended; k++) await sleep(5);
   assert.equal(room.game.phase === 'day' || room.ended, true);
 
   if (!room.ended) {
@@ -158,15 +169,9 @@ test('自由活动：走进房子进语音、锁门敲门、集合关掉所有�
   await room.act('u3', 'join');
   await room.act('u1', 'addBots', { count: 5 });
   await room.act('u1', 'start');
-  for (let k = 0; k < 200 && !room.resolving; k++) {
-    const g = room.game;
-    for (const id of g.missingChoices().filter((x) => !room.isFake(x))) {
-      const pr = g.nightPrompts().find((x) => x.playerId === id);
-      await room.act(id, 'choose', { night: g.night, targets: pr.options.slice(0, pr.count) });
-    }
-    await sleep(3);
-  }
-  await room.act('u1', 'dawn');
+  await room.act('u1', 'draft', { op: 'go' });
+  room.settings.pauseMs = 1e6; // 天亮后不自动开始自由活动：这里由说书人手动开
+  await untilDay(room);
   if (room.ended) return;
 
   await assert.rejects(room.act('u2', 'roam'), /只有说书人/);
@@ -664,10 +669,13 @@ test('真人说书：破门等说书人点「天亮」才播，播完才天亮�
   await room.act('u1', 'addBots', { count: 6 });
   await room.act('u1', 'assignRole', { player: 'u2', role: 'imp' });
   await room.act('u1', 'start');
+  await room.act('u1', 'draft', { op: 'go' });
+  room.infoWhy = () => '测试：都要过目'; // 7 人局第一夜一定有恶魔信息：停在天亮前
   try {
     assert.ok(room.homes && room.game.script === 'tb', '暗流涌动有家');
     await room.act('u1', 'dawn');                 // 第一下：结算夜晚
-    for (let k = 0; k < 200 && !room.resolving; k++) await sleep(3);
+    for (let k = 0; k < 200 && !room.held; k++) await sleep(3);
+    assert.ok(room.held, '有信息要过目：停在天亮前');
     room.game.demonKills = ['bot-1'];             // 假装今晚恶魔杀了 bot-1，bot-2 死于别的原因（赌错、刺客……）
     room.game.nightDeaths = ['bot-1', 'bot-2'];
     room.game.get('bot-1').alive = false; room.game.get('bot-2').alive = false;
@@ -1450,6 +1458,7 @@ test('房主自己让出房主：交给在线的真人玩家（先找坐着的�
   await h.act('u1', 'addBots', { count: 4 });
   for (const id of ['u1', 'u2']) h.online.add(id);
   await h.act('u1', 'start');
+  await h.act('u1', 'draft', { op: 'go' });
   await assert.rejects(h.act('u1', 'releaseHost'), /真人说书进行中/);
   await h.teardown();
   await room.teardown();

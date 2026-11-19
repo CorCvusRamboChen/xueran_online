@@ -2131,3 +2131,61 @@ span.lr-newbie { cursor: default; }
 .lang-hint { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font: 400 13px var(--sans); color: var(--paper); background: rgba(8, 10, 10, .8); border: 1px solid var(--line); padding: 6px 8px 6px 12px; }
 .lang-hint .btn { padding: 4px 10px; font-size: 12px; letter-spacing: .5px; }
 .lang-hint-x { background: none; border: 0; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0 4px; }
+
+/* ───────── 真人说书：开局排版台（StSetup.jsx，2026-11-20） ───────── */
+.dt-modal { position: fixed; inset: 0; z-index: 5000; background: rgba(6, 7, 8, .86); display: grid; place-items: center; padding: 16px; overflow-y: auto; }
+.dt-box { width: min(1180px, 100%); background: #101313; border: 1px solid var(--line); border-top: 3px solid var(--mot); box-shadow: 0 30px 80px rgba(0, 0, 0, .7); padding: 18px 22px 22px; }
+.dt-head h3 { margin: 0 0 2px; font-size: 24px; letter-spacing: .04em; }
+.dt-head p { margin: 0; max-width: 72ch; }
+.dt-body { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 22px; margin-top: 14px; align-items: start; }
+.dt-circle { position: relative; aspect-ratio: 1; width: 100%; max-height: 76vh; margin: 0 auto; border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, #1d1a14 0 34%, #151411 34.5% 62%, #101211 62.5%); box-shadow: inset 0 0 0 1px var(--line), inset 0 0 60px rgba(0, 0, 0, .6); }
+.dt-center { position: absolute; inset: 31%; display: grid; place-content: center; text-align: center; gap: 6px; }
+.dt-seat { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); width: 104px; display: grid; justify-items: center; gap: 1px;
+  background: none; border: 0; padding: 4px; cursor: pointer; color: var(--cream); border-radius: 10px; }
+.dt-seat:hover { background: rgba(255, 255, 255, .05); }
+.dt-seat.on { background: rgba(226, 181, 44, .14); outline: 2px solid var(--mot); }
+.dt-seat.swap { animation: dtpulse 1s ease-in-out infinite; }
+.dt-circle.swapping .dt-seat:not(.on) { outline: 1px dashed rgba(226, 181, 44, .5); }
+@keyframes dtpulse { 50% { box-shadow: 0 0 0 4px rgba(226, 181, 44, .35); } }
+.dt-token { width: 58px; height: 58px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: #e9e1cc; box-shadow: 0 0 0 3px var(--tone, var(--mot)), 0 6px 14px rgba(0, 0, 0, .55); }
+.dt-token.small { width: 34px; height: 34px; flex: none; box-shadow: 0 0 0 2px var(--tone, var(--mot)); }
+.dt-token img { width: 100%; height: 100%; object-fit: cover; }
+.dt-token-ph { font-size: 22px; color: #3a352a; font-weight: 900; }
+.dt-token.t-int { --tone: var(--int); } .dt-token.t-psy { --tone: var(--psy); } .dt-token.t-phy { --tone: var(--phy); }
+.dt-role { font-weight: 900; font-size: 14px; line-height: 1.2; margin-top: 4px; }
+.c-int { color: var(--int); } .c-psy { color: var(--psy); } .c-phy { color: var(--phy); } .c-mot { color: var(--mot); }
+.dt-who { font-size: 12px; color: var(--muted); line-height: 1.25; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dt-mark { font-size: 11px; color: #1d1606; background: var(--mot); padding: 0 6px; border-radius: 3px; line-height: 1.5; }
+.dt-counts { display: grid; grid-template-columns: repeat(2, auto); gap: 4px 14px; justify-content: center; font-family: var(--cond); font-size: 15px; }
+.dt-count b { font-size: 26px; font-family: var(--num); margin-right: 2px; }
+.dt-count small { color: var(--muted); margin-right: 4px; }
+.dt-count.off b { text-decoration: underline wavy var(--opt); text-underline-offset: 4px; }
+.dt-mods { grid-column: 1 / -1; margin: 4px 0 0; max-width: 24ch; justify-self: center; }
+.dt-side { display: grid; gap: 14px; }
+.dt-sec { background: var(--panel); border: 1px solid var(--line); padding: 10px 12px; display: grid; gap: 8px; }
+.dt-sec h4 { margin: 0; font-size: 15px; }
+.dt-sec p { margin: 0; }
+.dt-sec select { width: 100%; min-height: 36px; background: #0c0e0e; border: 1px solid var(--line); padding: 4px 8px; }
+.dt-row { display: flex; align-items: center; gap: 10px; }
+.dt-bluffs { display: grid; gap: 8px; }
+.dt-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.dt-go { display: grid; gap: 10px; }
+.dt-go > .btn { min-height: 48px; font-size: 17px; }
+.dt-hint { margin: 0; padding: 10px 12px; border: 1px dashed var(--line); }
+@media (max-width: 900px) {
+  .dt-body { grid-template-columns: 1fr; }
+  .dt-circle { aspect-ratio: auto; border-radius: 0; background: none; box-shadow: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; max-height: none; }
+  .dt-center { position: static; inset: auto; grid-column: 1 / -1; order: -1; padding: 6px 0 10px; }
+  .dt-seat { position: static; transform: none; width: auto; }
+  .dt-box { padding: 14px; }
+}
+
+/* 说书台：待你决定（App.jsx StDesk） */
+.ask-why { margin: 0 0 6px; font-size: 13px; color: var(--mot); }
+.ai-says { margin: 4px 0; font-size: 13px; color: var(--muted); }
+.ask-item .lead { margin: 4px 0; }
+.ask-mad { border-left-color: var(--phy); }
+.st-notes { margin: 6px 0 4px; }
+.st-notes ul { margin: 6px 0; padding-left: 18px; font-size: 13px; }
+.st-notes li { margin: 2px 0; }

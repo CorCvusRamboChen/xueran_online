@@ -569,12 +569,13 @@ test('审查回归：真人说书时，艺术家的问题到说书台，说书�
   await room.act('u1', 'addBots', { count: 7 });
   await room.act('u1', 'assignRole', { player: 'u2', role: 'artist' });
   await room.act('u1', 'start');
+  await room.act('u1', 'draft', { op: 'go' });
   const g = room.game;
   // 机器人是随机角色，有的还没选完就会报"还没选"：等它们选完
   for (let k = 0; k < 100 && g.phase !== 'day'; k++) { await room.act('u1', 'dawn').catch(() => {}); await sleep(10); }
   await until(() => g.phase === 'day');
   await room.act('u2', 'artist', { text: '恶魔活着吗' });
-  assert.deepEqual(room.viewFor('u1').st.artistAsks, [{ uid: 'u2', text: '恶魔活着吗' }]);
+  assert.deepEqual(room.viewFor('u1').st.artistAsks, [{ uid: 'u2', text: '恶魔活着吗', suggest: null }]);
   assert.ok(room.snapshot().artistAsks.length, '存档里有');
   await room.act('u1', 'st', { action: 'artistAnswer', target: 'u2', text: 'false' });
   assert.equal(room.viewFor('u1').st.artistAsks.length, 0);

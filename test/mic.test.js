@@ -304,12 +304,14 @@ test('收音页传上来的话会走到破功判定', async () => {
   await room.teardown();
 });
 
-test('房间：真人说书、或者服务器没有转写服务时没有收音入口', async () => {
+test('房间：真人说书也有收音入口（AI 只提议、说书人定）；服务器没有转写服务时没有', async () => {
   const room = await dayRoom();
   await room.teardown();
   room.settings.mode = 'human';
+  room.mic = null;
   room.hearToday();
-  assert.equal(room.mic, null, '真人说书');
+  assert.ok(room.mic, '真人说书也开收音（2026-11-20）');
+  room.mic = null;
   room.settings.mode = 'auto';
   room.micFor = null;
   room.hearToday();

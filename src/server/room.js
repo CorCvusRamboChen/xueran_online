@@ -16,6 +16,7 @@ import { ttsUrl } from './tts.js';
 import { judgeStatement, judgeMadness, judgeBreak, looksBroken, judgeAvailable, judgeAmnesiac, adviseFisherman, looksInjected, speakSeat7, judgeLead, judgeResponsible, readTable, judgeAfterGame } from './judge.js';
 import { parseTable, describeTable, tableLead } from '../engine/tableRead.js';
 import { feedbackAct } from './feedback.js';
+import { openDraft, draftAct, draftView, applyDraft, dropDraft } from './draft.js';
 import { noteMarks, readTown, markedRole } from './beliefs.js';
 import { Werewolf } from '../engine/werewolf.js';
 import { WW_ROOM } from './werewolfRoom.js';
@@ -32,6 +33,7 @@ const SHARED_HOME_SCRIPTS = new Set(['bmr']); // 能当家的房子比人少时�
 const VICTIM_SCENE_MS = 6500;
 // 一局里的真人全都离线这么久，就暂停这局、放开所有闭麦闭耳（有人回来自动接着打）
 const IDLE_PAUSE_MS = 3 * 60_000;
+const ST_HOLD_MS = 120_000; // 真人说书：夜晚结算完最多等说书人这么久，到点按建议发信息、自动天亮（2026-11-20）
 const NIGHT_MIN_MS = 25_000; // 最短夜晚：大家都选完了也要到 25 秒才天亮（11-12 用户定，见 beginNight）
 const MOONCHILD_WAIT_MS = 20_000; // 月之子 / 呆瓜黄昏被处决：入夜前等他公开选人这么久，超时随机选（用户 2026-11-03 嫌 30 秒卡，缩到 20 秒）
 /**
@@ -81,6 +83,9 @@ export function guessLevel(guess, ability) {
 }
 
 export class UserError extends Error {}
+
+// 真人说书排版中，这些操作会让排好的版作废（座位上的人变了、设置变了）
+const DRAFT_DROP = { join: '有人坐下了', leave: '有人离开了座位', kick: '有人被请离座位', addBots: '加了机器人', settings: '房间设置改了', claimHost: '房主换人了', giveHost: '房主换人了' };
 const KNOCK_STAY = 70; // 敲门的人目的地离门口这么近（像素）就还算站在门口
 const newId = () => Math.random().toString(36).slice(2, 8);
 
@@ -169,6 +174,7 @@ export class Room {
     this.inbox = new Map();
     this.acts = new Map();      // 每人自己夜里选了谁（只给自己看）
     this.pendingInfo = new Map();
+    this.draft = null;         // 真人说书的开局排版台（server/draft.js）
     this.stLog = [];
     this.log = [];
     this.resolving = false;
@@ -282,6 +288,7 @@ export class Room {
     if (this.game?.avalon && !AV_ACTIONS.has(type)) throw new UserError('阿瓦隆里没有这个操作'); // 没有自由活动、私聊、提名这些血染的操作
     if (this.game?.mark && !MK_ACTIONS.has(type)) throw new UserError('暗印里没有这个操作'); // 自由活动和私聊照用，提名投票、夜里选人这些血染的不要
     if (this.game?.werewolf && type.startsWith('ww')) { this.wwAct(uid, type, p); this.changed(); return null; }
+    if (this.draft && DRAFT_DROP[type]) dropDraft(this, DRAFT_DROP[type]); // 排版中座位或设置变了：这一版作废
     if (type === 'fullLog') return { log: this.log.slice(Math.max(0, this.log.findLastIndex((l) => l.kind === 'start'))) }; // 打开「记录」时取一次这局的全部
     switch (type) {
       case 'join': this.join(uid); break;
@@ -305,6 +312,8 @@ export class Room {
       case 'kick': this.requireHost(uid); if (!this.game) { this.lobby = this.lobby.filter((x) => x.id !== p.target); this.newbies = this.newbies.filter((x) => x !== p.target); } break;
       case 'markNewbie': this.requireHost(uid); this.markNewbie(p.player, !!p.on); break;
       case 'start': this.requireHost(uid); await this.start(); break;
+      case 'stAsk': this.requireHost(uid); this.answerAsk(p); break;
+      case 'draft': this.requireHost(uid); { const go = draftAct(this, p); if (go) await this.launch(go); } break;
       case 'avalon': await this.av.act(uid, p); break;
       case 'mark': await this.mk.act(uid, p); break;
       case 'choose': if (p.targets != null && !Array.isArray(p.targets)) throw new UserError('选择格式不对'); this.choose(uid, p.night, p.targets ?? [], p.role ?? null); break;
@@ -579,7 +588,9 @@ export class Room {
   // ───────────── 开局 ─────────────
   async start() {
     if (this.game) throw new UserError('游戏已经开始了');
+    if (this.draft) throw new UserError('说书人正在排版');
     this.pelted = {}; this.pelts = {}; // 惩罚场外：头上叠的东西每局重来
+    this.asks = []; this.artistAsks = []; this.held = null; // 真人说书：上一局没处理完的事不带过来
     this.peltFx = []; if (this.mvp) { this.cancel(this.mvp.timer); this.mvp = null; } // 上一局的扔东西动画、MVP 投票
     this.talk = []; // 全员收音的剧本：每天的发言（读场、将军、政客用）
     this.tableRead = null;
@@ -593,6 +604,14 @@ export class Room {
     if (SCRIPTS[script].avalon) return this.av.start(seats); // 阿瓦隆：完全是另一套流程
     if (SCRIPTS[script].mark) return this.mk.start(seats); // 暗印：另一套流程（server/mark.js），自由活动照用
     if (SCRIPTS[script].werewolf) return this.wwStart(seats, script); // 狼人杀、诸神黄昏：另一套流程（werewolfRoom.js）
+    const plan = this.planSetup(seats, script);
+    // 真人说书（2026-11-20 用户）：先给说书人排版——座位、角色、酒鬼以为的、红鲱鱼、伪装，AI 先排好一版，他点「发身份」才开局
+    if (this.stId && !this.tutorial && !this.solo) { openDraft(this, plan); this.changed(); return; }
+    await this.launch(plan);
+  }
+
+  /** 这局的角色怎么来：推荐预设 / AI 配平 / 完全随机 / 房主指定，新手照顾、恶魔开关、提线木偶挨着恶魔。seats 已经排好座位。 */
+  planSetup(seats, script) {
     // 七步成诗的灯神规则：7 号座位没有人坐，照样发角色，由说书人替它做决定
     if (SCRIPTS[script].seat7) seats.splice(6, 0, { id: SEAT7, name: '7号空座', avatar: null, fake: true });
     const teensy = !!SCRIPTS[script].teensy;
@@ -623,7 +642,14 @@ export class Room {
     if (demonSwap && !this.tutorial) roles = swapMoDemon(roles ?? balancedMixed(script, seats.length, Math.random), demonSwap, Math.random, new Set(seats.map((p, i) => (assign[p.id] ? i : -1)).filter((i) => i >= 0)));
     // 提线木偶要坐在恶魔旁边：房主指定了角色的座位不动（引擎开局还会再检查一次，那时已经相邻就不挪）
     if (roles?.includes('marionette')) roles = seatMarionette([...roles], Math.random, new Set(seats.map((p, i) => (assign[p.id] ? i : -1)).filter((i) => i >= 0)));
-    this.game = new Game(seats.map(({ id, name }) => ({ id, name })), { roles, drunkAs: custom ? null : preset?.drunkAs, script, noBaron, evilInfo: seats.length >= 7 || this.settings.smallEvilInfo, deadDrunk: !this.tutorial && !!this.settings.deadDrunk, lunaticGhost: !!this.settings.lunaticGhost, newbies: [...newbies], mezEasy: this.settings.mezEasy !== false, demonSwap });
+    return { seats, script, roles, drunkAs: custom ? null : preset?.drunkAs, noBaron, newbies: [...newbies], demonSwap, custom, preset, pure, ragnarok, teensy, mixed, riot, assigned: Object.keys(assign).length };
+  }
+
+  /** 照 plan 开局：建 Game、发身份、入第一夜。pick：真人说书人排版时改过的（酒鬼以为的、红鲱鱼、伪装）。 */
+  async launch({ seats, script, roles, drunkAs, noBaron, newbies: nb, demonSwap, custom, preset, pure, ragnarok, teensy, mixed, riot, assigned, pick = null }) {
+    const newbies = new Set(nb);
+    this.game = new Game(seats.map(({ id, name }) => ({ id, name })), { roles, drunkAs, script, noBaron, evilInfo: seats.length >= 7 || this.settings.smallEvilInfo, deadDrunk: !this.tutorial && !!this.settings.deadDrunk, lunaticGhost: !!this.settings.lunaticGhost, newbies: [...newbies], mezEasy: this.settings.mezEasy !== false, demonSwap });
+    if (pick) applyDraft(this.game, pick);
     this.duskDay = null;
     this.ragCur = null; this.ragQ = []; this.ragThen = null; // 诸神黄昏的开枪队列：上一局剩下的不要带过来
     this.game.records = this.readRecords(seats);
@@ -638,9 +664,10 @@ export class Room {
     if (mixed && !custom && !preset && !pure && !this.tutorial) this.stNote(`AI 配板：随机出 60 套、去掉最偏的两头后挑的一套（平衡分 ${setupScoreSNV(this.game.players.map((p) => p.role))}，正数偏善良）`);
     if (SCRIPTS[script].seat7) { this.game.get(SEAT7).seat7 = true; this.stNote(`灯神规则：7 号空座是 ${this.game.tag(SEAT7)}，由 AI 说书人替它选择，每局替它发言一次`); }
     if (teensy && !custom && !preset && !pure && !this.tutorial) this.stNote('小剧本：按官方人数表随机发的角色（男爵在已有一个外来者时只加一个；有气球驾驶员时可能多一个外来者）');
-    if (custom) this.stNote(`房主指定了 ${Object.keys(assign).length} 个人的角色，其余随机`);
+    if (pick) this.stNote('说书人排的版：照排版台上定的座位和角色开局');
+    else if (custom) this.stNote(`房主指定了 ${assigned} 个人的角色，其余随机`);
     else if (preset) this.stNote(`套用推荐配置「${preset.name}」`);
-    this.devRoles();
+    if (!pick) this.devRoles();
     this.assignHomes();
     const square = await this.safeVoice((v) => v.findSquare(this.hostId, seats.map((p) => p.id)));
     // 同一个语音频道同时只能有一局在控制语音：被别的局占着就撤销这局，回到大厅
@@ -723,7 +750,7 @@ export class Room {
     // 最短夜晚（AI 说书）：大家都选完了也要等到这个时刻才天亮。以前一选完 0.6 秒就结算（没人要醒的夜 2 秒），
     // 机器人又是瞬间选的，夜晚一闪而过（2026-11-11 用户：晚上速度太快了）；夜晚长短还会漏出今晚几个人醒、选得多快。
     // 固定 25 秒（11-12 用户定）；选人时限设得比 25 秒短时按时限。真人说书不加（说书人自己掌握），新手教程不加（单人练习要快）
-    this.nightMinAt = this.stId || this.tutorial ? null : Date.now() + Math.min(NIGHT_MIN_MS, this.settings.chooseSeconds * 1000);
+    this.nightMinAt = this.tutorial ? null : Date.now() + Math.min(NIGHT_MIN_MS, this.settings.chooseSeconds * 1000);
     if (!g.missingChoices().length) this.later(this.settings.pauseMs / 2, () => this.finishNight(night));
     else {
       this.deadline = Date.now() + this.settings.chooseSeconds * 1000;
@@ -957,16 +984,72 @@ export class Room {
       if (m.playerId === SEAT7) ((g.seat7 ??= {}).notes ??= []).push(`第 ${g.night} 夜：${what}`);
       g.record('info', `${g.tag(m.playerId)}${p && g.broken(p) ? '【能力失效】' : ''} ${what}`);
       const voice = p?.shownRole ?? null;
-      if (!this.stId) { this.tell(m.playerId, m.text, voice); continue; }
-      this.pendingInfo.set(newId(), { ...m, voice });
+      const why = this.stId ? this.infoWhy(m) : null;
+      if (!why) { this.tell(m.playerId, m.text, voice); continue; }
+      this.pendingInfo.set(newId(), { ...m, voice, why });
     }
   }
 
   handleInfo({ id, action, text }) {
+    if (action === 'sendAll') { this.flushInfo(); this.releaseNight(); return; }
     const m = this.pendingInfo.get(id);
     if (!m) throw new UserError('这条信息已经处理过了');
     this.pendingInfo.delete(id);
     if (action === 'send') this.tell(m.playerId, text?.trim() || m.text, m.voice);
+    this.releaseNight();
+  }
+
+  /** 待发的信息全部照建议发出去（说书人点「全部照建议发」、到点自动天亮、天亮时还没处理的）。 */
+  flushInfo() {
+    for (const m of this.pendingInfo.values()) this.tell(m.playerId, m.text, m.voice);
+    this.pendingInfo.clear();
+  }
+
+  /**
+   * 真人说书：这条信息要不要说书人过目，要的话说明为什么（显示在说书台上）。照规则算得出来的直接发，不用他一条条点。
+   * 要过目的：能力失效的人（醉酒、中毒）拿到的是 AI 编的假信息；陌客、间谍今晚被误登记了、信息里提到他的；
+   * 博学者的两条（一真一假怎么编是说书人的手艺）。
+   */
+  infoWhy(m) {
+    const g = this.game;
+    if (m.review) return m.review;
+    const p = g?.get(m.playerId);
+    if (!p) return null;
+    if (g.broken(p)) return p.role === 'drunk' || p.shownRole !== p.role && ROLES[p.role]?.team === 'outsider' ? `他其实是${ROLES[p.role].name}：这是 AI 编的假信息，可以改` : '他中毒 / 醉酒了：这是 AI 编的假信息，可以改';
+    const mis = g.st.decisions.filter((d) => d.kind === 'misregister' && d.chosen === true && d.night === g.night && g.get(d.who)).map((d) => g.name(d.who));
+    const hit = mis.find((n) => m.text.includes(n));
+    if (hit) return `${hit} 今晚被误登记了：这条信息按误登记算的，可以改`;
+    return null;
+  }
+
+  /** AI 说书人今晚替说书人做的判定（误登记、镇长替死、假信息……），说书台上列出来，他看过再天亮。 */
+  nightNotes(g = this.game) {
+    if (!g || g.phase !== 'night') return [];
+    const when = `第${g.night}夜`;
+    return g.st.journal.filter((e) => e.when === when).map((e) => e.text);
+  }
+
+  /** 真人说书、夜晚结算完：要不要停在天亮前等说书人。要等就定好最晚什么时候自动天亮，返回 true。 */
+  holdNight(g) {
+    if (!this.pendingInfo.size && !this.nightNotes(g).length) return false;
+    const night = g.night;
+    this.held = { night, until: Date.now() + (this.settings.stHoldMs ?? ST_HOLD_MS) };
+    this.cancel(this.holdTimer);
+    this.holdTimer = this.later(this.held.until - Date.now(), () => {
+      if (this.game !== g || g.phase !== 'night' || g.night !== night) return;
+      this.stNote('说书人没来得及处理：待发的信息照建议发出，自动天亮');
+      this.forceDawn().catch((e) => console.warn('[botc] 自动天亮出错：', e.message));
+    });
+    this.stNote(`夜晚结算完毕。今晚死亡：${g.nightDeaths.map((id) => g.name(id)).join('、') || '无'}。${this.pendingInfo.size ? `有 ${this.pendingInfo.size} 条信息等你过目。` : ''}看完点「天亮」。`);
+    this.changed();
+    return true;
+  }
+
+  /** 说书人处理完最后一条待发信息、今晚也没有 AI 替他做的判定：直接天亮，不用再点。 */
+  releaseNight() {
+    const g = this.game;
+    if (!this.held || !g || g.phase !== 'night' || this.pendingInfo.size || this.nightNotes(g).length) return;
+    this.forceDawn().catch((e) => console.warn('[botc] 天亮出错：', e.message));
   }
 
   /** 这局有没有破门过场（暗流涌动、每人有家）。 */
@@ -980,11 +1063,9 @@ export class Room {
     const scene = this.hasKillScene();
     const total = this.settings.killSceneMs ?? 11000;
     this.killScene = null;
-    if (this.stId) {
-      // 真人说书：说书人可能还要花一阵子发信息，破门等他点「天亮」时才播（见 forceDawn），免得受害者早早就知道自己死了
-      this.stNote(`夜晚结算完毕。今晚死亡：${g.nightDeaths.map((id) => g.name(id)).join('、') || '无'}。处理完信息后点「天亮」。`);
-      return;
-    }
+    // 真人说书（2026-11-20 用户：系统性的不用他来）：有要他过目的信息、或者 AI 替他做了判定（误登记、镇长替死……），
+    // 就停在天亮前等他看完（最多 ST_HOLD_MS，到点按建议发、自动天亮）；什么都不用他管就和 AI 说书一样自动天亮
+    if (this.stId && this.holdNight(g)) return;
     // 先等恶魔那边"变身 + 冲到门口"播完（约 4.5 秒），再开始踹受害者的门（约 6 秒），两边对得上
     if (scene) this.playKillScene(g, Math.max(0, total - VICTIM_SCENE_MS));
     this.later(scene ? Math.max(this.settings.pauseMs, total) : this.settings.pauseMs, () => this.beginDay());
@@ -1036,7 +1117,8 @@ export class Room {
   async beginDay() {
     const g = this.game;
     if (!g || (g.phase !== 'night' && !g.winner) || this.ended) return;
-    this.pendingInfo.clear();
+    this.flushInfo(); // 真人说书：还没处理的信息照建议发（以前直接丢掉，玩家就少了一晚的信息）
+    this.held = null; this.cancel(this.holdTimer);
     this.resolving = false;
     this.killScene = null;
     this.roamedToday = false;
@@ -1065,8 +1147,8 @@ export class Room {
     this.ragDied(deaths);
     this.hearToday();
     this.narrate('dawn', { day: g.day, deaths: deaths.map((id) => g.name(id)) });
-    // 自动说书：看完死讯就开始自由活动
-    if (!this.stId) {
+    // 看完死讯就开始自由活动（真人说书也一样，2026-11-20）
+    {
       const day = g.day;
       this.later(this.settings.pauseMs * 1.5, async () => {
         if (g.phase === 'day' && g.day === day && !this.roam && !this.vote && !this.pendingNom && !this.ended) this.startRoam(this.settings.roamMinutes);
@@ -1086,7 +1168,7 @@ export class Room {
     if (this.riotStep && !chain) throw new UserError(`现在轮到 ${this.game.name(this.riotStep.id)} 接着提名`);
     if (this.noms?.timeUp && !chain) throw new UserError('提名时间已经结束了');
     if (this.dusking || this.duskDay === g.day) throw new UserError('今天已经到黄昏了，不能再提名');
-    if (!this.stId && !this.noms && !this.roamedToday) throw new UserError('现在还不能提名，等大家回到广场'); // 天亮到自由活动之间：这时提名成功，自由活动就起不来了
+    if (!this.noms && !this.roamedToday) throw new UserError('现在还不能提名，等大家回到广场'); // 天亮到自由活动之间：这时提名成功，自由活动就起不来了
     const r = g.nominate(uid, target);
     if (r.riot) { this.riotAfter(`**${g.name(uid)}** 提名了 **${g.name(target)}**`, target); return; }
     if (r.golem) {
@@ -1103,13 +1185,13 @@ export class Room {
       this.pub(`${g.name(uid)} 提名了 ${g.name(target)}——**${g.name(uid)} 被立即处决！** 今天的处决已经发生。`, 'death');
       this.narrate('virgin', { a: g.name(uid), b: g.name(target) });
       if (g.winner) this.later(0, () => this.endGame());
-      else if (!this.stId) this.later(this.settings.pauseMs, () => this.autoDusk());
+      else this.later(this.settings.pauseMs, () => this.autoDusk());
       return;
     }
     this.announce(`**${g.name(uid)}** 提名了 **${g.name(target)}**`, 'vote');
     this.narrate('nominate', { a: g.name(uid), b: g.name(target) });
     this.pendingNom = { nominator: uid, nominee: target };
-    if (!this.stId) { this.pauseNoms(); this.nomStage('accuse'); }
+    this.pauseNoms(); this.nomStage('accuse'); // 真人说书也一样：陈述、辩护、投票自动走（2026-11-20）
     // 机器人哥布林被提名：多半当场声明身份
     const nominee = g.get(target);
     if (this.isFake(target) && g.engine === 'snv' && g.abilityOf(nominee) === 'goblin' && nominee.alive && g.st.roll('goblinClaim', {}, { who: target })) { try { this.goblin(target); } catch { /* 今天已经声明过 */ } }
@@ -1122,7 +1204,7 @@ export class Room {
 
   openNominations() {
     const g = this.game;
-    if (!g || g.phase !== 'day' || this.ended || this.roam || this.noms || this.stId) return;
+    if (!g || g.phase !== 'day' || this.ended || this.roam || this.noms) return;
     if (g.executedToday) { this.autoDusk(); return; }
     if (g.bishopOn?.()) { this.bishopDay(); return; }
     const min = this.settings.nominateMinutes;
@@ -1262,7 +1344,7 @@ export class Room {
 
   /** 一轮投票结束后：该入夜就入夜，否则继续等提名。 */
   afterVote() {
-    if (this.stId || !this.noms) return;
+    if (!this.noms) return;
     if (this.bishopQueue) { // 主教：说书人一个接一个提名，提完就入夜
       if (this.bishopQueue.length && !this.game.executedToday) this.later(this.settings.pauseMs, () => this.bishopNext());
       else { this.bishopQueue = null; this.later(this.settings.pauseMs, () => this.autoDusk()); }
@@ -1274,7 +1356,7 @@ export class Room {
 
   async autoDusk() {
     const g = this.game;
-    if (!g || g.phase !== 'day' || this.ended || this.vote || this.stId || this.riotStep) return;
+    if (!g || g.phase !== 'day' || this.ended || this.vote || this.riotStep) return;
     await this.dusk(); // 暴乱第三天没人提名时，dusk 会让说书人先提名
   }
 
@@ -1755,7 +1837,6 @@ export class Room {
     Object.assign(g, { block: id, blockVotes: Math.max(g.blockVotes ?? 0, 1), blockTied: [] });
     this.judgeDay = g.day;
     this.announce(`法官强制成功：**${g.name(id)}** 被处决，今天的提名到此结束。`, 'death');
-    if (this.stId) return; // 真人说书：请说书人点「结束白天」
     this.pauseNoms?.();
     this.later(this.settings.pauseMs, () => this.autoDusk());
   }
@@ -2219,11 +2300,11 @@ export class Room {
     const { text, mutant, mutantClaim } = g.engine === 'snv' ? g.declare(uid, role, { auto: !this.stId }) : g.claimRole(uid, role, MAX_DECLARES);
     this.pub(`**${g.name(uid)}** 公开声明：「${text}」`, 'vote');
     this.narrate('gossip', { a: g.name(uid), text });
-    if (mutantClaim) this.stNote(`畸形秀演员 ${g.name(uid)} 声称自己是外来者：要处决的话，在魔典里用「疯狂处决」`);
+    if (mutantClaim) this.addAsk({ kind: 'mad', who: uid, why: '公开声称自己是外来者', say: `**${g.name(uid)}** 因为疯狂被处决了！` });
     if (!mutant) return;
     this.pub(`**${g.name(uid)}** 因为疯狂被处决了！今天的处决已经发生。`, 'death');
     if (g.winner) this.later(0, () => this.endGame());
-    else if (!this.stId) this.later(this.settings.pauseMs, () => this.autoDusk());
+    else this.later(this.settings.pauseMs, () => this.autoDusk());
     this.klutzNotice();
   }
 
@@ -2273,7 +2354,7 @@ export class Room {
     }
     const { who, worked } = g.pardon(uid);
     this.pub(`**${g.name(uid)}** 公开特赦了台上的 **${g.name(who)}**……${worked ? '他走下了处决台。**今天不再处决任何人。**' : '什么也没有发生。'}`, 'vote');
-    if (worked && !this.stId) this.later(this.settings.pauseMs, () => this.autoDusk());
+    if (worked) this.later(this.settings.pauseMs, () => this.autoDusk());
   }
 
   /** 哥布林：被提名后、投票前公开声明。谁都可以这么说，只有真哥布林算数（说书人照样复述）。 */
@@ -2391,7 +2472,7 @@ export class Room {
   seat7Daily() {
     const g = this.game;
     const s = (g.seat7 ??= {});
-    if (s.spoke || s.rolled === g.day || this.stId) return;
+    if (s.spoke || s.rolled === g.day) return;
     if (g.harpyMad?.id === SEAT7 && g.harpyMad.night === g.night && !g.harpyMad.claimed) { s.rolled = g.day; this.later(2000, () => this.seat7Speak({ harpy: true })); return; } // 被鹰身女妖弄疯：用掉唯一一次发言去指认
     s.rolled = g.day;
     this.later(3000 + Math.random() * 6000, () => this.seat7Speak());
@@ -2402,7 +2483,7 @@ export class Room {
     const g = this.game;
     const p = g?.get(SEAT7);
     const s = (g.seat7 ??= {});
-    if (!p || s.spoke || g.phase !== 'day' || this.stId) return;
+    if (!p || s.spoke || g.phase !== 'day') return;
     const lastChance = g.aliveCount() <= 4;
     const late = g.aliveCount() <= Math.ceil(g.players.length / 2);
     if (!harpy && !lastChance && !g.st.roll('seat7Speak', { nominated, late }, { who: SEAT7 })) return;
@@ -2498,10 +2579,11 @@ export class Room {
     if (this.cannibalMiss(uid, 'fisherman')) return;
     const { lie } = g.fishermanAsk(uid);
     this.tell(uid, '说书人想了想……', 'storyteller');
-    if (this.stId) { this.stNote(`渔夫 ${g.name(uid)} 来请教建议${lie ? '（他失效了，可以给坏建议）' : ''}：用「私信」回复他`); return; }
     const p = g.get(uid);
+    const ask = this.stId ? this.addAsk({ kind: 'fisherman', who: uid, hint: lie ? '他能力失效了：可以给坏建议' : null, suggest: null }) : null;
     const reply = (text) => {
       if (this.game !== g) return;
+      if (ask) { ask.suggest = text; this.changed(); return; } // 真人说书：AI 的建议只填进卡片，说书人改好再发
       this.tell(uid, `说书人的建议：**${text}**`, 'storyteller');
       g.record('info', `${g.tag(uid)}${lie ? '【能力失效】' : ''} 得到建议：${text}`);
       this.changed();
@@ -2519,12 +2601,13 @@ export class Room {
     const g = this.requireSNV();
     const { text, ability, lie } = g.amnesiacGuess(uid, raw);
     this.tell(uid, '说书人想了想……', 'storyteller');
-    if (this.stId) { this.stNote(`失忆者 ${g.name(uid)}（能力其实是${ROLES[ability].name}）猜：${text}。用「私信」回复 无关 / 有关 / 接近 / 完美`); return; }
     const LEVELS = ['无关', '有关', '接近', '完美'];
-    const reply = (level) => {
+    const ask = this.stId ? this.addAsk({ kind: 'amnesiac', who: uid, text, truth: ROLES[ability].name, hint: lie ? '他能力失效了：可以答错' : null, suggest: null }) : null;
+    const reply = (level, final = false) => {
       if (this.game !== g) return;
+      if (ask && !final) { ask.suggest = LEVELS.includes(level) ? level : '无关'; this.changed(); return; }
       let said = LEVELS.includes(level) ? level : '无关';
-      if (lie) { const other = LEVELS.filter((x) => x !== said); said = other[Math.floor(Math.random() * other.length)]; g.flag(g.get(uid), '失忆者的猜测得到了错误的回答'); }
+      if (lie && !final) { const other = LEVELS.filter((x) => x !== said); said = other[Math.floor(Math.random() * other.length)]; g.flag(g.get(uid), '失忆者的猜测得到了错误的回答'); }
       // 真猜中了（没失效）：记一下。白天的按钮一直都在，猜中前也能试（官方：视作具有该能力）
       const unlock = level === '完美' && !lie && AMNESIAC_DAY.has(ability) && !g.amnesiacKnown?.[uid];
       // 听到「完美」就当他弄清了（失效时答的假完美也一样，不然按钮还在等于告诉他答错了）：不再给试别的白天能力的按钮（2026-11-12 用户：猜中气球驾驶员的失忆者还有开枪按钮）
@@ -2533,6 +2616,7 @@ export class Room {
       g.record('info', `${g.tag(uid)} 猜"${text}"，答：${said}${lie ? '（失效，答错了）' : ''}${unlock ? '（解锁了白天的能力）' : ''}`);
       this.changed();
     };
+    if (ask) ask.answer = (level) => reply(level, true);
     const truth = `${ROLES[ability].name}：${ROLES[ability].ability}`;
     if (looksInjected(text)) { this.stNote(`失忆者 ${g.name(uid)} 的猜测像在指挥大模型，没交给模型，按「无关」答`); reply('无关'); return; }
     if (!(this.judgeReady ?? judgeAvailable)()) { reply(guessLevel(text, ability)); return; }
@@ -2546,7 +2630,7 @@ export class Room {
     const g = this.requireSNV();
     if (this.cannibalMiss(uid, 'savant')) return;
     const { lines } = g.savantAsk(uid);
-    this.deliver([{ playerId: uid, text: `两条信息，一真一假：\n· ${lines.join('\n· ')}` }]);
+    this.deliver([{ playerId: uid, text: `两条信息，一真一假：\n· ${lines.join('\n· ')}`, review: '博学者的两条：一真一假，可以改写' }]);
   }
 
   /** 艺术家提问。AI 说书时问大模型，没配或失败就答"我不知道"；真人说书时交给说书人回答。 */
@@ -2555,17 +2639,15 @@ export class Room {
     if (this.cannibalMiss(uid, 'artist')) return;
     const { text } = g.artistAsk(uid, raw);
     this.tell(uid, '说书人想了想……', 'storyteller');
-    if (this.stId) { // 真人说书：放到说书台，由说书人回答（他看得到这人醉没醉，真假他自己定）
-      (this.artistAsks ??= []).push({ uid, text });
-      this.stNote(`艺术家 ${g.name(uid)} 问：${text}`);
-      return;
-    }
+    const st = this.stId ? { uid, text, suggest: null } : null;
+    if (st) (this.artistAsks ??= []).push(st); // 真人说书：放到说书台，由说书人回答（他看得到这人醉没醉，真假他自己定）；AI 的判断填进去当建议
     const answer = (verdict) => {
       if (this.game !== g) return;
+      if (st) { st.suggest = verdict; this.changed(); return; }
       this.artistReply(uid, text, g.artistAnswer(uid, verdict));
       this.changed();
     };
-    if (!(this.judgeReady ?? judgeAvailable)()) { answer('unknown'); return; }
+    if (!(this.judgeReady ?? judgeAvailable)()) { if (!st) answer('unknown'); return; }
     if (looksInjected(text)) { this.stNote(`艺术家 ${g.name(uid)} 的问题像在指挥大模型，没交给模型，答「我不知道」`); answer('unknown'); return; }
     // 问得有歧义（「1-5」可能是 1 到 5 号，也可能是 1 号和 5 号）、看不懂、或者不是是非题：不答，让他重新问，这次不算用掉
     // （2026-11-12 用户定；艺术家页：「如果你不能用这三种答案进行回答，让他重新问一个问题」）。
@@ -2574,7 +2656,7 @@ export class Room {
       .then((res) => {
         if (this.game !== g) return;
         if (res?.reason) { this.stNote(`艺术家 ${g.name(uid)} 问「${text}」，说书人的理解：${res.reason}（${res.verdict}）`); g.record('st', `艺术家的问题「${text}」，说书人判 ${res.verdict}：${res.reason}`); }
-        if (res?.verdict === 'unknown' && /^\s*【?歧义/.test(res.reason ?? '')) { this.artistRetry(uid, text); return; }
+        if (res?.verdict === 'unknown' && /^\s*【?歧义/.test(res.reason ?? '')) { if (st) { st.suggest = 'retry'; st.reason = res.reason; this.changed(); return; } this.artistRetry(uid, text); return; }
         answer(res?.verdict ?? 'unknown');
       })
       .catch((e) => { console.warn('[botc] 判定艺术家的问题出错：', e.message); answer('unknown'); });
@@ -2629,7 +2711,7 @@ export class Room {
 
   async judgeMadness() {
     const g = this.game;
-    if (g.engine !== 'snv' || this.stId) return;
+    if (g.engine !== 'snv') return;
     // 判定时听到的话和结论记进时间线（只在存档里，不发客户端）：以后拿真人数据看判得准不准（2026-11-11 用户要分析疯狂玩家的发言）
     const ask = async (claim, lines, id = null) => {
       const res = await (this.madnessJudge ?? judgeMadness)(claim, lines).catch(() => null);
@@ -2645,7 +2727,7 @@ export class Room {
       const heard = this.heardLines(p.id);
       const said = heard.length ? await ask(MUTANT_CLAIM, heard, p.id) : null;
       if (this.game !== g) return;
-      if (said === 'true' && g.st.mutantExecuted(p, { voice: true })) punish(p.id, '语音里说服别人自己是外来者', `**${g.name(p.id)}** 因为疯狂被处决了！`);
+      if (said === 'true' && (this.stId || g.st.mutantExecuted(p, { voice: true }))) punish(p.id, '语音里说服别人自己是外来者', `**${g.name(p.id)}** 因为疯狂被处决了！`);
     }
     // 小精灵：疯狂地证明自己是那个镇民了没有（没证明不罚，只是那人死时拿不到能力）
     for (const [id, px] of Object.entries(g.pixie ?? {})) {
@@ -2664,6 +2746,7 @@ export class Room {
       const verdict = heard.length ? await ask(`我是${ROLES[role].name}`, heard, id) : 'unknown';
       if (this.game !== g) return;
       if (verdict === 'true') continue;
+      if (this.stId) { if (verdict === 'false') punish(id, '语音里没有努力证明', `**${g.name(id)}** 没有疯狂地证明自己，被处决了！`); continue; } // 真人说书：只有真听到他没努力才提议（说书人自己也在听）
       // 依据不一样，骰子不一样：听到了判没努力最重，有人听但他没说次之，根本没人在听时只知道他没公开声明
       const noMic = mustMic && !this.mic.isOn(id);
       const how = verdict === 'false' ? { heardFalse: true } : heard.length ? {} : noMic ? { noMic: true, claimed } : this.listeningTo(id) ? { silent: true } : { blind: true };
@@ -2675,6 +2758,7 @@ export class Room {
   /** 判定不够疯狂：今天的处决还空着就处决（死人也算），占了就留到入夜。 */
   madPunish(id, why, say) {
     const g = this.game;
+    if (this.stId) { this.addAsk({ kind: 'mad', who: id, why, say }); return; } // 真人说书：AI 只提议，处不处决由说书人定
     if (g.executedToday || g.block || this.vote || this.pendingNom) { if (g.get(id).alive) g.madLater(id, why); return; }
     if (!g.madExecute(id, why)) return;
     this.pub(g.get(id).alive || g.lastExecuted === id ? say : `已经死去的 **${g.name(id)}** 也没能逃过疯狂的审判。今天的处决已经发生。`, 'death');
@@ -2692,7 +2776,7 @@ export class Room {
     if (this.game?.engine === 'snv' && this.game.abilityOf(this.game.get(id)) === 'mutant') await this.hearMutant(id, text);
     const g = this.game;
     const open = () => this.game === g && g.phase === 'day' && !this.ended && !this.dusking && this.duskDay !== g.day;
-    const due = g?.engine === 'snv' && !this.stId && open() ? g.madnessDue({ claimed: true }).find((x) => x.id === id) : null;
+    const due = g?.engine === 'snv' && open() ? g.madnessDue({ claimed: true }).find((x) => x.id === id) : null;
     const m = due && g.madness[id];
     const p = g?.get(id);
     const real = ROLES[p.role].name;
@@ -2705,7 +2789,7 @@ export class Room {
     g.record('st', `${g.tag(id)} 破坏了疯狂（${res.by}）：${res.reason}`);
     if (m.broke) return; // 这次疯狂已经掷过（放过了就是放过了，不反复掷到死）
     m.broke = true;
-    if (!g.madnessPenalty(id, { broke: true })) { this.changed(); return; }
+    if (!this.stId && !g.madnessPenalty(id, { broke: true })) { this.changed(); return; }
     const before = g.executedToday;
     this.madPunish(id, '语音里破坏了疯狂', `**${g.name(id)}** 破坏了疯狂，被处决了！今天的处决已经发生。`);
     if (g.winner) this.later(0, () => this.endGame());
@@ -2722,10 +2806,10 @@ export class Room {
     const g = this.game;
     const open = () => this.game === g && g.phase === 'day' && !this.ended && !this.dusking && this.duskDay !== g.day;
     const p = g.get(id);
-    if (this.stId || !open() || !p?.alive || g.broken(p) || g.block === id || this.mutantRolled?.[id] === g.day) return;
+    if (!open() || !p?.alive || g.broken(p) || g.block === id || this.mutantRolled?.[id] === g.day) return;
     // 自己说出「畸形秀」就直接处决：不问模型、不掷骰子（2026-11-12 用户：说了畸形秀就要处死）。转写常把畸写成奇
     if (MUTANT_WORD.test(text)) {
-      if (g.st.evilWinsBy(p)) return; // 官方：「可能」是为了不让邪恶靠这个获胜
+      if (!this.stId && g.st.evilWinsBy(p)) return; // 官方：「可能」是为了不让邪恶靠这个获胜
       (this.mutantRolled ??= {})[id] = g.day;
       const lines = this.heardLines(id).slice(-5);
       if (lines.at(-1) !== text) lines.push(text);
@@ -2752,7 +2836,7 @@ export class Room {
     if (res) this.stNote(`语音判定（${res.by}）畸形秀演员 ${g.name(id)} "我是外来者"：${res.verdict}。${res.reason}`);
     if (res?.verdict !== 'true' || !open() || this.mutantRolled?.[id] === g.day) return;
     (this.mutantRolled ??= {})[id] = g.day;
-    if (!g.st.mutantExecuted(p, { voice: true })) { this.changed(); return; }
+    if (!this.stId && !g.st.mutantExecuted(p, { voice: true })) { this.changed(); return; }
     const before = g.executedToday;
     this.madPunish(id, '语音里说服别人自己是外来者', `**${g.name(id)}** 因为疯狂被处决了！今天的处决已经发生。`);
     if (g.winner) this.later(0, () => this.endGame());
@@ -2763,7 +2847,7 @@ export class Room {
   /** 这局要不要开语音判定：房主打开了、AI 说书、梦殒春宵，而且这个服务器接得上（hearingFor 由服务器注入，旺财和 KOOK 没有）。 */
   async openHearing() {
     const g = this.game;
-    if (g.engine !== 'snv' || this.stId || !this.settings.hearMadness || !this.square || !this.hearingFor) return;
+    if (g.engine !== 'snv' || !this.settings.hearMadness || !this.square || !this.hearingFor) return;
     this.hearing = await this.hearingFor(this.square).catch(() => null);
     if (this.hearing) this.hearing.onAudio = (id, audio, text) => this.saveTalk('square', 'ogg', id, audio, text);
     if (this.hearing) this.announce('本局开了语音判定：机器人留在广场语音里，只转写被疯狂的玩家说的话，音频不保存。', 'info');
@@ -2808,7 +2892,7 @@ export class Room {
     const micIds = [...new Set([...ids, ...pixies, ...everyone])];
     // 收音页：被洗脑的人和畸形秀演员自己决定开不开，所以不用房主打开（micFor 由服务器注入，没有转写服务时没有）。
     // 以前只发给被洗脑的人，畸形秀演员拿不到收音链接，也就没有弹窗（2026-11-11 用户报的）
-    if (!this.stId && this.micFor) {
+    if (this.micFor) {
       this.mic ??= this.micFor();
       this.mic.onLine = (id, text) => {
         this.game?.mezHeard?.(id, text); // 灵言师的关键词：本机转写的文字里找，不交给大模型
@@ -2847,7 +2931,7 @@ export class Room {
     const g = this.game;
     if (!g || g.phase !== 'day' || this.ended) return null;
     if (this.duskDay === g.day) return 'dusk';
-    if (this.stId || this.roam || this.noms || this.pendingNom || this.vote) return null;
+    if (this.roam || this.noms || this.pendingNom || this.vote) return null;
     return this.roamedToday ? 'gather' : 'dawn';
   }
 
@@ -3156,7 +3240,7 @@ export class Room {
       this.narrate('gather');
       // 自动说书：回到广场后开放提名（暗印：回到广场公审）
       if (this.game?.mark) this.later(this.settings.pauseMs / 2, () => this.mk.gathered());
-      else if (!this.stId) this.later(this.settings.pauseMs / 2, () => this.openNominations());
+      else this.later(this.settings.pauseMs / 2, () => this.openNominations());
     }
   }
 
@@ -3236,6 +3320,60 @@ export class Room {
   }
 
   // ───────────── 说书人 ─────────────
+  /**
+   * 真人说书：一件要说书人拿主意的事（2026-11-20 用户：系统性的不用他来，需要人脑抉择的地方由他决定）。
+   * kind：fisherman 渔夫要建议 / amnesiac 失忆者猜能力 / mad 疯狂要不要处决（AI 听到的、畸形秀演员声明的）。
+   * suggest：AI 的建议（模型回来前是 null），说书人可以照着发，也可以改。艺术家的问题还走 artistAsks。
+   */
+  addAsk(a) {
+    const g = this.game;
+    if (a.kind === 'mad' && (this.asks ?? []).some((x) => x.kind === 'mad' && x.who === a.who && x.day === g.day)) return null; // 同一个人一天提一次就够
+    const ask = { id: newId(), day: g.day, night: g.phase === 'night', ...a };
+    (this.asks ??= []).push(ask);
+    const what = { fisherman: '渔夫来请教建议', amnesiac: `失忆者猜自己的能力：${a.text ?? ''}`, mad: `可能要因为疯狂处决：${a.why ?? ''}` }[a.kind];
+    this.stNote(`${g.name(a.who)} ${what}`);
+    this.changed();
+    return ask;
+  }
+
+  /** 说书人回答一件事。answer：fisherman 'send'（text 是建议）/ amnesiac 无关|有关|接近|完美 / mad 'execute'|'spare'；'drop' 不理。 */
+  answerAsk({ id, answer, text }) {
+    const g = this.requireGame();
+    const ask = (this.asks ?? []).find((x) => x.id === id);
+    if (!ask) throw new UserError('这件事已经处理过了');
+    const done = () => { this.asks = this.asks.filter((x) => x !== ask); };
+    if (answer === 'drop') { done(); return; }
+    if (ask.kind === 'fisherman') {
+      const said = String(text ?? ask.suggest ?? '').trim();
+      if (!said) throw new UserError('写一句建议');
+      done();
+      this.tell(ask.who, `说书人的建议：**${said}**`, 'storyteller');
+      g.record('info', `${g.tag(ask.who)} 得到建议：${said}`);
+      return;
+    }
+    if (ask.kind === 'amnesiac') {
+      if (!['无关', '有关', '接近', '完美'].includes(answer)) throw new UserError('选一个回答');
+      done();
+      if (ask.answer) ask.answer(answer);
+      else { this.tell(ask.who, `你猜：${ask.text}
+说书人的回答：**${answer}**`, 'storyteller'); g.record('info', `${g.tag(ask.who)} 猜"${ask.text}"，答：${answer}`); } // 重启过：只回答，不解锁按钮
+      return;
+    }
+    if (ask.kind === 'mad') {
+      done();
+      if (answer !== 'execute') { g.record('st', `说书人放过了 ${g.tag(ask.who)}（${ask.why}）`); return; }
+      const night = g.phase === 'night';
+      if (!night && (g.executedToday || g.block || this.vote || this.pendingNom)) { if (g.get(ask.who).alive) g.madLater(ask.who, ask.why); this.stNote(`今天的处决已经占了：${g.name(ask.who)} 留到入夜处决`); return; }
+      if (!g.madExecute(ask.who, ask.why, { night })) throw new UserError(night ? '他已经死了' : '今天已经处决过了');
+      this.pub(night ? `夜里，**${g.name(ask.who)}** 因为疯狂被处决了！` : ask.say ?? `**${g.name(ask.who)}** 因为疯狂被处决了！`, 'death');
+      this.klutzNotice();
+      if (g.winner) this.later(0, () => this.endGame());
+      else if (!night) this.later(this.settings.pauseMs, () => this.autoDusk());
+      return;
+    }
+    throw new UserError('未知操作');
+  }
+
   async stAction({ action, target, role, text }) {
     if (!this.stId) throw new UserError('说书人工具只在真人说书模式下可用');
     const g = this.requireGame();
@@ -3256,9 +3394,9 @@ export class Room {
       case 'kill': g.stKill(p.id); break;
       case 'artistAnswer': {
         const ask = this.artistAsks?.find((x) => x.uid === p.id);
-        if (!ask || !['true', 'false', 'unknown'].includes(text)) throw new UserError('这个问题已经答过了');
+        if (!ask || !['true', 'false', 'unknown', 'retry'].includes(text)) throw new UserError('这个问题已经答过了');
         this.artistAsks = this.artistAsks.filter((x) => x !== ask);
-        this.artistReply(p.id, ask.text, text);
+        if (text === 'retry') this.artistRetry(p.id, ask.text); else this.artistReply(p.id, ask.text, text);
         break;
       }
       case 'revive': g.stRevive(p.id); break;
@@ -3532,7 +3670,7 @@ export class Room {
     return {
       v: 1,
       savedAt: Date.now(),
-      key: this.key, guildId: this.guildId, hostId: this.hostId, settings: this.settings, artistAsks: this.artistAsks ?? [],
+      key: this.key, guildId: this.guildId, hostId: this.hostId, settings: this.settings, artistAsks: this.artistAsks ?? [], asks: (this.asks ?? []).map(({ answer, ...a }) => a),
       users: [...this.users.values()], lobby: this.lobby, roleAssign: this.roleAssign ?? {}, newbies: this.newbies ?? [],
       game: this.game?.toJSON() ?? null,
       ended: this.ended, square: this.square, log: this.log, logSeq: this.logSeq, logEpoch: this.epoch, stLog: this.stLog,
@@ -3569,7 +3707,7 @@ export class Room {
     this.game = s.game ? (s.game.werewolf ? Werewolf.fromJSON(s.game) : s.game.avalon ? Avalon.fromJSON(s.game) : s.game.mark ? MarkGame.fromJSON(s.game) : Game.fromJSON(s.game)) : null;
     this.wireGame();
     Object.assign(this, {
-      artistAsks: s.artistAsks ?? [], ended: s.ended, square: s.square, log: s.log ?? [], logSeq: s.logSeq ?? 0, epoch: s.logEpoch ?? this.epoch, stLog: s.stLog ?? [],
+      artistAsks: s.artistAsks ?? [], asks: s.asks ?? [], ended: s.ended, square: s.square, log: s.log ?? [], logSeq: s.logSeq ?? 0, epoch: s.logEpoch ?? this.epoch, stLog: s.stLog ?? [],
       inbox: new Map(s.inbox ?? []), acts: new Map(s.acts ?? []), pendingInfo: new Map(s.pendingInfo ?? []),
       resolving: s.resolving, rkPending: s.rkPending, revivePending: s.revivePending ?? null, deadline: s.deadline, nightBase: s.nightBase ?? s.deadline ?? null, dueFor: s.dueFor ?? {}, dawnAt: s.dawnAt ?? null,
       roamedToday: s.roamedToday, duskDay: s.duskDay, homes: s.homes ?? null, pendingNom: s.pendingNom, lastVote: s.lastVote,
@@ -3624,7 +3762,7 @@ export class Room {
         const rk = this.rkPending;
         this.deadline = Date.now() + left(this.deadline, 15000);
         this.rkTimer = this.later(this.deadline - Date.now(), () => this.onRavenkeeper(rk, g.players[0].id));
-      } else if (!this.stId) this.later(3000, () => this.beginDay());
+      } else if (!this.stId || !this.holdNight(g)) this.later(3000, () => this.beginDay());
       return;
     }
     if (g.phase !== 'day') return;
@@ -3648,7 +3786,6 @@ export class Room {
     if (g.riotChain && g.riotOn?.() && !g.winner && this.duskDay !== g.day) { this.riotNext(g.riotChain); return; }
     // 重启时正好在黄昏：结算过了，直接入夜（真人说书也一样，dusk 不会再结算第二次）
     if (this.duskDay === g.day) { if (g.pendingMoonchild || g.pendingKlutz) this.nightAfterDusk(); else this.later(3000, () => this.beginNight()); return; }
-    if (this.stId) return;
     // 下面都是自动说书
     if (this.pendingNom?.stage) {
       const nom = this.pendingNom;
@@ -3702,6 +3839,8 @@ export class Room {
       // 观战席：在线但没坐下（大厅）/ 不在这局里（游戏中）的人
       watchers: [...this.online].filter((id) => (g ? !g.get(id) : !this.lobby.some((p) => p.id === id)) && id !== this.stId)
         .map((id) => { const u = this.users.get(id); return { id, name: u?.name ?? '?', avatar: u?.avatar ?? null }; }),
+      drafting: !g && !!this.draft, // 真人说书人正在排版（玩家看到一句提示，看不到角色）
+      draft: !g && isST ? draftView(this) : null,
     };
     if (!g) return { ...view, phase: 'lobby' };
     if (g.werewolf) return this.wwView(uid, view);
@@ -3848,8 +3987,11 @@ export class Room {
     if (isST) {
       view.st = {
         artistAsks: this.artistAsks ?? [],
+        asks: (this.asks ?? []).map(({ id, kind, who, text, truth, hint, suggest, why, day }) => ({ id, kind, who, text, truth, hint, suggest, why, day })),
+        notes: this.nightNotes(g), // AI 今晚替他做的判定
+        held: this.held && g.phase === 'night' ? this.held.until : null, // 停在天亮前等他：最晚到这个时刻自动天亮
         log: this.stLog.slice(-30),
-        pendingInfo: [...this.pendingInfo.entries()].map(([id, m]) => ({ id, playerId: m.playerId, text: m.text, voice: m.voice })),
+        pendingInfo: [...this.pendingInfo.entries()].map(([id, m]) => ({ id, playerId: m.playerId, text: m.text, voice: m.voice, why: m.why ?? null })),
         waiting: g.phase === 'night' && !this.resolving ? g.missingChoices() : [],
         rkPending: this.rkPending,
         resolved: g.phase === 'night' && this.resolving && !this.rkPending && !this.revivePending,
