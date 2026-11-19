@@ -459,3 +459,17 @@ html[lang="en"] body { line-height: 1.62; font-feature-settings: "kern", "liga";
 html[lang="en"] h1, html[lang="en"] h2, html[lang="en"] h3 { letter-spacing: -.005em; line-height: 1.12; }
 html[lang="en"] .lead, html[lang="en"] .sec-head > p, html[lang="en"] .st-copy > p { max-width: 62ch; }
 .stat-num, .step-num { font-variant-numeric: lining-nums tabular-nums; }
+
+/* ── logo（2026-11-20，方向 B「标签里的钟楼」，源文件在 design/logo/）：图形 + 字，字用正文的衬线体 ── */
+.brand { gap: 10px; }
+.brand-mark { width: 40px; height: 36px; color: var(--paper); flex: none; }
+.brand-name { font: 900 19px/1 var(--serif); color: var(--paper); letter-spacing: 3px; white-space: nowrap; }
+html[lang="en"] .brand-name { font-size: 17px; letter-spacing: .3px; }
+.brand-sub { margin-left: -2px; }
+.foot .brand-mark { width: 30px; height: 27px; }
+@media (max-width: 700px) {
+  .brand-mark { width: 28px; height: 26px; }
+  .brand-name { font-size: 16px; letter-spacing: 2px; }
+  html[lang="en"] .brand-name { font-size: 14px; }
+}
+@media (max-width: 420px) { html[lang="en"] .brand-name { display: none; } }
