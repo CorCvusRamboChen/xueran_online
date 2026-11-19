@@ -79,7 +79,7 @@ test('决策日志：掷出去的概率是抽中这一面的概率', () => {
 
 test('决策日志：说书人的随机只能在记日志的地方，或者结果整体记下来的组合判定里', () => {
   const allowed = /^\s*(const yes = this\.rng\(\)|const x = pick\(pool|let left = this\.rng\(\))/; // roll / choose / draw 自己
-  const composite = ['buildWorld', 'buildSnvWorld', 'savantFacts', 'fakeOutsidersBMR', 'sagePair', 'savantLines'];
+  const composite = ['buildWorld', 'buildSnvWorld', 'savantFacts', 'savantMore', 'fakeOutsidersBMR', 'sagePair', 'savantLines'];
   let fn = '';
   for (const line of source.split('\n')) {
     const m = /^ {2}(\w+)\(.*\) \{/.exec(line);

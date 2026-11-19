@@ -908,7 +908,86 @@ export class Storyteller {
       { t: `${g.name(one.id)} 是${isEvil(one) ? '邪恶' : '善良'}的`, f: `${g.name(one.id)} 是${isEvil(one) ? '善良' : '邪恶'}的` },
     ];
     if (absent.length && present.length) facts.push({ t: `场上有${ROLES[pick(present, rng)].name}`, f: `场上有${ROLES[pick(absent, rng)].name}` });
+    facts.push(...this.savantMore(w, { isEvil, demons, dead, num }));
     return shuffled(facts, rng);
+  }
+
+  /**
+   * 博学者的更多种类（2026-11-20 用户给的真人说书人的口径）：单双数座位的邪恶谁多、爪牙外来者对座 / 邻座、
+   * 四个角色里有且只有两个在场、几人醉酒中毒、恶魔醉酒中毒、恶魔能不能转移座位、死人里几个善良、邪恶座位号加起来和某数比、
+   * 有没有能让别人死的镇民、从第几夜开始邪恶数量异常。每条都有真的和假的说法。
+   * 无神论者局（w）：中毒醉酒、恶魔状态这几类不说（假世界里说不圆，说了就是暗示没有邪恶）。
+   */
+  savantMore(w, { isEvil, demons, dead, num }) {
+    const g = this.g; const rng = this.rng;
+    const ps = g.players; const n = ps.length;
+    const kind = (q) => (w ? worldTeam(w, q) : ROLES[q.role].team);
+    const out = [];
+    const neg = (yes, a, b) => ({ t: yes ? a : b, f: yes ? b : a });
+    // ① 单双数座位的邪恶谁多
+    const even = ps.filter((q) => q.seat % 2 === 0 && isEvil(q)).length;
+    const odd = ps.filter((q) => q.seat % 2 === 1 && isEvil(q)).length;
+    const cmp = ['更多', '更少', '一样多'];
+    const truth = even > odd ? '更多' : even < odd ? '更少' : '一样多';
+    out.push({ t: `坐在双数号的邪恶玩家比单数号的${truth}`, f: `坐在双数号的邪恶玩家比单数号的${pick(cmp.filter((x) => x !== truth), rng)}` });
+    // ②③ 爪牙 / 外来者对座、邻座
+    const name = { minion: '爪牙', outsider: '外来者' };
+    const combos = [['minion', 'outsider'], ['minion', 'minion'], ['outsider', 'outsider']]
+      .filter(([a, b]) => ps.filter((q) => kind(q) === a).length >= (a === b ? 2 : 1) && ps.filter((q) => kind(q) === b).length >= 1);
+    const pairText = (a, b) => (a === b ? `两名${name[a]}` : `${name[a]}和${name[b]}`);
+    const hasPair = (a, b, step) => ps.some((q, i) => { const r = ps[(i + step) % n]; return (kind(q) === a && kind(r) === b) || (kind(q) === b && kind(r) === a); });
+    if (combos.length) {
+      const [a, b] = pick(combos, rng);
+      out.push(neg(hasPair(a, b, 1), `有${pairText(a, b)}相邻而坐`, `没有${pairText(a, b)}相邻而坐`));
+      if (n % 2 === 0) out.push(neg(hasPair(a, b, n / 2), `有${pairText(a, b)}坐在正对面`, `没有${pairText(a, b)}坐在正对面`));
+    }
+    // ④ 某四个角色中有且只有两个在场（不点邪恶角色、不点无神论者）
+    const roles = rolesOf(g.script).filter((r) => ['townsfolk', 'outsider'].includes(ROLES[r].team) && r !== 'atheist');
+    const inPlay = roles.filter((r) => ps.some((q) => q.role === r));
+    const outPlay = roles.filter((r) => !inPlay.includes(r));
+    const four = (k) => (inPlay.length >= k && outPlay.length >= 4 - k ? shuffled([...shuffled(inPlay, rng).slice(0, k), ...shuffled(outPlay, rng).slice(0, 4 - k)], rng) : null);
+    const yes4 = four(2); const no4 = four(pick([1, 3], rng)) ?? four(1) ?? four(3);
+    const say4 = (list) => `${list.map((r) => ROLES[r].name).join('、')}这四个角色中，有且只有两个在场`;
+    if (yes4 && no4) out.push({ t: say4(yes4), f: say4(no4) });
+    // ⑧ 死人里有几个善良
+    const goodDead = dead.filter((q) => !isEvil(q)).length;
+    out.push({ t: `死亡的玩家里有 ${goodDead} 名善良`, f: `死亡的玩家里有 ${num(goodDead, 0, n)} 名善良` });
+    // ⑨ 邪恶座位号加起来和某数比
+    const sum = ps.filter(isEvil).reduce((a, q) => a + q.seat, 0);
+    if (sum > 0) {
+      const T = Math.max(1, sum + pick([-4, -3, -2, 2, 3, 4], rng));
+      out.push(neg(sum > T, `所有邪恶玩家的座位号加起来大于 ${T}`, `所有邪恶玩家的座位号加起来小于 ${T}`));
+    }
+    // ⑩ 有没有能让别人死亡的镇民（杀手、造谣者、贞洁者、拿了精神病患者能力的炼金术士）
+    const KILL = new Set(['slayer', 'gossip', 'virgin']);
+    const killer = ps.some((q) => kind(q) === 'townsfolk' && (KILL.has(q.role) || (q.role === 'alchemist' && q.gained === 'psychopath')));
+    out.push(neg(killer, '这局有镇民的能力可以导致别人死亡', '这局没有镇民的能力可以导致别人死亡'));
+    // ⑪ 从第几夜开始邪恶数量异常
+    const start = w ? w.evil.size : (g.evilStart ?? ps.filter((q) => g.evilOf(q)).length);
+    const odd1 = w ? null : (g.evilHist ?? []).find((h) => h.count !== start);
+    const night = g.night ?? 1;
+    if (night >= 1) {
+      const never = '邪恶玩家的数量一直和开局时一样';
+      const from = (k) => `从第 ${k} 个夜晚开始，邪恶玩家的数量就和开局时不一样了`;
+      const other = Array.from({ length: Math.max(1, night) }, (_, i) => i + 1).filter((k) => k !== odd1?.night);
+      out.push(odd1 ? { t: from(odd1.night), f: other.length && rng() < 0.5 ? from(pick(other, rng)) : never } : { t: never, f: from(pick(other, rng)) });
+    }
+    if (!w) {
+      // ⑤ 几人醉酒中毒（活人）
+      const broken = ps.filter((q) => q.alive && g.snvBroken?.(q)).length;
+      out.push({ t: `场上有 ${broken} 名玩家醉酒或中毒`, f: `场上有 ${num(broken, 0, n)} 名玩家醉酒或中毒` });
+      const live = demons.filter((q) => q.alive);
+      if (live.length) {
+        // ⑥ 恶魔醉酒中毒
+        const off = live.some((q) => g.snvBroken?.(q));
+        out.push(neg(off, '有一名恶魔正处于醉酒或中毒状态', '没有恶魔处于醉酒或中毒状态'));
+        // ⑦ 恶魔能不能转移座位（小恶魔自杀传位、方古跳到外来者身上、小怪宝换人照看）
+        const MOVE = new Set(['imp', 'fanggu', 'lilmonsta']);
+        const move = live.some((q) => MOVE.has(q.role)) || !!g.monsta;
+        out.push(neg(move, '场上的恶魔具备转移座位的能力', '场上的恶魔不具备转移座位的能力'));
+      }
+    }
+    return out;
   }
 
   /** lie：null 一真一假；'must' 两条都假（涡流）；'fake' 两真或两假（醉酒中毒）。 */

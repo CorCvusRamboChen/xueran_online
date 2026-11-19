@@ -1767,6 +1767,7 @@ ${this.grimoire()}
 
   // ───────────────────────── 白天 ─────────────────────────
   dawnSNV() {
+    (this.evilHist ??= []).push({ night: this.night, count: this.players.filter((p) => this.evilOf(p)).length }); // 每晚过后邪恶有几人（博学者「从第几夜开始邪恶数量异常」用）
     if (this.leviDue && !this.winner && this.leviOn()) this.setWinner('evil', '利维坦恢复了清醒健康：第五天已经过了，邪恶立刻获胜'); // 官方
     this.diedToday = false;
     this.outsiderDiedToday = false;
