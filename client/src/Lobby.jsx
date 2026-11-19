@@ -129,10 +129,8 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
             {!host && s.hostOnline && <p className="menu-wait">等房主{s.hostName ? `「${s.hostName}」` : ''}开始……</p>}
             {!host && s.hostOnline && <Btn kind="secondary" className="menu-item" onClick={() => act('claimHost')}>房主没反应？接管房主</Btn>}
             {onTutorial && <Btn className="menu-item menu-tut" onClick={() => setIntro(true)}>新手教程（1 分钟动画 + 练习局）</Btn>}
-            <div className="menu-row">
-              <VolumeButton className="btn btn-secondary menu-item menu-vol" label="设置" />
-              <Btn className="menu-item" onClick={() => setFeedback(true)}>反馈</Btn>
-            </div>
+            <VolumeButton className="btn btn-secondary menu-item menu-vol" label="设置" />
+            <Btn className="menu-item" onClick={() => setFeedback(true)}>反馈</Btn>
             {feedback && <FeedbackBoard ask={ask} toast={toast} onClose={() => setFeedback(false)} />}
             {intro && createPortal(<TutorialIntro onStart={() => { setIntro(false); onTutorial(); }} onClose={() => setIntro(false)} />, document.body)}
             {browserHint && createPortal(<BrowserHint toast={toast} onClose={() => { markHintSeen(); setBrowserHint(false); }} />, document.body)}

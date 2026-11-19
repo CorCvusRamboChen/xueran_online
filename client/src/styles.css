@@ -1421,9 +1421,6 @@ span.lr-newbie { cursor: default; }
 .lobby-left:has(.vol-panel) { z-index: 40; } /* 只抬层级：宽屏时左栏是吸顶（sticky），改成 relative 会整列往下掉（2026-11-20 用户） */
 @media (max-width: 959px) { .lobby-left:has(.vol-panel) { position: relative; } }
 /* 设置、反馈并排一行（2026-11-20 用户）；设置面板挂在这一整行的右边，不压住「反馈」 */
-.menu .menu-row { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.menu .menu-row > * { min-width: 0; }
-.menu .menu-row .vol-wrap { position: static; }
 
 /* 对局右栏「角色」页（RoleIndex.jsx）：搜索 + 角色名小块 + 下面展开技能 */
 .ri { display: flex; flex-direction: column; gap: 8px; }
