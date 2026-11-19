@@ -216,7 +216,7 @@ export class Game {
       'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7', 'lunaticTold', 'lunaticTellTo', 'heard',
       'pixie', 'mez', 'execHist', 'nomBy', 'blockVoters', 'politicianDone', 'fibbinUsed', 'riotChain',
       'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared', 'aiLead', 'politicianEval', 'scapegoatDay', 'gunDay', 'judgeUsed',
-      'leviDue', 'goblinClaimDay', 'widowTold', 'baristaFx', 'harlotAsk', 'matronDay', 'butcherDay', 'mezEasy'];
+      'leviDue', 'goblinClaimDay', 'widowTold', 'baristaFx', 'harlotAsk', 'matronDay', 'butcherDay', 'mezEasy', 'nomHistory'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -688,6 +688,7 @@ export class Game {
     this.nominators.add(a.id);
     this.nominees.add(b.id);
     (this.nomBy ??= {})[b.id] = a.id;
+    (this.nomHistory ??= []).push([a.id, b.id]); // 整局的提名记录：谁提名过谁（读场没有发言时的兜底）
     this.suspicion[b.id] = (this.suspicion[b.id] ?? 0) + 1;
     this.log.push(`第${this.day}天 ${this.name(a.id)} 提名 ${this.name(b.id)}`);
     this.record('nominate', `${this.tag(a.id)} 提名了 ${this.tag(b.id)}`);

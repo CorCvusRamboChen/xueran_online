@@ -11,11 +11,14 @@
 // 每个判定都记进手记（journal），终局时公开。选择本身另记一份决策日志（decisions），只进存档，用来线下比较不同做法。
 import { ROLES, TOWNSFOLK, OUTSIDERS, MINIONS, isEvilRole, inScript, rolesOf, DISTRIBUTION } from './roles.js';
 import { chanceOf, drawOdds, DICE } from './dice.js';
+import { tableFeatures, mechanicalTable } from './tableRead.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const pick = (arr, rng) => arr[Math.floor(rng() * arr.length)];
 const idOf = (x) => x?.id ?? x;
 const upTo = (n) => Array.from({ length: n + 1 }, (_, i) => i);
+/** 假世界里这个人是什么类型：假恶魔算恶魔、假爪牙算爪牙，其余照真的（无神论者局的气球驾驶员用）。 */
+export const worldTeam = (w, q) => (q.id === w.demon ? 'demon' : w.evil.has(q.id) ? 'minion' : ROLES[q.role].team);
 
 // 算不算"这个人又被说书人挑中了"：同一个人身上别压太多（看决策日志就知道）
 const HARM = new Set(['mayorVictim', 'gossipVictim', 'sweetheartDrunk', 'innkeeperDrunk', 'pitVictim']);
@@ -97,7 +100,14 @@ export class Storyteller {
   claimOf(id) {
     const g = this.g;
     if (g.claims?.[id]) return g.claims[id];
+    const said = this.table()?.claims?.[id]?.role; // 读场：他在语音里报的身份（2026-11-19）
+    if (said) return said;
     try { return g.markedRole?.(id) ?? null; } catch { return null; }
+  }
+
+  /** 读场结果：房间黄昏时让 AI 听完大家的发言整理的（tableRead.js）。没有就 null。 */
+  table() {
+    try { const t = this.g.tableRead?.(); return t && (t.gameId == null || t.gameId === this.g.id) ? t : null; } catch { return null; }
   }
 
   /** 掷骰子决定要不要做（dice.js 的 DICE），并记下来。情况和加减值都进日志。 */
@@ -156,7 +166,9 @@ export class Storyteller {
     // ① 小魔典：好人们（只算善良玩家的标记）怀疑的是真邪恶就算善良领先，集体怀疑好人算邪恶领先。房间层算好放在 signals 里，没有就不算
     let sig = {};
     try { sig = g.signals?.() ?? {}; } catch { /* 看情况不能耽误结算（features 里会记一次警告） */ }
-    if (typeof sig.marksLead === 'number') raw += 0.6 * sig.marksLead;
+    // 小魔典和读场（AI 听了大家的发言，看大家怀疑的是不是真邪恶）都有就各占一半
+    const leads = [sig.marksLead, sig.tableLead].filter((v) => typeof v === 'number');
+    if (leads.length) raw += 0.6 * leads.reduce((a, v) => a + v, 0) / leads.length;
     // ② 离终局多近：剩 5 人起越来越偏邪恶；恶魔已经被大家盯上（被提名投票多、或者小魔典里多数人怀疑他）就打折
     const alive = g.aliveCount();
     const end = alive <= 5 ? Math.min(1, (6 - alive) / 3.5) : 0;
@@ -174,7 +186,7 @@ export class Storyteller {
     return {
       journal: this.journal,
       decisions: this.decisions,
-      worlds: [...this.worlds.entries()].map(([id, w]) => [id, { demon: w.demon, evil: [...w.evil], roles: [...w.roles.entries()], dream: w.dream }]),
+      worlds: [...this.worlds.entries()].map(([id, w]) => [id, { demon: w.demon, evil: [...w.evil], roles: [...w.roles.entries()], dream: w.dream, demonOk: w.demonOk ?? null }]),
       misCount: [...this.misCount.entries()],
       covers: this.covers,
     };
@@ -183,7 +195,7 @@ export class Storyteller {
   load(data) {
     this.journal = data?.journal ?? [];
     this.decisions = data?.decisions ?? [];
-    this.worlds = new Map((data?.worlds ?? []).map(([id, w]) => [id, { demon: w.demon, evil: new Set(w.evil), roles: new Map(w.roles), dream: w.dream }]));
+    this.worlds = new Map((data?.worlds ?? []).map(([id, w]) => [id, { demon: w.demon, evil: new Set(w.evil), roles: new Map(w.roles), dream: w.dream, demonOk: w.demonOk ?? null }]));
     this.misCount = new Map(data?.misCount ?? []);
     this.covers = data?.covers ?? {};
   }
@@ -569,6 +581,43 @@ export class Storyteller {
    * 然后是活人、已经有人怀疑的人。语音里说的身份这里看不到，只算公开声明。
    */
   /** 无神论者局：说书人假装有一个邪恶阵营（人数照标准表），从无神论者以外的人里挑。整局共用。 */
+  /**
+   * 无神论者局：给出去的信息里有跟「谁是恶魔」有关的，记下假世界里哪些人当恶魔还对得上（demonOk）。
+   * ok(w2)：把假恶魔换成 w2.demon 时，这条信息给的答案不变。假恶魔死了、被舞蛇人选中时，只在对得上的人里挪。
+   */
+  pinAtheist(w, ok) {
+    if (!w || this.worlds.get('atheist') !== w) return;
+    const fits = [...w.evil].filter((id) => { try { return ok({ ...w, demon: id }); } catch { return id === w.demon; } });
+    w.demonOk = w.demonOk ? w.demonOk.filter((id) => fits.includes(id)) : fits;
+  }
+
+  /** 读场结果；没有就用提名投票兜底（无神论者局挑人一定要有点依据）。 */
+  tableOrRules() { return this.table() ?? mechanicalTable(this.g); }
+
+  /**
+   * 无神论者局：说书人假装的恶魔今晚杀谁。照一个聪明的真恶魔会怎么杀（2026-11-19 用户：要胜过真人说书人）：
+   * - 杀大家最信任的、报了信息的、一直在指认假恶魔的人（真恶魔要灭口、要削弱好人的信息）；
+   * - 不杀被大家怀疑的人（真恶魔留着他们背锅）；
+   * - 不杀在喊「处决说书人」的人：真邪恶最希望好人去处决说书人（那样邪恶赢），绝不会杀他——杀了反而露馅。
+   */
+  atheistVictim(pool, w) {
+    const g = this.g;
+    const t = this.tableOrRules();
+    const v = this.draw('atheistKill', pool, (q) => tableFeatures(t, q.id, { demon: w.demon }));
+    if (!v) return v;
+    const f = tableFeatures(t, v.id, { demon: w.demon });
+    const why = [f.accuser && `他一直在指认假恶魔 ${g.name(w.demon)}`, f.trusted >= 0.4 && '大家很信任他', f.info && `他报了${ROLES[t.claims[v.id].role].name}、在给信息`].filter(Boolean);
+    const spared = pool.filter((q) => q.id !== v.id && tableFeatures(t, q.id).stVoice).map((q) => g.name(q.id));
+    this.note(`无神论者局：假恶魔杀 ${g.name(v.id)}${why.length ? `（${why.join('，')}）` : ''}${spared.length ? `；没杀 ${spared.join('、')}——他们在推处决说书人，真恶魔不会杀这样的人` : ''}${t.mechanical ? '（没有读场，只看提名投票）' : ''}`);
+    return v;
+  }
+
+  /** 无神论者局：假恶魔死了（多半是被处决），从对得上的人里挑下一个「恶魔」：大家越不怀疑的越像没被发现的恶魔。 */
+  atheistHeir(cands, w) {
+    const t = this.tableOrRules();
+    return this.draw('atheistDemon', cands, (q) => tableFeatures(t, q.id, { demon: w.demon }));
+  }
+
   buildAtheistWorld() {
     const g = this.g; const rng = this.rng;
     const m = DISTRIBUTION[g.players.length]?.[2] ?? 1;
@@ -809,12 +858,13 @@ export class Storyteller {
   }
 
   /** 博学者的两条信息：从真实局面算出来，保证真的就是真的、假的就是假的。 */
-  savantFacts() {
+  savantFacts(w = null) {
     const g = this.g; const rng = this.rng;
     const ps = g.players; const n = ps.length;
-    const evilIn = (list) => list.filter((q) => g.evilOf(q)).length;
+    const isEvil = (q) => (w ? w.evil.has(q.id) : g.evilOf(q));
+    const evilIn = (list) => list.filter(isEvil).length;
     const num = (v, lo, hi) => { const o = [v - 1, v + 1].filter((x) => x >= lo && x <= hi); return o.length ? pick(o, rng) : v + 1; };
-    const demons = ps.filter((q) => ROLES[q.role].team === 'demon');
+    const demons = ps.filter((q) => (w ? q.id === w.demon : ROLES[q.role].team === 'demon'));
     // 官方：「避免提供恶魔是谁这种信息」。点名一两个人的那几条不点恶魔，善良明显落后时才偶尔放开
     const open = !demons.length || this.roll('savantDemon', { balance: this.balance() }, {});
     const named = open ? ps : ps.filter((q) => !demons.includes(q));
@@ -824,23 +874,24 @@ export class Storyteller {
     const alive = ps.filter((q) => q.alive);
     const outs = ps.filter((q) => ROLES[q.role].team === 'outsider').length;
     const pool = rolesOf(g.script);
-    const absent = pool.filter((r) => !ps.some((q) => q.role === r));
-    const present = pool.filter((r) => ps.some((q) => q.role === r) && ROLES[r].team !== 'demon');
+    // 无神论者局：「场上有无神论者」真假都不说（说了就是在暗示）
+    const absent = pool.filter((r) => !ps.some((q) => q.role === r) && !(w && r === 'atheist'));
+    const present = pool.filter((r) => ps.some((q) => q.role === r) && ROLES[r].team !== 'demon' && !(w && r === 'atheist'));
     const half = Math.floor(n / 2);
     const lo = 1 + Math.floor(rng() * n);
     const seats = Array.from({ length: half }, (_, k) => ((lo + k - 1) % n) + 1);
     const demonIn = demons.some((q) => seats.includes(q.seat));
     let pairs = 0;
-    for (let i = 0; i < n; i++) if (g.evilOf(ps[i]) && g.evilOf(ps[(i + 1) % n])) pairs++;
-    const same = g.evilOf(two[0]) === g.evilOf(two[1]);
+    for (let i = 0; i < n; i++) if (isEvil(ps[i]) && isEvil(ps[(i + 1) % n])) pairs++;
+    const same = isEvil(two[0]) === isEvil(two[1]);
     const facts = [
       { t: `场上有 ${outs} 名外来者`, f: `场上有 ${num(outs, 0, n)} 名外来者` },
       { t: `死亡的玩家里有 ${evilIn(dead)} 名邪恶`, f: `死亡的玩家里有 ${num(evilIn(dead), 0, n)} 名邪恶` },
       { t: `存活的玩家里有 ${evilIn(alive)} 名邪恶`, f: `存活的玩家里有 ${num(evilIn(alive), 0, n)} 名邪恶` },
       { t: `相邻而坐的邪恶玩家有 ${pairs} 对`, f: `相邻而坐的邪恶玩家有 ${num(pairs, 0, n)} 对` },
       { t: `${g.name(two[0].id)} 和 ${g.name(two[1].id)} ${same ? '是' : '不是'}同一阵营`, f: `${g.name(two[0].id)} 和 ${g.name(two[1].id)} ${same ? '不是' : '是'}同一阵营` },
-      { t: `恶魔${demonIn ? '在' : '不在'} ${seats[0]} 号到 ${seats.at(-1)} 号之间`, f: `恶魔${demonIn ? '不在' : '在'} ${seats[0]} 号到 ${seats.at(-1)} 号之间` },
-      { t: `${g.name(one.id)} 是${g.evilOf(one) ? '邪恶' : '善良'}的`, f: `${g.name(one.id)} 是${g.evilOf(one) ? '善良' : '邪恶'}的` },
+      ...(w ? [] : [{ t: `恶魔${demonIn ? '在' : '不在'} ${seats[0]} 号到 ${seats.at(-1)} 号之间`, f: `恶魔${demonIn ? '不在' : '在'} ${seats[0]} 号到 ${seats.at(-1)} 号之间` }]), // 无神论者局不说恶魔在哪（假恶魔以后可能要换人）
+      { t: `${g.name(one.id)} 是${isEvil(one) ? '邪恶' : '善良'}的`, f: `${g.name(one.id)} 是${isEvil(one) ? '善良' : '邪恶'}的` },
     ];
     if (absent.length && present.length) facts.push({ t: `场上有${ROLES[pick(present, rng)].name}`, f: `场上有${ROLES[pick(absent, rng)].name}` });
     return shuffled(facts, rng);
@@ -848,7 +899,10 @@ export class Storyteller {
 
   /** lie：null 一真一假；'must' 两条都假（涡流）；'fake' 两真或两假（醉酒中毒）。 */
   savantLines(p, lie) {
-    const [a, b] = this.savantFacts();
+    // 无神论者局：两条信息照常一真一假，「真」是假世界里的真（说书人整局假装有邪恶）
+    const w = lie === 'atheist' ? this.snvWorld(p, 'atheist') : null;
+    if (w) lie = null;
+    const [a, b] = this.savantFacts(w);
     const lines = lie === 'must' ? [a.f, b.f] : lie === 'fake' ? (this.roll('savantTrue', {}, { who: p.id }) ? [a.t, b.t] : [a.f, b.f]) : [a.t, b.f];
     this.decide('savant', { who: p.id, options: [a.t, a.f, b.t, b.f], chosen: lines, lie });
     this.note(`博学者 ${this.g.name(p.id)}：${lie ? `失效，给了${lie === 'must' || lines[0] === a.f ? '两条假' : '两条真'}` : `真：${a.t}；假：${b.f}`}`);
@@ -896,10 +950,10 @@ export class Storyteller {
    * 气球驾驶员今晚看谁：和上一晚看到的人类型不同（首夜随便），活人死人都行。
    * 失效时随便给，多半给同一类型的人（这样他的信息链就断了）。前期多指活人：有话可聊。
    */
-  balloonPick(p, last, lie) {
+  balloonPick(p, last, lie, w = null) {
     const g = this.g;
     const others = g.players.filter((q) => q.id !== p.id);
-    const type = (q) => ROLES[q.role].team;
+    const type = (q) => (w ? worldTeam(w, q) : ROLES[q.role].team); // 无神论者局：假世界里的「爪牙」「恶魔」也是一种类型
     const live = (list) => { const a = list.filter((q) => q.alive); return a.length ? a : list; };
     if (lie && last) {
       const same = others.filter((q) => type(q) === last);

@@ -13,7 +13,8 @@ import { SETUPS, pickPreset, PRESET_SHARE } from '../shared/setups.js';
 import { buildRoles, easeNewbies } from '../engine/assign.js';
 import { narration } from './narration.js';
 import { ttsUrl } from './tts.js';
-import { judgeStatement, judgeMadness, judgeBreak, looksBroken, judgeAvailable, judgeAmnesiac, adviseFisherman, looksInjected, speakSeat7, judgeLead, judgeResponsible } from './judge.js';
+import { judgeStatement, judgeMadness, judgeBreak, looksBroken, judgeAvailable, judgeAmnesiac, adviseFisherman, looksInjected, speakSeat7, judgeLead, judgeResponsible, readTable } from './judge.js';
+import { parseTable, describeTable, tableLead } from '../engine/tableRead.js';
 import { noteMarks, readTown, markedRole } from './beliefs.js';
 import { Werewolf } from '../engine/werewolf.js';
 import { WW_ROOM } from './werewolfRoom.js';
@@ -393,6 +394,7 @@ export class Room {
   wireGame() {
     if (!this.game) return;
     this.game.signals = (who) => this.signals(who);
+    this.game.tableRead = () => (this.tableRead?.gameId === this.game?.id ? this.tableRead : null); // 黄昏读场的结果（说书人挑人、配合伪装用）
     // 大家在小魔典里把这个人标成什么善良角色（没有公开声明时，说书人照这个配合他的伪装）
     this.game.markedRole = (id) => { const g = this.game; return markedRole(this.beliefs?.now, id, (r) => inScript(r, g.script) && ['townsfolk', 'outsider'].includes(ROLES[r]?.team)); };
   }
@@ -444,6 +446,8 @@ export class Room {
       out.demonKinds = kinds.size;
       out.demonSplit = kinds.size >= 2 ? 1 : 0;
     }
+    const t = this.tableRead?.gameId === g.id ? this.tableRead : null;
+    if (t) { const lead = tableLead(t, g); if (lead != null) out.tableLead = lead; out.atheistTalk = t.atheist; }
     if (who && !this.isFake(who)) {
       const r = rec?.players[who];
       if (r) { out.games = r.games; out.rookie = r.games < 3 && !g.newbies?.includes(who); out.veteran = r.games >= 20; }
@@ -570,7 +574,8 @@ export class Room {
     if (this.game) throw new UserError('游戏已经开始了');
     this.pelted = {}; this.pelts = {}; // 惩罚场外：头上叠的东西每局重来
     this.peltFx = []; if (this.mvp) { this.cancel(this.mvp.timer); this.mvp = null; } // 上一局的扔东西动画、MVP 投票
-    this.talk = []; // 将军、政客用的每天发言
+    this.talk = []; // 全员收音的剧本：每天的发言（读场、将军、政客用）
+    this.tableRead = null;
     if (this.lobby.length < MIN_PLAYERS) throw new UserError(`至少需要 ${MIN_PLAYERS} 名玩家`);
     const seats = this.settings.shuffle ? shuffle(this.lobby, Math.random) : [...this.lobby];
     const script = this.tutorial ? 'tb' : this.settings.script ?? 'tb';
@@ -1347,7 +1352,7 @@ export class Room {
   listenWhy(g) { return ['mezepheles', 'general', 'politician'].filter((r) => inScript(r, g.script)); }
   /** 有将军或政客：今天的转写留到这局结束（只在内存和临时存档里，不进往期对局文件）。每人每天最多 30 句。 */
   keepTalk(g) {
-    if (!this.mic || !['general', 'politician'].some((r) => inScript(r, g.script))) return;
+    if (!this.mic || !this.listenAll(g)) return; // 2026-11-19：全员收音的剧本都留着（读场用），以前只留将军、政客的
     const day = {};
     for (const p of g.players) { const lines = this.mic.transcript(p.id); if (lines.length) day[p.id] = lines.slice(-30); }
     if (Object.keys(day).length) (this.talk ??= []).push({ day: g.day, lines: day });
@@ -1360,6 +1365,27 @@ export class Room {
     while (out.length > max && blocks.length > 1) { blocks.shift(); out = blocks.join('\n\n'); }
     return out.slice(-max);
   }
+  /**
+   * 黄昏读场（2026-11-19 用户：用全员收音让说书人更懂场面，目标是无神论者局里胜过真人说书人）：
+   * 把公开情况和大家说过的话交给 AI，整理出谁报了什么身份、谁被怀疑 / 信任、谁在推「处决说书人」。
+   * 只给公开情况，不给任何人的真实身份——要的是「玩家们怎么想」。结果给说书人挑人（假恶魔杀谁、假世界挑谁、配合伪装）
+   * 和算局势用；真人说书人在说书台上看得到。没配 AI、今天没人说话就跳过（说书人用提名投票兜底）。
+   */
+  async readTableNow(g) {
+    if (g.engine !== 'snv' || g.winner || !this.listenAll(g)) return;
+    const ask = this.tableJudge ?? ((this.judgeReady ?? judgeAvailable)() ? readTable : null);
+    if (!ask) return;
+    const talk = this.talkText(g, null, 9000);
+    if (!talk.trim()) return;
+    const raw = await ask(g.publicFacts(), talk, rolesOf(g.script).map((r) => ROLES[r].name)).catch((e) => { console.warn('[botc] 读场失败：', e.message); return null; });
+    if (!raw || this.game !== g) return;
+    const t = parseTable(raw, g, g.day);
+    this.tableRead = t;
+    const text = describeTable(t, g);
+    this.stNote(`读场（第${g.day}天黄昏）：${text}`);
+    g.st.note(`黄昏读场：${describeTable(t, g, { summary: false })}`);
+  }
+
   /** 黄昏：有将军的剧本问 AI 现在谁在赢（今晚将军听它的，说书人的骰子一半看它）。没配 AI 就跳过。 */
   async judgeLeadNow(g) {
     if (g.engine !== 'snv' || g.winner || !inScript('general', g.script)) return;
@@ -1950,8 +1976,10 @@ export class Room {
     this.clearNoms();
     await this.judgeMadness();
     if (this.game !== g) return undefined;
-    this.keepTalk(g); // 有将军或政客的剧本：今天的发言留到这局结束（AI 判局势、判政客用）
+    this.keepTalk(g); // 全员收音的剧本：今天的发言留到这局结束（读场、判局势、判政客用）
     this.mic?.listen([]); // 判完了：收音令牌作废，文字清掉
+    await this.readTableNow(g);
+    if (this.game !== g) return undefined;
     await this.judgeLeadNow(g);
     if (this.game !== g) return undefined;
     if (g.winner) return this.endGame();
@@ -2395,7 +2423,8 @@ export class Room {
     };
     const fallback = () => reply(g.st.fishermanAdvice(p, lie));
     if (!(this.judgeReady ?? judgeAvailable)()) { fallback(); return; }
-    (this.advise ?? adviseFisherman)({ team: g.evilOf(p) && p.role !== 'marionette' ? '邪恶' : '善良', lie: !!lie, facts: g.factsSNV() }) // 提线木偶以为自己是好人
+    const fake = lie === 'atheist'; // 无神论者局：按说书人假装的邪恶阵营给正常的建议（以前当成失效、还把「全员善良」的真实情况交给模型）
+    (this.advise ?? adviseFisherman)({ team: g.evilOf(p) && p.role !== 'marionette' ? '邪恶' : '善良', lie: !!lie && !fake, facts: fake ? g.factsFake() : g.factsSNV() }) // 提线木偶以为自己是好人
       .then((res) => (res?.advice ? reply(res.advice) : fallback()))
       .catch((e) => { console.warn('[botc] 渔夫的建议出错：', e.message); fallback(); });
   }
@@ -2456,7 +2485,7 @@ export class Room {
     // 问得有歧义（「1-5」可能是 1 到 5 号，也可能是 1 号和 5 号）、看不懂、或者不是是非题：不答，让他重新问，这次不算用掉
     // （2026-11-12 用户定；艺术家页：「如果你不能用这三种答案进行回答，让他重新问一个问题」）。
     // 模型的理由记进说书人记录（以前丢掉了，事后看不出它怎么理解的问题）；理由不给玩家看，免得漏出真实情况
-    (this.judge ?? judgeStatement)(`（这是一个是非问题：答案为"是"就判 true，为"不是"就判 false。玩家说的数字一般指座位号。如果这个问题有歧义——同一句话能读出两种意思、两种意思的答案不一样，比如「1-5」可能是 1 号到 5 号、也可能是 1 号和 5 号——或者看不懂在问什么，或者根本不是能用「是 / 不是 / 我不知道」回答的问题（比如「有几个爪牙」「谁是恶魔」），判 unknown，reason 以「歧义：」开头说明为什么要重问）${text}`, g.factsSNV())
+    (this.judge ?? judgeStatement)(`（这是一个是非问题：答案为"是"就判 true，为"不是"就判 false。玩家说的数字一般指座位号。如果这个问题有歧义——同一句话能读出两种意思、两种意思的答案不一样，比如「1-5」可能是 1 号到 5 号、也可能是 1 号和 5 号——或者看不懂在问什么，或者根本不是能用「是 / 不是 / 我不知道」回答的问题（比如「有几个爪牙」「谁是恶魔」），判 unknown，reason 以「歧义：」开头说明为什么要重问）${text}`, g.atheist && !g.evilOf(g.get(uid)) ? g.factsFake() : g.factsSNV()) // 无神论者局：按说书人假装的邪恶阵营判（2026-11-19）
       .then((res) => {
         if (this.game !== g) return;
         if (res?.reason) { this.stNote(`艺术家 ${g.name(uid)} 问「${text}」，说书人的理解：${res.reason}（${res.verdict}）`); g.record('st', `艺术家的问题「${text}」，说书人判 ${res.verdict}：${res.reason}`); }
@@ -3411,7 +3440,7 @@ export class Room {
       ended: this.ended, square: this.square, log: this.log, logSeq: this.logSeq, logEpoch: this.epoch, stLog: this.stLog,
       inbox: entries(this.inbox), acts: entries(this.acts ?? new Map()), pendingInfo: entries(this.pendingInfo),
       resolving: this.resolving, rkPending: this.rkPending, revivePending: this.revivePending ?? null, deadline: this.deadline, nightBase: this.nightBase ?? null, dueFor: this.dueFor ?? {}, dawnAt: this.dawnAt ?? null,
-      roamedToday: !!this.roamedToday, duskDay: this.duskDay ?? null, homes: this.homes ?? null, pelted: this.pelted ?? {}, pelts: this.pelts ?? {}, talk: this.talk ?? [],
+      roamedToday: !!this.roamedToday, duskDay: this.duskDay ?? null, homes: this.homes ?? null, pelted: this.pelted ?? {}, pelts: this.pelts ?? {}, talk: this.talk ?? [], tableRead: this.tableRead ?? null,
       pendingNom: this.pendingNom,
       noms: this.noms && { until: this.noms.until, paused: this.noms.paused, timeUp: this.noms.timeUp, skips: [...this.noms.skips] },
       vote: this.vote && { ...this.vote, yes: [...this.vote.yes], locked: [...this.vote.locked] },
@@ -3449,7 +3478,7 @@ export class Room {
       voteHistory: s.voteHistory ?? [], knifeLog: s.knifeLog ?? [], execLog: s.execLog ?? [], pubLog: s.pubLog ?? [],
       beliefs: s.beliefs ?? null, meets: s.meets ?? [],
       outfits: new Map(s.outfits ?? []),
-      pelted: s.pelted ?? {}, pelts: s.pelts ?? {}, talk: s.talk ?? [],
+      pelted: s.pelted ?? {}, pelts: s.pelts ?? {}, talk: s.talk ?? [], tableRead: s.tableRead ?? null,
       watchMuted: [], // 机器人重启时账上的闭麦都解开了：resume 里重新闭上
       paused: !!s.paused,
     });

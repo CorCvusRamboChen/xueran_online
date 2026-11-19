@@ -86,7 +86,7 @@ test('房间：有将军、政客的剧本所有人都拿到收音；黄昏存�
   await room.act('u1', 'start');
   const g = room.game;
   try {
-    for (let k = 0; k < 400 && g.phase === 'night'; k++) {
+    for (let k = 0; k < 2000 && g.phase === 'night'; k++) { // 全套测试一起跑时夜里慢，等久一点
       if (!room.resolving) for (const pr of g.nightPrompts()) {
         if (room.isFake(pr.playerId) || g.choices[pr.playerId]) continue;
         await room.act(pr.playerId, 'choose', { night: g.night, targets: pr.options.slice(0, pr.count) }).catch(() => {});

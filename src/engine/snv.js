@@ -15,6 +15,7 @@
 
 import { ROLES, rolesOf, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, SCRIPTS, inScript, playersOf, ST_NOMINEE } from './roles.js';
 import { SNV_STEPS, MIX_STEPS } from '../shared/nightOrder.js';
+import { worldTeam } from './storyteller.js';
 
 const team = (p) => ROLES[p.role].team;
 const shuffle = (arr, rng) => { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -550,9 +551,11 @@ export const SNV_METHODS = {
   infoNumber(p, truth, range, inWorld = null) {
     const mode = this.lieMode(p);
     if (!mode) return truth;
-    const said = inWorld ? inWorld(this.st.snvWorld(p, mode, (w) => inWorld(w) !== truth)) : null;
+    const world = inWorld ? this.st.snvWorld(p, mode, (w) => inWorld(w) !== truth) : null;
+    const said = world ? inWorld(world) : null;
     const usable = said != null && said >= range.min && said <= range.max && (mode !== 'must' || said !== truth);
     let v = usable ? said : this.st.fakeNumber(p, truth, range);
+    if (mode === 'atheist' && usable) this.st.pinAtheist(world, (w) => inWorld(w) === v);
     if (mode === 'must' && v === truth) v = truth + 1; // 可选范围只有真相一个数（比如还没人死）：涡流下也不能说真话
     this.st.decide('infoNumber', { who: p.id, role: p.role, mode, range, chosen: v, truth, fromWorld: usable });
     if (v !== truth) this.flag(p, `得到了错误的数字 ${v}（真实是 ${truth}）`);
@@ -561,7 +564,9 @@ export const SNV_METHODS = {
   infoYes(p, truth, inWorld) {
     const mode = this.lieMode(p);
     if (!mode) return truth;
-    const said = inWorld(this.st.snvWorld(p, mode, (w) => inWorld(w) !== truth));
+    const w = this.st.snvWorld(p, mode, (x) => inWorld(x) !== truth);
+    const said = inWorld(w);
+    if (mode === 'atheist') this.st.pinAtheist(w, (x) => inWorld(x) === said);
     const v = mode === 'must' ? !truth : said;
     this.st.decide('infoYes', { who: p.id, role: p.role, mode, options: [true, false], chosen: v, truth, fromWorld: v === said });
     if (v !== truth) this.flag(p, `得到了相反的答案（真实是${truth ? '是' : '否'}）`);
@@ -1128,6 +1133,7 @@ ${this.grimoire()}
         } break;
         case 'snakecharmer': for (const p of this.holders('snakecharmer')) {
           const t = this.choiceOfSNV(p)?.targets[0]; if (!t) continue;
+          if (this.atheist) { this.atheistSnake(p, t); continue; } // 无神论者局：别让舞蛇人「选中恶魔却什么都没发生」
           if (team(t) !== 'demon' || !t.alive) continue;
           if (broken(p)) { this.flag(p, '舞蛇人选中了恶魔，但失效了，没有交换'); continue; }
           this.record('st', `舞蛇人 ${this.tag(p.id)} 选中了恶魔 ${this.tag(t.id)}：互换角色和阵营`);
@@ -1517,9 +1523,12 @@ ${this.grimoire()}
           }
         } break;
         case 'balloonist': for (const p of this.holders('balloonist')) {
-          const t = this.st.balloonPick(p, this.balloon[p.id] ?? null, this.lieMode(p));
+          const lie = this.lieMode(p);
+          const aw = lie === 'atheist' ? this.atheistWorld() : null; // 无神论者局：按假世界的类型给，他才看得到「爪牙」「恶魔」类型的人
+          const t = this.st.balloonPick(p, this.balloon[p.id] ?? null, aw ? null : lie, aw);
           if (!t) continue;
-          this.balloon[p.id] = team(t); // 失效时给的人类型可能一样：以后照给他看的人算（官方提示标记的做法）
+          this.balloon[p.id] = aw ? worldTeam(aw, t) : team(t); // 失效时给的人类型可能一样：以后照给他看的人算（官方提示标记的做法）
+          if (aw) { const shown = worldTeam(aw, t); this.st.pinAtheist(aw, (w) => worldTeam(w, t) === shown); }
           tell(p, `你得知了 **${this.name(t.id)}**。`, `说书人指了指 **${this.name(t.id)}**。`);
         } break;
         case 'chambermaid': for (const p of this.holders('chambermaid')) { // acted：每一步当时还活着、为用能力醒来的人（见循环开头）
@@ -1819,7 +1828,7 @@ ${this.grimoire()}
   artistAnswer(uid, verdict) {
     const p = this.get(uid);
     const lie = this.lieMode(p);
-    if (verdict === 'unknown' || !lie) return verdict;
+    if (verdict === 'unknown' || !lie || lie === 'atheist') return verdict; // 无神论者局：问题是按假世界判的，不用翻
     this.flag(p, '艺术家得到了相反的答案');
     return verdict === 'true' ? 'false' : 'true';
   },
@@ -1901,7 +1910,8 @@ ${this.grimoire()}
     if ([...text].length > 120) throw new Error('太长了（最多 120 字）');
     this.amnesiacDay[uid] = this.day;
     this.record('st', `失忆者 ${this.tag(uid)} 猜自己的能力：${text}`);
-    return { text, ability: p.gained, lie: this.lieMode(p) };
+    const lie = this.lieMode(p);
+    return { text, ability: p.gained, lie: lie === 'atheist' ? null : lie }; // 无神论者局：他没有失效，猜能力照实答
   },
 
   /** 呆瓜得知自己死亡后公开选一名存活的玩家。 */
@@ -2161,6 +2171,7 @@ ${this.grimoire()}
     this.nominators.add(a.id);
     this.nominees.add(ST_NOMINEE);
     (this.nomBy ??= {})[ST_NOMINEE] = a.id;
+    (this.nomHistory ??= []).push([a.id, 'storyteller']);
     this.log.push(`第${this.day}天 ${this.name(a.id)} 提名 说书人`);
     this.record('nominate', `${this.tag(a.id)} 提名了说书人`);
     return { virgin: false, storyteller: true };
@@ -2170,7 +2181,7 @@ ${this.grimoire()}
   atheistKill(messages) {
     const w = this.atheistWorld();
     const pool = this.alive().filter((q) => !w.evil.has(q.id));
-    const v = pool.length ? this.st.choose('atheistKill', pool, {}) : null;
+    const v = pool.length ? this.st.atheistVictim(pool, w) : null; // 照聪明的真恶魔挑人（读场：杀被信任的、指认假恶魔的，不杀在推处决说书人的）
     if (!v) return;
     this.record('st', `无神论者局：说书人假装恶魔，杀死了 ${this.tag(v.id)}`);
     this.snvDie(v, 'demon', messages);
@@ -2180,11 +2191,56 @@ ${this.grimoire()}
   atheistShift(p) {
     const w = this.st.worlds?.get('atheist');
     if (!w || w.demon !== p.id) return;
-    const next = [...w.evil].map((id) => this.get(id)).find((q) => q?.alive && q.id !== p.id)
-      ?? this.st.choose('atheistDemon', this.alive().filter((q) => q.role !== 'atheist' && q.id !== p.id), {});
-    if (!next) return;
+    this.atheistMoveDemon(p.id, '死了');
+  },
+  /**
+   * 无神论者局：假恶魔要换人（死了、被舞蛇人选中）。官方无神论者页：说书人可以打破规则来模拟邪恶在场。
+   * 大家不知道死的是不是恶魔，所以只要换得前后对得上，游戏照常往下走，看不出破绽：
+   * 先在「和给过的信息都对得上」的活着的假邪恶里挑（大家越不怀疑越像藏得好的恶魔）；没有对得上的，
+   * 再从活着的假邪恶里挑；都死光了才从活人里补一个（这时邪恶人数可能和之前的信息对不上，记下风险）。
+   */
+  atheistMoveDemon(fromId, why) {
+    const w = this.st.worlds?.get('atheist');
+    if (!w) return null;
+    const alive = (id) => id !== fromId && this.get(id)?.alive;
+    const fit = [...w.evil].filter((id) => alive(id) && (!w.demonOk || w.demonOk.includes(id))).map((id) => this.get(id));
+    const evilLeft = [...w.evil].filter(alive).map((id) => this.get(id));
+    const extra = this.alive().filter((q) => q.id !== fromId && q.role !== 'atheist' && !w.evil.has(q.id));
+    const pool = fit.length ? fit : evilLeft.length ? evilLeft : extra;
+    const next = pool.length ? this.st.atheistHeir(pool, w) : null;
+    if (!next) return null;
     w.demon = next.id; w.evil.add(next.id);
-    this.record('st', `无神论者局：假装的恶魔 ${this.tag(p.id)} 死了，说书人改把 ${this.tag(next.id)} 当成恶魔`);
+    if (!fit.length) w.demonOk = null; // 已经对不上了：之后重新开始记
+    const risk = fit.length ? '之前给出的信息都对得上' : evilLeft.length ? '有一条跟恶魔有关的信息可能对不上' : '假世界里的邪恶都死光了，只好补一个，邪恶人数可能和之前的信息对不上';
+    this.record('st', `无神论者局：假装的恶魔 ${this.tag(fromId)} ${why}，说书人改把 ${this.tag(next.id)} 当成恶魔（${risk}），${this.tag(fromId)} 就算是爪牙，游戏照常进行`);
+    return next;
+  },
+  /** 无神论者局的舞蛇人：选中真恶魔会和他互换。这里没有恶魔可换，说书人就让「恶魔」不是他（换人），以后他也不能当恶魔。 */
+  atheistSnake(p, t) {
+    const w = this.atheistWorld();
+    if (w.demon === t.id && t.alive) this.atheistMoveDemon(t.id, `被舞蛇人 ${this.tag(p.id)} 选中（真恶魔会和舞蛇人互换，这里不能换）`);
+    w.demonOk = (w.demonOk ?? [...w.evil]).filter((id) => id !== t.id);
+  },
+  /**
+   * 无神论者局给大模型看的「真实情况」（艺术家的问题、渔夫的建议）：按说书人假装的那个邪恶阵营写，
+   * 不提无神论者，也不带说书人手记（手记里写着这是无神论者局）。
+   */
+  factsFake() {
+    const w = this.atheistWorld();
+    const ppl = this.players.map((q) => {
+      const role = q.id === w.demon ? '恶魔（哈迪寂亚或亡骨魔，说书人还没定）' : w.evil.has(q.id) ? '爪牙（具体角色说书人还没定）' : q.role === 'atheist' ? '镇民（具体角色保密）' : `${ROLES[q.role].name}（${{ townsfolk: '镇民', outsider: '外来者' }[team(q)] ?? '镇民'}）`;
+      return `${q.seat}号 ${q.name}：${role}，${w.evil.has(q.id) ? '邪恶' : '善良'}，${q.alive ? '存活' : '死亡'}`;
+    });
+    return [`剧本：${SCRIPTS[this.script].name}。现在是第 ${this.day} 天，共 ${this.players.length} 名玩家。场上没有无神论者。`, '玩家：', ...ppl, '', '公开发生过的事：', ...this.publicEvents()].join('\n');
+  },
+  /** 公开发生过的事：提名、投票、处决、死亡（不带死因）。读场、无神论者局的假情况用。 */
+  publicEvents() {
+    return (this.log ?? []).filter((l) => /提名|投票|被处决|死亡|复活/.test(l)).map((l) => l.replace(/死亡（[^）]*）/, '死亡')).slice(-60);
+  },
+  /** 读场给大模型的公开情况：座位、生死、公开声明、提名投票处决记录。不含任何人的真实身份。 */
+  publicFacts() {
+    const ppl = this.players.map((q) => `${q.seat}号 ${q.name}：${q.alive ? '存活' : '死亡'}${this.claims?.[q.id] ? `，公开声明自己是${ROLES[this.claims[q.id]]?.name ?? this.claims[q.id]}` : ''}`);
+    return [`剧本：${SCRIPTS[this.script].name}。现在是第 ${this.day} 天，共 ${this.players.length} 名玩家，存活 ${this.aliveCount()} 人。`, '玩家：', ...ppl, '', '公开发生过的事：', ...this.publicEvents()].join('\n');
   },
 
   /** 骗人精（传奇角色）：每局一次，一名善良玩家可能得到错误信息。说书人掷骰子，用掉了就再也不会。 */
