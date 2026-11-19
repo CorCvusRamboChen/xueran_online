@@ -143,7 +143,7 @@ export function rollMixed(script, n, rng, { exclude = null } = {}) {
   const ok = (r) => !exclude?.has(r);
   const L = listsOf(script);
   let [t, o, m] = DISTRIBUTION[n];
-  const out = L.out.filter(ok);
+  let out = L.out.filter(ok);
   // 无神论者局：没有爪牙和恶魔，空出来的位置补镇民（官方：拿掉邪恶角色，补上镇民或外来者）
   if (L.tf.includes('atheist') && ok('atheist') && rng() < ATHEIST_SHARE) {
     [t, o] = sentinelShift(script, t + m + 1, o, out.length, rng);
@@ -156,6 +156,7 @@ export function rollMixed(script, n, rng, { exclude = null } = {}) {
   const tfPool = L.tf.filter((r) => ok(r) && r !== 'atheist'); // 不是无神论者局：无神论者不发（可以被酒鬼以为、被邪恶拿来伪装）
   const minions = sample(L.min.filter(ok), m, rng);
   const demon = pickOne(L.dem.filter(ok), rng);
+  if (demon === 'lleech') out = out.filter((r) => r !== 'heretic'); // 官方相克：痢蛭和异端分子只能有一个在场
   if (minions.includes('baron')) { const add = Math.max(0, Math.min(2, out.length - o)); t -= add; o += add; }
   if (minions.includes('godfather')) { if (o === 0 || (o < out.length && rng() < 0.5)) { t -= 1; o += 1; } else { t += 1; o -= 1; } }
   [t, o] = demonShift(demon, t, o);
@@ -201,9 +202,9 @@ const BOFFIN_PROOF = new Set(['washerwoman', 'librarian', 'investigator', 'chef'
 // ───────────── AI 配板 ─────────────
 // 分数是经验估计（官方没有公式）：正数对善良有利，负数对邪恶有利，只用来比较同人数的几套配板。
 // 2026-11-11：混合剧本（冒名钓鱼、生死未卜、人人可玩）里暗流涌动、黯月初升的角色以前没有权重（按 0 算），AI 配板等于没在平衡，补上
-const DEMON_W = { vortox: 3.0, nodashii: 2.6, vigormortis: 2.4, fanggu: 2.2, imp: 2.3, pukka: 2.0, zombuul: 2.2, shabaloth: 2.3, po: 2.2, leviathan: 2.0 };
+const DEMON_W = { vortox: 3.0, nodashii: 2.6, vigormortis: 2.4, fanggu: 2.2, imp: 2.3, pukka: 2.0, zombuul: 2.2, shabaloth: 2.3, po: 2.2, leviathan: 2.0, lleech: 2.4 };
 const MINION_W = { pithag: 1.8, witch: 1.8, eviltwin: 1.6, cerenovus: 1.4, harpy: 1.5, boffin: 1.4, boomdandy: 1.0, scarletwoman: 1.2, baron: 0.8,
-  poisoner: 1.7, spy: 1.3, widow: 1.7, godfather: 1.6, assassin: 1.5, devilsadvocate: 1.2, mastermind: 1.0, marionette: 1.3, goblin: 0.9 };
+  poisoner: 1.7, spy: 1.3, widow: 1.7, godfather: 1.6, assassin: 1.5, devilsadvocate: 1.2, mastermind: 1.0, marionette: 1.3, goblin: 0.9, fearmonger: 1.3 };
 const GOOD_W = {
   clockmaker: 0.7, dreamer: 1.4, snakecharmer: 1.2, mathematician: 1.0, flowergirl: 1.1, towncrier: 1.1, oracle: 1.1,
   savant: 1.3, seamstress: 1.0, philosopher: 1.3, artist: 1.2, juggler: 0.9, sage: 0.6,
@@ -218,6 +219,8 @@ const GOOD_W = {
   minstrel: 0.8, tealady: 0.7, pacifist: 0.9, fool: 0.6, goon: -0.3, lunatic: -0.4, tinker: -0.5, moonchild: -0.4,
   // 窃窃私语
   amnesiac: 0.8, cannibal: 0.6,
+  // 横行霸道
+  alchemist: 1.0, heretic: -0.4,
 };
 const NIGHT_INFO = ['dreamer', 'flowergirl', 'towncrier', 'oracle', 'mathematician'];
 
@@ -269,6 +272,11 @@ export const SNV_METHODS = {
     const S = SCRIPTS[this.script];
     const assigned = roles ?? (S.riot ? rollRiot(players.length, rng) : S.teensy ? rollTeensy(this.script, players.length, rng) : S.roles ? balancedMixed(this.script, players.length, rng) : balancedSNV(players.length, rng));
     if (assigned.length !== players.length) throw new Error('角色数量与玩家数量不符');
+    // 官方相克：痢蛭和异端分子只能有一个在场（房主指定了两个时，异端分子换成一个不在场的外来者）
+    if (assigned.includes('lleech') && assigned.includes('heretic')) {
+      const free = listsOf(this.script).out.filter((r) => !assigned.includes(r));
+      if (free.length) assigned[assigned.indexOf('heretic')] = pickOne(free, rng);
+    }
     seatMarionette(assigned, rng);
     this.players = players.map((p, i) => ({
       id: p.id, name: p.name, seat: i + 1, role: assigned[i], shownRole: assigned[i],
@@ -289,6 +297,15 @@ export const SNV_METHODS = {
         p.gained = pickOne(day.length && (!night.length || rng() < DAY_SHARE) ? day : night, rng);
       }
     }
+    // 炼金术士：拿一个不在场的爪牙的能力（官方：首夜说书人告诉他，之后在那个爪牙醒的时候醒）
+    for (const p of this.players.filter((q) => q.role === 'alchemist')) {
+      const free = rolesOf(this.script, 'minion').filter((r) => !inPlay.has(r) && !this.players.some((q) => q.gained === r));
+      if (free.length) p.gained = pickOne(free, rng);
+    }
+    this.lleechHost = null;    // 痢蛭的宿主（首夜选的人）：他活着痢蛭就不会死，他死了痢蛭跟着死
+    this.lleechDue = false;    // 宿主死的时候痢蛭失效了：等痢蛭恢复清醒健康时立刻死（集石百科）
+    this.fear = null;          // 恐惧之灵现在选的人 { by, target }
+    this.fearNews = null;      // 恐惧之灵第一次选、换了人的那一晚：天亮时全场都会知道
     this.bluffs = S.riot ? [] : pickBluffsSNV(new Set([...inPlay, ...this.players.map((p) => p.shownRole)]), rng, this.script); // 裁缝与暴乱：善良全是女裁缝，没有可拿的伪装
     this.fibbinUsed = false;   // 骗人精（传奇角色）用过了
     this.riotChain = null;     // 暴乱：刚被提名死掉、现在可以（第三天必须）接着提名的人
@@ -685,7 +702,7 @@ export const SNV_METHODS = {
       madness: '因疯狂被处决', storyteller: '说书人判定死亡', starpass: '恶魔自杀（传位）', slayer: '被猎手射杀',
       harpy: '没能疯狂地证明，被鹰身女妖的能力杀死', boomdandy: '死于炸弹人的炸弹',
       assassin: '被刺客刺杀', godfather: '被教父杀死', gambler: '赌错了角色', gossip: '因造谣者的声明而死', tinker: '修补匠突然死亡',
-      golem: '被魔像提名，不是恶魔所以死了', riot: '被提名，死于暴乱', psychopath: '被精神病患者杀死',
+      golem: '被魔像提名，不是恶魔所以死了', lleech: '宿主死了，痢蛭随之死亡', riot: '被提名，死于暴乱', psychopath: '被精神病患者杀死',
       alhadikhia: '被哈迪寂亚选中，选择了死去', alhadikhia3: '被哈迪寂亚选中，三个人都选了活，一起死去', moonchild: '被月之子带走', grandmother: '孙子被恶魔杀死，祖母随之而去',
     }[cause] ?? cause;
     this.log.push(`${this.name(p.id)} 死亡（${cause}）`);
@@ -718,6 +735,8 @@ export const SNV_METHODS = {
     if (cause === 'execution') this.feedCannibals(p, ab);
     if (ab === 'poppygrower' && !off && this.poppyHid && !this.poppyRevealed) this.poppyDue = true; // 失效时死了，邪恶不会互认（官方）
     if (this.atheist) this.atheistShift(p);
+    if (this.lleechHost === p.id) this.lleechLink(messages); // 痢蛭的宿主死了：痢蛭跟着死（痢蛭失效时等他恢复）
+    if (this.fear?.by === p.id) { this.fear = null; this.record('st', `恐惧之灵 ${this.tag(p.id)} 死了：他选的人不再有效`); }
     if (team(p) === 'demon' && !this.demonsAlive().length && cause !== 'fanggu' && cause !== 'pithag') this.demonHeir(p, cause, aliveBefore, messages);
   },
 
@@ -812,6 +831,7 @@ export const SNV_METHODS = {
   bmrProtection(p, cause) {
     if (cause === 'assassin') return null;
     if (this.has(p, 'sailor') && !this.snvBroken(p)) return '水手';
+    if (cause !== 'lleech' && this.has(p, 'lleech') && !this.snvBroken(p) && this.lleechHost && this.get(this.lleechHost)?.alive) return '宿主还活着（痢蛭）';
     for (const t of this.holders('tealady').filter((q) => q.alive && !this.snvBroken(q))) {
       const nb = this.teaNeighbours(t);
       if (nb.length === 2 && nb.every((q) => !this.evilOf(q)) && nb.some((q) => q.id === p.id)) return '茶艺师';
@@ -985,6 +1005,7 @@ ${this.grimoire()}
       if (spec.notLast && q.id === last) return false;
       if (role === 'barber' && team(q) === 'demon' && q.id !== p.id) return false; // 不能选其他恶魔
       if (role === 'lm_sit' && !(q.alive && this.evilOf(q) && team(q) === 'minion')) return false; // 照看小怪宝：只能选活着的爪牙
+      if (role === 'lleech' && this.night === 1 && !this.visAlive(q)) return false; // 痢蛭首夜：选一名存活的玩家当宿主
       return true;
     }).map((q) => q.id);
     let roleOptions = spec.role ? (spec.good ? goodOf(this.script) : spec.evil ? this.scriptRoles().filter((r) => ['minion', 'demon'].includes(ROLES[r].team)) : this.scriptRoles()) : null;
@@ -1057,7 +1078,7 @@ ${this.grimoire()}
     if (pr.optional && this.rng() < 0.5) return skip();
     let opts = pr.options;
     const prey = opts.filter((id) => !this.evilOf(this.get(id)) && this.get(id).alive);
-    if (['alhadikhia', 'fanggu', 'vigormortis', 'nodashii', 'vortox', 'witch', 'cerenovus', 'pithag', 'imp', 'widow', 'pukka', 'poisoner', 'zombuul', 'shabaloth', 'po', 'assassin', 'godfather'].includes(pr.role) && prey.length >= pr.count) opts = prey;
+    if (['alhadikhia', 'lleech', 'fearmonger', 'fanggu', 'vigormortis', 'nodashii', 'vortox', 'witch', 'cerenovus', 'pithag', 'imp', 'widow', 'pukka', 'poisoner', 'zombuul', 'shabaloth', 'po', 'assassin', 'godfather'].includes(pr.role) && prey.length >= pr.count) opts = prey;
     const targets = sample(opts, pr.count, this.rng);
     let role = null;
     if (pr.pickRole) {
@@ -1462,6 +1483,35 @@ ${this.grimoire()}
           if (c.role === 'mezepheles' && !this.mez) this.mez = { word: this.st.choose('mezWord', this.mezEasy ? MEZ_WORDS_EASY : MEZ_WORDS), used: false, hit: null };
         } break;
         case 'lilmonsta': if (this.monsta && this.monstaStep(i, messages, first) === 'pause') return pause(); break;
+        case 'alchemist': for (const p of this.players.filter((q) => q.role === 'alchemist' && q.gained && this.active(q))) {
+          if (this.firstDone[`alchemist-${p.id}`]) continue;
+          this.firstDone[`alchemist-${p.id}`] = true;
+          say(p, `你是炼金术士，你拥有**${ROLES[p.gained].name}**的能力：${ROLES[p.gained].ability}\n（你仍是善良阵营；之后在${ROLES[p.gained].name}醒来的时候你会醒来用这个能力。）`);
+          this.record('info', `炼金术士 ${this.tag(p.id)} 拿到了${ROLES[p.gained].name}的能力`);
+        } break;
+        case 'lleech': for (const p of this.players.filter((q) => q.role === 'lleech' && q.alive)) {
+          if (this.blocked === p.id) continue;
+          const t = this.choiceOfSNV(p)?.targets[0]; if (!t) continue;
+          if (first) { // 首夜：选宿主（他中毒）。失效时选的宿主也算（集石百科：宿主由他的选择决定），毒照样下
+            this.lleechHost = t.id;
+            if (!broken(p)) this.addFx('poison', t.id, p.id, 'never', '痢蛭');
+            this.record('choice', `痢蛭 ${this.tag(p.id)} 选 ${this.tag(t.id)} 当宿主${broken(p) ? '（痢蛭失效，没有中毒）' : '：他中毒'}`);
+            continue;
+          }
+          for (const d of this.pitNight?.kill?.splice(0) ?? []) this.snvDie(d, 'pithag', messages);
+          if (broken(p)) { if (t.alive) this.flag(p, '恶魔失效，没有杀死人'); continue; }
+          if (this.pitNight?.suppress) { this.record('st', '今晚的死亡由说书人决定：这一刀没有生效'); continue; }
+          this.demonHit(p, t, messages);
+          if (this.midNight) return pause();
+        } break;
+        case 'fearmonger': for (const p of this.holders('fearmonger')) {
+          const t = this.choiceOfSNV(p)?.targets[0]; if (!t) continue;
+          if (broken(p)) { this.flag(p, '恐惧之灵失效，这次选的人不算'); continue; }
+          if (this.fear?.target === t.id && this.fear.by === p.id) { this.record('choice', `恐惧之灵 ${this.tag(p.id)} 还是选 ${this.tag(t.id)}`); continue; }
+          this.fear = { by: p.id, target: t.id };
+          this.fearNews = this.night; // 第一次选、换了人：天亮时全场都会知道（不说是谁）
+          this.record('choice', `恐惧之灵 ${this.tag(p.id)} 选了新的人：${this.tag(t.id)}（他提名并处决这人，这人的阵营落败）`);
+        } break;
         case 'alhadikhia': {
           if (this.atheist) { if (!first && mid?.as !== 'ah_choice') this.atheistKill(messages); break; }
           for (const d of this.pitNight?.kill?.splice(0) ?? []) this.snvDie(d, 'pithag', messages); // 麻脸巫婆造恶魔那晚的死亡，在第一个恶魔行动之前
@@ -1658,6 +1708,8 @@ ${this.grimoire()}
         } break;
         case 'juggler': for (const p of this.holders('juggler')) {
           let j = this.juggled[p.id];
+          // 官方相克：杂耍艺人第一天猜了、当天被处决，今晚活着的食人族得知他猜对了几个
+          if (!j && p.role === 'cannibal' && this.lastExecuted && this.get(this.lastExecuted)?.role === 'juggler') j = this.juggled[this.lastExecuted];
           // 官方：新人杂耍艺人忘了公开猜，说书人可以宽容处理，当晚照样唤醒告诉他 0
           if (!j && this.jugglerDay[p.id] === this.day && this.juggleLog?.[p.id] !== this.day && this.newbies?.includes(p.id)) {
             j = { day: this.day, correct: 0, count: 0 };
@@ -2006,9 +2058,12 @@ ${this.grimoire()}
     if (this.psychoSpared === p.id) { // 精神病患者被处决，猜拳没输：活下来（这次仍算今天的处决）
       this.psychoSpared = null;
       this.record('st', `精神病患者 ${this.tag(p.id)} 被处决，但猜拳没有输：他活了下来`);
+      this.fearCheck(p); // 被处决了（没死也算）
       return 'saved';
     }
-    return this.afterExecution(p);
+    const res = this.afterExecution(p);
+    this.fearCheck(p);
+    return res;
   },
 
   endDaySNV() {
@@ -2221,6 +2276,32 @@ ${this.grimoire()}
     return { virgin: false, storyteller: true };
   },
 
+  // ───────────── 横行霸道（Outed Evil，2026-11-19）─────────────
+  /** 痢蛭的宿主死了：痢蛭立刻死（善良多半就赢了）；痢蛭失效就先不死，等他恢复清醒健康（集石百科）。 */
+  lleechLink(messages) {
+    for (const l of this.players.filter((q) => q.role === 'lleech' && q.alive)) {
+      if (this.snvBroken(l)) { this.lleechDue = true; this.record('st', `痢蛭的宿主死了，但痢蛭 ${this.tag(l.id)} 失效了：先不死，恢复清醒健康时立刻死`); continue; }
+      this.snvDie(l, 'lleech', messages);
+    }
+  },
+  /** 痢蛭欠着的死：恢复清醒健康了就死（胜负判定前看一次）。 */
+  lleechTick() {
+    if (!this.lleechDue) return;
+    const l = this.players.find((q) => q.role === 'lleech' && q.alive);
+    if (!l) { this.lleechDue = false; return; }
+    if (this.snvBroken(l)) return;
+    this.lleechDue = false;
+    this.snvDie(l, 'lleech', this.phase === 'night' ? [] : this.dayMessages());
+  },
+  /** 恐惧之灵：他提名了自己选中的人、这人被处决（死没死都算），这人的阵营落败。 */
+  fearCheck(p) {
+    const f = this.fear;
+    if (!f || f.target !== p.id || this.winner) return;
+    const by = this.get(f.by);
+    if (!by || this.nomBy?.[p.id] !== by.id || !this.has(by, 'fearmonger') || this.snvBroken(by)) return;
+    this.setWinner(this.evilOf(p) ? 'good' : 'evil', `恐惧之灵 ${this.name(by.id)} 提名并处决了他选中的 ${this.name(p.id)}：${this.evilOf(p) ? '邪恶' : '善良'}阵营落败`);
+  },
+
   // ───────────── 小怪宝（夜半狂欢的恶魔开关，2026-11-19 用户；口径照集石百科小怪宝页）─────────────
   /** 首夜：没有恶魔信息和伪装；爪牙一起醒来选照看的人，所以互相认识（罂粟种植者活着时一个个醒，互不认识）。人少也一样。 */
   monstaInfo(minions, say, messages) {
@@ -2384,6 +2465,7 @@ ${this.grimoire()}
 
   checkWinnerSNV() {
     if (this.winner) return this.winner;
+    this.lleechTick?.();
     if (this.atheist) { // 无神论者局：没有恶魔可杀，处决说书人才赢；只剩两人善良落败
       if (this.townAlive() <= 2) this.setWinner('evil', '只剩两名存活玩家：说书人始终没有被处决，善良落败（场上其实没有邪恶）');
       return this.winner;

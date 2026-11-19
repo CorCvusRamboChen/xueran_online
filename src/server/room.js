@@ -26,7 +26,7 @@ import { MarkTable, MK_ACTIONS, MARK_SETTINGS } from './mark.js';
 // 受害者那段破门过场多长（毫秒）：踹门 → 踹开 → "你死了"，播完再天亮
 // 每人在镇上有家的剧本（早上从自家门口出门）；其中暗流涌动一系还有夜里「冲到对方家门口破门」的过场
 const KILL_SCENE_SCRIPTS = new Set(['tb']); // 破门过场只在暗流涌动（2026-11-11 用户定）
-const HOME_SCRIPTS = new Set(['tb', 'ngj', 'rag', 'cat', 'ucd', 'ecp', 'bmr', 'hhr', 'pie', 'trust', 'booz', 'sar', 'mo']); // 每人在镇上有个家（白天从自家出门）：和破门是两回事
+const HOME_SCRIPTS = new Set(['tb', 'ngj', 'rag', 'cat', 'ucd', 'ecp', 'bmr', 'hhr', 'pie', 'trust', 'booz', 'sar', 'mo', 'oe']); // 每人在镇上有个家（白天从自家出门）：和破门是两回事
 const SHARED_HOME_SCRIPTS = new Set(['bmr']); // 能当家的房子比人少时合住（黯月初升的地图只有 6 栋）
 const VICTIM_SCENE_MS = 6500;
 // 一局里的真人全都离线这么久，就暂停这局、放开所有闭麦闭耳（有人回来自动接着打）
@@ -1046,6 +1046,8 @@ export class Room {
     if (back.length) this.announce(`${back.map((id) => `**${g.name(id)}**`).join('、')} 复活了。`, 'day', true);
     // 哈迪寂亚：所有人都会得知他选了谁（各自怎么选的不公开，只说现在谁活着）
     if (g.ahNews?.night === g.night) this.announce(`**哈迪寂亚**昨晚选了：${g.ahNews.targets.map((id) => `**${g.name(id)}**（${g.get(id)?.alive ? '活着' : '死了'}）`).join('、')}。`, 'day', true);
+    // 恐惧之灵：第一次选人、换了人，全场都会得知（不说选了谁）
+    if (g.fearNews === g.night) this.announce('**恐惧之灵**昨晚选了一名新的玩家：如果恐惧之灵提名他、他被处决，他的阵营落败。', 'day', true);
     // 利维坦：每天天亮宣布在场和第几天（官方建议对新手每天说）；它失效的那天不宣布
     if (g.engine === 'snv' && g.leviOn()) this.announce(`**利维坦在场。**现在是第 ${g.day} 天${g.day >= 5 ? '——今天结束时邪恶获胜' : `（第 5 天结束时邪恶获胜；已有 ${g.leviGood.length} 名善良玩家被处决，再处决 ${2 - g.leviGood.length} 名善良玩家邪恶就获胜）`}。`, 'day', true);
     (this.knifeLog ??= []).push({ night: g.night, day: g.day, deaths: [...deaths], revived: back });

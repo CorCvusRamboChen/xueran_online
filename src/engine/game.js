@@ -217,7 +217,7 @@ export class Game {
       'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7', 'lunaticTold', 'lunaticTellTo', 'heard',
       'pixie', 'mez', 'execHist', 'nomBy', 'blockVoters', 'politicianDone', 'fibbinUsed', 'riotChain',
       'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared', 'aiLead', 'politicianEval', 'scapegoatDay', 'gunDay', 'judgeUsed',
-      'leviDue', 'goblinClaimDay', 'widowTold', 'baristaFx', 'harlotAsk', 'matronDay', 'butcherDay', 'mezEasy', 'nomHistory', 'demonSwap', 'monsta'];
+      'leviDue', 'goblinClaimDay', 'widowTold', 'baristaFx', 'harlotAsk', 'matronDay', 'butcherDay', 'mezEasy', 'nomHistory', 'demonSwap', 'monsta', 'lleechHost', 'lleechDue', 'fear', 'fearNews'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -818,6 +818,12 @@ export class Game {
   // ───────────────────────── 胜负 ─────────────────────────
   setWinner(team, reason) {
     if (this.winner) return;
+    // 异端分子（横行霸道）：对调胜负，死了也对调；醉酒中毒时不对调（集石百科）
+    const heretic = this.engine === 'snv' && this.players.find((p) => this.has?.(p, 'heretic') && !p.left);
+    if (heretic && !this.snvBroken(heretic)) {
+      reason = `${reason}——但异端分子 ${this.name(heretic.id)} 在场，胜负对调`;
+      team = team === 'good' ? 'evil' : 'good';
+    }
     this.winner = team;
     this.winReason = reason;
     this.phase = 'ended';

@@ -519,6 +519,49 @@ NIGHT_ORDER.sar = {
   ],
 };
 
+// 横行霸道（Outed Evil，作者 Manny）：照官方英文总表的顺序（resources/data/nightsheet.json）
+NIGHT_ORDER.oe = {
+  first: [
+    ['alchemist', '得知自己拿到了哪个不在场的爪牙的能力'],
+    ['poppygrower', '罂粟种植者在场：跳过爪牙和恶魔信息，只给恶魔 3 个伪装'],
+    ['minioninfo', '爪牙互认、得知恶魔（罂粟种植者在场时跳过）'],
+    ['demoninfo', '恶魔得知爪牙和 3 个伪装（罂粟种植者在场时只给伪装）'],
+    ['sailor', '选一名存活玩家：你或他之一醉酒到明天黄昏'],
+    ['lleech', '选一名存活的玩家当宿主：他中毒；宿主活着你就不会死'],
+    ['poisoner', '选一人中毒到明天黄昏'],
+    ['snakecharmer', '选一名存活玩家：选中恶魔就互换角色和阵营，然后他中毒'],
+    ['devilsadvocate', '选一名存活玩家（和上次不同）：明天他被处决也不会死'],
+    ['fearmonger', '选一名玩家：你提名他并处决了，他的阵营落败（第一次选、换人时全场都会知道）'],
+    ['huntsman', '每局一次：选一名存活的玩家，是落难少女就让她变成一个不在场的镇民'],
+    ['damsel', '爪牙得知落难少女在场'],
+    ['fortuneteller', '选两名玩家：得知其中有没有恶魔'],
+    ['general', '得知说书人认为哪一方领先'],
+  ],
+  other: [
+    ['poppygrower', '罂粟种植者今天或今晚死了：爪牙和恶魔互相认识'],
+    ['sailor', '选一名存活玩家：你或他之一醉酒到明天黄昏'],
+    ['poisoner', '选一人中毒到明天黄昏'],
+    ['snakecharmer', '选一名存活玩家：选中恶魔就互换'],
+    ['monk', '选一名玩家：今晚恶魔伤不到他'],
+    ['devilsadvocate', '选一名存活玩家（和上次不同）：明天他被处决也不会死'],
+    ['fearmonger', '选一名玩家（换人时全场都会知道）'],
+    ['imp', '选一人杀死；自杀的话一名爪牙变成小恶魔'],
+    ['lleech', '选一人杀死'],
+    ['barber', '理发师今天死了：恶魔可以选两人交换角色'],
+    ['huntsman', '每局一次：选一名存活的玩家'],
+    ['damsel', '落难少女变了人：告诉新的爪牙'],
+    ['fortuneteller', '选两名玩家：得知其中有没有恶魔'],
+    ['juggler', '今天第一次公开猜过：得知猜对了几个'],
+    ['general', '得知说书人认为哪一方领先'],
+  ],
+  why: [
+    '「横行霸道」：坏人会「出头」——恐惧之灵换目标时全场都知道、精神病患者白天当众杀人、哥布林被提名时自曝。好人要在「处决谁」上格外小心。',
+    '炼金术士拿着一个不在场的爪牙能力（说书人首夜告诉他），在那个爪牙醒的时候醒。痢蛭首夜选宿主（他中毒），宿主活着痢蛭就杀不死，宿主一死痢蛭跟着死。',
+    '异端分子：对调胜负——善良本该赢就变成邪恶赢，反过来也一样，他死了也照样对调（醉酒中毒时不对调）。官方相克：异端分子和痢蛭不会同时在场。',
+    '传奇角色：哨兵（外来者可能多一个或少一个）。',
+  ],
+};
+
 // 夜半狂欢（The Midnight Oasis，作者 Zets）：照官方英文总表的顺序
 NIGHT_ORDER.mo = {
   first: [
@@ -593,11 +636,11 @@ for (const [script, o] of Object.entries(NIGHT_ORDER)) {
  * 失忆者、食人族拿到的能力也按这张表的位置醒。
  */
 export const MIX_STEPS = {
-  first: ['apprentice', 'barista', 'bureaucrat', 'thief', 'philosopher', 'sailor', 'lilmonsta', 'engineer', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'pukka', 'pixie', 'huntsman',
+  first: ['alchemist', 'apprentice', 'barista', 'bureaucrat', 'thief', 'philosopher', 'sailor', 'lleech', 'lilmonsta', 'engineer', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'fearmonger', 'pukka', 'pixie', 'huntsman',
     'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'grandmother', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress', 'noble', 'balloonist', 'shugenja', 'villageidiot',
     'butler', 'spy', 'ogre', 'highpriestess', 'general', 'chambermaid', 'mathematician'],
-  other: ['barista', 'bureaucrat', 'thief', 'harlot', 'bonecollector', 'poppygrower', 'philosopher', 'sailor', 'engineer', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist',
-    'imp', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'alhadikhia', 'lilmonsta', 'assassin', 'godfather', 'gossip',
+  other: ['barista', 'bureaucrat', 'thief', 'harlot', 'bonecollector', 'poppygrower', 'philosopher', 'sailor', 'engineer', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist', 'fearmonger',
+    'imp', 'lleech', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'alhadikhia', 'lilmonsta', 'assassin', 'godfather', 'gossip',
     'barber', 'sweetheart', 'sage', 'professor', 'huntsman', 'farmer', 'tinker', 'moonchild', 'grandmother', 'ravenkeeper', // 照官方英文总表（11-11 用户定：和集石百科不一样时以英文新表为准）
     'washerwoman', 'librarian', 'investigator', 'chef', 'clockmaker', 'noble', 'shugenja', 'empath', 'fortuneteller', 'undertaker', 'dreamer', 'amn_detect', 'amn_echo', 'flowergirl', 'towncrier', 'oracle', 'seamstress',
     'juggler', 'balloonist', 'villageidiot', 'butler', 'spy', 'highpriestess', 'general', 'chambermaid', 'mathematician'],

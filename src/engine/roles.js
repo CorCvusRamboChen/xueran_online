@@ -225,6 +225,15 @@ const LUF = {
     ability: '如果你被提名后、投票前公开声明自己是哥布林，并且当天被处决，你的阵营获胜。（被提名时点「我是哥布林」）' },
   leviathan: { name: '利维坦', en: 'Leviathan', team: 'demon', firstNight: 0, otherNight: 0,
     ability: '你不杀人。所有人都知道利维坦在场。如果有超过一名善良玩家被处决，邪恶获胜；第五个白天结束时，邪恶获胜。' },
+  // 横行霸道（Outed Evil，2026-11-19 用户发的剧本卡）的新角色。口径照集石百科，相克照官方 jinxes.json
+  alchemist: { name: '炼金术士', en: 'Alchemist', team: 'townsfolk', firstNight: 1, otherNight: 0,
+    ability: '你拥有一个不在场的爪牙角色的能力。（首夜说书人告诉你是哪个；之后在那个爪牙醒来的时候你醒来，像爪牙一样用能力）' },
+  heretic: { name: '异端分子', en: 'Heretic', team: 'outsider', firstNight: 0, otherNight: 0,
+    ability: '对调胜负结果，即使你已死亡。（你醉酒或中毒时不对调）' },
+  fearmonger: { name: '恐惧之灵', en: 'Fearmonger', team: 'minion', firstNight: 1, otherNight: 1, choose: { count: 1 },
+    ability: '每个夜晚，你要选择一名玩家：如果你提名他且他被处决，他的阵营落败。当你首次选择或更换目标时，所有玩家都会得知你选择了新的玩家。' },
+  lleech: { name: '痢蛭', en: 'Lleech', team: 'demon', firstNight: 1, otherNight: 1, choose: { count: 1 },
+    ability: '每个夜晚*，你要选择一名玩家：他死亡。在你的首个夜晚，你要选择一名存活的玩家：他中毒，只有当他处于死亡状态时你才会立即死亡。' },
   // 夜半狂欢可以把亡骨魔换成小怪宝或利维坦（2026-11-19 用户要的开关）。口径照集石百科小怪宝页
   lilmonsta: { name: '小怪宝', en: "Lil' Monsta", team: 'demon', firstNight: 0, otherNight: 0,
     ability: '每个夜晚，爪牙们选择一名爪牙：他照看小怪宝，并且「是恶魔」。每个夜晚*，可能会有一名玩家死亡。[+1 爪牙]（照看小怪宝的人死了，善良获胜）' },
@@ -461,6 +470,11 @@ export const SCRIPTS = {
   mo: { id: 'mo', name: '夜半狂欢', en: 'The Midnight Oasis', engine: 'snv', players: [7, 15], sentinel: true, ivory: true, demonSwap: ['lilmonsta', 'leviathan'], // 房间设置可以把亡骨魔换成这两个
     roles: ['noble', 'snakecharmer', 'balloonist', 'huntsman', 'engineer', 'fisherman', 'professor', 'savant', 'amnesiac', 'farmer', 'cannibal', 'poppygrower', 'atheist',
       'drunk', 'barber', 'golem', 'damsel', 'poisoner', 'psychopath', 'mezepheles', 'pithag', 'alhadikhia', 'vigormortis'] },
+  // 横行霸道（Outed Evil v4.5.0，作者 Manny，美术 Lei & 摸鱼；染钟楼谜团剧本世界杯第二名；用户 2026-11-19 发来剧本卡）：7–15 人。
+  // 坏人会「出头」：恐惧之灵换目标全场都知道、精神病患者白天当众杀人、哥布林自曝。传奇角色哨兵。口径见 references/community.md
+  oe: { id: 'oe', name: '横行霸道', en: 'Outed Evil', engine: 'snv', players: [7, 15], sentinel: true,
+    roles: ['alchemist', 'sailor', 'general', 'fortuneteller', 'snakecharmer', 'monk', 'savant', 'juggler', 'fisherman', 'huntsman', 'tealady', 'cannibal', 'poppygrower',
+      'damsel', 'politician', 'barber', 'goon', 'heretic', 'poisoner', 'fearmonger', 'goblin', 'devilsadvocate', 'psychopath', 'lleech', 'imp'] },
   rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'ww', werewolf: true, ragnarok: true, players: RAG_PLAYERS, roles: ['ww_hunter', 'ww_wolf'] },
   // 娱乐模式：经典网杀「预女猎守」，不是血染。规则和人数表在 werewolf.js / werewolf-roles.js，房间流程在 server/werewolfRoom.js
   ww: { id: 'ww', name: '狼人杀', en: 'Werewolf', engine: 'ww', werewolf: true, players: WW_PLAYERS, roles: Object.keys(WW_ROLES) },
