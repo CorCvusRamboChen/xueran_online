@@ -13,6 +13,7 @@ import { MarkGame } from './Mark.jsx';
 import { Line, Portrait, clock, syncClock, serverNow, gameClock, useTick, useCountdown, cnNum } from './util.jsx';
 import { Tag, Panel, Btn, Stat, Check, Faces, HudBar } from './ui.jsx';
 import { PeltButton, PeltPanel, PeltFx } from './Pelt.jsx';
+import { AfterGame, CourtFx } from './AfterGame.jsx';
 import { TravellerJoin, TravellerActions, ExilePanel, JudgeButtons, ButcherPanel, GnomeButton } from './Travellers.jsx';
 import { tick } from './world/footsteps.js';
 import { ATTR, FLAVOR, ROLE_NAMES, ROLE_TEAM, voiceOf } from './flavor.js';
@@ -432,6 +433,7 @@ function Game({ s, act, ask }) {
   return (
     <div className="game">
       <PeltFx s={s} />{/* 扔东西的动画：全场都看得到 */}
+      <CourtFx s={s} />{/* 赛后军事法庭：全场同时看战犯被吊起来 */}
       <section className="scene">
         {!roaming && <Tag className="where">{place}</Tag>}
         {s.spectator && s.phase !== 'ended' && (
@@ -1044,6 +1046,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
         <p className="lead">{s.winner?.reason}</p>
         <p className="muted">魔典已经公开，每个人的真实身份写在肖像下面。</p>
         {s.isHost && <div className="btn-row"><Btn kind="primary" onClick={() => act('end')}>再来一局</Btn></div>}
+        <AfterGame s={s} />{/* 赛后总结 + 军事法庭，下面是 MVP 投票（2026-11-19 用户：放在一起） */}
         <MvpVote s={s} act={act} g={g} />
         {s.timeline?.length > 0 ? <Replay timeline={s.timeline} /> : s.journal?.length > 0 && (
           <details className="st-journal">

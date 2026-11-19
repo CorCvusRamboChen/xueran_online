@@ -1988,3 +1988,58 @@ span.lr-newbie { cursor: default; }
 /* 顶栏说明长的剧本：说明另起一行，票数条往下让 */
 .board-bar.two .bb-note { position: absolute; top: calc(100% - 1px); left: 50%; transform: translateX(-50%); white-space: nowrap; background: rgba(8, 10, 10, .86); border: 1px solid var(--line); border-top: 0; padding: 2px 10px 3px; }
 .scene:has(.board-bar.two) .vote-stats, .town:has(.board-bar.two) .vote-stats { top: 66px; }
+
+/* 赛后：总结 + 军事法庭（2026-11-19 用户） */
+.after-game { margin: 10px 0; display: grid; gap: 10px; }
+.after-game h4 { margin: 0 0 4px; color: #e8c66a; font-family: var(--serif); }
+.ag-recap p { margin: 4px 0; line-height: 1.6; }
+.ag-recap ul { margin: 4px 0; padding-left: 18px; line-height: 1.6; }
+.ag-talk { font-size: 12px; }
+.ag-court { border: 1px solid #6b2a24; background: rgba(120, 30, 24, .12); padding: 8px 10px; }
+.ag-verdict { display: flex; gap: 10px; align-items: flex-start; }
+.ag-verdict p { margin: 3px 0; font-size: 13px; line-height: 1.5; }
+.ag-evidence q { display: inline-block; margin-right: 6px; color: #e6c98e; }
+.ag-replay { margin-top: 6px; background: none; border: 1px solid #6b2a24; color: inherit; padding: 2px 10px; cursor: pointer; }
+
+/* 军事法庭的动画：全屏盖一层，三个小人站在绞刑架上，中间的顶着战犯的头像 */
+.court-fx { position: fixed; inset: 0; z-index: 3000; display: grid; place-items: center; background: rgba(6, 6, 8, .84); pointer-events: none; animation: cf-fade 7.2s linear forwards; }
+@keyframes cf-fade { 0% { opacity: 0; } 5% { opacity: 1; } 90% { opacity: 1; } 100% { opacity: 0; } }
+.cf-stage { position: relative; width: 340px; text-align: center; color: var(--paper, #eee); }
+.cf-stage.shake, .court-fx .cf-stage { animation: cf-shake .4s 1.6s; }
+@keyframes cf-shake { 0%, 100% { transform: none; } 20% { transform: translate(-6px, 3px); } 40% { transform: translate(5px, -4px); } 60% { transform: translate(-4px, 2px); } 80% { transform: translate(3px, -2px); } }
+.cf-title { font: 900 22px/1.2 var(--serif); color: #e8c66a; margin: 0; letter-spacing: 4px; }
+.cf-verdict { margin: 4px 0 8px; font-size: 15px; }
+.cf-gallows { position: relative; height: 210px; margin: 0 auto 50px; width: 300px; transform: scale(1.3); transform-origin: top center; }
+.cf-gallows i { position: absolute; display: block; }
+.cf-post { left: 46px; top: 10px; width: 10px; height: 170px; background: #8a5d32; }
+.cf-beam { left: 46px; top: 10px; width: 150px; height: 10px; background: #8a5d32; }
+.cf-rope { left: 150px; top: 20px; width: 2px; height: 40px; background: #c9a86a; transform-origin: top; animation: cf-rope 7s 1.6s forwards; }
+@keyframes cf-rope { 0% { height: 40px; } 6% { height: 66px; } 100% { height: 66px; } }
+.cf-floor { left: 20px; top: 150px; width: 110px; height: 8px; background: #6b4a2a; }
+.cf-floor::after { content: ''; position: absolute; left: 170px; top: 0; width: 90px; height: 8px; background: #6b4a2a; }
+.cf-trap { left: 130px; top: 150px; width: 60px; height: 8px; background: #7a5532; transform-origin: left center; animation: cf-trap .35s 1.6s forwards; }
+@keyframes cf-trap { to { transform: rotate(80deg); } }
+.cf-man { position: absolute; top: 88px; width: 36px; height: 62px; animation: cf-in .9s both; }
+.cf-man .cf-body { position: absolute; left: 9px; bottom: 0; width: 18px; height: 34px; border-radius: 8px 8px 3px 3px; background: #5b5466; box-shadow: 0 0 0 1px #c9a86a55; }
+.cf-man .cf-hood { position: absolute; left: 5px; top: 2px; width: 26px; height: 28px; border-radius: 50% 50% 40% 40%; background: #2a1a1a; box-shadow: 0 0 0 1px #c9a86a66, inset 0 -6px 0 -2px #6b2a24; }
+.cf-man .cf-hood::before, .cf-man .cf-hood::after { content: ''; position: absolute; top: 11px; width: 5px; height: 3px; border-radius: 2px; background: #e8c66a; }
+.cf-man .cf-hood::before { left: 6px; } .cf-man .cf-hood::after { right: 6px; }
+.cf-left { left: 72px; }
+.cf-right { left: 196px; animation-delay: .15s; }
+.cf-left, .cf-right { animation-name: cf-in, cf-hop; animation-duration: .9s, .45s; animation-delay: 0s, 2.1s; animation-iteration-count: 1, 6; animation-direction: normal, alternate; }
+@keyframes cf-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes cf-hop { to { transform: translateY(-12px); } }
+.cf-convict { left: 133px; top: 82px; transform-origin: 18px -22px; animation: cf-in .9s .3s both, cf-drop .5s 1.6s forwards, cf-swing 1.4s 2.1s ease-in-out 4 alternate; }
+.cf-convict .cf-body { background: #a08a6a; }
+.cf-head { position: absolute; left: -2px; top: -12px; z-index: 1; border-radius: 50%; overflow: hidden; box-shadow: 0 0 0 2px #e8c66a; }
+.cf-noose { left: 12px; top: 26px; width: 14px; height: 6px; border: 2px solid #c9a86a; border-radius: 50%; }
+@keyframes cf-drop { to { transform: translateY(26px); } }
+@keyframes cf-swing { from { transform: translateY(26px) rotate(-7deg); } to { transform: translateY(26px) rotate(7deg); } }
+.cf-pa { position: absolute; left: 50%; top: 40%; font: 900 44px/1 var(--serif); color: #fff; text-shadow: 0 0 12px #c0392b, 0 3px 0 #6b2a24; opacity: 0; transform: translate(-50%, -50%) scale(.4); animation: cf-pa .7s 1.6s forwards; }
+@keyframes cf-pa { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.4); } 30% { opacity: 1; transform: translate(-50%, -50%) scale(1.25); } 100% { opacity: 0; transform: translate(-50%, -60%) scale(1); } }
+.cf-cheer { margin: 6px 0 0; font: 900 22px/1.2 var(--serif); color: #e8c66a; opacity: 0; animation: cf-cheer .6s 2.2s forwards; }
+@keyframes cf-cheer { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
+.cf-confetti { position: absolute; inset: 0; overflow: hidden; }
+.cf-confetti i { position: absolute; left: var(--x); top: -20px; width: 8px; height: 14px; background: var(--c); transform: rotate(var(--r)); opacity: 0; animation: cf-fall 3.6s calc(2.1s + var(--d)) ease-in forwards; }
+@keyframes cf-fall { 0% { opacity: 1; transform: translateY(0) rotate(var(--r)); } 100% { opacity: .9; transform: translateY(105vh) rotate(calc(var(--r) + 540deg)); } }
+@media (prefers-reduced-motion: reduce) { .cf-convict, .cf-man, .cf-confetti i, .cf-stage { animation-duration: .01s !important; animation-iteration-count: 1 !important; } }

@@ -311,6 +311,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                   {!soloMode && <Toggle label="发言时其他人闭麦" on={st.speechMute} onChange={(v) => set({ speechMute: v })} />}
                   <Toggle rule label="提名者自动举手（可以放下）" on={st.nominatorVotes} onChange={(v) => set({ nominatorVotes: v })} />
                   <Toggle rule label="投票时隐藏票型（投完公开）" on={st.hideVotes} onChange={(v) => set({ hideVotes: v })} />
+                  <Toggle label="赛后军事法庭（AI 在输的一方判一名战犯，全场看他被吊起来）" on={st.warCourt !== false} onChange={(v) => set({ warCourt: v })} />
                 </div>
                 {!soloMode && <div className="setting-group">
                   <h4>观战</h4>
@@ -808,7 +809,7 @@ const SCRIPT_CARDS = {
   pie: { tag: '暗流涌动加料', map: '烤派的冬夜 · 钟楼广场', color: '#d6a46a' },
   trust: { tag: '信息都真 · 难在信谁', map: '守信的晚钟 · 黯月驿站', color: '#c2b48a' },
   oe: { tag: '世界杯第二名 · 坏人出头 · 7–15 人', map: '恶人横行的雨夜 · 钟楼广场', color: '#b5524a' },
-  mo: { tag: '实验角色快速上手 · 7–15 人', map: '午夜的旋转木马 · 黯月驿站', color: '#b07ad8' },
+  mo: { tag: '实验角色快速上手 · 7–15 人', map: '午夜的绿洲 · 黯月驿站', color: '#b07ad8' },
   sar: { tag: '极速板子 · 最多三天', map: '暴乱的三天 · 钟楼广场', color: '#d0603a' },
   booz: { tag: '2022 冠军 · 中文社区常玩', map: '醉醺醺的旅店 · 黯月驿站', color: '#c8874a' },
   twv: { tag: '暗流好人 vs 梦殒坏人 · 偏难', map: '紫罗兰下的雪 · 鸦木布拉夫', color: '#9c8fd0' },

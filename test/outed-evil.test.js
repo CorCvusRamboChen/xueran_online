@@ -144,7 +144,7 @@ test('房间：横行霸道 9 人局（2 真人 + 7 机器人）能打完；恐�
           await sleep(3);
         }
         if (g.winner || room.ended) break;
-        if (days === 0 && k === 0) assert.ok(room.log.some((l) => /恐惧之灵/.test(l.text)), '天亮公告恐惧之灵选了人');
+        if (days === 0 && k === 0) assert.ok(room.log.some((l) => /恐惧之灵/.test(l.text)) || g.timeline.some((e) => /恐惧之灵失效/.test(e.text)), '天亮公告恐惧之灵选了人（被水手弄醉的那晚不算）');
         days++;
         await until(() => room.roam || room.ended, 300);
         if (room.ended) break;

@@ -1580,6 +1580,7 @@ export class World {
     else if (town.weather === 'leaves') this.buildLeaves();
     else if (town.weather === 'petals') this.buildLeaves(['#b79ad8', '#e8a8bf', '#f2e6c8'], 12);
     else if (town.weather === 'embers') this.buildLeaves(['#f07a2a', '#ffb347', '#e04a1c', '#5a4a44'], 16); // 裁缝与暴乱：火星和灰
+    else if (town.weather === 'fireflies') this.buildFireflies(); // 夜半狂欢：午夜绿洲上的萤火虫
     if (town.lanterns?.length) this.buildLanterns(town.lanterns);
     app.renderer.on('resize', () => this.layout());
     app.ticker.add(() => this.frame());
@@ -1857,6 +1858,48 @@ export class World {
   }
 
   /** 落叶：稀稀拉拉的几片橙红叶子打着旋往右下飘（黯月初升）；换颜色、加数量就是花瓣（梦殒春宵）。和雪共用 snowFrame。 */
+  /**
+   * 萤火虫（夜半狂欢，2026-11-19 用户：不要灯笼烟花，要符合背景故事；萤火虫要在地图上，不跟着镜头动）：
+   * 午夜的绿洲，溪水边和林子边飞着萤火虫，在地图坐标里慢慢绕着各自的位置游荡、一明一灭。
+   * 大半贴着溪流（地图的 water 带），其余散在镇上；画在上层雾那一层（盖在房子和人上面，像飞在空中）。
+   */
+  buildFireflies(count = 120) {
+    const town = this.town;
+    const tex = Texture.from(fogBlob(32));
+    const layer = new Container();
+    const pts = town.water?.band?.pts ?? [];
+    const half = town.water?.band?.half ?? 50;
+    const W = town.w ?? 1800; const H = town.h ?? 1400;
+    this.fireflies = [];
+    for (let i = 0; i < count; i++) {
+      let x; let y;
+      if (pts.length > 1 && i < count * 0.4) { // 溪流两岸
+        const k = Math.floor(Math.random() * (pts.length - 1)); const t = Math.random();
+        const [ax, ay] = pts[k]; const [bx, by] = pts[k + 1];
+        const nx = -(by - ay); const ny = bx - ax; const len = Math.hypot(nx, ny) || 1;
+        const off = (Math.random() < 0.5 ? -1 : 1) * (half * 0.6 + Math.random() * 120);
+        x = ax + (bx - ax) * t + (nx / len) * off; y = ay + (by - ay) * t + (ny / len) * off;
+      } else { x = Math.random() * W; y = Math.random() * H; }
+      const glow = new Sprite(tex);
+      glow.anchor.set(0.5); glow.tint = 0xd8f07a; glow.blendMode = 'add';
+      const size = 26 + Math.random() * 16; glow.width = glow.height = size;
+      const core = new Sprite(tex);
+      core.anchor.set(0.5); core.tint = 0xfaffd0; core.blendMode = 'add'; core.width = core.height = size * 0.3;
+      layer.addChild(glow, core);
+      this.fireflies.push({ glow, core, x, y, z: 12 + Math.random() * 50, ph: Math.random() * 6.28, r: 15 + Math.random() * 30, blink: 0.5 + Math.random() * 1.2, a: 0.75 + Math.random() * 0.25 });
+    }
+    this.topFog.addChild(layer);
+  }
+
+  fireflyFrame(t) {
+    for (const f of this.fireflies ?? []) {
+      const q = iso(f.x + Math.sin(t * 0.31 + f.ph) * f.r, f.y + Math.cos(t * 0.23 + f.ph * 1.3) * f.r, f.z + Math.sin(t * 0.7 + f.ph) * 8);
+      f.glow.position.set(q.x, q.y); f.core.position.set(q.x, q.y);
+      const on = f.a * (0.3 + 0.7 * Math.max(0, Math.sin(t * f.blink + f.ph)));
+      f.glow.alpha = on; f.core.alpha = Math.min(1, on * 1.2);
+    }
+  }
+
   buildLeaves(colors = ['#c4502a', '#e08a3a', '#8a3a22'], count = 5) {
     const leaf = (col) => {
       const c = document.createElement('canvas'); c.width = 14; c.height = 8;
@@ -2374,6 +2417,7 @@ export class World {
     this.fogFrame(dt, t);
     this.fireworksFrame(dt);
     this.lanternFrame(t);
+    this.fireflyFrame(t);
 
     // 给 HTML 层的屏幕坐标
     const screen = { walkers: {}, houses: {}, zoom: this.zoom, project: (x, y, z) => this.toScreen(x, y, z) };

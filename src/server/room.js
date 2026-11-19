@@ -13,7 +13,7 @@ import { SETUPS, pickPreset, PRESET_SHARE } from '../shared/setups.js';
 import { buildRoles, easeNewbies } from '../engine/assign.js';
 import { narration } from './narration.js';
 import { ttsUrl } from './tts.js';
-import { judgeStatement, judgeMadness, judgeBreak, looksBroken, judgeAvailable, judgeAmnesiac, adviseFisherman, looksInjected, speakSeat7, judgeLead, judgeResponsible, readTable } from './judge.js';
+import { judgeStatement, judgeMadness, judgeBreak, looksBroken, judgeAvailable, judgeAmnesiac, adviseFisherman, looksInjected, speakSeat7, judgeLead, judgeResponsible, readTable, judgeAfterGame } from './judge.js';
 import { parseTable, describeTable, tableLead } from '../engine/tableRead.js';
 import { noteMarks, readTown, markedRole } from './beliefs.js';
 import { Werewolf } from '../engine/werewolf.js';
@@ -100,6 +100,7 @@ export const DEFAULT_SETTINGS = {
   voteSeconds: 3,        // 投票时钟每人停留
   voteCountdown: 8,      // 时钟开始转动前的倒计时
   mezEasy: true,         // 灵言师的关键词：简单（日常话题词，好引导）；关掉是普通（不常见的词，官方口径）（2026-11-19 用户：默认简单）
+  warCourt: true,        // 赛后军事法庭：AI 在输的一方里判一名「战犯」，全场看他被吊起来（2026-11-19 用户：房主的开关）
   moDemon: 'vigormortis', // 夜半狂欢的第二个恶魔：亡骨魔（原版）/ 小怪宝 / 利维坦（2026-11-19 用户要的开关）
   nightDeafen: false,    // 夜里服务器闭麦+闭耳（默认关：大家自觉闭麦，开了有时会卡入夜）
   pauseMs: 4000,         // 结算后到下一阶段的停顿
@@ -496,6 +497,7 @@ export class Room {
     if (typeof p.nightDeafen === 'boolean') { s.nightDeafen = p.nightDeafen; s.nightDeafenAuto = false; } // 房主自己定了，就不再自动改
     if (typeof p.mezEasy === 'boolean') s.mezEasy = p.mezEasy;
     if (['vigormortis', 'lilmonsta', 'leviathan'].includes(p.moDemon)) s.moDemon = p.moDemon;
+    if (typeof p.warCourt === 'boolean') s.warCourt = p.warCourt;
     if (typeof p.nominatorVotes === 'boolean') s.nominatorVotes = p.nominatorVotes;
     if (typeof p.speechMute === 'boolean') s.speechMute = p.speechMute;
     if (typeof p.smallEvilInfo === 'boolean') s.smallEvilInfo = p.smallEvilInfo;
@@ -578,6 +580,8 @@ export class Room {
     this.peltFx = []; if (this.mvp) { this.cancel(this.mvp.timer); this.mvp = null; } // 上一局的扔东西动画、MVP 投票
     this.talk = []; // 全员收音的剧本：每天的发言（读场、将军、政客用）
     this.tableRead = null;
+    this.minutes = []; // 每天的纪要（读场时顺便出）：{ day, points, quotes: [{ id, text }] }
+    this.after = null; this.court = null; // 赛后总结、军事法庭
     if (this.lobby.length < MIN_PLAYERS) throw new UserError(`至少需要 ${MIN_PLAYERS} 名玩家`);
     const seats = this.settings.shuffle ? shuffle(this.lobby, Math.random) : [...this.lobby];
     const script = this.tutorial ? 'tb' : this.settings.script ?? 'tb';
@@ -1364,6 +1368,29 @@ export class Room {
     for (const p of g.players) { const lines = this.mic.transcript(p.id); if (lines.length) day[p.id] = lines.slice(-30); }
     if (Object.keys(day).length) (this.talk ??= []).push({ day: g.day, lines: day });
   }
+  /**
+   * 给 AI 看的整局发言（会议纪要软件的做法：长会议先分段出纪要，最后读纪要 + 最近一段原话）：
+   * 有纪要的天用纪要（要点 + 原话摘录），最后一天和没有纪要的天用原话。比只截最后几千字强：早几天的事不会丢。
+   */
+  talkDigest(g, max = 9000) {
+    const days = [...new Set([...(this.talk ?? []).map((t) => t.day), ...(this.minutes ?? []).map((m) => m.day)])].sort((a, b) => a - b);
+    const last = days.at(-1);
+    const blocks = days.map((d) => {
+      const m = (this.minutes ?? []).find((x) => x.day === d);
+      if (m && d !== last) return `第${d}天纪要：\n${m.points.map((p) => `· ${p}`).join('\n')}${m.quotes.length ? `\n原话：${m.quotes.map((q) => `${g.name(q.id)}「${q.text}」`).join('；')}` : ''}`;
+      return this.talkText(g, d, max);
+    }).filter(Boolean);
+    let out = blocks.join('\n\n');
+    while (out.length > max && blocks.length > 1) { blocks.shift(); out = blocks.join('\n\n'); }
+    return out.slice(-max);
+  }
+  /** 谁说得最多（会议软件的「发言时长」）：按转写的字数，前三名。 */
+  talkers(g) {
+    const n = {};
+    for (const t of this.talk ?? []) for (const [id, ls] of Object.entries(t.lines)) n[id] = (n[id] ?? 0) + ls.join('').length;
+    return Object.entries(n).filter(([id, c]) => c > 0 && g.get(id)).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id, chars]) => ({ id, chars }));
+  }
+
   /** 给 AI 看的发言：按天、按人，太长就从最早的天开始丢。onlyDay：只要那一天的。 */
   talkText(g, onlyDay = null, max = 6000) {
     const days = (this.talk ?? []).filter((t) => onlyDay == null || t.day === onlyDay);
@@ -1388,6 +1415,13 @@ export class Room {
     if (!raw || this.game !== g) return;
     const t = parseTable(raw, g, g.day);
     this.tableRead = t;
+    const m = raw.minutes;
+    if (m && typeof m === 'object') { // 当天纪要：要点 + 原话摘录（会议纪要的做法），后面判战犯、写总结时读它，不用把每天的原话全塞进去
+      const bySeat = new Map(g.players.map((q) => [q.seat, q.id]));
+      const points = (Array.isArray(m.points) ? m.points : []).map((x) => String(x ?? '').slice(0, 120)).filter(Boolean).slice(0, 6);
+      const quotes = (Array.isArray(m.quotes) ? m.quotes : []).map((q) => ({ id: bySeat.get(Number(q?.seat)), text: String(q?.text ?? '').slice(0, 40) })).filter((q) => q.id && q.text).slice(0, 5);
+      this.minutes = [...(this.minutes ?? []).filter((x) => x.day !== g.day), { day: g.day, points, quotes }];
+    }
     const text = describeTable(t, g);
     this.stNote(`读场（第${g.day}天黄昏）：${text}`);
     g.st.note(`黄昏读场：${describeTable(t, g, { summary: false })}`);
@@ -1412,7 +1446,7 @@ export class Room {
     if (!ask) return;
     for (const e of ev) {
       const losers = g.players.filter((q) => (q.id === e.id ? true : g.evilOf(q) === e.lost));
-      const r = await ask(g.factsSNV(), this.talkText(g), losers.map((q) => ({ seat: q.seat, name: q.name }))).catch(() => null);
+      const r = await ask(g.factsSNV(), this.talkDigest(g), losers.map((q) => ({ seat: q.seat, name: q.name }))).catch(() => null);
       if (!r || this.game !== g) continue;
       const pick = losers.find((q) => q.seat === r.seat);
       if (!pick) { if (r.seat === 0) g.politicianVerdict(e.id, false, r.reason); continue; } // 0：集体的决定，没有突出的责任人（政客页范例二）
@@ -1745,6 +1779,47 @@ export class Room {
     const now = Date.now();
     this.peltFx = [...(this.peltFx ?? []).filter((f) => now - f.at < 6000), { id: `${now}-${uid}`, item, by: uid, target, at: now }];
     this.pub(it.praise ? `**${g.name(uid)}** ${it.verb}给 **${g.name(target)}**。` : `**${g.name(uid)}** 嫌 **${g.name(target)}** 聊场外，${it.verb}。`, 'vote');
+  }
+
+  // ───────────── 赛后总结和军事法庭（2026-11-19 用户：AI 判战犯，和 MVP 投票、赛后总结放在一起）─────────────
+  /**
+   * 游戏结束后：AI 读整局（真实情况 + 每天纪要 + 最后一天原话）写赛后总结，房主开着「军事法庭」时在输的一方里判一名战犯。
+   * 全场同时看到战犯被吊起来的动画（view.court.at 是开始时间）。没配 AI：没有总结，战犯按「处决自己人」记账挑（没人有账就休庭）。
+   * 这时这局已经存进往期对局，总结和判词不进存档（里面可能有大家的原话）。
+   */
+  async afterGameNow(g) {
+    if (this.tutorial || !['tb', 'bmr', 'snv'].includes(g.engine) || !g.winner) return;
+    const court = this.settings.warCourt !== false;
+    const lostEvil = g.winner === 'good';
+    const losers = g.players.filter((p) => !p.left && !p.traveller && g.evilOf(p) === lostEvil);
+    const endedAt = Date.now();
+    this.after = { pending: true, recap: null, moments: [], talkers: this.talkers(g), by: null };
+    this.court = null;
+    this.changed();
+    const ask = this.afterJudge ?? ((this.judgeReady ?? judgeAvailable)() ? judgeAfterGame : null);
+    const r = ask ? await ask(g.factsSNV(), this.talkDigest(g), losers.map((q) => ({ seat: q.seat, name: q.name })), { court }).catch(() => null) : null;
+    if (this.game !== g) return;
+    this.after = { pending: false, recap: r?.recap ?? null, moments: r?.moments ?? [], talkers: this.talkers(g), by: r?.by ?? null };
+    let crim = court && r?.criminal ? { id: g.players.find((q) => q.seat === r.criminal.seat)?.id, reason: r.criminal.reason, evidence: r.criminal.evidence } : null;
+    if (court && !crim?.id) crim = this.ruleCriminal(g, losers);
+    if (crim?.id) {
+      this.court = { ...crim, at: Math.max(Date.now() + 1200, endedAt + 8000) }; // 等结束的公告字幕播完再开庭
+      this.announce(`⚖️ **军事法庭**：**${g.name(crim.id)}** 被判为本局战犯${crim.reason ? `——${crim.reason}` : ''}`, 'end');
+    } else if (court) this.announce('⚖️ **军事法庭**：没找到战犯，这次休庭。', 'end');
+    this.changed();
+  }
+  /** 没有 AI 时的战犯：处决了自己人——提名的记 2 分、举手的记 1 分（和政客一样记账），最高且至少 2 分。 */
+  ruleCriminal(g, losers) {
+    const ids = new Set(losers.map((q) => q.id));
+    const score = {};
+    for (const e of g.execHist ?? []) {
+      const ex = g.get(e.id);
+      if (!ex || !ids.has(ex.id)) continue;
+      if (e.by && ids.has(e.by)) score[e.by] = (score[e.by] ?? 0) + 2;
+      for (const v of e.voters ?? []) if (ids.has(v)) score[v] = (score[v] ?? 0) + 1;
+    }
+    const best = Object.entries(score).sort((a, b) => b[1] - a[1])[0];
+    return best && best[1] >= 2 ? { id: best[0], reason: `处决自己人最积极（记了 ${best[1]} 分）`, evidence: [] } : null;
   }
 
   // ───────────── 赛后 MVP 投票（2026-11-18 用户）─────────────
@@ -3219,6 +3294,7 @@ export class Room {
     await this.judgePoliticianNow(g);
     if (!this.tutorial) this.onEnded?.(this); // 永久存档这一局
     this.openMvp(g);
+    this.afterGameNow(g).catch((e) => console.warn('[botc] 赛后总结出错：', e.message));
     this.narrate('end', { team: g.winner, reason: g.winReason });
     this.changed();
     await this.endRoam();
@@ -3447,7 +3523,7 @@ export class Room {
       ended: this.ended, square: this.square, log: this.log, logSeq: this.logSeq, logEpoch: this.epoch, stLog: this.stLog,
       inbox: entries(this.inbox), acts: entries(this.acts ?? new Map()), pendingInfo: entries(this.pendingInfo),
       resolving: this.resolving, rkPending: this.rkPending, revivePending: this.revivePending ?? null, deadline: this.deadline, nightBase: this.nightBase ?? null, dueFor: this.dueFor ?? {}, dawnAt: this.dawnAt ?? null,
-      roamedToday: !!this.roamedToday, duskDay: this.duskDay ?? null, homes: this.homes ?? null, pelted: this.pelted ?? {}, pelts: this.pelts ?? {}, talk: this.talk ?? [], tableRead: this.tableRead ?? null,
+      roamedToday: !!this.roamedToday, duskDay: this.duskDay ?? null, homes: this.homes ?? null, pelted: this.pelted ?? {}, pelts: this.pelts ?? {}, talk: this.talk ?? [], tableRead: this.tableRead ?? null, minutes: this.minutes ?? [],
       pendingNom: this.pendingNom,
       noms: this.noms && { until: this.noms.until, paused: this.noms.paused, timeUp: this.noms.timeUp, skips: [...this.noms.skips] },
       vote: this.vote && { ...this.vote, yes: [...this.vote.yes], locked: [...this.vote.locked] },
@@ -3485,7 +3561,7 @@ export class Room {
       voteHistory: s.voteHistory ?? [], knifeLog: s.knifeLog ?? [], execLog: s.execLog ?? [], pubLog: s.pubLog ?? [],
       beliefs: s.beliefs ?? null, meets: s.meets ?? [],
       outfits: new Map(s.outfits ?? []),
-      pelted: s.pelted ?? {}, pelts: s.pelts ?? {}, talk: s.talk ?? [], tableRead: s.tableRead ?? null,
+      pelted: s.pelted ?? {}, pelts: s.pelts ?? {}, talk: s.talk ?? [], tableRead: s.tableRead ?? null, minutes: s.minutes ?? [],
       watchMuted: [], // 机器人重启时账上的闭麦都解开了：resume 里重新闭上
       paused: !!s.paused,
     });
@@ -3668,6 +3744,8 @@ export class Room {
       demonSwap: g.demonSwap ?? null, // 夜半狂欢：亡骨魔换成了谁（技能表、角色页、顶栏说明跟着换）
       // 说书人也坐在台上（2026-11-18 用户）：真人说书显示他的头像，AI 说书显示 ★；有无神论者的剧本可以直接点他提名
       peltFx: (this.peltFx ?? []).filter((f) => Date.now() - f.at < 6000).map(({ id, item, by, target, at }) => ({ id, item, by, target, at })),
+      after: g.phase === 'ended' ? this.after : null,
+      court: g.phase === 'ended' && this.court ? { id: this.court.id, reason: this.court.reason, evidence: this.court.evidence, at: this.court.at } : null,
       mvp: this.mvp ? { until: this.mvp.until, mine: this.mvp.votes.get(uid) ?? null, count: this.mvp.votes.size, need: this.mvp.voters.length, canVote: this.mvp.voters.includes(uid), result: this.mvp.result } : null,
       storyteller: !(g.engine === 'snv' && inScript('atheist', g.script)) ? null : this.stId ? { id: this.stId, name: this.users.get(this.stId)?.name ?? '说书人', avatar: this.users.get(this.stId)?.avatar ?? null, human: true, mic: this.mics?.[this.stId] ?? null } : { id: 'storyteller', name: 'AI 说书人', avatar: null, human: false },
       stNominated: !!g.nominees?.has('storyteller'),
