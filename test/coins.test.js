@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { useWalletFile, seedWallet, balance, addCoins, spendCoins, awardWins, WALLET } from '../src/server/wallet.js';
-import { PELT_PER_DAY } from '../src/shared/pelt.js';
+import { PELT_PER_DAY, PELT_ON } from '../src/shared/pelt.js';
 import { Room } from '../src/server/room.js';
 
 useWalletFile(null); // 只放内存，别写 data/wallet.json
@@ -42,7 +42,7 @@ function mockVoice() {
   return { async findSquare() { return 'sq'; }, async setAsleep() {}, async openRoom() { return `r${++n}`; }, async closeRoom() {}, async addToRoom() {}, async removeFromRoom() {}, async moveAll() {}, async setMuted() {} };
 }
 
-test('房间：白天花金币朝人扔东西，叠在他头上；每天最多 3 次；不能扔自己；夜里不能扔；钱不够不能扔', async () => {
+test('房间：白天花金币朝人扔东西，叠在他头上；每天最多 3 次；不能扔自己；夜里不能扔；钱不够不能扔', { skip: !PELT_ON && '惩罚场外暂时下架（PELT_ON = false）' }, async () => {
   const room = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { ...FAST, mode: 'auto', shuffle: false, script: 'tb' } });
   room.wallet = WALLET;
   room.judgeReady = () => false;
@@ -81,4 +81,15 @@ test('房间：白天花金币朝人扔东西，叠在他头上；每天最多 3
     assert.equal(back.pelted.u2.length, 3);
     await back.teardown?.();
   } finally { await room.teardown(); }
+});
+
+test('惩罚场外下架时：服务器不收扔东西（2026-11-19 用户：番茄系统暂时下架）', { skip: PELT_ON }, async () => {
+  const room = new Room({ key: 'k2', guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { ...FAST, mode: 'auto', shuffle: false, script: 'tb' } });
+  room.wallet = WALLET;
+  for (const [id, name] of [['u1', '阿一'], ['u2', '阿二']]) room.users.set(id, { id, name, avatar: null });
+  await room.act('u1', 'join'); await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 5 });
+  await room.act('u1', 'start');
+  await assert.rejects(room.act('u1', 'pelt', { target: 'u2', item: 'tomato' }), /暂时下架/);
+  await room.teardown();
 });

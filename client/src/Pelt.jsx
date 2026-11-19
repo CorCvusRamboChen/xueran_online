@@ -1,7 +1,7 @@
 // 金币和「惩罚聊场外」：白天花金币朝某人扔烂番茄、放乌鸦、套毒舌笼头，东西叠在他头上直到这局结束。
 // 只买面子，不影响结算。道具定义在 src/shared/pelt.js，扔的规则在 server/room.js 的 pelt()。
 import { useEffect, useRef, useState } from 'react';
-import { PELT_ITEMS } from '../../src/shared/pelt.js';
+import { PELT_ITEMS, PELT_ON } from '../../src/shared/pelt.js';
 import { Panel, Btn } from './ui.jsx';
 
 /** 道具的小图：自己画的，叠在头上也认得出。 */
@@ -46,6 +46,7 @@ export function PeltIcon({ item, size = 16 }) {
 
 /** 头上叠的一摞：从下往上叠，太多了只画最上面几个再写总数。 */
 export function PeltStack({ items, size = 14, max = 6 }) {
+  if (!PELT_ON) return null; // 暂时下架（shared/pelt.js）
   if (!items?.length) return null;
   const shown = items.slice(-max);
   const counts = items.reduce((m, x) => ({ ...m, [x.item]: (m[x.item] ?? 0) + 1 }), {});
@@ -60,6 +61,7 @@ export function PeltStack({ items, size = 14, max = 6 }) {
 
 /** 白天的按钮：「惩罚场外」，旁边写着余额。 */
 export function PeltButton({ s, setMode }) {
+  if (!PELT_ON) return null; // 暂时下架（shared/pelt.js）
   if (s.coins == null || s.phase !== 'day' || !s.self || s.phase === 'ended') return null;
   return (
     <div className="btn-row gossip-row">
@@ -76,6 +78,7 @@ export function PeltButton({ s, setMode }) {
  * 头像用 data-pid 找（广场座位、左下角存活条、镇民页都有）；找不到扔的人就从屏幕下方飞进来。
  */
 export function PeltFx({ s }) {
+  if (!PELT_ON) return null; // 暂时下架（shared/pelt.js）
   const seen = useRef(new Set());
   const [flying, setFlying] = useState([]);
   useEffect(() => {

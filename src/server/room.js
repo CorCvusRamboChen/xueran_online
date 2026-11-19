@@ -7,7 +7,7 @@ import { TRAVELLER_IDS, SCRIPT_TRAVELLERS, travellersOf, ROLES, SCRIPTS, TEAM_NA
 import { getMap, houseAt, houseCenter, doorPoint, pathLength, positionAt, speedOf } from '../shared/map.js';
 import { CHARACTERS, CHARACTER_IDS } from '../shared/characters.js';
 import { cleanOutfit } from '../shared/outfit.js';
-import { PELT_ITEMS, PELT_PER_DAY } from '../shared/pelt.js';
+import { PELT_ITEMS, PELT_PER_DAY, PELT_ON } from '../shared/pelt.js';
 import { saveRecording } from './recorder.js';
 import { SETUPS, pickPreset, PRESET_SHARE } from '../shared/setups.js';
 import { buildRoles, easeNewbies } from '../engine/assign.js';
@@ -1694,6 +1694,7 @@ export class Room {
   /** 花金币朝某人扔东西（烂番茄、乌鸦、毒舌笼头），叠在他头上直到这局结束。只买面子，不影响结算。 */
   pelt(uid, target, item) {
     const g = this.requireGame();
+    if (!PELT_ON) throw new UserError('惩罚场外暂时下架了');
     if (!this.wallet) throw new UserError('这里没有开金币');
     const it = PELT_ITEMS[item];
     if (!it) throw new UserError('没有这个东西');
