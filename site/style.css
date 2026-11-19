@@ -422,3 +422,19 @@ button.hud-btn:hover { color: #fff; background: rgba(233, 228, 216, .08); }
   .cta-pnl .pnl-head { margin-left: -18px; }
   .cta h2 { font-size: 10vw; }
 }
+
+/* ── 英文页（/botc/en/，2026-11-20）：英文字长，收字距、不折行；导航放不下就早一点收起来 ── */
+html[lang="en"] .tabs a { padding: 0 10px; letter-spacing: .5px; white-space: nowrap; font-size: 13px; }
+html[lang="en"] .top-actions .btn { white-space: nowrap; }
+@media (max-width: 1360px) { html[lang="en"] .tabs { display: none; } html[lang="en"] .top-actions { margin-left: auto !important; } }
+.lang-switch { letter-spacing: 1px; }
+@media (max-width: 700px) { .top-actions .lang-switch { padding: 8px 10px; } }
+html[lang="en"] .hero h1 { font-size: clamp(2rem, 1rem + 2.6vw, 3.3rem); letter-spacing: .5px; }
+html[lang="en"] h2 { letter-spacing: .5px; }
+@media (max-width: 700px) { html[lang="en"] .hero h1 { font-size: 8vw; } }
+html[lang="en"] .ri-team { grid-template-columns: 84px 1fr; }
+html[lang="en"] .ri-tlabel { letter-spacing: .5px; }
+@media (max-width: 700px) { html[lang="en"] .ri-team { grid-template-columns: 1fr; } }
+html[lang="en"] .tag, html[lang="en"] .sec-num span { letter-spacing: 1px; }
+/* 顶栏多了语言切换按钮：导航在 1340 以下就收起来，免得折成两行（原来是 1180） */
+@media (max-width: 1340px) { .tabs { display: none; } .top-actions { margin-left: auto !important; } }
