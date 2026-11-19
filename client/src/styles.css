@@ -1418,7 +1418,9 @@ span.lr-newbie { cursor: default; }
 @media (max-width: 760px) { .menu .vol-panel { left: 0; bottom: auto; top: calc(100% + 6px); } }
 .scene:has(.minimap) .sound-toggles .vol-panel { top: auto; bottom: calc(100% + 6px); }
 .ti2 .f-img img.role { object-position: 50% 30%; transform: scale(1.15); }
-.lobby-left:has(.vol-panel) { position: relative; z-index: 40; }
+.lobby-left:has(.vol-panel) { z-index: 40; } /* 只抬层级：宽屏时左栏是吸顶（sticky），改成 relative 会整列往下掉（2026-11-20 用户） */
+@media (max-width: 959px) { .lobby-left:has(.vol-panel) { position: relative; } }
+/* 设置、反馈并排一行（2026-11-20 用户）；设置面板挂在这一整行的右边，不压住「反馈」 */
 
 /* 对局右栏「角色」页（RoleIndex.jsx）：搜索 + 角色名小块 + 下面展开技能 */
 .ri { display: flex; flex-direction: column; gap: 8px; }
@@ -2043,6 +2045,79 @@ span.lr-newbie { cursor: default; }
 @keyframes cf-fall { 0% { opacity: 1; transform: translateY(0) rotate(var(--r)); } 100% { opacity: .9; transform: translateY(105vh) rotate(calc(var(--r) + 540deg)); } }
 @media (prefers-reduced-motion: reduce) { .cf-convict, .cf-man, .cf-confetti i, .cf-stage { animation-duration: .01s !important; animation-iteration-count: 1 !important; } }
 
+/* 大厅：镇民面板右上角加机器人；右键头像的菜单（2026-11-20 用户） */
+.lr-extra { display: inline-flex; align-items: center; gap: 10px; }
+.lr-addbot { background: none; border: 1px solid var(--line, #3a3a3a); color: var(--paper); font: 900 12px var(--sans); padding: 2px 10px; cursor: pointer; }
+.lr-addbot:hover { border-color: var(--mot); color: var(--mot); }
+.lr-hint { font-size: 12px; margin: 4px 0 0; }
+.roster-menu b { font-family: var(--serif); }
+.roster-menu button { background: none; border: 1px solid var(--line, #3a3a3a); color: var(--paper); text-align: left; padding: 6px 10px; cursor: pointer; font: 700 13px var(--sans); }
+.roster-menu button:hover { border-color: var(--mot); }
+.roster-menu button.danger { color: #e07a6a; }
+
+/* 意见箱：照 Cromma 的看板，四栏 */
+.fb-modal { position: fixed; inset: 0; z-index: 2500; background: rgba(4, 5, 6, .78); display: grid; place-items: center; padding: 20px; }
+.fb-box { position: relative; width: min(1400px, 100%); height: min(900px, 100%); background: #121314; border: 1px solid #2a2c2e; box-shadow: 0 20px 60px #000; display: flex; flex-direction: column; padding: 16px 18px; font-family: var(--sans); }
+.fb-head { display: flex; align-items: flex-start; gap: 12px; }
+.fb-head > div { flex: 1; }
+.fb-head h3 { margin: 0; font: 900 16px var(--sans); letter-spacing: 2px; }
+.fb-head p { margin: 4px 0 0; font-size: 12px; }
+.fb-new { background: #f4f2ec; color: #111; border: 0; font: 900 13px var(--sans); padding: 6px 14px; cursor: pointer; }
+.fb-close { background: none; border: 0; color: var(--muted); font-size: 22px; cursor: pointer; line-height: 1; }
+.fb-loading { margin-top: 30px; text-align: center; }
+.fb-cols { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.fb-col { display: flex; flex-direction: column; min-height: 0; background: #17181a; border: 1px solid #222426; }
+.fb-col h4 { display: flex; justify-content: space-between; margin: 0; padding: 8px 10px; font: 900 13px var(--sans); letter-spacing: 1px; border-bottom: 1px solid #222426; }
+.c-done h4 > span:first-child { color: #6fbf73; }
+.c-taken h4 > span:first-child { color: #e8c66a; }
+.fb-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.fb-empty { text-align: center; font-size: 12px; margin: 16px 0; }
+.fb-card { background: #1d1e21; border: 1px solid #2a2c2f; padding: 10px; font-size: 13px; line-height: 1.6; }
+.fb-card header { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+.fb-no { color: #8a8d92; }
+.fb-kind { background: #2b2d31; color: #c9ccd1; padding: 0 6px; }
+.fb-kind.k-bug { color: #e88a7a; }
+.fb-kind.k-feature { color: #8fb8e8; }
+.fb-ago { margin-left: auto; }
+.fb-text { margin: 6px 0; white-space: pre-wrap; word-break: break-word; font-weight: 700; color: var(--paper); }
+.fb-imgs { display: flex; gap: 6px; flex-wrap: wrap; }
+.fb-imgs button { padding: 0; border: 1px solid #333; background: none; cursor: zoom-in; }
+.fb-imgs img { display: block; width: 46px; height: 46px; object-fit: cover; }
+.fb-take, .fb-note { margin: 6px 0 0; color: #a7aab0; font-size: 12px; white-space: pre-wrap; }
+.fb-card footer { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: #a7aab0; }
+.fb-by { display: inline-flex; align-items: center; gap: 6px; }
+.fb-av { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
+.fb-av-none { display: inline-grid; place-items: center; background: #3a3d42; color: #fff; font-size: 10px; }
+.fb-ver { margin-left: auto; color: #6fbf73; border: 1px solid #2f5a33; padding: 0 6px; }
+.fb-shelf { margin-left: auto; color: #9a9da2; }
+.fb-taken { margin-left: auto; color: #e8c66a; }
+.fb-admin-open { margin-top: 6px; background: none; border: 1px dashed #3a3d42; color: var(--muted); font-size: 11px; padding: 1px 8px; cursor: pointer; }
+.fb-admin { margin-top: 8px; display: grid; gap: 6px; }
+.fb-admin textarea, .fb-admin input, .fb-compose textarea { background: #0f1011; border: 1px solid #333; color: var(--paper); font: 13px/1.5 var(--sans); padding: 6px 8px; resize: vertical; }
+.fb-admin-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.fb-admin-btns button, .fb-compose-btns button, .fb-kinds button { background: none; border: 1px solid #3a3d42; color: var(--paper); font: 700 12px var(--sans); padding: 3px 10px; cursor: pointer; }
+.fb-compose-wrap { position: absolute; inset: 0; background: rgba(0, 0, 0, .55); display: grid; place-items: center; }
+.fb-compose { width: min(560px, 92%); background: #17181a; border: 1px solid #333; padding: 14px; display: grid; gap: 10px; }
+.fb-compose h4 { margin: 0; font: 900 14px var(--sans); }
+.fb-kinds { display: flex; gap: 6px; flex-wrap: wrap; }
+.fb-kinds button.on { background: #f4f2ec; color: #111; border-color: #f4f2ec; }
+.fb-shots { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.fb-shot { position: relative; }
+.fb-shot img { width: 64px; height: 64px; object-fit: cover; border: 1px solid #333; display: block; }
+.fb-shot button { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: 0; background: #c0392b; color: #fff; cursor: pointer; line-height: 18px; padding: 0; }
+.fb-addshot { background: none; border: 1px dashed #3a3d42; color: var(--muted); padding: 18px 10px; cursor: pointer; }
+.fb-compose-btns { display: flex; align-items: center; gap: 8px; }
+.fb-compose-btns > span { flex: 1; font-size: 12px; }
+.fb-compose-btns button.primary { background: #f4f2ec; color: #111; border-color: #f4f2ec; }
+.fb-compose-btns button:disabled { opacity: .5; cursor: default; }
+.fb-zoom { position: absolute; inset: 0; background: rgba(0, 0, 0, .85); display: grid; place-items: center; cursor: zoom-out; }
+.fb-zoom img { max-width: 92%; max-height: 92%; }
+@media (max-width: 859px) {
+  .fb-modal { padding: 0; }
+  .fb-box { height: 100%; padding: 12px; }
+  .fb-cols { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 86%; overflow-x: auto; scroll-snap-type: x mandatory; }
+  .fb-col { scroll-snap-align: start; }
+}
 /* 英文版（2026-11-20）：大标题是一长串英文，缩小、收字距，别撑出左栏 */
 .lang-en .lobby .title { font-size: clamp(34px, 4.2vw, 58px); letter-spacing: .02em; line-height: 1.02; max-width: 9.5em; }
 .lang-en .splash .title { font-size: 34px; letter-spacing: .04em; margin-right: 0; }

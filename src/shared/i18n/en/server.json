@@ -506,5 +506,19 @@
  "机器人不在这个服务器里": "The bot isn't in this server.",
  "金币不够：要 {0} 枚，你有 {1} 枚": "Not enough coins: you need {0} and have {1}.",
  "补发：赢过的人各一枚": "Back pay: one coin for everyone who has won before",
- "赢了一局（{0}）": "Won a game ({0})"
+ "赢了一局（{0}）": "Won a game ({0})",
+ "截图只收 PNG、JPG、WebP": "Screenshots must be PNG, JPG or WebP",
+ "截图太大了（每张最多 700KB）": "Screenshot too large (700 KB max each)",
+ "选一下是 Bug、新功能请求还是已有功能意见": "Pick one: bug, feature request or feedback on a feature",
+ "写点什么再提交吧": "Write something before sending",
+ "最多 {0} 个字": "{0} characters max",
+ "截图最多 {0} 张": "{0} {0|screenshot|screenshots} max",
+ "提得太快了，过几分钟再来": "Too fast — try again in a few minutes",
+ "只有管理员能处理意见": "Only admins can handle feedback",
+ "没有这一条": "No such entry",
+ "不认识的状态": "Unknown status",
+ "收到了，谢谢！": "Got it, thanks!",
+ "要交给一名真人玩家": "Pick a human player",
+ "他现在不在线，交不过去": "They're offline right now, so Host can't be passed to them",
+ "{0} 把房主交给了 {1}": "{0} made {1} the Host"
 }

@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 import express from 'express';
 import { WebSocketServer } from 'ws';
+import { imagePath } from './feedback.js';
 import { Client, Events, GatewayIntentBits } from 'discord.js';
 import { Room, UserError } from './room.js';
 import { VoiceHub } from './voice.js';
@@ -238,6 +239,7 @@ setInterval(() => clientLogs.clear(), 10 * 60_000).unref();
 
 app.get('/api/config', (_req, res) => res.json({ clientId: PLAY_ONLY ? null : DISCORD_CLIENT_ID ?? null, devLogin: DEV_LOGIN && !PLAY_ONLY, publicUrl: PUBLIC_URL, solo: soloEnabled(), playOnly: PLAY_ONLY }));
 // 全服排行榜（所有服务器合计，不含单机试玩）：给独立的试玩服务器读。和单机大厅里谁都能看到的那份一样，不含别的信息。
+app.get('/api/feedback/img/:name', (req, res) => { const f = imagePath(req.params.name); if (!f) return res.status(404).end(); res.set('Cache-Control', 'public, max-age=86400'); res.sendFile(f, (e) => e && !res.headersSent && res.status(404).end()); }); // 意见箱的截图
 app.get('/api/leaderboard', (_req, res) => { res.set('Cache-Control', 'public, max-age=60'); res.json(statsAll()); });
 
 // 收音页：令牌就是身份，只发给被洗脑的本人
@@ -438,7 +440,9 @@ wss.on('connection', (ws) => {
   ws.on('message', async (raw) => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
-    const reply = (body) => ws.readyState === ws.OPEN && ws.send(JSON.stringify({ type: 'ack', reqId: msg.reqId, ...forLang(ws.lang, body) }));
+    // 意见箱的卡片是玩家自己写的字，原样给（报错照样翻）
+    const asWritten = msg.type === 'act' && msg.action === 'feedback';
+    const reply = (body) => ws.readyState === ws.OPEN && ws.send(JSON.stringify({ type: 'ack', reqId: msg.reqId, ...forLang(asWritten && body.ok !== false ? 'zh' : ws.lang, body) }));
     try {
       if (msg.type === 'hello') {
         ws.lang = normLang(msg.lang); // 界面语言：发给这个连接的东西按它翻（中英可以混在一个房间里）

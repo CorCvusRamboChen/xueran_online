@@ -26,7 +26,6 @@
  "在浏览器里打开就不会被打断：还是你、还是这一局，{0}，别退出语音频道就行。": "In a browser nothing interrupts you: same you, same game, and {0}. Just don't leave the voice channel.",
  "语音照旧在 Discord 里聊": "voice chat stays on Discord",
  "留在 Discord": "Stay in Discord",
- "以后想换，在设置面板的最下面也能点「在浏览器打开」（大厅里叫「声音、字号和语言」，对局里在齿轮里）。": "To switch later, click \"Open in browser\" at the bottom of the settings panel (\"Sound, text & language\" in the lobby, the gear icon in a game).",
  "单机试玩": "Solo practice",
  "离开座位": "Leave seat",
  "加入游戏": "Join game",
@@ -34,7 +33,6 @@
  "（还差 {0} 人）": " (need {0} more)",
  "（这个剧本最多 {0} 人）": " (max {0} for this script)",
  "加一个机器人玩家": "Add a bot",
- "确定让出房主（交给在线的人）": "Confirm: hand Host to someone online",
  "让出房主": "Step down as Host",
  "房主不在，接管房主": "Host is away: become Host",
  "等房主{0}开始……": "Waiting for the Host {0} to start…",
@@ -305,5 +303,13 @@
  "房规：和官方规则不一样的地方": "House rule: differs from the official rules",
  "你的形象": "Your look",
  "地图上的 3D 小人（设置里「模型」选 3D 时）": "Your 3D figure on the map (when \"Model\" is set to 3D in settings)",
- "普通镇民": "Plain townsperson"
+ "普通镇民": "Plain townsperson",
+ "以后想换，在设置面板的最下面也能点「在浏览器打开」（大厅里叫「设置」，对局里在齿轮里）。": "To switch later, click \"Open in browser\" at the bottom of the settings panel (\"Settings\" in the lobby, the gear icon in a game).",
+ "反馈": "Feedback",
+ "＋ 机器人": "+ Bot",
+ "右键（手机长按）别人的头像：让他当房主、标成新手、请他离开": "Right-click (long-press on mobile) someone's portrait to make them Host, mark them as new, or remove them",
+ "让他当房主": "Make Host",
+ "取消新手标记": "Unmark as new",
+ "标成新手": "Mark as new",
+ "去掉这个机器人": "Remove this bot"
 }

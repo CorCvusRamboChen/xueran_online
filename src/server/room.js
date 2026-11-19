@@ -15,6 +15,7 @@ import { narration } from './narration.js';
 import { ttsUrl } from './tts.js';
 import { judgeStatement, judgeMadness, judgeBreak, looksBroken, judgeAvailable, judgeAmnesiac, adviseFisherman, looksInjected, speakSeat7, judgeLead, judgeResponsible, readTable, judgeAfterGame } from './judge.js';
 import { parseTable, describeTable, tableLead } from '../engine/tableRead.js';
+import { feedbackAct } from './feedback.js';
 import { noteMarks, readTown, markedRole } from './beliefs.js';
 import { Werewolf } from '../engine/werewolf.js';
 import { WW_ROOM } from './werewolfRoom.js';
@@ -276,6 +277,7 @@ export class Room {
     // 走路很频繁，只推送位置，不推完整状态
     if (type === 'move') return this.move(uid, p.x, p.y, { run: !!p.run });
     if (type === 'marks') return this.recordMarks(uid, p); // 没有状态要推给别人
+    if (type === 'feedback') return feedbackAct(uid, this.users.get(uid), p); // 意见箱：全站共用，和这个房间无关
     if (this.game?.werewolf && !this.wwAllowed(type)) throw new UserError('狼人杀里没有这个操作');
     if (this.game?.avalon && !AV_ACTIONS.has(type)) throw new UserError('阿瓦隆里没有这个操作'); // 没有自由活动、私聊、提名这些血染的操作
     if (this.game?.mark && !MK_ACTIONS.has(type)) throw new UserError('暗印里没有这个操作'); // 自由活动和私聊照用，提名投票、夜里选人这些血染的不要
@@ -294,6 +296,7 @@ export class Room {
         this.takeHost(uid);
         break;
       case 'releaseHost': this.releaseHost(uid); break;
+      case 'giveHost': this.giveHost(uid, p.target); break;
       case 'settings': this.updateSettings(uid, p); break;
       case 'character': this.pickCharacter(uid, p.id ?? null); break;
       case 'outfit': this.outfits.set(uid, cleanOutfit(p.outfit, uid)); break;
@@ -3413,6 +3416,15 @@ export class Room {
    * 房主自己让出房主：交给在线的人，先找坐着的真人（开局后是这局的玩家），没有再找观战的。
    * 真人说书进行中不能让（房主就是说书人，换人等于换说书人）。
    */
+  /** 房主右键某人的头像，把房主交给他（2026-11-20 用户：让出房主改成右键别人头像选）。要是在线的真人。 */
+  giveHost(uid, target) {
+    if (uid !== this.hostId) throw new UserError('你不是房主');
+    if (this.game && !this.ended && this.stId) throw new UserError('真人说书进行中，不能让出房主');
+    if (!target || target === uid || this.isFake(target)) throw new UserError('要交给一名真人玩家');
+    if (!this.online.has(target)) throw new UserError('他现在不在线，交不过去');
+    this.announce(`${this.name(uid)} 把房主交给了 ${this.name(target)}`);
+    this.takeHost(target);
+  }
   releaseHost(uid) {
     if (uid !== this.hostId) throw new UserError('你不是房主');
     if (this.game && !this.ended && this.stId) throw new UserError('真人说书进行中，不能让出房主');

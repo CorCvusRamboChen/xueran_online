@@ -17,6 +17,7 @@ import { ATTR } from './flavor.js';
 import { AbilityCard } from './AbilityCard.jsx';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { FeedbackBoard } from './Feedback.jsx';
 import { Replay, VoteHistory } from './replay.jsx';
 import { SETUPS, presetsFor, PRESET_SHARE } from '../../src/shared/setups.js';
 import { Glossed } from './terms.jsx';
@@ -62,7 +63,7 @@ function BrowserHint({ toast, onClose }) {
           <Btn kind="primary" disabled={busy} onClick={async () => { setBusy(true); const msg = await openInBrowser(); if (msg) toast?.(msg); onClose(); }}>在浏览器打开</Btn>
           <Btn kind="ghost" onClick={onClose}>留在 Discord</Btn>
         </div>
-        <p className="muted">以后想换，在设置面板的最下面也能点「在浏览器打开」（大厅里叫「声音、字号和语言」，对局里在齿轮里）。</p>
+        <p className="muted">以后想换，在设置面板的最下面也能点「在浏览器打开」（大厅里叫「设置」，对局里在齿轮里）。</p>
       </div>
     </div>
   );
@@ -86,7 +87,8 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
   const shown = peek ?? st.script ?? 'tb';
   const shownWW = !!SCRIPTS[shown]?.werewolf;
   const [browserHint, setBrowserHint] = useState(false); // 手机 Discord 里坐下后：建议去浏览器里玩
-  const [release, setRelease] = useState(false); // 让出房主：点两次才算
+  const [feedback, setFeedback] = useState(false); // 意见箱（2026-11-20 用户：设置下面加反馈）
+  const [menu, setMenu] = useState(null); // 右键某人的头像：{ id, x, y }（让出房主、标新手、请他离开）
 
   const art = SCENE_ART['lobby-hero'];
   return (
@@ -125,16 +127,14 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
               ? <Btn kind="secondary" className="menu-item" onClick={() => act('leave')}>离开座位</Btn>
               : <Btn kind="primary" className="menu-item" onClick={async () => { if (await act('join') && onDiscordMobile() && !hintSeen()) setBrowserHint(true); }}>加入游戏</Btn>)}
             {host && <Btn kind={n >= lo && n <= hi ? 'primary' : 'secondary'} className="menu-item" disabled={n < lo || n > hi} onClick={() => act('start')}>开始游戏{n < lo ? `（还差 ${lo - n} 人）` : n > hi ? `（这个剧本最多 ${hi} 人）` : ''}</Btn>}
-            {host && <Btn className="menu-item" disabled={soloMode && n >= hi} onClick={() => act('addBots', { count: 1 })}>加一个机器人玩家</Btn>}
             {soloMode && host && <SoloBots s={s} act={act} />}
-            {host && !soloMode && (release
-              ? <Btn kind="primary" className="menu-item" onClick={async () => { setRelease(false); await act('releaseHost'); }} onMouseLeave={() => setRelease(false)}>确定让出房主（交给在线的人）</Btn>
-              : <Btn className="menu-item" onClick={() => setRelease(true)}>让出房主</Btn>)}
             {!host && !s.hostOnline && <Btn className="menu-item" onClick={() => act('claimHost')}>房主不在，接管房主</Btn>}
             {!host && s.hostOnline && <p className="menu-wait">等房主{s.hostName ? `「${s.hostName}」` : ''}开始……</p>}
             {!host && s.hostOnline && <Btn kind="secondary" className="menu-item" onClick={() => act('claimHost')}>房主没反应？接管房主</Btn>}
             {onTutorial && <Btn className="menu-item menu-tut" onClick={() => setIntro(true)}>新手教程（1 分钟动画 + 练习局）</Btn>}
-            <VolumeButton className="btn btn-secondary menu-item menu-vol" label="声音、字号和语言" />
+            <VolumeButton className="btn btn-secondary menu-item menu-vol" label="设置" />
+            <Btn className="menu-item" onClick={() => setFeedback(true)}>反馈</Btn>
+            {feedback && <FeedbackBoard ask={ask} toast={toast} onClose={() => setFeedback(false)} />}
             {intro && createPortal(<TutorialIntro onStart={() => { setIntro(false); onTutorial(); }} onClose={() => setIntro(false)} />, document.body)}
             {browserHint && createPortal(<BrowserHint toast={toast} onClose={() => { markHintSeen(); setBrowserHint(false); }} />, document.body)}
           </nav>
@@ -152,7 +152,10 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
 
         {/* 右：镇民、形象、房间设置 */}
         <section className="lobby-right">
-          <Panel title="镇民" className="glass" extra={<span className="muted">{n} / {hi}</span>}>
+          <Panel title="镇民" className="glass" extra={<span className="lr-extra">
+            {host && !soloMode && n < hi && <button type="button" className="lr-addbot" onClick={() => act('addBots', { count: 1 })} title="加一个机器人玩家">＋ 机器人</button>}
+            <span className="muted">{n} / {hi}</span>
+          </span>}>
             {st.script === 'avalon' ? <AvalonDist n={n} /> : st.script === 'mark' ? <MarkDist n={n} /> : <DistBar n={n} d={d} lo={lo} hi={hi} parts={ww ? wwDist(n, st.script) : null} />}
             {SCRIPTS[st.script]?.seat7 && <p className="muted seat7-note">🪑 灯神规则：<b>7 号座位留空</b>，照样发角色，由说书人替它做决定，每局还会替它发言一次。{seat7 ? `开局后共 ${n + 1} 个座位。` : ''}</p>}
             {!n && <p className="muted">广场上还空无一人。</p>}
@@ -161,7 +164,9 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                 {s.lobby.flatMap((p, i) => [
                   // 七步成诗：开局时 7 号座位插一张空椅子，后面的人往后挪一位，这里先画出来
                   ...(seat7 && i === 6 ? [<div key="seat7" className="lr-item lr-empty" title="7 号座位留空：照样发角色，由说书人替它做决定"><span className="lr-chair" aria-hidden="true">🪑</span><span className="lr-seat">7</span><span className="lr-name">空座</span></div>] : []),
-                  <div key={p.id} className={`lr-item ${p.id === s.me ? 'me' : ''}`}>
+                  <div key={p.id} className={`lr-item ${p.id === s.me ? 'me' : ''}`}
+                    onContextMenu={(e) => { if (!host || p.id === s.me) return; e.preventDefault(); setMenu({ id: p.id, x: e.clientX, y: e.clientY }); }}
+                    {...longPress(() => host && p.id !== s.me && setMenu((m) => m ?? { id: p.id, ...lastTouch }))}>
                     <Portrait p={p} size={52} frame={p.id === s.me ? 'var(--mot)' : '#f4f4f0'} />
                     <span className="lr-seat">{seat7 && i >= 6 ? i + 2 : i + 1}</span>
                     <span className="lr-name">{p.id === s.me ? '你' : p.name}</span>
@@ -184,6 +189,8 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                 )}
               </div>
             )}
+            {host && !soloMode && n > 1 && <p className="muted lr-hint">右键（手机长按）别人的头像：让他当房主、标成新手、请他离开</p>}
+            {menu && <RosterMenu s={s} act={act} at={menu} onClose={() => setMenu(null)} />}
             <Watchers s={s} hint={!joined ? '你现在在观战席。点「加入游戏」坐下；不加入就是观战，开局后能看广场和投票，看不到别人的身份。' : null} />
           </Panel>
 
@@ -646,6 +653,42 @@ function PastGame({ game, onClose }) {
         <button type="button" className="role-modal-close" onClick={onClose}>关闭</button>
       </div>
     </div>
+  );
+}
+
+// 手机上没有右键：长按 0.5 秒当右键（记下按的位置，菜单开在那里）
+let lastTouch = { x: 0, y: 0 };
+function longPress(fn) {
+  let t = null;
+  const stop = () => { clearTimeout(t); t = null; };
+  return {
+    onTouchStart: (e) => { const p = e.touches[0]; lastTouch = { x: p.clientX, y: p.clientY }; stop(); t = setTimeout(fn, 500); },
+    onTouchEnd: stop, onTouchMove: stop, onTouchCancel: stop,
+  };
+}
+
+/** 房主右键大厅里某人的头像（2026-11-20 用户：让出房主改成右键别人头像选）：让他当房主、标成新手、请他离开。 */
+function RosterMenu({ s, act, at, onClose }) {
+  const p = s.lobby.find((x) => x.id === at.id);
+  useEffect(() => {
+    const close = (e) => { if (!e.target.closest?.('.roster-menu')) onClose(); };
+    const esc = (e) => e.key === 'Escape' && onClose();
+    setTimeout(() => { addEventListener('pointerdown', close); addEventListener('keydown', esc); }, 0);
+    return () => { removeEventListener('pointerdown', close); removeEventListener('keydown', esc); };
+  }, []);
+  if (!p) return null;
+  const bot = p.id.startsWith('bot-');
+  const newbie = s.newbies?.includes(p.id);
+  const run = (fn) => async () => { onClose(); await fn(); };
+  const x = Math.min(at.x, innerWidth - 220); const y = Math.min(at.y, innerHeight - 170);
+  return createPortal(
+    <div className="mark-menu roster-menu" style={{ left: x, top: y }} role="menu">
+      <b>{p.name}</b>
+      {!bot && <button type="button" role="menuitem" onClick={run(() => act('giveHost', { target: p.id }))}>让他当房主</button>}
+      {!bot && <button type="button" role="menuitem" onClick={run(() => act('markNewbie', { player: p.id, on: !newbie }))}>{newbie ? '取消新手标记' : '标成新手'}</button>}
+      <button type="button" role="menuitem" className="danger" onClick={run(() => act('kick', { target: p.id }))}>{bot ? '去掉这个机器人' : '请他离开'}</button>
+    </div>,
+    document.body,
   );
 }
 
