@@ -182,7 +182,7 @@ export function WerewolfGame({ s, act, ask }) {
           <button type="button" className="drawer-close" onClick={() => setTab(null)} aria-label="收起">×</button>
         </div>
         <div className="drawer-body">
-          {shown === 'role' && me && <WwSelf me={me} name={name} />}
+          {shown === 'role' && me && <WwSelf me={me} name={name} script={s.script} />}
           {shown === 'log' && <History log={s.log} players={s.players} ask={ask} epoch={s.logEpoch} />}
           {shown === 'votes' && <WwVotes votes={ww.votes} name={name} />}
           {shown === 'roster' && <><Roster s={s} /><Watchers s={s} /></>}
@@ -438,7 +438,7 @@ function SeerChecks({ checks, name }) {
 }
 
 /** 身份页：身份牌、同伴 / 查验记录 / 药，再下面是私密信息。 */
-function WwSelf({ me, name }) {
+function WwSelf({ me, name, script }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -447,7 +447,7 @@ function WwSelf({ me, name }) {
         <button type="button" className={`idcard ${open ? 'open' : ''}`} onClick={() => setOpen((x) => !x)} aria-label={open ? '合上身份卡' : '翻开身份卡'}>
           <span className="idcard-inner">
             <span className="idface idback"><span className="id-art ww-back">?</span><span className="id-name">翻开身份</span></span>
-            <span className="idface idfront"><WwCard id={me.role.id} script={s.script} /></span>
+            <span className="idface idfront"><WwCard id={me.role.id} script={script} /></span>
           </span>
         </button>
         <p className="muted id-hint">{open ? `你坐在${cnNum(me.seat)}号${me.alive ? '' : '，已经出局'}。点卡片扣回去。` : '点卡片翻开。别让旁边的人看见。'}</p>
