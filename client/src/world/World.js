@@ -1882,21 +1882,21 @@ export class World {
       } else { x = Math.random() * W; y = Math.random() * H; }
       const glow = new Sprite(tex);
       glow.anchor.set(0.5); glow.tint = 0xd8f07a; glow.blendMode = 'add';
-      const size = 26 + Math.random() * 16; glow.width = glow.height = size;
+      const size = 10 + Math.random() * 6; glow.width = glow.height = size; // 按地图上的比例：比人的头小得多（2026-11-20 用户：太大太亮，要像在地图上）
       const core = new Sprite(tex);
       core.anchor.set(0.5); core.tint = 0xfaffd0; core.blendMode = 'add'; core.width = core.height = size * 0.3;
       layer.addChild(glow, core);
-      this.fireflies.push({ glow, core, x, y, z: 12 + Math.random() * 50, ph: Math.random() * 6.28, r: 15 + Math.random() * 30, blink: 0.5 + Math.random() * 1.2, a: 0.75 + Math.random() * 0.25 });
+      this.fireflies.push({ glow, core, x, y, z: 6 + Math.random() * 28, ph: Math.random() * 6.28, r: 10 + Math.random() * 22, blink: 0.5 + Math.random() * 1.2, a: 0.6 + Math.random() * 0.3 });
     }
     this.topFog.addChild(layer);
   }
 
   fireflyFrame(t) {
     for (const f of this.fireflies ?? []) {
-      const q = iso(f.x + Math.sin(t * 0.31 + f.ph) * f.r, f.y + Math.cos(t * 0.23 + f.ph * 1.3) * f.r, f.z + Math.sin(t * 0.7 + f.ph) * 8);
+      const q = iso(f.x + Math.sin(t * 0.31 + f.ph) * f.r, f.y + Math.cos(t * 0.23 + f.ph * 1.3) * f.r, f.z + Math.sin(t * 0.7 + f.ph) * 4);
       f.glow.position.set(q.x, q.y); f.core.position.set(q.x, q.y);
-      const on = f.a * (0.3 + 0.7 * Math.max(0, Math.sin(t * f.blink + f.ph)));
-      f.glow.alpha = on; f.core.alpha = Math.min(1, on * 1.2);
+      const on = f.a * (0.2 + 0.8 * Math.max(0, Math.sin(t * f.blink + f.ph)));
+      f.glow.alpha = on * 0.75; f.core.alpha = on;
     }
   }
 
