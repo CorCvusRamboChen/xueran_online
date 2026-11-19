@@ -3,6 +3,7 @@ import { CHARACTERS } from '../../src/shared/characters.js';
 import { PEOPLE_ART, ROLE_ART } from './art.js';
 import { ROLES } from '../../src/engine/roles.js';
 import { useSpeaking } from './speaking.js';
+import { isEn } from './i18n.js';
 
 export const CHAR_BY_ID = Object.fromEntries(CHARACTERS.map((c) => [c.id, c]));
 
@@ -108,7 +109,7 @@ export function useTick(ms = 1000) {
 }
 
 const CN = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
-export const cnNum = (n) => (n <= 10 ? CN[n] : n < 20 ? `十${CN[n - 10]}` : `${CN[Math.floor(n / 10)]}十${n % 10 ? CN[n % 10] : ''}`);
+export const cnNum = (n) => (isEn ? String(n) : n <= 10 ? CN[n] : n < 20 ? `十${CN[n - 10]}` : `${CN[Math.floor(n / 10)]}十${n % 10 ? CN[n % 10] : ''}`);
 
 const hhmm = (min) => {
   const m = Math.round(min) % (24 * 60);
@@ -179,6 +180,8 @@ export function Dialogue({ lines = [], options = [], children, keys = false }) {
 const ROLE_BY_NAME = Object.fromEntries(Object.entries(ROLES).map(([id, r]) => [r.name, id]));
 // 魔典的一行（服务器 Game.grimoire() 的格式）：【邪】4号 名字 — 小恶魔（中毒、占卜师的干扰项）
 const GRIM_LINE = /^【(善|邪)】(\d+)号 (.+) — ([^（]+)(?:（(.+)）)?$/;
+// 英文版（服务器翻好的，见 src/shared/i18n/core.js 的 RULES）：[Evil] #4 名字 — Imp (poisoned, …)
+const GRIM_LINE_EN = /^\[(Good|Evil)\] #(\d+) (.+) — ([^(]+?)(?: \((.+)\))?$/;
 const TEAM_COLOR = { townsfolk: 'var(--int)', outsider: 'var(--psy)', minion: 'var(--phy)', demon: 'var(--phy)' };
 
 /** 多行信息：一行一段；魔典的行排成一张表（座位、角色小图、名字、角色、提示标记），一人一行对齐。 */
@@ -193,14 +196,14 @@ function MultiLine({ text }) {
         {rows.map(([, side, seat, name, roleName, tags]) => {
           const id = ROLE_BY_NAME[roleName.trim()];
           return (
-            <li key={seat} className={side === '邪' ? 'evil' : 'good'}>
+            <li key={seat} className={side}>
               <span className="grim-seat">{seat}</span>
               <span className="grim-icon">{id && ROLE_ART[id] ? <img src={ROLE_ART[id]} alt="" /> : null}</span>
               <span className="grim-who">
                 <b style={{ color: TEAM_COLOR[ROLES[id]?.team] ?? 'inherit' }}>{roleName.trim()}</b>
-                <small>{name}{side === '邪' ? ' · 邪恶' : ''}</small>
+                <small>{name}{side === 'evil' ? ' · 邪恶' : ''}</small>
               </span>
-              {tags && <span className="grim-tags">{tags.split(/[、，]/).map((t) => <i key={t}>{t}</i>)}</span>}
+              {tags && <span className="grim-tags">{tags.split(/[、，]|, /).map((t) => <i key={t}>{t}</i>)}</span>}
             </li>
           );
         })}
@@ -209,8 +212,8 @@ function MultiLine({ text }) {
     rows = [];
   };
   for (const l of lines) {
-    const m = l.match(GRIM_LINE);
-    if (m) { rows.push(m); continue; }
+    const m = l.match(GRIM_LINE) ?? l.match(GRIM_LINE_EN);
+    if (m) { rows.push([m[0], m[1] === '邪' || m[1] === 'Evil' ? 'evil' : 'good', ...m.slice(2)]); continue; }
     flush();
     if (l.trim()) out.push(<span className="ml-line" key={`l${out.length}`}><Md text={l} /></span>);
   }

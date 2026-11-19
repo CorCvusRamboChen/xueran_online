@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { isEn } from './i18n.js';
 import { createPortal } from 'react-dom';
 import { openMic, login, openSocket, report, listenSpeaking, fromKook, fromBrowserLink, soloMode } from './connect.js';
 import { Town, PaintFilters } from './Town.jsx';
@@ -233,7 +234,7 @@ export default function App() {
   };
 
   if (status.kind === 'error' || !s) {
-    const wrongPlace = status.kind === 'error' && /^请从.*文字频道进入/.test(status.error ?? ''); // 从语音频道打开：重新进入也没用，不给那个按钮
+    const wrongPlace = status.kind === 'error' && (/^请从.*文字频道进入/.test(status.error ?? '') || /^Please enter from .*text channel/.test(status.error ?? '')); // 从语音频道打开：重新进入也没用，不给那个按钮
     return (
       <div className="splash">
         <PaintFilters />
@@ -974,7 +975,7 @@ function ExtrasInfo({ s }) {
       <h4>传奇角色</h4>
       <p className="muted">传奇角色不是哪个玩家的身份，是说书人给这一局加的全场规则（集石百科）：没人拿这张牌，它不会死、不会醉酒中毒；说书人会告诉大家加了哪些，但不会说它这局具体造成了什么。</p>
       {fab.length ? fab.map((id) => (
-        <div key={id} className="ex-card"><b>{FABLED[id].name}<i>{FABLED[id].en}</i></b><p>{FABLED[id].ability}</p><p className="muted">{FABLED[id].detail}</p></div>
+        <div key={id} className="ex-card"><b>{FABLED[id].name}{!isEn && <i>{FABLED[id].en}</i>}</b><p>{FABLED[id].ability}</p><p className="muted">{FABLED[id].detail}</p></div>
       )) : <p>这个剧本没有传奇角色。</p>}
       <h4>旅行者</h4>
       <p className="muted">给开局后才来、或者要提前走的人用的角色（集石百科）。</p>
@@ -987,7 +988,7 @@ function ExtrasInfo({ s }) {
       </ul>
       {joined.length > 0 && <p>这局加入的旅行者：{joined.map((p) => `${p.seat}号 ${p.name}（${p.travellerRole}${p.left ? '，已离开' : p.alive ? '' : '，已出局'}）`).join('、')}</p>}
       {trs.length ? trs.map((id) => (
-        <div key={id} className="ex-card"><b>{ROLE_DEFS[id].name}<i>{ROLE_DEFS[id].en}</i></b><p>{ROLE_DEFS[id].ability}</p></div>
+        <div key={id} className="ex-card"><b>{ROLE_DEFS[id].name}{!isEn && <i>{ROLE_DEFS[id].en}</i>}</b><p>{ROLE_DEFS[id].ability}</p></div>
       )) : null}
     </section>
   );

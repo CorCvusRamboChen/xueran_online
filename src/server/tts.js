@@ -13,6 +13,13 @@ const VOICE = process.env.AZURE_TTS_VOICE || 'zh-CN-YunfengNeural';
 const STYLE = process.env.AZURE_TTS_STYLE ?? 'depressed';  // 云枫可选：serious、depressed、sad、fearful、angry、cheerful、disgruntled；留空 = 不加语气
 const RATE = process.env.AZURE_TTS_RATE || '-8%';
 const PITCH = process.env.AZURE_TTS_PITCH || '-4%';
+// 英文玩家听英文旁白（2026-11-20 英文版）：每个人按自己的界面语言听，同一局里可以中英混着
+const EN = {
+  voice: process.env.AZURE_TTS_VOICE_EN || 'en-GB-RyanNeural',
+  style: process.env.AZURE_TTS_STYLE_EN ?? '',
+  rate: process.env.AZURE_TTS_RATE_EN || '-6%',
+  pitch: process.env.AZURE_TTS_PITCH_EN || '-4%',
+};
 const DIR = path.resolve('data/tts');
 export const BAKED = path.resolve('assets/tts'); // 预先合成的固定台词（文件名和 data/tts 一样是哈希，换了声音就对不上，自动退回现合成）
 
@@ -23,17 +30,19 @@ const pending = new Map();   // 哈希 → 正在合成的 Promise
 const esc = (s) => s.replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
 const clean = (s) => s.replace(/\*\*/g, '');
 
-function ssml(text) {
-  const body = `<prosody rate="${RATE}" pitch="${PITCH}">${esc(clean(text))}</prosody>`;
-  return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="zh-CN">`
-    + `<voice name="${VOICE}">${STYLE ? `<mstts:express-as style="${STYLE}">${body}</mstts:express-as>` : body}</voice></speak>`;
+function ssml(text, lang = 'zh') {
+  const v = lang === 'en' ? EN : { voice: VOICE, style: STYLE, rate: RATE, pitch: PITCH };
+  const body = `<prosody rate="${v.rate}" pitch="${v.pitch}">${esc(clean(text))}</prosody>`;
+  return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="${lang === 'en' ? 'en-GB' : 'zh-CN'}">`
+    + `<voice name="${v.voice}">${v.style ? `<mstts:express-as style="${v.style}">${body}</mstts:express-as>` : body}</voice></speak>`;
 }
 
 export const ttsVoice = { voice: VOICE, style: STYLE, rate: RATE, pitch: PITCH };
-export const hashOf = (text) => createHash('sha1').update(`${VOICE}|${STYLE}|${RATE}|${PITCH}|${text}`).digest('hex').slice(0, 20);
+export const hashOf = (text, lang = 'zh') => createHash('sha1')
+  .update(lang === 'en' ? `${EN.voice}|${EN.style}|${EN.rate}|${EN.pitch}|${text}` : `${VOICE}|${STYLE}|${RATE}|${PITCH}|${text}`).digest('hex').slice(0, 20);
 
 /** 调 Azure 把一句话合成成 mp3（Buffer）。预合成脚本也用这个。 */
-export async function azureSynth(text) {
+export async function azureSynth(text, lang = 'zh') {
   const r = await fetch(`https://${REGION}.tts.speech.microsoft.com/cognitiveservices/v1`, {
     method: 'POST',
     headers: {
@@ -42,7 +51,7 @@ export async function azureSynth(text) {
       'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
       'User-Agent': 'botc-activity',
     },
-    body: ssml(text),
+    body: ssml(text, lang),
   });
   if (!r.ok) throw new Error(`Azure 语音合成失败：${r.status} ${await r.text().catch(() => '')}`.trim());
   return Buffer.from(await r.arrayBuffer());
@@ -52,9 +61,9 @@ async function synthesize(id) {
   try { return await readFile(path.join(BAKED, `${id}.mp3`)); } catch { /* 不是预合成的固定台词 */ }
   const file = path.join(DIR, `${id}.mp3`);
   try { return await readFile(file); } catch { /* 还没合成过 */ }
-  const text = known.get(id);
-  if (!text) return null;
-  const buf = await azureSynth(text);
+  const k = known.get(id);
+  if (!k) return null;
+  const buf = await azureSynth(k.text, k.lang);
   await mkdir(DIR, { recursive: true });
   await writeFile(file, buf);
   return buf;
@@ -68,10 +77,10 @@ function ensure(id) {
 }
 
 /** 登记一句旁白，返回它的音频地址（并在后台先合成好）；没配语音服务时返回 null。 */
-export function ttsUrl(text) {
+export function ttsUrl(text, lang = 'zh') {
   if (!ttsEnabled || !text) return null;
-  const id = hashOf(text);
-  known.set(id, text);
+  const id = hashOf(text, lang);
+  known.set(id, { text, lang });
   ensure(id).catch((e) => console.warn('[tts]', e.message));
   return `/api/tts/${id}.mp3`;
 }

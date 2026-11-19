@@ -10,7 +10,8 @@ import { WebSocketServer } from 'ws';
 import { Client, Events, GatewayIntentBits } from 'discord.js';
 import { Room, UserError } from './room.js';
 import { VoiceHub } from './voice.js';
-import { ttsHandler, ttsEnabled, bakedCount } from './tts.js';
+import { ttsHandler, ttsEnabled, bakedCount, ttsUrl } from './tts.js';
+import { forLang, normLang } from '../shared/i18n/server.js';
 import { saveSoon, flushAll, loadAll, archiveGame, listGames, getGame, statsFor, statsAll, archiveMark, markStatsFor, allPlayerWins, forgetSave } from './store.js';
 import { SOLO_GUILD, soloEnabled, soloIdentity, setupSoloRoom, seatSolo, soloEvictions } from './solo.js';
 import { WALLET, awardWins, seedWallet } from './wallet.js';
@@ -241,7 +242,7 @@ app.get('/api/leaderboard', (_req, res) => { res.set('Cache-Control', 'public, m
 
 // 收音页：令牌就是身份，只发给被洗脑的本人
 if (DEV_LOGIN) micDemo();
-app.get('/api/mic/:token', (req, res) => (micValid(req.params.token) ? res.json(micAbout(req.params.token)) : res.status(410).end()));
+app.get('/api/mic/:token', (req, res) => (micValid(req.params.token) ? res.json(forLang(normLang(req.query.lang), micAbout(req.params.token))) : res.status(410).end()));
 app.post('/api/mic/:token/ping', (req, res) => res.status(micPing(req.params.token) ? 204 : 410).end()); // 收音页每 15 秒报到：还开着
 app.post('/api/mic/:token', express.raw({ type: 'audio/wav', limit: '2mb' }), async (req, res) => {
   const { status, text } = await micIngest(req.params.token, req.body);
@@ -307,8 +308,16 @@ const sockets = new Map(); // Room → Set<ws>
 
 function broadcast(room) {
   for (const ws of sockets.get(room) ?? []) {
-    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'state', state: room.viewFor(ws.uid) }));
+    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'state', state: forLang(ws.lang, room.viewFor(ws.uid), englishAudio) }));
   }
+}
+
+// 英文玩家：旁白翻成英文以后，配音也换成英文的（见 tts.js；每个人按自己的语言听）
+function englishAudio(v, depth = 0) {
+  if (!v || typeof v !== 'object' || depth > 6) return;
+  if (Array.isArray(v)) { for (const x of v) englishAudio(x, depth + 1); return; }
+  if (v.kind === 'story' && v.audio && typeof v.text === 'string') v.audio = ttsUrl(v.text, 'en');
+  for (const k of Object.keys(v)) if (v[k] && typeof v[k] === 'object') englishAudio(v[k], depth + 1);
 }
 
 /** 走路只推一个人的位置，不推整份状态。 */
@@ -429,9 +438,10 @@ wss.on('connection', (ws) => {
   ws.on('message', async (raw) => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
-    const reply = (body) => ws.readyState === ws.OPEN && ws.send(JSON.stringify({ type: 'ack', reqId: msg.reqId, ...body }));
+    const reply = (body) => ws.readyState === ws.OPEN && ws.send(JSON.stringify({ type: 'ack', reqId: msg.reqId, ...forLang(ws.lang, body) }));
     try {
       if (msg.type === 'hello') {
+        ws.lang = normLang(msg.lang); // 界面语言：发给这个连接的东西按它翻（中英可以混在一个房间里）
         let user;
         let ticket = null;
         let via = 'discord';
@@ -481,6 +491,7 @@ wss.on('connection', (ws) => {
         sockets.get(room).add(ws);
         room.users.set(user.id, user);
         room.online.add(user.id);
+        (room.langs ??= new Map()).set(user.id, ws.lang); // AI 说书人写字用房主的语言（见 room.js aiLang）
         if (via === 'solo') seatSolo(room, user.id); // 第一次进来：你坐下，再坐 6 个机器人
         // 大厅里的人改了昵称/头像就同步一下
         const seat = room.lobby.find((p) => p.id === user.id);

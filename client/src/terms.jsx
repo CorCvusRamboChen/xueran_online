@@ -2,6 +2,7 @@
 // 每段文字里同一个词只标第一次出现的地方，免得满屏都是下划线。
 import { useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { isEn, tr } from './i18n.js';
 
 export const GLOSSARY = {
   醉酒: '能力失效，但本人不知道：说书人会假装他的能力还在，给的信息可能是假的，能力也不会真的生效。醉酒由水手、侍臣、旅店老板、莽夫等造成；酒鬼一整局都是醉的。',
@@ -35,16 +36,19 @@ export const GLOSSARY = {
   声明: '造谣者白天公开说的一句话。只有真造谣者的声明、而且内容为真时，当晚才会有人死亡；谁都可以假装造谣者发表声明。',
 };
 
-const TERMS = Object.keys(GLOSSARY).sort((a, b) => b.length - a.length);
-const RE = new RegExp(TERMS.map((t) => t.replace(/[*]/g, '\\$&')).join('|'), 'g');
+// 英文版：关键词换成英文（词典里的译名），不分大小写、按整词找（官方能力原文里是小写的 drunk、poisoned……）
+const GL = isEn ? Object.fromEntries(Object.entries(GLOSSARY).map(([k, v]) => [tr(k).toLowerCase(), v])) : GLOSSARY;
+const TERMS = Object.keys(GL).filter(Boolean).sort((a, b) => b.length - a.length);
+const esc = (t) => t.replace(/[*.?+()[\]\\]/g, '\\$&');
+const RE = isEn ? new RegExp(`\\b(?:${TERMS.map(esc).join('|')})\\b`, 'gi') : new RegExp(TERMS.map(esc).join('|'), 'g');
 
 /** 一段文字，把关键词标出来。 */
 export function Glossed({ text }) {
   if (!text) return null;
   const out = []; const seen = new Set(); let last = 0;
   for (const m of String(text).matchAll(RE)) {
-    if (seen.has(m[0])) continue;
-    seen.add(m[0]);
+    if (seen.has(m[0].toLowerCase())) continue;
+    seen.add(m[0].toLowerCase());
     if (m.index > last) out.push(text.slice(last, m.index));
     out.push(<Term key={m.index} k={m[0]}>{m[0]}</Term>);
     last = m.index + m[0].length;
@@ -66,7 +70,7 @@ export function Term({ k, children }) {
     const below = r.top < 140;
     setPos({ left, width: w, top: below ? r.bottom + 8 : undefined, bottom: below ? undefined : window.innerHeight - r.top + 8 });
   }, [open]);
-  const text = GLOSSARY[k];
+  const text = GL[isEn ? k.toLowerCase() : k];
   if (!text) return children;
   return (
     <>

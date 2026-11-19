@@ -1,5 +1,6 @@
 // 狼人杀（娱乐模式）的游戏画面：座位圈 + 操作面板 + 右栏。服务器那边见 src/server/werewolfRoom.js，规则见 src/engine/werewolf.js。
 // 借用血染的零件（广场座位圈、HUD、记录、小魔典），流程和按钮是狼人杀自己的。
+import { isEn } from './i18n.js';
 import { soloMode } from './connect.js';
 import { useEffect, useState } from 'react';
 import { Town } from './Town.jsx';
@@ -89,7 +90,7 @@ function WwCard({ id, script = 'ww' }) {
   return (
     <article className="acard ww-card" style={{ '--attr': color }}>
       <div className="acard-art ww-art"><span className="ww-glyph">{GLYPH[id]}</span></div>
-      <header className="acard-name"><b>{r.name}</b><small>{r.en.toUpperCase()}</small></header>
+      <header className="acard-name"><b>{r.name}</b>{!isEn && <small>{r.en.toUpperCase()}</small>}</header>
       <div className="acard-body">
         <p className="acard-kicker">{side} · {r.side === 'wolf' ? '狼人阵营' : '好人阵营'}</p>
         <p className="acard-text">{abilityIn(id, script)}</p>

@@ -6,6 +6,7 @@ import { knock, wolfHowl } from './world/footsteps.js';
 import { speak } from './voice.js';
 import { SCALES, AVATAR_MODES, AVATAR_3D_ON, getDisplay, setDisplay, onDisplay, avatarMode } from './display.js';
 import { inDiscord, openInBrowser } from './connect.js';
+import { LANG, LANGS, LANG_LABEL, switchLang } from './i18n.js';
 
 const PREVIEW = {
   master: () => knock(0.8),
@@ -68,6 +69,14 @@ function DisplaySettings() {
     <div className="disp">
       <div className="vol-title">显示</div>
       <div className="disp-row">
+        <span className="vol-name">{LANG_LABEL}</span>
+        <div className="disp-seg">
+          {LANGS.map(([k, label]) => (
+            <button key={k} type="button" className={LANG === k ? 'on' : ''} onClick={() => switchLang(k)} lang={k === 'en' ? 'en' : 'zh-CN'}>{label}</button>
+          ))}
+        </div>
+      </div>
+      <div className="disp-row">
         <span className="vol-name">字号</span>
         <div className="disp-seg">
           {SCALES.map((k) => (
@@ -93,7 +102,7 @@ export function VolumeButton({ className = '', label = '设置' }) {
   const [open, setOpen] = useState(false);
   return (
     <span className="vol-wrap">
-      <button type="button" className={`vol-btn ${className} ${open ? 'on' : ''}`} onClick={() => setOpen((x) => !x)} title="音量和字号">{label}</button>
+      <button type="button" className={`vol-btn ${className} ${open ? 'on' : ''}`} onClick={() => setOpen((x) => !x)} title="音量、字号和语言">{label}</button>
       {open && <VolumePanel onClose={() => setOpen(false)} />}
     </span>
   );

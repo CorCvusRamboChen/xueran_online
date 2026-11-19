@@ -1,5 +1,6 @@
 // 收音页：被洗脑的玩家在普通浏览器里打开（Discord 活动里拿不到麦克风）。?mic=令牌
 // 只收这台设备的麦克风，一句话说完才上传；令牌当天黄昏失效。
+import { LANG } from './i18n.js';
 import { useEffect, useRef, useState } from 'react';
 import { Segmenter, downsample, encodeWav } from './micAudio.js';
 
@@ -141,7 +142,7 @@ export default function MicPage({ token }) {
   };
 
   useEffect(() => {
-    fetch(`/api/mic/${encodeURIComponent(token)}`)
+    fetch(`/api/mic/${encodeURIComponent(token)}?lang=${LANG}`) // 英文页：服务器把说明翻好
       .then(async (r) => { setState(r.ok ? 'ready' : 'expired'); if (r.status === 200) setAbout(await r.json().catch(() => ({}))); })
       .catch(() => setState('expired'));
     return shut;

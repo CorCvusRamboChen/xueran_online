@@ -1,5 +1,7 @@
 // 大厅：参考极乐迪斯科主菜单——手绘的雪夜小镇铺满首屏，左边大标题和一列竖排菜单；
 // 右边是镇民名册（带阵营构成）、挑形象、房间设置（按夜晚 / 白天分组）。
+import { LangHint } from './LangHint.jsx';
+import { isEn } from './i18n.js';
 import { Portrait } from './util.jsx';
 import { stepWake, wakeOf, WAKE_LABEL } from '../../src/shared/nightWake.js';
 import { CHARACTERS } from '../../src/shared/characters.js';
@@ -60,7 +62,7 @@ function BrowserHint({ toast, onClose }) {
           <Btn kind="primary" disabled={busy} onClick={async () => { setBusy(true); const msg = await openInBrowser(); if (msg) toast?.(msg); onClose(); }}>在浏览器打开</Btn>
           <Btn kind="ghost" onClick={onClose}>留在 Discord</Btn>
         </div>
-        <p className="muted">以后想换，在设置面板的最下面也能点「在浏览器打开」（大厅里叫「声音和字号」，对局里在齿轮里）。</p>
+        <p className="muted">以后想换，在设置面板的最下面也能点「在浏览器打开」（大厅里叫「声音、字号和语言」，对局里在齿轮里）。</p>
       </div>
     </div>
   );
@@ -114,7 +116,8 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
         <section className="lobby-left">
           <div className="hero-title">
             <h1 className="title">血染钟楼</h1>
-            <Tag tone="dark">{`${SCRIPTS[st.script]?.name ?? SCRIPTS.tb.name} · ${(SCRIPTS[st.script]?.en ?? SCRIPTS.tb.en).toUpperCase()}`}</Tag>
+            <LangHint />
+            <Tag tone="dark">{isEn ? (SCRIPTS[st.script]?.en ?? SCRIPTS.tb.en) : `${SCRIPTS[st.script]?.name ?? SCRIPTS.tb.name} · ${(SCRIPTS[st.script]?.en ?? SCRIPTS.tb.en).toUpperCase()}`}</Tag>
             {soloMode && <Tag tone="mot">单机试玩</Tag>}
           </div>
           <nav className="menu">
@@ -131,7 +134,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
             {!host && s.hostOnline && <p className="menu-wait">等房主{s.hostName ? `「${s.hostName}」` : ''}开始……</p>}
             {!host && s.hostOnline && <Btn kind="secondary" className="menu-item" onClick={() => act('claimHost')}>房主没反应？接管房主</Btn>}
             {onTutorial && <Btn className="menu-item menu-tut" onClick={() => setIntro(true)}>新手教程（1 分钟动画 + 练习局）</Btn>}
-            <VolumeButton className="btn btn-secondary menu-item menu-vol" label="声音和字号" />
+            <VolumeButton className="btn btn-secondary menu-item menu-vol" label="声音、字号和语言" />
             {intro && createPortal(<TutorialIntro onStart={() => { setIntro(false); onTutorial(); }} onClose={() => setIntro(false)} />, document.body)}
             {browserHint && createPortal(<BrowserHint toast={toast} onClose={() => { markHintSeen(); setBrowserHint(false); }} />, document.body)}
           </nav>
@@ -719,7 +722,7 @@ export function RoleShowcase({ compact = false, script = 'tb' }) {
               <button key={id} type="button" className="role-tile" style={{ '--attr': ATTR[t].color }} onClick={() => setOpen(id)}>
                 <span className="rt-art">{ROLE_ART[id] ? <img src={ROLE_ART[id]} alt="" loading="lazy" /> : null}</span>
                 <span className="rt-body">
-                  <b>{ROLES[id].name}<i>{ROLES[id].en}</i></b>
+                  <b>{ROLES[id].name}{!isEn && <i>{ROLES[id].en}</i>}</b>
                   <span><Glossed text={ROLES[id].ability} /></span>
                 </span>
               </button>

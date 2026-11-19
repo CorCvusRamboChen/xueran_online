@@ -116,8 +116,11 @@ export async function judgeStatement(statement, facts, { timeoutMs = 25_000, pro
 // ───────────── 窃窃私语：失忆者猜能力、渔夫要建议 ─────────────
 // 不是判真假，所以单独问：同样先 Jev，再 DeepSeek。只要快模型就够（一句话的事），失败了调用方用规则兜底。
 
+const EN_NOTE = '\n\n【语言】这一桌玩家用的是英文界面：JSON 里所有要给玩家看的文字（句子、理由、总结、发言）都用自然的英文写；角色名用官方英文名（如 Washerwoman、Imp）；规定了取值的字段（枚举、座位号、数字）照旧。';
+
 /** 问一家 OpenAI 兼容接口，要一个 JSON 对象；check(out) 返回整理好的结果，不合格返回 null。所有服务都失败返回 null。 */
-async function askJson(system, user, check, { providers = PROVIDERS.filter((p) => p.name !== 'DeepSeek'), fetchImpl = fetch } = {}) {
+async function askJson(system, user, check, { providers = PROVIDERS.filter((p) => p.name !== 'DeepSeek'), fetchImpl = fetch, lang = 'zh' } = {}) {
+  if (lang === 'en') system += EN_NOTE; // 英文版（2026-11-20）：房主用英文界面时，给玩家看的文字用英文写
   for (const p of providers) {
     const key = String(p.key() ?? '').match(/[!-~]+/)?.[0];
     if (!key) continue;

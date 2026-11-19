@@ -3,6 +3,7 @@
 // 普通浏览器里走 DEV_LOGIN 测试模式。
 import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { setSpeaking, clearSpeaking } from './speaking.js';
+import { LANG } from './i18n.js';
 
 let sdkRef = null;
 let publicUrl = null;
@@ -240,7 +241,7 @@ export function openSocket(hello, { onState, onPos, onStatus, onUpdate }) {
       const r = await new Promise((resolve) => {
         const reqId = ++seq;
         pending.set(reqId, resolve);
-        ws.send(JSON.stringify({ type: 'hello', ...hello, reqId }));
+        ws.send(JSON.stringify({ type: 'hello', ...hello, lang: LANG, reqId })); // 界面语言：服务器按它翻译发给我的东西
       });
       if (!r.ok) { report('进入房间', r.error); onStatus('error', r.error); return; }
       if (r.build) { if (build && r.build !== build && r.build !== 'dev') onUpdate?.(); build ??= r.build; }

@@ -1797,7 +1797,7 @@ export class Room {
     this.court = null;
     this.changed();
     const ask = this.afterJudge ?? ((this.judgeReady ?? judgeAvailable)() ? judgeAfterGame : null);
-    const r = ask ? await ask(g.factsSNV(), this.talkDigest(g), losers.map((q) => ({ seat: q.seat, name: q.name })), { court }).catch(() => null) : null;
+    const r = ask ? await ask(g.factsSNV(), this.talkDigest(g), losers.map((q) => ({ seat: q.seat, name: q.name })), { court, lang: this.aiLang() }).catch(() => null) : null;
     if (this.game !== g) return;
     this.after = { pending: false, recap: r?.recap ?? null, moments: r?.moments ?? [], talkers: this.talkers(g), by: r?.by ?? null };
     let crim = court && r?.criminal ? { id: g.players.find((q) => q.seat === r.criminal.seat)?.id, reason: r.criminal.reason, evidence: r.criminal.evidence } : null;
@@ -2473,7 +2473,7 @@ export class Room {
       `白天公开发生的事：\n${pub.slice(-30).join('\n') || '还没有'}`,
     ].filter(Boolean).join('\n\n');
     try {
-      const r = (this.judgeReady ?? judgeAvailable)() ? await speakSeat7(ctx) : null;
+      const r = (this.judgeReady ?? judgeAvailable)() ? await speakSeat7(ctx, { lang: this.aiLang() }) : null;
       if (r?.say) { g.record('st', `7 号空座的发言由 ${r.by} 写`); return r.say; }
     } catch (e) { console.warn('[botc] 7 号空座发言失败：', e.message); }
     const others = g.alive().filter((q) => q.id !== p.id);
@@ -2506,7 +2506,7 @@ export class Room {
     const fallback = () => reply(g.st.fishermanAdvice(p, lie));
     if (!(this.judgeReady ?? judgeAvailable)()) { fallback(); return; }
     const fake = lie === 'atheist'; // 无神论者局：按说书人假装的邪恶阵营给正常的建议（以前当成失效、还把「全员善良」的真实情况交给模型）
-    (this.advise ?? adviseFisherman)({ team: g.evilOf(p) && p.role !== 'marionette' ? '邪恶' : '善良', lie: !!lie && !fake, facts: fake ? g.factsFake() : g.factsSNV() }) // 提线木偶以为自己是好人
+    (this.advise ?? adviseFisherman)({ team: g.evilOf(p) && p.role !== 'marionette' ? '邪恶' : '善良', lie: !!lie && !fake, facts: fake ? g.factsFake() : g.factsSNV() }, { lang: this.aiLang() }) // 提线木偶以为自己是好人
       .then((res) => (res?.advice ? reply(res.advice) : fallback()))
       .catch((e) => { console.warn('[botc] 渔夫的建议出错：', e.message); fallback(); });
   }
@@ -2621,6 +2621,9 @@ export class Room {
    * 把收音转写的话交给大模型看他有没有努力证明；有收音服务时公开声明不算数，不开收音会重罚。最后都由说书人掷骰子，加减值看 dice.js。
    * 夜里没有人说话、也不能声明，所以夜晚的疯狂只看当天白天的表现。
    */
+  /** AI 说书人写给玩家看的字用什么语言：跟房主的界面语言（index.js 记在 langs 里；中英混桌时以房主为准）。 */
+  aiLang() { return this.langs?.get(this.hostId) === 'en' ? 'en' : 'zh'; }
+
   async judgeMadness() {
     const g = this.game;
     if (g.engine !== 'snv' || this.stId) return;

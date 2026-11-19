@@ -36,7 +36,7 @@ export function Replay({ timeline }) {
           <h4>{gr.when}</h4>
           <ul>
             {gr.items.map((e, k) => (
-              <li key={k} className={`rk-${e.kind}${/【能力失效】/.test(e.text) ? ' broken' : ''}`}>
+              <li key={k} className={`rk-${e.kind}${e.text.includes('【能力失效】'.trim()) ? ' broken' : ''}`}>
                 <span className="replay-kind">{REPLAY_KINDS[e.kind] ?? e.kind}</span>
                 <span>{e.text}</span>
               </li>
@@ -93,7 +93,7 @@ export function KeyInfo({ votes = [], knives = [], execs = [], pubs = [], g, nam
 
 /** 一条公开事件（公开声明、开枪、公开选人、突然死亡）。白天的按发生顺序排在投票前面。 */
 function PubRow({ e }) {
-  const tag = e.night ? `第${cnNum(e.night)}夜` : /开.{0,2}枪|举起枪/.test(e.text) ? '开枪' : /声明|猜|说：/.test(e.text) ? '公开声明' : '公开';
+  const tag = e.night ? `第${cnNum(e.night)}夜` : /开.{0,2}枪|举起枪|\bsho(t|ot)\b|raises? (a|the|their|his|her) gun/i.test(e.text) ? '开枪' : /声明|猜|说：|claim|guess|says?:/i.test(e.text) ? '公开声明' : '公开';
   return (
     <div className="ki-row ki-pub">
       <span className="ki-tag">{tag}</span>

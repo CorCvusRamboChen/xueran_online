@@ -48,7 +48,7 @@ export function useNarrator(log, epoch) {
     for (const l of fresh) speak(l.text, l.audio);
     const titled = fresh.filter((l) => l.title).map((l) => ({ ...l, key: l.id }));
     // "第 N 天"一到就把还没放的旧卡丢掉，直接放它（不然开局时几张卡排队，天亮的卡要等到自由活动开始以后才出来）
-    const dawnAt = titled.findIndex((l) => /^第.+天$/.test(l.title));
+    const dawnAt = titled.findIndex((l) => /^第.+天$|^Day \d+$/.test(l.title)); // 英文版：Day 3
     if (dawnAt >= 0) setCards(titled.slice(dawnAt));
     else if (titled.length) setCards((cur) => [...cur, ...titled].slice(-3));
   }, [log, epoch]);
@@ -71,7 +71,7 @@ export function TitleCard({ card, onClose, players = [], kicker = '说书人' })
   }, [card, onClose]);
   if (!card) return null;
   // "第 N 天"：天亮那张卡做成浅的（只在下方垫一层暗），让后面小屋里的晨光动画露出来
-  const tone = /^第.+天$/.test(card.title) ? 'dawn' : /处决|邪恶|开枪/.test(card.title) ? 'phy' : /夜/.test(card.title) ? 'night' : 'day';
+  const tone = /^第.+天$|^Day \d+$/.test(card.title) ? 'dawn' : /处决|邪恶|开枪|Execut|Evil|Shot/.test(card.title) ? 'phy' : /夜|Night/.test(card.title) ? 'night' : 'day';
   if (BANNER.has(card.title)) {
     return (
       <div className={`tc-banner tc-${tone}`} key={card.key} role="status" aria-live="assertive">

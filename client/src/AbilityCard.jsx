@@ -1,5 +1,6 @@
 // 能力牌：主体是能力本身（不画人，人物有单独的头像牌）。
 // 版面：上半插画铺满（极乐迪斯科技能卡）+ 行动时机（血染夜晚顺序）+ 白底名字条 + 能力说明 + 提醒标记（血染原作的 reminder token）。
+import { isEn } from './i18n.js';
 import { ROLES, TEAM_NAME, isEvilRole, inScript } from '../../src/engine/roles.js';
 import { ATTR, FLAVOR } from './flavor.js';
 import { ROLE_ART } from './art.js';
@@ -80,7 +81,7 @@ export function AbilityCard({ id, compact = false }) {
       </div>
       <header className="acard-name">
         <b>{r.name}</b>
-        <small>{r.en.toUpperCase()}</small>
+        {!isEn && <small>{r.en.toUpperCase()}</small>}
       </header>
       <div className="acard-body">
         <p className="acard-kicker">{attr.name} · {TEAM_NAME[r.team]} · {r.team === 'traveller' ? '阵营由说书人决定' : isEvilRole(id) ? '邪恶' : '善良'}</p>

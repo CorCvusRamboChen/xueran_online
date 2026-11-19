@@ -2,6 +2,7 @@
 // 上面一个搜索框（角色名、英文名、技能里的词都能搜），下面按阵营排好的角色名小块，整个剧本一屏放得下；
 // 点一个就在下面展开它的技能，默认展开你自己的角色。打开「多选」可以同时展开好几个角色对着看（比如几个人报的角色）。
 // 你在小魔典里猜过某人是这个角色的，小块上会写几号。
+import { isEn } from './i18n.js';
 import { useEffect, useRef, useState } from 'react';
 import { ROLES, SCRIPTS, TEAM_NAME, rolesOf, travellersOf } from '../../src/engine/roles.js';
 import { ROLE_ART } from './art.js';
@@ -116,9 +117,9 @@ function RoleDetail({ id, mine, guessed, onCard, onClose, innerRef }) {
       </button>
       <div className="ri-body">
         <header>
-          <b>{r.name}</b><small>{r.en}</small>
+          <b>{r.name}</b>{!isEn && <small>{r.en}</small>}
           <span className="ri-tag">{TEAM_NAME[r.team]}</span>
-          {wakeTags(id).map((n) => <span key={n} className={`ri-tag night ${/判定/.test(n) ? 'st' : ''}`}>☾ {n}</span>)}
+          {wakeTags(id).map((n) => <span key={n} className={`ri-tag night ${/判定|Storyteller/.test(n) ? 'st' : ''}`}>☾ {n}</span>)}
           {onClose && <button type="button" className="ri-x" onClick={onClose} aria-label={`收起${r.name}`}>×</button>}
         </header>
         <p><Glossed text={r.ability} /></p>
