@@ -257,6 +257,19 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                 ? `推荐预设：${n} 人有 ${list.length} 套推荐配置${off ? `（官方 ${off} 套，优先）` : ''}，大约 ${Math.round(PRESET_SHARE * 100)}% 的局从里面挑，其余用 AI 配置。`
                 : n ? `推荐预设：${n} 人还没有推荐配置，会用 AI 配置。` : '推荐预设：按坐下的人数从推荐配置里挑，这个人数没有的话用 AI 配置。';
             })()}</p>
+            {st.script === 'mo' && <><div className="setting mode-row">
+              <span>恶魔</span>
+              <div className="seg">
+                {[['vigormortis', '亡骨魔'], ['lilmonsta', '小怪宝'], ['leviathan', '利维坦']].map(([id, label]) => (
+                  <button key={id} type="button" className={(st.moDemon ?? 'vigormortis') === id ? 'on' : ''} onClick={() => set({ moDemon: id })}>{label}</button>
+                ))}
+              </div>
+            </div>
+            <p className="muted setting-note">{{
+              vigormortis: '原版：恶魔是哈迪寂亚或亡骨魔。',
+              lilmonsta: '亡骨魔换成小怪宝：没有恶魔玩家、多一个爪牙；爪牙每晚选一名爪牙照看它，照看的人「是恶魔」，他死了善良获胜；首夜以外说书人每晚杀一人。',
+              leviathan: '亡骨魔换成利维坦：不杀人，所有人都知道它在场；处决第二名善良玩家、或者第 5 个白天结束，邪恶获胜。',
+            }[st.moDemon ?? 'vigormortis']}抽到哈迪寂亚的局不受影响。</p></>}
             {s.roleAssign && n > 0 && <RoleAssign s={s} act={act} script={st.script ?? 'tb'} />}
             {!soloMode && <><div className="setting mode-row">
               <span>说书人</span>
@@ -644,6 +657,8 @@ const TEAM_HINT = {
 /** 夜间顺序：首夜 / 其他夜晚各一列，每步写这个角色醒来做什么，最后讲为什么这么排（照官方的夜晚顺序表）。 */
 export function NightOrder({ script }) {
   const o = NIGHT_ORDER[script];
+  // 夜半狂欢的恶魔开关：这局没有的那几个恶魔（亡骨魔 / 小怪宝 / 利维坦）不列
+  const here = (([id]) => !['vigormortis', 'lilmonsta', 'leviathan'].includes(id) || rolesOf(script).includes(id));
   const row = (first) => ([id, what], i) => {
     const r = ROLES[id];
     const color = r ? ATTR[r.team].color : 'var(--muted)';
@@ -661,8 +676,8 @@ export function NightOrder({ script }) {
     <div className="night-order">
       <p className="muted">说书人每晚按这个顺序走。<b className="no-wake wake">睁眼</b> 这个人会被叫醒；<b className="no-wake if">条件</b> 满足条件才醒（或醒的是别人）；<b className="no-wake st">判定</b> 本人不醒，说书人自己结算。没在场的角色直接跳过；死了的人不再醒（守鸦人这种死了才触发的除外）。</p>
       <div className="no-cols">
-        <section><h3>☾ 首夜</h3><ol>{o.first.map(row(true))}</ol></section>
-        <section><h3>☾ 其他夜晚</h3><ol>{o.other.map(row(false))}</ol></section>
+        <section><h3>☾ 首夜</h3><ol>{o.first.filter(here).map(row(true))}</ol></section>
+        <section><h3>☾ 其他夜晚</h3><ol>{o.other.filter(here).map(row(false))}</ol></section>
       </div>
       <h3>为什么这么排</h3>
       <ul className="no-why">{o.why.map((t) => <li key={t}><Glossed text={t} /></li>)}</ul>

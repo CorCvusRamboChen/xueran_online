@@ -40,6 +40,7 @@ const OVERRIDES = {
   philosopher: { note: '用掉能力之前每晚醒' },
   // 小剧本、社区剧本
   leviathan: { first: ST, other: ST, note: '本人不醒：说书人宣布利维坦在场、现在第几天' },
+  lilmonsta: { first: W, other: W, note: '醒的是爪牙：一起决定谁照看小怪宝；首夜以外说书人替恶魔杀一人' },
   amnesiac: { first: IF, other: IF, note: '看说书人给他的能力：那个能力夜里要醒，他才醒' },
   cannibal: { other: IF, note: '吃到的能力夜里要醒，他才醒' },
   farmer: { other: IF, note: '他夜里死了：叫醒的是一名活着的善良玩家，他变成农夫' },

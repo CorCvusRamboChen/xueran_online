@@ -612,6 +612,20 @@ export class Storyteller {
     return v;
   }
 
+  /** 小怪宝：说书人替「恶魔」杀人，照聪明的恶魔挑（读场有就用：杀被信任的、报信息的、指认照看者的，留着被怀疑的人）。 */
+  monstaVictim(pool, holder) {
+    const g = this.g;
+    const t = this.tableOrRules();
+    const v = this.draw('monstaKill', pool, (q) => tableFeatures(t, q.id, { demon: holder.id }));
+    if (v) this.note(`小怪宝：说书人替恶魔杀死 ${g.name(v.id)}（照看的是 ${g.name(holder.id)}）`);
+    return v;
+  }
+  /** 小怪宝：爪牙没定（机器人、超时）时说书人挑照看的人：大家越不怀疑越安全（官方：交给可靠的人）。 */
+  monstaSitter(sitters, m) {
+    const t = this.tableOrRules();
+    return this.draw('monstaSitter', sitters, (q) => ({ ...tableFeatures(t, q.id), keep: q.id === m.holder ? 1 : 0 }));
+  }
+
   /** 无神论者局：假恶魔死了（多半是被处决），从对得上的人里挑下一个「恶魔」：大家越不怀疑的越像没被发现的恶魔。 */
   atheistHeir(cands, w) {
     const t = this.tableOrRules();
@@ -864,7 +878,7 @@ export class Storyteller {
     const isEvil = (q) => (w ? w.evil.has(q.id) : g.evilOf(q));
     const evilIn = (list) => list.filter(isEvil).length;
     const num = (v, lo, hi) => { const o = [v - 1, v + 1].filter((x) => x >= lo && x <= hi); return o.length ? pick(o, rng) : v + 1; };
-    const demons = ps.filter((q) => (w ? q.id === w.demon : ROLES[q.role].team === 'demon'));
+    const demons = ps.filter((q) => (w ? q.id === w.demon : g.demonNow ? g.demonNow(q) : ROLES[q.role].team === 'demon'));
     // 官方：「避免提供恶魔是谁这种信息」。点名一两个人的那几条不点恶魔，善良明显落后时才偶尔放开
     const open = !demons.length || this.roll('savantDemon', { balance: this.balance() }, {});
     const named = open ? ps : ps.filter((q) => !demons.includes(q));

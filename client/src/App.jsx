@@ -27,7 +27,7 @@ import { WerewolfGame } from './Werewolf.jsx';
 import { RoleIndex } from './RoleIndex.jsx';
 import { Replay, KeyInfo } from './replay.jsx';
 import { savedOutfit } from './Wardrobe.jsx';
-import { DISTRIBUTION, ROLES as ROLE_DEFS, SCRIPTS, engineOf, inScript, rolesOf, ragnarokWolves, FABLED, fabledOf, travellersOf } from '../../src/engine/roles.js';
+import { DISTRIBUTION, ROLES as ROLE_DEFS, SCRIPTS, engineOf, inScript, rolesOf, ragnarokWolves, FABLED, fabledOf, travellersOf, setDemonSwap } from '../../src/engine/roles.js';
 const ROLE_ABILITY = Object.fromEntries(Object.entries(ROLE_DEFS).map(([id, r]) => [id, r.ability]));
 
 /**
@@ -59,16 +59,25 @@ const BOARD_NOTE = {
 function markFabled(text, script) {
   const names = fabledOf(script).map((id) => FABLED[id].name);
   if (!names.length) return text;
-  return text.split(new RegExp(`(${names.join('|')})`)).map((part, i) => (names.includes(part) ? <span key={i} className="fab-name">{part}<sub>传奇</sub></span> : part));
+  const of = (name) => FABLED[fabledOf(script).find((id) => FABLED[id].name === name)];
+  return text.split(new RegExp(`(${names.join('|')})`)).map((part, i) => (names.includes(part) ? <span key={i} className="fab-name" title={`传奇角色 · ${part}：${of(part)?.ability ?? ''}`}>{part}<sub>传奇</sub></span> : part));
 }
 /** 顶部常驻：这局的板子配置（几个镇民、外来者、爪牙、恶魔）。 */
+/** 夜半狂欢换了恶魔时顶栏的说明（亡骨魔 −1 外来者换成对应的）。 */
+function boardNote(script, swap) {
+  const note = BOARD_NOTE[script];
+  if (script !== 'mo' || !note || !swap || swap === 'vigormortis') return note;
+  const what = swap === 'lilmonsta' ? ['小怪宝：没有恶魔玩家、多一个爪牙，爪牙每晚选谁照看（他「是恶魔」）', '小怪宝 +1 爪牙'] : ['利维坦：不杀人，处决第二名善良或第 5 天结束邪恶获胜', '利维坦 不杀人'];
+  return [note[0].replace('亡骨魔在场 −1 外来者', what[0]), note[1].replace('亡骨魔 −1', what[1])];
+}
 function BoardBar({ n, script }) {
   const d = script === 'rag' && DISTRIBUTION[n] ? [n - ragnarokWolves(n), 0, 0, ragnarokWolves(n)] : DISTRIBUTION[n]; // 诸神黄昏：猎手和狼人
   if (!d) return null;
   const parts = [['镇民', d[0], 'var(--int)'], ['外来者', d[1], 'var(--psy)'], ['爪牙', d[2], '#c9762e'], ['恶魔', d[3], 'var(--phy)']];
-  const note = BOARD_NOTE[script]?.[1] ?? '';
+  const full = boardNote(script, rolesOf('mo', 'demon').find((r) => r !== 'alhadikhia'));
+  const note = full?.[1] ?? '';
   return (
-    <div className={`board-bar ${note.length > 14 ? 'two' : ''}`} title={BOARD_NOTE[script]?.[0] ?? ''}>{/* 说明长了就另起一行，不撑宽顶栏 */}
+    <div className={`board-bar ${note.length > 14 ? 'two' : ''}`} title={full?.[0] ?? ''}>{/* 说明长了就另起一行，不撑宽顶栏 */}
       <span className="bb-script">{SCRIPTS[script]?.name ?? SCRIPTS.tb.name}</span>
       <span className="bb-n">{n} 人局</span>
       {parts.map(([k, v, c]) => <span key={k} className="bb-item"><b style={{ color: c }}>{v}</b>{k}</span>)}
@@ -140,6 +149,8 @@ function predictMove(s, x, y, run = false) {
 
 export default function App() {
   const [s, setS] = useState(null);
+  // 夜半狂欢的恶魔开关：对局里看这局的，大厅里看房间设置。技能表、角色页、夜晚顺序都按它换掉亡骨魔（渲染子组件之前就记下）
+  setDemonSwap('mo', s?.demonSwap !== undefined ? s.demonSwap : s?.settings?.moDemon);
   const [status, setStatus] = useState({ kind: 'connecting' });
   const [step, setStep] = useState('正在走进这座小镇……');
   const [slow, setSlow] = useState(false);

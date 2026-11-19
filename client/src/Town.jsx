@@ -8,7 +8,6 @@ import { useMarks, TAGS, MarkMenu, MarkBadge, LinkLines, LINKS, addLink, useLink
 import { ClockTower, Tree, Lamp, MAP_COLORS as C, INK } from './art/TownArt.jsx';
 import { SCENE_ART } from './art.js';
 import { PeltStack } from './Pelt.jsx';
-import { FABLED, fabledOf } from '../../src/engine/roles.js';
 
 // 手绘广场（白天 / 夜里两张同构图，夜里淡入）；没有就用线稿。
 // 每个剧本一张：square-day-<剧本>.webp（暗流涌动不带后缀）；还没画的剧本先用暗流涌动的
@@ -135,12 +134,9 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
           <button type="button" className="tl-cancel" onClick={() => setFrom(null)}>取消</button>
         </div>
       )}
-      {(s.storyteller || fabledOf(s.script).length > 0) && (
-        <div className="st-corner">{/* 左下角：说书人（有无神论者的剧本）和这局的传奇角色（2026-11-19 用户） */}
-          {fabledOf(s.script).length > 0 && ( // 传奇角色叠在说书人座位上方一小排（横排太长会压到座位和底部按钮栏）
-            <div className="fabled-row">{fabledOf(s.script).map((id) => <FabledChip key={id} id={id} size={Math.round(tk * 0.5)} />)}</div>
-          )}
-          {s.storyteller && <StSeat s={s} pickable={pickable} picked={picked} vote={vote} tk={tk} onTap={onTap} />}
+      {s.storyteller && (
+        <div className="st-corner">{/* 左下角：说书人（有无神论者的剧本）。传奇角色在顶栏和右栏「传奇·旅行者」里，这里不重复（2026-11-19 用户） */}
+          <StSeat s={s} pickable={pickable} picked={picked} vote={vote} tk={tk} onTap={onTap} />
         </div>
       )}
       {s.players.map((p, i) => {
@@ -223,29 +219,6 @@ function StSeat({ s, pickable, picked, vote, tk, onTap }) {
       <div className="token-name">{st.human ? `说书人 · ${st.name}` : 'AI 说书人'}</div>
       {(s.stNominated || onBlock) && <div className="token-tags">{onBlock ? '处决台上' : '被提名'}</div>}
     </button>
-  );
-}
-
-/** 传奇角色的小牌子：点一下看能力（大家都知道它在场，但不知道它这局具体造成了什么）。 */
-function FabledChip({ id, size }) {
-  const [open, setOpen] = useState(false);
-  const f = FABLED[id];
-  return (
-    <div className="fabled-chip">
-      <button type="button" className="fabled-face" style={{ width: size, height: size }} onClick={() => setOpen(!open)} title={`传奇角色 · ${f.name}：${f.ability}`}>
-        <span>{[...f.name][0]}</span>
-      </button>
-      <div className="token-name">{f.name}<sub>传奇</sub></div>
-      {open && (
-        <div className="fabled-pop" role="dialog" aria-label={f.name}>
-          <b>{f.name} <i>{f.en}</i></b>
-          <small>传奇角色 · 说书人给这一局加的规则，不是哪个玩家的身份</small>
-          <p>{f.ability}</p>
-          <p className="muted">{f.detail}</p>
-          <button type="button" onClick={() => setOpen(false)}>收起</button>
-        </div>
-      )}
-    </div>
   );
 }
 

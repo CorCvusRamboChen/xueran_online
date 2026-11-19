@@ -102,7 +102,10 @@ export const DRAW = {
   // 杀大家信任的、在指认假恶魔的、在报信息的；留着被怀疑的人背锅；在推「处决说书人」的人真邪恶最想留着，基本不杀
   atheistKill: { trusted: 1.5, accuser: 1.4, info: 0.7, suspected: -2, stVoice: -3, newbie: -1, hits: -0.5 },
   // 假恶魔被处决后挑下一个「恶魔」：大家越不怀疑越像藏得好的恶魔，故事才能接着讲
-  atheistDemon: { suspected: -1.5, trusted: -0.5 },      // 麻脸巫婆那晚说书人多杀的人：别总挑新手、同一个人             // 修行者两边一样近：善良落后多指恶魔那一侧，领先多指爪牙那一侧（官方：说书人决定）
+  atheistDemon: { suspected: -1.5, trusted: -0.5 },
+  // 小怪宝（夜半狂欢的恶魔开关）：说书人替恶魔杀人，和聪明的恶魔一样挑；爪牙没定照看的人时，说书人挑最不被怀疑的，多半不换人
+  monstaKill: { trusted: 1.2, accuser: 1.2, info: 0.6, suspected: -1, newbie: -1, hits: -0.5 },
+  monstaSitter: { suspected: -2, keep: 0.7 },      // 麻脸巫婆那晚说书人多杀的人：别总挑新手、同一个人             // 修行者两边一样近：善良落后多指恶魔那一侧，领先多指爪牙那一侧（官方：说书人决定）
 };
 
 const logit = (p) => Math.log(p / (1 - p));

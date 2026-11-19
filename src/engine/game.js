@@ -11,7 +11,7 @@
 
 import { TRAVELLER_METHODS } from './travellers.js';
 import {
-  ROLES, TOWNSFOLK, OUTSIDERS, MINIONS, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, SCRIPTS, engineOf, ragnarokWolves, inScript,
+  ROLES, TOWNSFOLK, OUTSIDERS, MINIONS, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, SCRIPTS, engineOf, ragnarokWolves, inScript, rolesOf,
 } from './roles.js';
 import { Storyteller } from './storyteller.js';
 import { BMR_METHODS } from './bmr.js';
@@ -117,7 +117,7 @@ export class Game {
    * @param {{rng?:()=>number, roles?:string[], misregister?:number}} opts
    *   misregister：陌客/间谍"错误登记"的固定概率（测试用）；不给就由说书人按局势判定
    */
-  constructor(players, { rng = Math.random, roles, misregister = null, evilInfo = null, script = 'tb', drunkAs = null, noBaron = false, deadDrunk = false, lunaticGhost = false, newbies = [], mezEasy = true } = {}) {
+  constructor(players, { rng = Math.random, roles, misregister = null, evilInfo = null, script = 'tb', drunkAs = null, noBaron = false, deadDrunk = false, lunaticGhost = false, newbies = [], mezEasy = true, demonSwap = null } = {}) {
     this.rng = rng;
     this.newbies = newbies; // 红鲱鱼在下面就要定，要先有
     this.script = SCRIPTS[script] ? script : 'tb';
@@ -129,6 +129,7 @@ export class Game {
     this.misregister = misregister;
     this.deadDrunk = !!deadDrunk; // 房规：夜里被杀的信息角色照样拿当晚的信息，但按醉酒处理（官方：死了就没有能力）
     this.mezEasy = mezEasy !== false; // 灵言师关键词：简单（日常词）/ 普通（不常见的词），房间设置，默认简单
+    this.demonSwap = SCRIPTS[this.script]?.demonSwap?.includes(demonSwap) ? demonSwap : null; // 夜半狂欢：亡骨魔换成了小怪宝 / 利维坦（房间设置）
     this.lunaticGhost = !!lunaticGhost; // 房规（黯月初升）：以为自己是僵怖的疯子死后，在他看来是"假死"，没人死的夜里照样叫醒他（官方：死了就失去能力，不再醒）
     this.suspicion = {}; // 每个人被提名、得票的累计，说书人判断局势用
     this.timeline = [];  // 终局复盘：每晚谁选了谁、谁得到什么信息（真/假）、死亡、提名投票、说书人的判定
@@ -216,7 +217,7 @@ export class Game {
       'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7', 'lunaticTold', 'lunaticTellTo', 'heard',
       'pixie', 'mez', 'execHist', 'nomBy', 'blockVoters', 'politicianDone', 'fibbinUsed', 'riotChain',
       'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared', 'aiLead', 'politicianEval', 'scapegoatDay', 'gunDay', 'judgeUsed',
-      'leviDue', 'goblinClaimDay', 'widowTold', 'baristaFx', 'harlotAsk', 'matronDay', 'butcherDay', 'mezEasy', 'nomHistory'];
+      'leviDue', 'goblinClaimDay', 'widowTold', 'baristaFx', 'harlotAsk', 'matronDay', 'butcherDay', 'mezEasy', 'nomHistory', 'demonSwap', 'monsta'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -287,7 +288,9 @@ export class Game {
   alive() { return this.players.filter((p) => p.alive); }
   aliveCount() { return this.alive().length; }
   byRole(role) { return this.players.find((p) => p.role === role); }
-  demon() { return this.players.find((p) => p.alive && ROLES[p.role].team === 'demon'); }
+  demon() { return this.players.find((p) => p.alive && (ROLES[p.role].team === 'demon' || this.monsta?.holder === p.id)); } // 小怪宝：照看的人「是恶魔」
+  /** 这局剧本的角色（夜半狂欢的恶魔开关：亡骨魔换成了谁）。 */
+  scriptRoles(team) { return rolesOf(this.script, team, this.demonSwap); }
   name(id) { if (id === 'storyteller') return '说书人'; const p = this.get(id); return p ? `${p.seat}号 ${p.name}` : '?'; }
 
   visAlive(p) { return p.alive && !p.apparentDead; }

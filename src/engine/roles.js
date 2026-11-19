@@ -225,6 +225,9 @@ const LUF = {
     ability: '如果你被提名后、投票前公开声明自己是哥布林，并且当天被处决，你的阵营获胜。（被提名时点「我是哥布林」）' },
   leviathan: { name: '利维坦', en: 'Leviathan', team: 'demon', firstNight: 0, otherNight: 0,
     ability: '你不杀人。所有人都知道利维坦在场。如果有超过一名善良玩家被处决，邪恶获胜；第五个白天结束时，邪恶获胜。' },
+  // 夜半狂欢可以把亡骨魔换成小怪宝或利维坦（2026-11-19 用户要的开关）。口径照集石百科小怪宝页
+  lilmonsta: { name: '小怪宝', en: "Lil' Monsta", team: 'demon', firstNight: 0, otherNight: 0,
+    ability: '每个夜晚，爪牙们选择一名爪牙：他照看小怪宝，并且「是恶魔」。每个夜晚*，可能会有一名玩家死亡。[+1 爪牙]（照看小怪宝的人死了，善良获胜）' },
 };
 
 // ───────────────────────── 七步成诗（2025 剧本世界杯冠军）里新出现的角色 ─────────────────────────
@@ -382,6 +385,8 @@ const PROMPT_ONLY = {
     ability: '悄悄选择：活下去，还是死去。如果被选中的三个人最后都活着，三个人一起死。' },
   ah_live: { name: '活下去', en: 'Live', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
   ah_die: { name: '死去', en: 'Die', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
+  lm_sit: { name: '照看小怪宝', en: "Lil' Monsta", team: 'minion', firstNight: 0, otherNight: 0, choose: { count: 1, alive: true },
+    ability: '你们爪牙决定今晚由谁照看小怪宝：选一名活着的爪牙（可以选自己）。照看的人「是恶魔」，他死了善良获胜。' },
   harlot_ask: { name: '流莺选中了你', en: 'Harlot', team: 'traveller', firstNight: 0, otherNight: 0, choose: { count: 0, role: true },
     ability: '流莺想知道你的角色。同意的话，她会得知你的角色，但你们两个可能同时死亡。' },
   harlot_yes: { name: '同意', en: 'Yes', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
@@ -453,7 +458,7 @@ export const SCRIPTS = {
   sar: { id: 'sar', name: '裁缝与暴乱', en: 'Seamstresses & Riot', engine: 'snv', riot: true, fibbin: true, roles: ['seamstress', 'riot'] },
   // 夜半狂欢（The Midnight Oasis，作者 Zets，钟楼剧本博物馆美术；用户 2026-11-16 发来剧本卡）：「旋转木马」快速上手剧本，7–15 人。
   // 传奇角色：哨兵（外来者可能 ±1）、圣洁之魂（邪恶玩家最多比开局多一名）。口径见 references/community.md
-  mo: { id: 'mo', name: '夜半狂欢', en: 'The Midnight Oasis', engine: 'snv', players: [7, 15], sentinel: true, ivory: true,
+  mo: { id: 'mo', name: '夜半狂欢', en: 'The Midnight Oasis', engine: 'snv', players: [7, 15], sentinel: true, ivory: true, demonSwap: ['lilmonsta', 'leviathan'], // 房间设置可以把亡骨魔换成这两个
     roles: ['noble', 'snakecharmer', 'balloonist', 'huntsman', 'engineer', 'fisherman', 'professor', 'savant', 'amnesiac', 'farmer', 'cannibal', 'poppygrower', 'atheist',
       'drunk', 'barber', 'golem', 'damsel', 'poisoner', 'psychopath', 'mezepheles', 'pithag', 'alhadikhia', 'vigormortis'] },
   rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'ww', werewolf: true, ragnarok: true, players: RAG_PLAYERS, roles: ['ww_hunter', 'ww_wolf'] },
@@ -469,7 +474,15 @@ export const engineOf = (script) => SCRIPTS[script]?.engine ?? 'tb';
 /** 这个角色在不在这个剧本里。 */
 export const inScript = (id, script) => (SCRIPTS[script ?? 'tb']?.roles ? SCRIPTS[script].roles.includes(id) : (ROLES[id]?.script ?? 'tb') === (script ?? 'tb'));
 /** 某个剧本某个类型的角色 id 列表（小剧本按剧本页的顺序）。 */
-export const rolesOf = (script, team) => (SCRIPTS[script]?.roles ?? Object.keys(ROLES)).filter((id) => ROLES[id] && inScript(id, script) && (!team || ROLES[id].team === team));
+export const rolesOf = (script, team, swap = SWAP[script]) => (SCRIPTS[script]?.roles ?? Object.keys(ROLES)).filter((id) => ROLES[id] && inScript(id, script))
+  .map((id) => swapRole(id, swap)).filter((id) => !team || ROLES[id].team === team);
+/**
+ * 夜半狂欢的恶魔开关（2026-11-19 用户）：这局把亡骨魔换成了谁（'lilmonsta' / 'leviathan'，null 不换）。
+ * 引擎用 game.scriptRoles()（每局自己的）；前端只有一局，用 setDemonSwap 记下来，技能表、角色页、夜晚顺序都跟着换。
+ */
+const SWAP = {};
+export const swapRole = (id, swap) => (id === 'vigormortis' && swap && swap !== 'vigormortis' && ROLES[swap] ? swap : id);
+export const setDemonSwap = (script, swap) => { if (swap && swap !== 'vigormortis' && SCRIPTS[script]?.demonSwap?.includes(swap)) SWAP[script] = swap; else delete SWAP[script]; };
 /** 剧本的人数范围。 */
 export const playersOf = (script) => SCRIPTS[script]?.players ?? [MIN_PLAYERS, MAX_PLAYERS];
 

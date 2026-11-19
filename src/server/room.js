@@ -2,7 +2,7 @@
 // 所有操作走 act(userId, type, payload)；状态变了就 onChange()，由服务器给每个人推送各自的视图。
 import { Game, shuffle, balancedTB, setupScoreTB, rollRoles, rollRagnarok } from '../engine/game.js';
 import { balancedBMR, setupScore, rollBMR } from '../engine/bmr.js';
-import { balancedSNV, setupScoreSNV, rollSNV, rollTeensy, rollMixed, balancedMixed, MAX_DECLARES, AMNESIAC_DAY, seatMarionette, rollRiot } from '../engine/snv.js';
+import { balancedSNV, setupScoreSNV, rollSNV, rollTeensy, rollMixed, balancedMixed, MAX_DECLARES, AMNESIAC_DAY, seatMarionette, rollRiot, swapMoDemon } from '../engine/snv.js';
 import { TRAVELLER_IDS, SCRIPT_TRAVELLERS, travellersOf, ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, engineOf, inScript, rolesOf, playersOf, ragnarokWolves } from '../engine/roles.js';
 import { getMap, houseAt, houseCenter, doorPoint, pathLength, positionAt, speedOf } from '../shared/map.js';
 import { CHARACTERS, CHARACTER_IDS } from '../shared/characters.js';
@@ -100,6 +100,7 @@ export const DEFAULT_SETTINGS = {
   voteSeconds: 3,        // 投票时钟每人停留
   voteCountdown: 8,      // 时钟开始转动前的倒计时
   mezEasy: true,         // 灵言师的关键词：简单（日常话题词，好引导）；关掉是普通（不常见的词，官方口径）（2026-11-19 用户：默认简单）
+  moDemon: 'vigormortis', // 夜半狂欢的第二个恶魔：亡骨魔（原版）/ 小怪宝 / 利维坦（2026-11-19 用户要的开关）
   nightDeafen: false,    // 夜里服务器闭麦+闭耳（默认关：大家自觉闭麦，开了有时会卡入夜）
   pauseMs: 4000,         // 结算后到下一阶段的停顿
   killSceneMs: 11000,    // 暗流涌动：夜晚结算后到天亮的时间，留给恶魔"变身 + 冲刺"和受害者"被破门"两段动画
@@ -494,6 +495,7 @@ export class Room {
     if (typeof p.shuffle === 'boolean') s.shuffle = p.shuffle;
     if (typeof p.nightDeafen === 'boolean') { s.nightDeafen = p.nightDeafen; s.nightDeafenAuto = false; } // 房主自己定了，就不再自动改
     if (typeof p.mezEasy === 'boolean') s.mezEasy = p.mezEasy;
+    if (['vigormortis', 'lilmonsta', 'leviathan'].includes(p.moDemon)) s.moDemon = p.moDemon;
     if (typeof p.nominatorVotes === 'boolean') s.nominatorVotes = p.nominatorVotes;
     if (typeof p.speechMute === 'boolean') s.speechMute = p.speechMute;
     if (typeof p.smallEvilInfo === 'boolean') s.smallEvilInfo = p.smallEvilInfo;
@@ -609,9 +611,12 @@ export class Room {
       roles ??= ragnarok ? rollRagnarok(seats.length, Math.random) : teensy ? rollTeensy(script, seats.length, Math.random) : mixed ? balancedMixed(script, seats.length, Math.random) : script === 'bmr' ? balancedBMR(seats.length, Math.random) : script === 'snv' ? balancedSNV(seats.length, Math.random) : balancedTB(seats.length, Math.random, { noBaron });
       roles = easeNewbies(seats.map((p) => p.id), roles, newbies, script, { fixed: new Set(Object.keys(assign)) });
     }
+    // 夜半狂欢的恶魔开关：抽到亡骨魔就换成小怪宝 / 利维坦（人数跟着调）；房主指定了亡骨魔的不换
+    const demonSwap = script === 'mo' && ['lilmonsta', 'leviathan'].includes(this.settings.moDemon) ? this.settings.moDemon : null;
+    if (demonSwap && !this.tutorial) roles = swapMoDemon(roles ?? balancedMixed(script, seats.length, Math.random), demonSwap, Math.random, new Set(seats.map((p, i) => (assign[p.id] ? i : -1)).filter((i) => i >= 0)));
     // 提线木偶要坐在恶魔旁边：房主指定了角色的座位不动（引擎开局还会再检查一次，那时已经相邻就不挪）
     if (roles?.includes('marionette')) roles = seatMarionette([...roles], Math.random, new Set(seats.map((p, i) => (assign[p.id] ? i : -1)).filter((i) => i >= 0)));
-    this.game = new Game(seats.map(({ id, name }) => ({ id, name })), { roles, drunkAs: custom ? null : preset?.drunkAs, script, noBaron, evilInfo: seats.length >= 7 || this.settings.smallEvilInfo, deadDrunk: !this.tutorial && !!this.settings.deadDrunk, lunaticGhost: !!this.settings.lunaticGhost, newbies: [...newbies], mezEasy: this.settings.mezEasy !== false });
+    this.game = new Game(seats.map(({ id, name }) => ({ id, name })), { roles, drunkAs: custom ? null : preset?.drunkAs, script, noBaron, evilInfo: seats.length >= 7 || this.settings.smallEvilInfo, deadDrunk: !this.tutorial && !!this.settings.deadDrunk, lunaticGhost: !!this.settings.lunaticGhost, newbies: [...newbies], mezEasy: this.settings.mezEasy !== false, demonSwap });
     this.duskDay = null;
     this.ragCur = null; this.ragQ = []; this.ragThen = null; // 诸神黄昏的开枪队列：上一局剩下的不要带过来
     this.game.records = this.readRecords(seats);
@@ -3658,6 +3663,7 @@ export class Room {
       bishop: !!g.bishopOn?.(),
       exiledToday: Object.keys(this.exiled ?? {}).filter((k) => k.startsWith(`${g.day}:`)).map((k) => k.slice(k.indexOf(':') + 1)),
       stNominable: g.engine === 'snv' && inScript('atheist', g.script), // 有无神论者的剧本：可以提名说书人
+      demonSwap: g.demonSwap ?? null, // 夜半狂欢：亡骨魔换成了谁（技能表、角色页、顶栏说明跟着换）
       // 说书人也坐在台上（2026-11-18 用户）：真人说书显示他的头像，AI 说书显示 ★；有无神论者的剧本可以直接点他提名
       peltFx: (this.peltFx ?? []).filter((f) => Date.now() - f.at < 6000).map(({ id, item, by, target, at }) => ({ id, item, by, target, at })),
       mvp: this.mvp ? { until: this.mvp.until, mine: this.mvp.votes.get(uid) ?? null, count: this.mvp.votes.size, need: this.mvp.voters.length, canVote: this.mvp.voters.includes(uid), result: this.mvp.result } : null,
