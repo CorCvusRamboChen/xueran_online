@@ -438,3 +438,17 @@ html[lang="en"] .ri-tlabel { letter-spacing: .5px; }
 html[lang="en"] .tag, html[lang="en"] .sec-num span { letter-spacing: 1px; }
 /* 顶栏多了语言切换按钮：导航在 1340 以下就收起来，免得折成两行（原来是 1180） */
 @media (max-width: 1340px) { .tabs { display: none; } .top-actions { margin-left: auto !important; } }
+
+/* 1 · 其余剧本和娱乐模式（2026-11-20 按现在的进度更新）：按大厅里的分类，一组一块 */
+.more-head { margin: 34px 0 14px; color: var(--muted); max-width: 70ch; }
+.more-scripts { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.ms-group { border: 1px solid var(--line); background: rgba(14, 16, 16, .72); padding: 14px 16px 12px; }
+.ms-group h3 { display: flex; flex-direction: column; gap: 2px; font-size: 18px; margin-bottom: 10px; }
+.ms-group h3 small { font: 700 12px var(--sans); color: var(--muted); letter-spacing: 1px; }
+.ms-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ms-group li { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: baseline; }
+.ms-group li b { font: 900 15px var(--sans); color: var(--paper); }
+.ms-group li i { font: italic 12px var(--serif2, serif); color: var(--muted); }
+.ms-group li small { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
+.ms-fun { border-color: rgba(201, 162, 39, .45); }
+.ms-fun h3 { color: #e8c66a; }
