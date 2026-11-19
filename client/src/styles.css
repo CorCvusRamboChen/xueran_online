@@ -1892,7 +1892,6 @@ span.lr-newbie { cursor: default; }
 .pelt-stack .ps-it:first-child { height: var(--ps); }
 .pelt-stack .ps-n { font: 900 10px/1 var(--sans); color: #f4e2c0; text-shadow: 0 1px 2px #000; }
 .token-face .pelt-stack { bottom: 64%; } /* 压在头像的头上往上叠：第一排座位不会被顶上的票数栏盖住 */
-.walker-head { position: relative; }
 .as-face { position: relative; }
 .walker-head .float { position: relative; }
 .walker-head .float .pelt-stack { bottom: 55%; } /* 地图上小人头顶的小头像：一样压在头上往上叠 */
