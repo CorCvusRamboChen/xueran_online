@@ -2,6 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<script>
+// 按浏览器选语言（2026-11-20）：没手动选过、浏览器的第一语言是中文，就去中文页；搜索引擎的爬虫不跳
+(function () {
+  try {
+    if (localStorage.getItem('botc-site-lang') || /bot|crawl|spider|slurp|preview|facebookexternalhit/i.test(navigator.userAgent)) return;
+    var l = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ''];
+    if (/^zh/i.test(l[0] || '')) location.replace('../' + location.search + location.hash);
+  } catch (e) { /* 隐私模式：留在英文 */ }
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Blood on the Clocktower Online</title>
 <meta name="description" content="Play Blood on the Clocktower in Discord: an AI Host runs the game as Storyteller, and walking into a house moves you into its voice channel. 17 scripts plus 4 party modes like Werewolf and Avalon, rules built from the official wiki, house rules you can switch on and off, in English and Chinese.">
@@ -16,8 +26,8 @@
 <meta name="theme-color" content="#0e1010">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Libre+Baskerville:ital@1&family=Noto+Sans+SC:wght@400;700;900&family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../style.css?v=7">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Libre+Baskerville:ital@1&family=Source+Serif+4:ital,wght@0,400;0,700;0,900;1,400&family=Source+Sans+3:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../style.css?v=8">
 <script>document.documentElement.classList.add('js')</script>
 </head>
 <body>
@@ -44,7 +54,7 @@
     <a href="#faq">FAQ</a>
   </nav>
   <div class="top-actions">
-    <a class="btn btn-secondary lang-switch" href="../" hreflang="zh-CN" lang="zh-CN" title="切换到中文">中文</a>
+    <a class="btn btn-secondary lang-switch" href="../" hreflang="zh-CN" lang="zh-CN" title="切换到中文" data-set-lang="zh">中文</a>
     <a class="btn btn-secondary" href="https://github.com/CorCvusRamboChen/xueran_online" target="_blank" rel="noopener">
       <svg class="ico" aria-hidden="true"><use href="#i-github"/></svg><span>GitHub</span>
     </a>
@@ -416,12 +426,12 @@
       <a href="#scripts">Scripts</a><a href="#voice">Discord voice</a><a href="#storyteller">AI Storyteller</a><a href="#rules">By the wiki</a><a href="#houserules">House rules</a><a href="#marks">Notes &amp; links</a><a href="#faq">FAQ</a>
       <a href="https://github.com/CorCvusRamboChen/xueran_online" target="_blank" rel="noopener">GitHub repo</a>
       <a href="https://github.com/CorCvusRamboChen/xueran_online/issues" target="_blank" rel="noopener">Ask a question</a>
-      <a href="../" hreflang="zh-CN" lang="zh-CN">中文版</a>
+      <a href="../" hreflang="zh-CN" lang="zh-CN" data-set-lang="zh">中文版</a>
     </nav>
   </div>
   <p class="legal">An unofficial, non-commercial fan project, not affiliated with The Pandemonium Institute. Blood on the Clocktower is a trademark of The Pandemonium Institute; character names and ability text are theirs. All footage is recorded from the beta; the trailer and screenshots show the Chinese interface. In the trailer, the Discord voice-channel part is a mock-up animation, and some players are bots.</p>
 </footer>
 
-<script src="../main.js?v=7" defer></script>
+<script src="../main.js?v=8" defer></script>
 </body>
 </html>

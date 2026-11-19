@@ -4,6 +4,8 @@
 const EN = document.documentElement.lang === 'en';
 const L = (zh, en) => (EN ? en : zh);
 const BASE = EN ? '../' : '';
+// 点了语言切换就记住，以后不再按浏览器自动跳（见 index.html 开头）
+document.querySelectorAll('[data-set-lang]').forEach((a) => a.addEventListener('click', () => { try { localStorage.setItem('botc-site-lang', a.dataset.setLang); } catch { /* 隐私模式 */ } }));
 
 // Discord 开发者后台 → 你的应用 → OAuth2 → Client ID。填上以后页面上所有「添加到 Discord」都直接打开授权页。
 const CLIENT_ID = '';

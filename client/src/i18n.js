@@ -2,7 +2,8 @@
 // 它们都从这里来（vite 的别名 @i18n）。原理见 src/shared/i18n/core.js。
 //
 // 语言存在本机（localStorage「botc-lang」）；网址带 ?lang=en / ?lang=zh 以它为准并记住（给英文玩家的链接）。
-// 都没有就用中文（现有玩家很多是英文系统的中文用户，按系统语言猜会把他们突然换成英文）。
+// 都没有就按浏览器（2026-11-20 用户：自动按照浏览器选语言）：浏览器的语言列表里有中文就中文，没有就英文。
+// 猜错了大厅会提示一句，点一下换过来就记住了（LangHint.jsx）。
 // 换语言时重新加载页面：模块里的常量（角色表、剧本说明）在加载时就按语言生成好了。
 // 英文词典只在英文下才下载（main.jsx 等它装好才加载界面），中文玩家不多下载一个字节。
 import { createElement, Fragment } from 'react';
@@ -15,12 +16,17 @@ function detect() {
     if (q === 'zh' || q === 'en') { try { localStorage.setItem(KEY, q); } catch { /* 隐私模式 */ } return q; }
   } catch { /* 没有 location（测试） */ }
   try { const v = localStorage.getItem(KEY); if (v === 'zh' || v === 'en') return v; } catch { /* 隐私模式 */ }
-  return 'zh';
+  return browserLangs().some((l) => /^zh/i.test(l)) ? 'zh' : 'en';
 }
+function browserLangs() {
+  try { return navigator.languages?.length ? [...navigator.languages] : [navigator.language || 'zh']; } catch { return ['zh']; }
+}
+/** 浏览器的第一语言是不是中文。 */
+export const browserZhFirst = typeof navigator === 'undefined' || /^zh/i.test(browserLangs()[0] || '');
 
 export const LANG = typeof window === 'undefined' ? 'zh' : detect();
 export const isEn = LANG === 'en';
-/** 本机有没有自己选过语言（没选过、系统又不是中文时，大厅会提示一下有英文版）。 */
+/** 本机有没有自己选过语言（没选过时大厅提示一句，见 LangHint.jsx）。 */
 export const langChosen = (() => { try { return !!localStorage.getItem(KEY); } catch { return true; } })();
 
 const DICTS = import.meta.glob('../../src/shared/i18n/en/*.json', { import: 'default' });
@@ -37,6 +43,11 @@ if (typeof document !== 'undefined') {
 // 语言按钮上的字：每种语言用它自己的写法（这个文件不经过翻译插件，所以「中文」不会被换掉）
 export const LANGS = [['zh', '中文'], ['en', 'English']];
 export const LANG_LABEL = '语言 · Language';
+// 自动选的语言可能不对：用另一种语言提示一句（看得懂另一种语言的人才需要它）
+export const LANG_HINT = {
+  en: { text: '界面按浏览器的语言显示成了英文。', btn: '切换到中文', to: 'zh', lang: 'zh-CN' },
+  zh: { text: 'This game is also available in English.', btn: 'Switch to English', to: 'en', lang: 'en' },
+};
 
 export function switchLang(l) {
   if (l !== 'zh' && l !== 'en') return;

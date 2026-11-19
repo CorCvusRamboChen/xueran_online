@@ -2,6 +2,16 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<script>
+// 按浏览器选语言（2026-11-20）：没手动选过、浏览器的语言里一个中文都没有，就去英文页；搜索引擎的爬虫不跳
+(function () {
+  try {
+    if (localStorage.getItem('botc-site-lang') || /bot|crawl|spider|slurp|preview|facebookexternalhit/i.test(navigator.userAgent)) return;
+    var l = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ''];
+    if (!l.some(function (x) { return /^zh/i.test(x); })) location.replace('en/' + location.search + location.hash);
+  } catch (e) { /* 隐私模式：留在中文 */ }
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>血染钟楼 Online</title>
 <meta name="description" content="在 Discord 里开一局血染钟楼：AI 房主当说书人，走进房子自动进那间的语音。17 个剧本和狼人杀、阿瓦隆等 4 个娱乐模式，规则照官方百科，村规一键开关，中英双语。">
@@ -15,8 +25,8 @@
 <meta name="theme-color" content="#0e1010">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Libre+Baskerville:ital@1&family=Noto+Sans+SC:wght@400;700;900&family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=7">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Libre+Baskerville:ital@1&family=Source+Serif+4:wght@400;700;900&family=Source+Sans+3:wght@400;700;900&family=Noto+Sans+SC:wght@400;700;900&family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=8">
 <script>document.documentElement.classList.add('js')</script>
 </head>
 <body>
@@ -43,7 +53,7 @@
     <a href="#faq">问答</a>
   </nav>
   <div class="top-actions">
-    <a class="btn btn-secondary lang-switch" href="en/" hreflang="en" lang="en" title="English version">English</a>
+    <a class="btn btn-secondary lang-switch" href="en/" hreflang="en" lang="en" title="English version" data-set-lang="en">English</a>
     <a class="btn btn-secondary" href="https://github.com/CorCvusRamboChen/xueran_online" target="_blank" rel="noopener">
       <svg class="ico" aria-hidden="true"><use href="#i-github"/></svg><span>GitHub 仓库</span>
     </a>
@@ -419,12 +429,12 @@
       <a href="#scripts">剧本</a><a href="#voice">Discord 语音</a><a href="#storyteller">AI 说书人</a><a href="#rules">按照百科</a><a href="#houserules">村规开关</a><a href="#marks">连线标记</a><a href="#faq">问答</a>
       <a href="https://github.com/CorCvusRamboChen/xueran_online" target="_blank" rel="noopener">GitHub 仓库</a>
       <a href="https://github.com/CorCvusRamboChen/xueran_online/issues" target="_blank" rel="noopener">提问题</a>
-      <a href="en/" hreflang="en" lang="en">English</a>
+      <a href="en/" hreflang="en" lang="en" data-set-lang="en">English</a>
     </nav>
   </div>
   <p class="legal">非官方粉丝作品，不以盈利为目的，与 The Pandemonium Institute 无关。游戏画面均为内测版实机录制，其中宣传片里的 Discord 语音频道部分为示意动画，部分玩家由机器人扮演。</p>
 </footer>
 
-<script src="main.js?v=7" defer></script>
+<script src="main.js?v=8" defer></script>
 </body>
 </html>
