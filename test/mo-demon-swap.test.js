@@ -1,5 +1,5 @@
 // 夜半狂欢的恶魔开关（2026-11-19 用户）：亡骨魔可以换成小怪宝或利维坦；
-// 同一天定下的哈迪寂亚口径：入夜是死的、天亮还是死的，死人票不刷新（用户问了社区：只有活到白天的人才更新存活状态）。
+// 哈迪寂亚口径（2026-11-20 改）：死人选活当场复活、夜里是活的，复活又死是新的死亡，死人票刷新（官方百科 How to run；11-19 那次「不刷新」作废）。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Game, makeRng } from '../src/engine/game.js';
@@ -114,7 +114,7 @@ test('利维坦：夜半狂欢里照常——不杀人，第二名善良被处�
   assert.equal(g.winner, 'evil');
 });
 
-test('哈迪寂亚：入夜是死的、复活又死、天亮还是死的——死人票不刷新；新死的人照常有票', () => {
+test('哈迪寂亚：入夜是死的、复活又死——夜里是活过的，死人票刷新；新死的人照常有票', () => {
   const g = mk(['noble', 'savant', 'fisherman', 'balloonist', 'farmer', 'poisoner', 'alhadikhia']); // 不放教授：他会把死人救回来
   night(g); g.dawn(); g.endDay();
   night(g, { p7: ['p1', 'p4', 'p5'] }, { p1: 'ah_die', p4: 'ah_live', p5: 'ah_live' });
@@ -124,9 +124,8 @@ test('哈迪寂亚：入夜是死的、复活又死、天亮还是死的——�
   g.endDay();
   night(g, { p7: ['p1', 'p2', 'p3'] }, { p1: 'ah_live', p2: 'ah_live', p3: 'ah_live' });
   assert.equal(g.get('p1').alive, false, '复活后三个都活，一起死');
-  assert.equal(g.get('p1').ghostVote, false, '入夜死、天亮死：票不刷新');
+  assert.equal(g.get('p1').ghostVote, true, '夜里复活过，再死是新的死亡：死人票刷新');
   assert.equal(g.get('p2').ghostVote, true, '新死的人有死人票');
-  assert.ok(g.timeline.some((e) => /死人票不刷新/.test(e.text)));
 });
 
 const FAST = { chooseSeconds: 0.05, voteSeconds: 0.002, voteCountdown: 0.005, pauseMs: 5, killSceneMs: 0, accuseSeconds: 0.005, defendSeconds: 0.005, rpsSeconds: 0.05 };

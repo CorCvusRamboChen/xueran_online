@@ -1800,6 +1800,7 @@ span.lr-newbie { cursor: default; }
 /* 疯狂的定义：紫色细边框（疯狂相关的颜色），比下面的规则醒目 */
 .mic-rule { padding: 14px 16px; border-left: 4px solid var(--psy); background: rgba(244, 244, 240, .06); }
 .mic-rule h2 { margin: 0 0 8px; font: 900 20px/1.4 var(--serif); }
+.mic-rule .mic-must { margin-top: 10px; padding: 8px 10px; background: rgba(219, 84, 68, .12); border-left: 3px solid var(--phy); } /* 不能默许（2026-11-20） */
 .mic-rule p { margin: 0 0 8px; font: 17px/1.7 var(--serif); }
 .mic-rule p:last-child { margin-bottom: 0; }
 .mic-heard { margin-top: 8px; padding-top: 16px; border-top: 1px solid rgba(244, 244, 240, .35); }

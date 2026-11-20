@@ -88,6 +88,7 @@ export class Hearing {
       const list = this.lines.get(id) ?? [];
       if (list.length < MAX_LINES) list.push(text);
       this.lines.set(id, list);
+      this.onLine?.(id, text); // 房间：默许检测（别人说某人被洗脑、跳他的角色；他有没有否认）
     } catch (e) {
       console.warn('[botc] 语音转写失败：', e.message);
     } finally {

@@ -17,6 +17,7 @@ import { judgeStatement, judgeMadness, judgeBreak, looksBroken, judgeAvailable, 
 import { parseTable, describeTable, tableLead } from '../engine/tableRead.js';
 import { feedbackAct } from './feedback.js';
 import { openDraft, draftAct, draftView, applyDraft, dropDraft } from './draft.js';
+import { RESPOND_MS, triggerOf, denies } from './tacit.js';
 import { noteMarks, readTown, markedRole } from './beliefs.js';
 import { Werewolf } from '../engine/werewolf.js';
 import { WW_ROOM } from './werewolfRoom.js';
@@ -2818,6 +2819,62 @@ export class Room {
    * 以前第一次只警告，比官方宽太多（2026-11-11 用户：破坏了疯狂应该直接死）。转写听错的风险由大模型复核和骰子兜着。
    * 疯子、酒鬼说出他以为的那个角色也算（他不知道自己的真实角色，但那正是他要藏的）。
    */
+  /**
+   * 疯狂的默许（2026-11-20 用户转述朋友：检测太弱，主要是默许那块）：别人说某个被洗脑的人被洗脑了，或者有人也跳了他被洗脑要扮的角色，
+   * 他要站出来否认、和对方争；RESPOND_MS 内没有就是默认自己被洗脑 = 破坏疯狂。第一次这样时私下提醒他一次。
+   * id：说这句话的人（被洗脑的人自己说的话用来判断他有没有回应）。
+   */
+  tacitHear(id, text) {
+    const g = this.game;
+    if (!g || g.engine !== 'snv' || g.phase !== 'day' || this.ended || this.dusking || this.duskDay === g.day || !text) return;
+    this.tacit ??= {};
+    const mine = this.tacit[id];
+    if (mine && !mine.done && mine.day === g.day && denies(text, mine.role)) { mine.done = 'answered'; this.stNote(`${g.name(id)} 回应了「${mine.what}」：没有默许`); return; }
+    const speaker = g.get(id);
+    if (!speaker) return;
+    for (const m of g.madnessDue({ claimed: true })) {
+      const p = g.get(m.id);
+      if (!p || this.isFake(m.id) || m.id === id) continue;
+      const role = ROLES[m.role]?.name;
+      const kind = triggerOf(text, speaker, p, role);
+      if (!kind) continue;
+      const cur = this.tacit[m.id];
+      if (cur && !cur.done && cur.day === g.day) continue; // 已经在等他回应
+      const what = kind === 'accuse' ? `${g.name(id)} 说他被洗脑了` : `${g.name(id)} 也跳了${role}`;
+      const ch = this.tacit[m.id] = { day: g.day, by: id, kind, what, role, said: text, idx: this.heardLines(m.id).length, done: null };
+      this.stNote(`默许检测：${what}（「${text.slice(0, 40)}」）。等 ${g.name(m.id)} 站出来否认`);
+      const key = `${g.day}:${m.id}`;
+      if (!this.tacitWarned?.has(key)) {
+        (this.tacitWarned ??= new Set()).add(key);
+        this.tell(m.id, kind === 'accuse'
+          ? `**提醒（只提醒这一次）**：${g.name(id)} 说你被洗脑了。你要**马上站出来否认**（「我没有被洗脑」「我就是${role}」）——不吭声就等于默认，可能被处决。`
+          : `**提醒（只提醒这一次）**：${g.name(id)} 也说自己是**${role}**。你要**马上站出来和他争**，坚持你才是${role}——不吭声就等于默认他是真的、你被洗脑了，可能被处决。`, 'storyteller');
+      }
+      this.later(this.settings.tacitMs ?? RESPOND_MS, () => this.tacitCheck(m.id, ch));
+    }
+  }
+
+  /** 到点：被洗脑的人回应了没有。没回应 = 默许 = 破坏疯狂（AI 说书掷骰；真人说书交给说书人定）。 */
+  tacitCheck(mid, ch) {
+    const g = this.game;
+    if (!g || this.tacit?.[mid] !== ch || ch.done || g.phase !== 'day' || g.day !== ch.day || this.ended || this.dusking) return;
+    const due = g.madnessDue({ claimed: true }).find((x) => x.id === mid);
+    if (!due) return; // 这次疯狂已经判过了
+    const after = this.heardLines(mid).slice(ch.idx);
+    if (after.some((t) => denies(t, ch.role))) { ch.done = 'answered'; return; }
+    if (!this.listeningTo(mid)) { ch.done = 'unheard'; this.stNote(`${g.name(mid)} 没人在听（没开收音、在屋里或掉线），默许不判`); return; }
+    ch.done = 'tacit';
+    const why = `${ch.what}，他没有站出来否认（默许）`;
+    g.record('st', `${g.tag(mid)} 默许：${why}`);
+    noteHeard(g, { id: mid, kind: 'tacit', claim: ch.role, verdict: 'true', reason: why, lines: [`${g.name(ch.by)}：${ch.said}`, ...after] });
+    if (!this.stId && !g.madnessPenalty(mid, { tacit: true })) { this.changed(); return; }
+    const before = g.executedToday;
+    this.madPunish(mid, why, `**${g.name(mid)}** 没有否认自己被洗脑——默许就是破坏了疯狂，被处决了！`);
+    if (g.winner) this.later(0, () => this.endGame());
+    else if (!before && g.executedToday) this.later(this.settings.pauseMs, () => this.autoDusk());
+    this.changed();
+  }
+
   async hearBreak(id, text) {
     if (this.game?.engine === 'snv' && this.game.abilityOf(this.game.get(id)) === 'mutant') await this.hearMutant(id, text);
     const g = this.game;
@@ -2896,7 +2953,8 @@ export class Room {
     if (g.engine !== 'snv' || !this.settings.hearMadness || !this.square || !this.hearingFor) return;
     this.hearing = await this.hearingFor(this.square).catch(() => null);
     if (this.hearing) this.hearing.onAudio = (id, audio, text) => this.saveTalk('square', 'ogg', id, audio, text);
-    if (this.hearing) this.announce('本局开了语音判定：机器人留在广场语音里，只转写被疯狂的玩家说的话，音频不保存。', 'info');
+    if (this.hearing) this.hearing.onLine = (id, text) => this.tacitHear(id, text);
+    if (this.hearing) this.announce('本局开了语音判定：机器人留在广场语音里，转写被疯狂的玩家说的话；有人被洗脑的那天，也转写大家在广场上说的话（看有没有人说他被洗脑、跳他的角色，他有没有站出来否认）。', 'info');
     else this.announce('语音判定没有打开：说书人听不到语音，疯狂由说书人按局势判定（被洗脑的人可以打开收音页，让说书人听到自己）。', 'info');
   }
 
@@ -2930,7 +2988,10 @@ export class Room {
     const due = g.madnessDue().map((x) => x.id).filter((id) => !this.isFake(id));
     const mutants = g.players.filter((q) => this.thinksMutant(q) && !this.isFake(q.id)).map((q) => q.id);
     const ids = [...new Set([...due, ...mutants])];
-    this.hearing?.listen(ids);
+    // 有人被洗脑：广场上所有活着的真人也听（2026-11-20：别人说他被洗脑、跳他的角色时，他不否认就是默许）
+    const talkers = due.length ? g.players.filter((q) => q.alive && !this.isFake(q.id)).map((q) => q.id) : [];
+    this.hearing?.listen([...new Set([...ids, ...talkers])]);
+    this.tacit = {};
     // 收音页还要发给：小精灵（可以疯狂地证明自己是那个镇民）；剧本里有灵言师时所有活着的真人（听关键词）。
     // 灵言师那条不看他在不在场，免得谁收到收音页就说明灵言师在场（2026-11-14 用户：灵言师用收音页、本机转写、检测关键词）
     const pixies = g.players.filter((q) => q.alive && g.pixie?.[q.id] && !g.pixie[q.id].gained && !this.isFake(q.id)).map((q) => q.id);
@@ -2942,6 +3003,7 @@ export class Room {
       this.mic ??= this.micFor();
       this.mic.onLine = (id, text) => {
         this.game?.mezHeard?.(id, text); // 灵言师的关键词：本机转写的文字里找，不交给大模型
+        this.tacitHear(id, text); // 疯狂的默许：别人说他被洗脑 / 跳了他的角色，他要站出来否认
         this.hearBreak(id, text).catch((e) => console.warn('[botc] 判定破坏疯狂出错：', e.message));
       };
       // 收音页上显示哪种疯狂的定义（被洗脑的要证明的角色；畸形秀演员）

@@ -171,5 +171,21 @@
   "点一张卡片挑一个旅行者": "Click a card to pick a Traveller",
   "传奇角色哨兵：外来者可能 +1 或 −1；传奇角色圣洁之魂：邪恶玩家最多比开局多一名；气球驾驶员在场 +0~1 外来者；有巡山人时落难少女一定在场（没外来者就换掉一个镇民）；亡骨魔在场 −1 外来者；偶尔是无神论者局（没有邪恶）": "Fabled Sentinel: maybe +1 or −1 Outsider; Fabled Spirit of Ivory: at most one more evil player than at setup; Balloonist in play: +0–1 Outsider; with the Huntsman, the Damsel is always in play (replacing a Townsfolk if there are no Outsiders); Vigormortis in play: −1 Outsider; occasionally an Atheist game (no evil)",
   "哨兵±1 · 圣洁之魂 邪恶至多+1 · 气球+0~1 · 亡骨魔−1 · 巡山人带落难少女 · 或无邪恶": "Sentinel ±1 · Spirit of Ivory evil +1 max · Balloonist +0–1 · Vigormortis −1 · Huntsman→Damsel · maybe no evil",
-  "亡骨魔−1": "Vigormortis −1"
+  "亡骨魔−1": "Vigormortis −1",
+  "今天你要{0}地让大家相信你是{1}，不然可能被处决。暗示自己是被逼的、敷衍、故意聊爆，都算没有疯狂。{2}——不吭声就等于默认，会被处决。": "Today you must {0} convince everyone that you are the {1}, or you might be executed. Hinting that you're being forced, half-hearted effort, or deliberately blowing it all count as not being mad. {2} — staying quiet counts as admitting it, and you'll be executed.",
+  "别人说你被洗脑了、或者有人也跳了{0}，要马上站出来否认、和他争": "If someone says you've been made mad, or someone else also claims {0}, deny it at once and argue with them",
+  "{0}有人说你被洗脑了、被问「你是不是疯了」，要马上坚决否认；有人也跳了{1}，要站出来和他争、坚持你才是。{2}——别人替你说话、讨论你，都要回应。说书人第一次遇到时会提醒你一次。": "{0}If someone says you've been made mad, or asks \"are you mad?\", deny it firmly at once; if someone else also claims {1}, stand up and argue that you're the real one. {2} — whenever others speak for you or talk about you, respond. The Storyteller reminds you once the first time it happens.",
+  "不能默许：": "No silent consent: ",
+  "不吭声就等于默认自己被洗脑，会被处决": "Staying quiet means admitting you're mad, and you'll be executed",
+  "{0} 回应了「{1}」：没有默许": "{0} responded to \"{1}\": not consenting",
+  "{0} 说他被洗脑了": "{0} said they're mad",
+  "{0} 也跳了{1}": "{0} also claimed {1}",
+  "默许检测：{0}（「{1}」）。等 {2} 站出来否认": "Silent-consent check: {0} (\"{1}\"). Waiting for {2} to deny it",
+  "**提醒（只提醒这一次）**：{0} 说你被洗脑了。你要**马上站出来否认**（「我没有被洗脑」「我就是{1}」）——不吭声就等于默认，可能被处决。": "**Reminder (only once)**: {0} said you've been made mad. **Deny it right away** (\"I'm not mad\", \"I really am the {1}\") — staying quiet counts as admitting it, and you may be executed.",
+  "**提醒（只提醒这一次）**：{0} 也说自己是**{1}**。你要**马上站出来和他争**，坚持你才是{2}——不吭声就等于默认他是真的、你被洗脑了，可能被处决。": "**Reminder (only once)**: {0} also claims to be the **{1}**. **Stand up and argue right away** that you're the real {2} — staying quiet means you accept they're real and you're mad, and you may be executed.",
+  "{0} 没人在听（没开收音、在屋里或掉线），默许不判": "{0} wasn't being heard (mic off, indoors or offline): no silent-consent ruling",
+  "{0}，他没有站出来否认（默许）": "{0}, and they didn't deny it (silent consent)",
+  "{0} 默许：{1}": "{0} consented silently: {1}",
+  "**{0}** 没有否认自己被洗脑——默许就是破坏了疯狂，被处决了！": "**{0}** didn't deny being mad — silent consent breaks madness, and they were executed!",
+  "本局开了语音判定：机器人留在广场语音里，转写被疯狂的玩家说的话；有人被洗脑的那天，也转写大家在广场上说的话（看有没有人说他被洗脑、跳他的角色，他有没有站出来否认）。": "Voice judging is on this game: the bot stays in the square's voice channel and transcribes what mad players say. On a day someone has been made mad, it also transcribes what everyone says in the square (to see whether anyone says they're mad or claims their character, and whether they deny it)."
 }

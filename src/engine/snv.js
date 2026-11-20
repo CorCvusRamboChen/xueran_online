@@ -2204,9 +2204,9 @@ ${this.grimoire()}
       if (!d || this.blocked === d.id) return null;
       const ts = this.choiceOfSNV(d).targets.map((q) => q.id);
       if (this.snvBroken(d)) { this.flag(d, '哈迪寂亚失效，选中的三个人什么都不用做'); return null; }
-      // 入夜时已经死了的人记下他的死人票：复活又死、天亮还是死的，票不刷新（2026-11-19 用户问了社区：只有活到白天的人才更新存活状态、重新拿死人票）
-      const ghost = Object.fromEntries(ts.filter((id) => !this.get(id).alive).map((id) => [id, !!this.get(id).ghostVote]));
-      ah = this.ahNight = { night: this.night, demon: d.id, targets: ts, idx: 0, picks: {}, asked: null, saved: {}, done: false, ghost };
+      // 死人选「活」当场复活、夜里就是活的（官方百科 How to run：remove their shroud），复活又死就是一次新的死亡，死人票刷新
+      // （2026-11-20 用户：问了朋友、看了官方百科，改回会刷新；11-19 那次「入夜死天亮死不刷新」作废）
+      ah = this.ahNight = { night: this.night, demon: d.id, targets: ts, idx: 0, picks: {}, asked: null, saved: {}, done: false };
       this.record('choice', `哈迪寂亚 ${this.tag(d.id)} 选了 ${ts.map((id) => this.tag(id)).join('、')}`);
     }
     while (ah.idx < ah.targets.length) {
@@ -2233,10 +2233,6 @@ ${this.grimoire()}
       ah.done = true;
       const all = ah.targets.map((id) => this.get(id));
       if (all.every((q) => q.alive)) { this.record('st', '哈迪寂亚：三个人都活着，一起死去'); for (const q of all) this.snvDie(q, 'alhadikhia3', messages); }
-      for (const [id, had] of Object.entries(ah.ghost ?? {})) {
-        const q = this.get(id);
-        if (q && !q.alive && q.ghostVote !== had) { q.ghostVote = had; this.record('st', `${this.tag(id)} 入夜是死的、天亮还是死的：死人票不刷新（${had ? '还有' : '已经用掉了'}）`); }
-      }
       this.ahNews = { night: this.night, targets: [...ah.targets] };
     }
     return null;

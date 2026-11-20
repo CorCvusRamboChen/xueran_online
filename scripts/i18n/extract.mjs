@@ -17,7 +17,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 export const SKIP_FILES = [
   'client/src/world/LayoutEditor.jsx', 'client/src/world/DoorEditor.jsx', 'client/src/world/TilesPreview.jsx',
   'client/src/world/AvatarPreview.jsx', 'client/src/world/TownGuide.jsx',
-  'src/server/judge.js', 'src/server/stt.js', 'src/server/stt-worker.js', 'src/server/recorder.js', 'src/server/kook.js',
+  'src/server/judge.js', 'src/server/stt.js', 'src/server/stt-worker.js', 'src/server/recorder.js', 'src/server/kook.js', 'src/server/tacit.js', // tacit.js 只有正则和中文数字（认人说的话），不给玩家看
   'src/engine/worlds-table.json',
   'client/src/i18n.js',
 ];
