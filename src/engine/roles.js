@@ -415,6 +415,15 @@ const PROMPT_ONLY = {
   harlot_ask: { name: '流莺选中了你', en: 'Harlot', team: 'traveller', firstNight: 0, otherNight: 0, choose: { count: 0, role: true },
     ability: '流莺想知道你的角色。同意的话，她会得知你的角色，但你们两个可能同时死亡。' },
   harlot_yes: { name: '同意', en: 'Yes', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
+  // 全员失忆：只给本人看的角色卡（他只知道自己是哪一类）
+  amn_townsfolk: { name: '失忆的镇民', en: 'Amnesiac Townsfolk', team: 'townsfolk', firstNight: 0, otherNight: 0,
+    ability: '你是镇民，但你不知道自己是哪个角色。你的能力照常生效。每个白天，你可以问说书人一次关于自己能力或角色的问题，得知你猜得有多准（完美 / 接近 / 有关 / 无关）。' },
+  amn_outsider: { name: '失忆的外来者', en: 'Amnesiac Outsider', team: 'outsider', firstNight: 0, otherNight: 0,
+    ability: '你是外来者，但你不知道自己是哪个角色。你的能力照常生效。每个白天，你可以问说书人一次关于自己能力或角色的问题，得知你猜得有多准（完美 / 接近 / 有关 / 无关）。' },
+  amn_minion: { name: '失忆的爪牙', en: 'Amnesiac Minion', team: 'minion', firstNight: 0, otherNight: 0,
+    ability: '你是爪牙，但你不知道自己是哪个角色。你的能力照常生效。每个白天，你可以问说书人一次关于自己能力或角色的问题，得知你猜得有多准（完美 / 接近 / 有关 / 无关）。' },
+  amn_demon: { name: '失忆的恶魔', en: 'Amnesiac Demon', team: 'demon', firstNight: 0, otherNight: 0,
+    ability: '你是恶魔，但你不知道自己是哪个角色。你的能力照常生效。每个白天，你可以问说书人一次关于自己能力或角色的问题，得知你猜得有多准（完美 / 接近 / 有关 / 无关）。' },
   hatter_pick: { name: '帽匠的茶会', en: 'Hatter', team: 'minion', firstNight: 0, otherNight: 0, choose: { count: 0, role: true, optional: true },
     ability: '帽匠死了：你可以换成剧本里另一个同类型、不在场的角色，也可以不换。' },
   harlot_no: { name: '拒绝', en: 'No', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
@@ -499,6 +508,8 @@ export const SCRIPTS = {
   roc: { id: 'roc', name: '心理博弈', en: 'Rochambeau', engine: 'snv', players: [5, 15],
     roles: ['noble', 'bountyhunter', 'highpriestess', 'towncrier', 'innkeeper', 'gambler', 'acrobat', 'lycanthrope', 'gossip', 'nightwatchman', 'seamstress', 'cannibal', 'mayor',
       'tinker', 'recluse', 'moonchild', 'hatter', 'godfather', 'poisoner', 'pithag', 'assassin', 'widow', 'po', 'vigormortis', 'leviathan'] },
+  // 全员失忆（2026-11-20 用户：娱乐本；网上没有固定的角色表，是一种玩法，见 engine/allAmnesiac.js）：角色从三个官方剧本里发，roles 在下面补
+  amn: { id: 'amn', name: '全员失忆', en: 'All Amnesiacs', engine: 'snv', players: [5, 15], allAmnesiac: true, roles: [] },
   rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'ww', werewolf: true, ragnarok: true, players: RAG_PLAYERS, roles: ['ww_hunter', 'ww_wolf'] },
   // 娱乐模式：经典网杀「预女猎守」，不是血染。规则和人数表在 werewolf.js / werewolf-roles.js，房间流程在 server/werewolfRoom.js
   ww: { id: 'ww', name: '狼人杀', en: 'Werewolf', engine: 'ww', werewolf: true, players: WW_PLAYERS, roles: Object.keys(WW_ROLES) },
@@ -554,3 +565,6 @@ export function roleLabel(id) {
   const r = ROLES[id];
   return `${r.name}（${TEAM_NAME[r.team]}）`;
 }
+
+// 全员失忆的角色池：三个官方剧本的全部角色，去掉必须先知道自己是谁才玩得了的杂耍艺人（第一天要公开猜）、畸形秀演员（不能让人信自己是外来者）
+SCRIPTS.amn.roles = [...new Set(['tb', 'bmr', 'snv'].flatMap((k) => rolesOf(k)))].filter((r) => !['juggler', 'mutant'].includes(r));

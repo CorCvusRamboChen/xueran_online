@@ -11,6 +11,7 @@
 
 import { TRAVELLER_METHODS } from './travellers.js';
 import { ROCHAMBEAU_METHODS } from './rochambeau.js';
+import { ALL_AMNESIAC_METHODS } from './allAmnesiac.js';
 import {
   ROLES, TOWNSFOLK, OUTSIDERS, MINIONS, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, SCRIPTS, engineOf, ragnarokWolves, inScript, rolesOf,
 } from './roles.js';
@@ -219,7 +220,7 @@ export class Game {
       'pixie', 'mez', 'execHist', 'nomBy', 'blockVoters', 'politicianDone', 'fibbinUsed', 'riotChain',
       'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared', 'aiLead', 'politicianEval', 'scapegoatDay', 'gunDay', 'judgeUsed',
       'leviDue', 'goblinClaimDay', 'widowTold', 'baristaFx', 'harlotAsk', 'matronDay', 'butcherDay', 'mezEasy', 'nomHistory', 'demonSwap', 'monsta', 'lleechHost', 'lleechDue', 'fear', 'fearNews', 'evilHist',
-      'rochDone', 'bhEvilTf', 'fauxPaw', 'bh', 'acro', 'lycanNight', 'hatterDue', 'hatterNight'];
+      'rochDone', 'bhEvilTf', 'fauxPaw', 'bh', 'acro', 'lycanNight', 'hatterDue', 'hatterNight', 'allKnown'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -915,3 +916,4 @@ Object.assign(Game.prototype, BMR_METHODS);
 Object.assign(Game.prototype, SNV_METHODS);
 Object.assign(Game.prototype, TRAVELLER_METHODS);
 Object.assign(Game.prototype, ROCHAMBEAU_METHODS);
+Object.assign(Game.prototype, ALL_AMNESIAC_METHODS);

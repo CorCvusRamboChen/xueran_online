@@ -483,7 +483,7 @@ export const SNV_METHODS = {
   // ───────────────────────── 状态查询 ─────────────────────────
   abilityOf(p) { return p.gained ?? (p.role === 'drunk' || p.role === 'marionette' ? p.shownRole : p.role); }, // 酒鬼、提线木偶按他以为的角色行动
   /** 不知道自己是什么能力的人（失忆者、拿到能力的食人族）：信息只给裸的数字、人名，不说是哪个能力。 */
-  hidden(p) { return !!p?.gained && (p.role === 'amnesiac' || p.role === 'cannibal'); },
+  hidden(p) { return (!!p?.gained && (p.role === 'amnesiac' || p.role === 'cannibal')) || !!this.allAmn?.(p); }, // 全员失忆：还不知道自己是谁的人
   /** 利维坦在起作用。 */
   leviOn() { return this.players.some((q) => q.role === 'leviathan' && q.alive && !this.snvBroken(q)); },
   /** 这个死人还留着能力吗（被亡骨魔杀死的爪牙，亡骨魔还在且没失效）。 */
@@ -1017,7 +1017,7 @@ ${this.grimoire()}
     if (role === 'harlot_ask') roleOptions = ['harlot_yes', 'harlot_no'];
     if (role === 'hatter_pick') roleOptions = this.scriptRoles().filter((r) => ROLES[r].team === team(p) && r !== 'lilmonsta' && (r === p.role || !this.players.some((q) => q.role === r))); // 帽匠的茶会：同类型、不在场的角色
     if (role === 'cerenovus' && inScript('goblin', this.script)) roleOptions = [...roleOptions, 'goblin']; // 相克：洗脑师可以让人对「自己是哥布林」疯狂
-    return { playerId: p.id, role: this.hidden(p) && role !== 'ah_choice' && role !== 'harlot_ask' && role !== 'hatter_pick' ? p.role : role, count: spec.count, options, optional: !!spec.optional, pickRole: !!spec.role, roleOptions, waiting: false };
+    return { playerId: p.id, role: this.hidden(p) && role !== 'ah_choice' && role !== 'harlot_ask' && role !== 'hatter_pick' ? (this.allAmn?.(p) ? this.amnRoleOf(p) : p.role) : role, count: spec.count, options, optional: !!spec.optional, pickRole: !!spec.role, roleOptions, waiting: false };
   },
 
   nightPromptsSNV() {

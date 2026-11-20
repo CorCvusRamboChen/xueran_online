@@ -29,7 +29,7 @@ import { MarkTable, MK_ACTIONS, MARK_SETTINGS } from './mark.js';
 // 受害者那段破门过场多长（毫秒）：踹门 → 踹开 → "你死了"，播完再天亮
 // 每人在镇上有家的剧本（早上从自家门口出门）；其中暗流涌动一系还有夜里「冲到对方家门口破门」的过场
 const KILL_SCENE_SCRIPTS = new Set(['tb']); // 破门过场只在暗流涌动（2026-11-11 用户定）
-const HOME_SCRIPTS = new Set(['tb', 'ngj', 'rag', 'cat', 'ucd', 'ecp', 'bmr', 'hhr', 'pie', 'trust', 'booz', 'sar', 'mo', 'oe', 'roc']); // 每人在镇上有个家（白天从自家出门）：和破门是两回事
+const HOME_SCRIPTS = new Set(['tb', 'ngj', 'rag', 'cat', 'ucd', 'ecp', 'bmr', 'hhr', 'pie', 'trust', 'booz', 'sar', 'mo', 'oe', 'roc', 'amn']); // 每人在镇上有个家（白天从自家出门）：和破门是两回事
 const SHARED_HOME_SCRIPTS = new Set(['bmr', 'roc']); // 能当家的房子比人少时合住（黯月初升的地图只有 6 栋）
 const VICTIM_SCENE_MS = 6500;
 // 一局里的真人全都离线这么久，就暂停这局、放开所有闭麦闭耳（有人回来自动接着打）
@@ -1145,6 +1145,10 @@ export class Room {
     // 恐惧之灵：第一次选人、换了人，全场都会得知（不说选了谁）
     if (g.fearNews === g.night) this.announce('**恐惧之灵**昨晚选了一名新的玩家：如果恐惧之灵提名他、他被处决，他的阵营落败。', 'day', true);
     // 利维坦：每天天亮宣布在场和第几天（官方建议对新手每天说）；它失效的那天不宣布
+    if (g.allAmnMode?.() && !g.allKnown && g.day >= 4) { // 全员失忆：第 4 天失忆结束，每个人私下得知自己的角色
+      for (const m of g.amnRevealAll()) this.tell(m.playerId, m.text, 'storyteller');
+      this.announce('**全员失忆结束了。**从今天起，每个人都知道了自己的角色。', 'day', true);
+    }
     if (g.engine === 'snv' && g.leviOn()) this.announce(`**利维坦在场。**现在是第 ${g.day} 天${g.day >= 5 ? '——今天结束时邪恶获胜' : `（第 5 天结束时邪恶获胜；已有 ${g.leviGood.length} 名善良玩家被处决，再处决 ${2 - g.leviGood.length} 名善良玩家邪恶就获胜）`}。`, 'day', true);
     (this.knifeLog ??= []).push({ night: g.night, day: g.day, deaths: [...deaths], revived: back });
     if (g.nightRevived) g.nightRevived = [];
@@ -2207,6 +2211,7 @@ export class Room {
     else this.announce(already ? '黄昏。今天的处决已经发生过了。' : '黄昏。今天没有人被处决。', 'night', true);
     if (!already || executed) (this.execLog ??= []).push({ day: g.day, id: executed ?? null, saved: result === 'saved' });
     for (const id of harpyDead ?? []) this.pub(`**${g.name(id)}** 突然倒地身亡。`, 'death'); // 鹰身女妖：疯狂没做到
+    if (g.allAmnMode?.() && !g.allKnown) this.announce(`全员失忆：现在有 **${g.amnKnownCount()}** 人知道了自己是谁（第 4 天所有人都会知道）。`, 'night');
     if (g.boom) { await this.boomCountdown(g); if (this.game !== g) return undefined; }
     if (executed && !g.winner && g.butcherReady?.()) { await this.butcherRound(g); if (this.game !== g) return undefined; }
     this.madAtNight();
@@ -2646,7 +2651,8 @@ export class Room {
   /** 失忆者猜能力：大模型按"无关 / 有关 / 接近 / 完美"判；没配就用字面重合度粗判。失效时说书人可以乱答。 */
   amnesiac(uid, raw) {
     const g = this.requireSNV();
-    const { text, ability, lie } = g.amnesiacGuess(uid, raw);
+    const all = !!g.allAmnMode?.(); // 全员失忆（2026-11-20）：每个人每天问一次自己是谁
+    const { text, ability, lie } = all ? g.allGuess(uid, raw) : g.amnesiacGuess(uid, raw);
     this.tell(uid, '说书人想了想……', 'storyteller');
     const LEVELS = ['无关', '有关', '接近', '完美'];
     const ask = this.stId ? this.addAsk({ kind: 'amnesiac', who: uid, text, truth: ROLES[ability].name, hint: lie ? '他能力失效了：可以答错' : null, suggest: null }) : null;
@@ -2659,7 +2665,8 @@ export class Room {
       const unlock = level === '完美' && !lie && AMNESIAC_DAY.has(ability) && !g.amnesiacKnown?.[uid];
       // 听到「完美」就当他弄清了（失效时答的假完美也一样，不然按钮还在等于告诉他答错了）：不再给试别的白天能力的按钮（2026-11-12 用户：猜中气球驾驶员的失忆者还有开枪按钮）
       if (said === '完美') (g.amnesiacKnown ??= {})[uid] = true;
-      this.tell(uid, `你猜：${text}\n说书人的回答：**${said}**${unlock ? '\n你弄清了自己的能力：用行动面板里对应的按钮。' : ''}`, 'storyteller');
+      const known = all && said === '完美' ? `\n**你弄清了自己是谁：${ROLES[ability].name}**（${TEAM_NAME[ROLES[ability].team]}）——${ROLES[ability].ability}` : '';
+      this.tell(uid, `你猜：${text}\n说书人的回答：**${said}**${unlock && !all ? '\n你弄清了自己的能力：用行动面板里对应的按钮。' : ''}${known}`, 'storyteller');
       g.record('info', `${g.tag(uid)} 猜"${text}"，答：${said}${lie ? '（失效，答错了）' : ''}${unlock ? '（解锁了白天的能力）' : ''}`);
       this.changed();
     };
@@ -4049,11 +4056,11 @@ export class Room {
 
     const p = g.get(uid);
     if (p) {
-      const r = ROLES[p.shownRole];
+      const r = ROLES[g.allAmn?.(p) ? g.amnRoleOf(p) : p.shownRole]; // 全员失忆：只看到自己是哪一类
       const prompt = g.phase === 'night' && (!this.resolving || this.revivePending === uid) && (p.alive || this.revivePending === uid || g.ghostLunatic?.(p) || (g.engine === 'snv' && g.kept(p))) ? g.nightPrompts().find((x) => x.playerId === uid) : null;
       view.self = {
         seat: p.seat, alive: g.visAlive(p) || hushed.has(p.id), ghostVote: p.ghostVote,
-        role: { id: p.shownRole, name: r.name, team: r.team, teamName: TEAM_NAME[r.team], evil: g.engine === 'snv' && !['lunatic', 'marionette'].includes(p.role) && !(p.role === 'ogre' && !p.ogreKnows) ? g.evilOf(p) : isEvilRole(p.shownRole), ability: r.ability }, // 疯子、提线木偶看到的是他以为的阵营；食人魔不知道自己变成了哪边
+        role: { id: g.allAmn?.(p) ? g.amnRoleOf(p) : p.shownRole, name: r.name, team: r.team, teamName: TEAM_NAME[r.team], evil: g.engine === 'snv' && !['lunatic', 'marionette'].includes(p.role) && !(p.role === 'ogre' && !p.ogreKnows) ? g.evilOf(p) : isEvilRole(p.shownRole), ability: r.ability }, // 疯子、提线木偶看到的是他以为的阵营；食人魔不知道自己变成了哪边
         ...(g.engine === 'snv' ? this.snvSelf(p) : {}),
         canDeclare: this.canDeclare(uid),
         inbox: this.inbox.get(uid) ?? [],
@@ -4121,7 +4128,7 @@ export class Room {
     const day = g.phase === 'day' && !this.ended;
     // 食人族不知道自己拿到了什么能力：白天的几个"拜访说书人"他都可以试试，不是他的能力就什么也不发生
     // 失忆者不知道自己的能力：白天的几个能力也都可以试（官方：视作具有该能力），不是他的就什么也不发生
-    const amn = p.role === 'amnesiac' && !g.amnesiacKnown?.[uid]; // 弄清了自己的能力就不再乱试
+    const amn = (p.role === 'amnesiac' && !g.amnesiacKnown?.[uid]) || !!g.allAmn?.(p); // 弄清了自己的能力就不再乱试；全员失忆时不知道自己是谁的人都能试
     const tryAs = (r) => (ab === r || g.extraAbility(p) === r || (p.role === 'cannibal' && inScript(r, g.script)) || amn); // 科学怪人给恶魔的白天能力也有按钮
     return {
       gained: p.gained && !g.hidden(p) ? { id: p.gained, name: ROLES[p.gained].name, ability: ROLES[p.gained].ability } : null,
@@ -4132,7 +4139,7 @@ export class Room {
       canSavant: day && p.alive && tryAs('savant') && g.savantDay?.[uid] !== g.day,
       canArtist: day && p.alive && tryAs('artist') && !g.used?.[uid] && !this.triedToday(uid, 'artist'),
       canFisherman: day && p.alive && tryAs('fisherman') && !g.used?.[`fish-${uid}`] && !this.triedToday(uid, 'fisherman'),
-      canAmnesiac: day && p.alive && p.role === 'amnesiac' && g.amnesiacDay?.[uid] !== g.day,
+      canAmnesiac: day && (g.allAmnMode?.() ? !!g.allAmn(p) : p.alive && p.role === 'amnesiac') && g.amnesiacDay?.[uid] !== g.day, // 全员失忆：死了也能问
       canSlay: day && p.alive && (['slayer', 'amn_gun', 'amn_judge'].includes(ab) || g.extraAbility(p) === 'slayer' || amn) && !g.shooters?.includes(uid),
       canGun: day && p.alive && p.role === 'gunslinger' && g.gunDay !== g.day && (this.voteHistory ?? []).some((v) => v.day === g.day && !v.exile) && !this.vote,
       canJudge: day && p.alive && p.role === 'judge' && !g.judgeUsed && this.judgeDay !== g.day && !!this.judgeTarget() && this.judgeTarget().nom.nominator !== uid,
