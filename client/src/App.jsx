@@ -454,11 +454,11 @@ function Game({ s, act, ask }) {
       <PeltFx s={s} />{/* 扔东西的动画：全场都看得到 */}
       <CourtFx s={s} />{/* 赛后军事法庭：全场同时看战犯被吊起来 */}
       <section className="scene">
-        {!roaming && <div className="where">{place !== town.name && <Tag>{place}</Tag>}{/* 白天广场不写地名，只写剧本名（2026-11-20 用户）；夜里的「你的小屋」「魔典」照常 */}<Tag className="where-script">{SCRIPTS[s.script]?.name ?? SCRIPTS.tb.name}</Tag><BoardBar n={s.players.filter((p) => !p.traveller).length} script={s.script} inline /></div>}
+        {!roaming && <div className="where">{place !== town.name && <Tag>{place}</Tag>}{/* 白天广场不写地名，只写剧本名（2026-11-20 用户）；夜里的「你的小屋」「魔典」照常 */}<Tag className="where-script">{SCRIPTS[s.script]?.name ?? SCRIPTS.tb.name}</Tag></div>}
         {s.spectator && s.phase !== 'ended' && (
           <div className="spectator-bar">观战中{s.settings?.spectatorGrimoire ? ' · 你能看到所有人的身份，别在语音里说' : ' · 看不到任何人的身份'}{(s.watchers?.length ?? 0) > 1 ? ` · 观战 ${s.watchers.length} 人` : ''}</div>
         )}
-        <BoardBar n={s.players.filter((p) => !p.traveller).length} script={s.script} /> {/* 旅行者不算进人数配置。电脑上不在街上时，这一条跟在左上角地名、剧本名后面（.where 里那份），这份藏起来 */}
+        <BoardBar n={s.players.filter((p) => !p.traveller).length} script={s.script} /> {/* 旅行者不算进人数配置。人数条在顶栏居中（2026-11-20 用户：不要挪到左上角） */}
         {/* 票数统计块（VoteStats）2026-11-20 用户说不需要，不再显示 */}
         {roaming ? (
           <TownMap s={s} onMove={me ? (x, y, run) => { predictMove(s, x, y, run); return act('move', { x, y, run }); } : () => null} />

@@ -727,15 +727,9 @@ body:has(.lobby) { padding-top: 0; } /* 大厅背景图铺到灵动岛底下，�
 .bb-item { font: 700 12px var(--sans); color: var(--muted); letter-spacing: 1px; }
 .bb-item b { font: 700 18px/1 var(--cond); margin-right: 3px; }
 .bb-note { font: 400 11px var(--sans); color: #8f8a7e; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.board-bar { max-width: calc(100% - 104px); }
-/* 电脑上：人数条跟在左上角地名、剧本名后面排成一排（2026-11-20 用户：剧本名挪到左上角）；在街上（没有 .where）时还是居中那份 */
-.where { right: 12px; }
-.where .board-bar { position: static; transform: none; max-width: none; min-width: 0; flex: 0 1 auto; }
-.where .board-bar { gap: 8px; padding: 5px 8px; } .where .bb-n { letter-spacing: 1px; } .where .bb-item b { margin-right: 2px; }
-.where { gap: 4px; } .where > .tag { letter-spacing: 1px; }
-.scene:has(.where .board-bar) .board-bar.solo { display: none; }
-@media (max-width: 859px) { .where .board-bar { display: none; } .scene:has(.where .board-bar) .board-bar.solo { display: flex; } .where { right: auto; } } /* 说明和人数同一排：太长时截断，不压到两边的按钮 */
-.board-bar:has(.bb-note) { gap: 9px; padding: 5px 12px; }
+.board-bar { max-width: calc(100% - 196px); } /* 顶栏居中，左边让出剧本名 */
+.board-bar:has(.bb-note) { gap: 8px; padding: 5px 10px; }
+.board-bar:has(.bb-note) .bb-n { letter-spacing: 1px; } .board-bar:has(.bb-note) .bb-item b { margin-right: 2px; }
 .board-bar:has(.bb-note) .bb-item { letter-spacing: 0; }
 .board-bar:has(.bb-note) .bb-note { letter-spacing: -.2px; }
 @media (max-width: 859px) { .board-bar { top: 6px; gap: 8px; padding: 3px 8px; } .bb-note { display: none; } .bb-item b { font-size: 15px; } }
