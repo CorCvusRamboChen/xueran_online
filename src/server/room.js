@@ -651,6 +651,9 @@ export class Room {
     const newbies = new Set(nb);
     this.game = new Game(seats.map(({ id, name }) => ({ id, name })), { roles, drunkAs, script, noBaron, evilInfo: seats.length >= 7 || this.settings.smallEvilInfo, deadDrunk: !this.tutorial && !!this.settings.deadDrunk, lunaticGhost: !!this.settings.lunaticGhost, newbies: [...newbies], mezEasy: this.settings.mezEasy !== false, demonSwap });
     if (pick) applyDraft(this.game, pick);
+    if (!this.tutorial && this.evilTilt && !ragnarok) { // 按真实胜率调帮邪恶的程度（index.js 接上 server/winrate.js；测试和教学局不接）
+      try { const t = this.evilTilt(script); this.game.st.tilt = t.tilt; if (t.tilt) this.stNote(`帮邪恶的程度 ${t.tilt > 0 ? '+' : ''}${t.tilt.toFixed(2)}：${t.why}`); } catch (e) { console.warn('[botc] 算胜率出错：', e.message); }
+    }
     this.duskDay = null;
     this.ragCur = null; this.ragQ = []; this.ragThen = null; // 诸神黄昏的开枪队列：上一局剩下的不要带过来
     this.game.records = this.readRecords(seats);
@@ -2643,7 +2646,10 @@ export class Room {
     const fallback = () => reply(g.st.fishermanAdvice(p, lie));
     if (!(this.judgeReady ?? judgeAvailable)()) { fallback(); return; }
     const fake = lie === 'atheist'; // 无神论者局：按说书人假装的邪恶阵营给正常的建议（以前当成失效、还把「全员善良」的真实情况交给模型）
-    (this.advise ?? adviseFisherman)({ team: g.evilOf(p) && p.role !== 'marionette' ? '邪恶' : '善良', lie: !!lie && !fake, facts: fake ? g.factsFake() : g.factsSNV() }, { lang: this.aiLang() }) // 提线木偶以为自己是好人
+    const evilSide = g.evilOf(p) && p.role !== 'marionette';
+    // 2026-11-20 用户：夜半狂欢那局渔夫的建议「核对 3 号和 8 号」直接把恶魔 8 号打了出去。能力正常的建议不许点邪恶玩家（邪恶渔夫不许点恶魔）
+    const avoid = fake ? [] : g.players.filter((q) => (evilSide ? (g.demonNow?.(q) ?? ROLES[q.role].team === 'demon') : g.evilOf(q))).map((q) => ({ seat: q.seat, name: q.name }));
+    (this.advise ?? adviseFisherman)({ team: evilSide ? '邪恶' : '善良', lie: !!lie && !fake, facts: fake ? g.factsFake() : g.factsSNV(), avoid }, { lang: this.aiLang() }) // 提线木偶以为自己是好人
       .then((res) => (res?.advice ? reply(res.advice) : fallback()))
       .catch((e) => { console.warn('[botc] 渔夫的建议出错：', e.message); fallback(); });
   }

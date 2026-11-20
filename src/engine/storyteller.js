@@ -59,6 +59,7 @@ export class Storyteller {
     this.worlds = new Map();   // 玩家 id → 他看到的假世界
     this.misCount = new Map(); // "第几夜:玩家" → 这晚被错误登记了几次
     this.covers = {};          // 筑梦师看邪恶玩家时展示的伪装：id → 角色，每晚一样
+    this.tilt = 0;             // 帮邪恶的程度：按真实对局的邪恶胜率定（server/winrate.js），加在局势上；正数 = 多帮邪恶
   }
 
   when() {
@@ -173,7 +174,8 @@ export class Storyteller {
     const alive = g.aliveCount();
     const end = alive <= 5 ? Math.min(1, (6 - alive) / 3.5) : 0;
     if (end && demon) raw -= 0.9 * end * (1 - Math.max(demonHeat, sig.demonExposed ?? 0));
-    raw = clamp(raw, -1, 1);
+    // 帮邪恶的程度（2026-11-20 用户：看邪恶的真实胜率来调）：邪恶赢得少就把局势看得更偏善良，骰子多往邪恶偏
+    raw = clamp(raw + (this.tilt || 0), -1, 1);
     // ③ AI 说书人黄昏时听了大家今天说的话、看了真实情况，判断谁在赢（有将军或政客的剧本才问）：当晚一半听它的
     if (g.aiLead && g.aiLead.day === g.day) raw = clamp(0.5 * raw + 0.5 * ({ good: 0.6, evil: -0.6, neither: 0 }[g.aiLead.side] ?? 0), -1, 1);
     // 官方《给说书人的建议》：「如果你不知道你应该帮助哪个阵营，要么哪个阵营都不帮，要么就帮助邪恶阵营」。
@@ -189,6 +191,7 @@ export class Storyteller {
       worlds: [...this.worlds.entries()].map(([id, w]) => [id, { demon: w.demon, evil: [...w.evil], roles: [...w.roles.entries()], dream: w.dream, demonOk: w.demonOk ?? null }]),
       misCount: [...this.misCount.entries()],
       covers: this.covers,
+      tilt: this.tilt,
     };
   }
 
@@ -198,6 +201,7 @@ export class Storyteller {
     this.worlds = new Map((data?.worlds ?? []).map(([id, w]) => [id, { demon: w.demon, evil: new Set(w.evil), roles: new Map(w.roles), dream: w.dream, demonOk: w.demonOk ?? null }]));
     this.misCount = new Map(data?.misCount ?? []);
     this.covers = data?.covers ?? {};
+    this.tilt = data?.tilt ?? 0;
   }
 
   // ───────────── 开局 ─────────────
@@ -877,6 +881,7 @@ export class Storyteller {
     const ps = g.players; const n = ps.length;
     const isEvil = (q) => (w ? w.evil.has(q.id) : g.evilOf(q));
     const evilIn = (list) => list.filter(isEvil).length;
+    const pins = (list) => { const k = evilIn(list); return k >= 1 && list.length - k <= 1; }; // 这群人里几乎全是邪恶：说出人数就等于点名
     const num = (v, lo, hi) => { const o = [v - 1, v + 1].filter((x) => x >= lo && x <= hi); return o.length ? pick(o, rng) : v + 1; };
     const demons = ps.filter((q) => (w ? q.id === w.demon : g.demonNow ? g.demonNow(q) : ROLES[q.role].team === 'demon'));
     // 官方：「避免提供恶魔是谁这种信息」。点名一两个人的那几条不点恶魔，善良明显落后时才偶尔放开
@@ -900,15 +905,15 @@ export class Storyteller {
     const same = isEvil(two[0]) === isEvil(two[1]);
     const facts = [
       { t: `场上有 ${outs} 名外来者`, f: `场上有 ${num(outs, 0, n)} 名外来者` },
-      { t: `死亡的玩家里有 ${evilIn(dead)} 名邪恶`, f: `死亡的玩家里有 ${num(evilIn(dead), 0, n)} 名邪恶` },
+      { t: `死亡的玩家里有 ${evilIn(dead)} 名邪恶`, f: `死亡的玩家里有 ${num(evilIn(dead), 0, n)} 名邪恶`, sharp: pins(dead) },
       { t: `存活的玩家里有 ${evilIn(alive)} 名邪恶`, f: `存活的玩家里有 ${num(evilIn(alive), 0, n)} 名邪恶` },
       { t: `相邻而坐的邪恶玩家有 ${pairs} 对`, f: `相邻而坐的邪恶玩家有 ${num(pairs, 0, n)} 对` },
       { t: `${g.name(two[0].id)} 和 ${g.name(two[1].id)} ${same ? '是' : '不是'}同一阵营`, f: `${g.name(two[0].id)} 和 ${g.name(two[1].id)} ${same ? '不是' : '是'}同一阵营` },
       ...(w ? [] : [{ t: `恶魔${demonIn ? '在' : '不在'} ${seats[0]} 号到 ${seats.at(-1)} 号之间`, f: `恶魔${demonIn ? '不在' : '在'} ${seats[0]} 号到 ${seats.at(-1)} 号之间` }]), // 无神论者局不说恶魔在哪（假恶魔以后可能要换人）
-      { t: `${g.name(one.id)} 是${isEvil(one) ? '邪恶' : '善良'}的`, f: `${g.name(one.id)} 是${isEvil(one) ? '善良' : '邪恶'}的` },
+      { t: `${g.name(one.id)} 是${isEvil(one) ? '邪恶' : '善良'}的`, f: `${g.name(one.id)} 是${isEvil(one) ? '善良' : '邪恶'}的`, sharp: isEvil(one) },
     ];
     if (absent.length && present.length) facts.push({ t: `场上有${ROLES[pick(present, rng)].name}`, f: `场上有${ROLES[pick(absent, rng)].name}` });
-    facts.push(...this.savantMore(w, { isEvil, demons, dead, num }));
+    facts.push(...this.savantMore(w, { isEvil, demons, dead, num, pins }));
     return shuffled(facts, rng);
   }
 
@@ -918,7 +923,7 @@ export class Storyteller {
    * 有没有能让别人死的镇民、从第几夜开始邪恶数量异常。每条都有真的和假的说法。
    * 无神论者局（w）：中毒醉酒、恶魔状态这几类不说（假世界里说不圆，说了就是暗示没有邪恶）。
    */
-  savantMore(w, { isEvil, demons, dead, num }) {
+  savantMore(w, { isEvil, demons, dead, num, pins = () => false }) {
     const g = this.g; const rng = this.rng;
     const ps = g.players; const n = ps.length;
     const kind = (q) => (w ? worldTeam(w, q) : ROLES[q.role].team);
@@ -951,7 +956,7 @@ export class Storyteller {
     if (yes4 && no4) out.push({ t: say4(yes4), f: say4(no4) });
     // ⑧ 死人里有几个善良
     const goodDead = dead.filter((q) => !isEvil(q)).length;
-    out.push({ t: `死亡的玩家里有 ${goodDead} 名善良`, f: `死亡的玩家里有 ${num(goodDead, 0, n)} 名善良` });
+    out.push({ t: `死亡的玩家里有 ${goodDead} 名善良`, f: `死亡的玩家里有 ${num(goodDead, 0, n)} 名善良`, sharp: pins(dead) });
     // ⑨ 邪恶座位号加起来和某数比
     const sum = ps.filter(isEvil).reduce((a, q) => a + q.seat, 0);
     if (sum > 0) {
@@ -995,7 +1000,14 @@ export class Storyteller {
     // 无神论者局：两条信息照常一真一假，「真」是假世界里的真（说书人整局假装有邪恶）
     const w = lie === 'atheist' ? this.snvWorld(p, 'atheist') : null;
     if (w) lie = null;
-    const [a, b] = this.savantFacts(w);
+    // 2026-11-20 用户：夜半狂欢那局博学者第二天的真信息「死亡的玩家里有 1 名邪恶」（只死了一个人）等于点名。
+    // 一下子把人圈到一两个里的真话（sharp）少给：善良落后时才多放
+    const facts = this.savantFacts(w);
+    const soft = facts.filter((f) => !f.sharp);
+    const keep = (f, other) => (!f.sharp || !soft.some((x) => x !== other) || this.roll('savantSharp', { balance: this.balance() }, { who: p.id }) ? f : soft.find((x) => x !== other));
+    const a = lie === 'must' ? facts[0] : keep(facts[0], null); // 涡流两条都假，不用挑
+    let b = facts.find((f) => f !== a);
+    if (lie === 'fake') b = keep(b, a); // 醉酒中毒可能两条都真
     const lines = lie === 'must' ? [a.f, b.f] : lie === 'fake' ? (this.roll('savantTrue', {}, { who: p.id }) ? [a.t, b.t] : [a.f, b.f]) : [a.t, b.f];
     this.decide('savant', { who: p.id, options: [a.t, a.f, b.t, b.f], chosen: lines, lie });
     this.note(`博学者 ${this.g.name(p.id)}：${lie ? `失效，给了${lie === 'must' || lines[0] === a.f ? '两条假' : '两条真'}` : `真：${a.t}；假：${b.f}`}`);
@@ -1052,7 +1064,10 @@ export class Storyteller {
       const same = others.filter((q) => type(q) === last);
       if (same.length && this.roll('balloonSame', {}, { who: p.id })) { g.flag(p, '气球驾驶员看到了和上一晚同类型的人'); return this.choose('balloon', live(same), { who: p.id, lie }); }
     }
-    const pool = last ? others.filter((q) => type(q) !== last) : others;
+    let pool = last ? others.filter((q) => type(q) !== last) : others;
+    // 2026-11-20 用户：夜半狂欢那局气球驾驶员第二晚就看到恶魔 8 号，信息太直接。能力正常时少给恶魔，善良领先、前两晚更少（还能给外来者、爪牙）
+    const demons = pool.filter((q) => type(q) === 'demon');
+    if (!lie && demons.length && demons.length < pool.length && !this.roll('balloonDemon', { balance: this.balance(), early: (g.night ?? 1) <= 2 ? 1 : 0 }, { who: p.id })) pool = pool.filter((q) => type(q) !== 'demon');
     return pool.length ? this.choose('balloon', live(pool), { who: p.id, lie: !!lie }) : null;
   }
 
@@ -1070,7 +1085,7 @@ export class Storyteller {
     const b = this.balance();
     const name = (q) => g.name(q.id);
     const mine = !g.evilOf(p); // 渔夫的阵营：建议帮他这一边
-    const friends = mine ? good : evil; const foes = mine ? evil : good;
+    const friends = mine ? good : evil.filter((q) => !(g.demonNow?.(q) ?? ROLES[q.role].team === 'demon')); const foes = mine ? evil : good; // 邪恶渔夫也不点恶魔（罂粟种植者在场时爪牙不认识恶魔）
     const broken = friends.filter((q) => g.snvBroken?.(q)); // 自己人里信息不可靠的（醉酒中毒）
     let text;
     if (lie && foes.length) text = `相信 ${name(this.choose('fishBad', foes, { who: p.id }))}。`; // 失效：让他相信对面的人

@@ -190,8 +190,9 @@ const FISHERMAN_SYSTEM = `你是《血染钟楼》的说书人。渔夫每局可
 要求：
 - 建议是"去做什么"，不是"某人是什么"（集石百科：行动建议比信息有趣）。官方范例："你不应该相信小八"（小八的信息是错的）、"让声称自己是外来者的玩家活着"。
 - 要含蓄，像说书人给的点拨，不是答案：
-  · 不要单独点名恶魔，也不要说"处决某某""别让某某活过明天"这种直接指向一个邪恶玩家的话；
-  · 可以说相信谁、别相信谁、保护谁、让哪类人活着、多听谁的、去核对哪两个人的说法、在两三个人里留意一下；
+  · 能力正常时，建议里不能出现【不能点名】里列出的任何人（座位号和名字都不行），也不要说"处决某某""别让某某活过明天"；
+  · 可以说相信谁、保护谁、让哪类人活着、多听谁的（只能点不在【不能点名】里的人），或者不点名、只给一个做法（比如"今天别急着处决""让声称自己是外来者的玩家活着"）；
+  · 不要把场上已有的线索拼成指向某个人的结论（2026-11-20：上一局"核对 3 号和 8 号的说法"等于告诉大家 8 号是恶魔）；
   · 不要给"某两个人之中有恶魔 / 有人在骗你"这种话（渔夫页：这并非建议，是信息）。
 - 一到两句中文，不超过 40 字，用玩家的座位号和名字称呼人，不要说出任何人的真实角色或阵营。
 - 能力正常时：给真正有帮助、但需要他自己去想的建议。
@@ -199,9 +200,18 @@ const FISHERMAN_SYSTEM = `你是《血染钟楼》的说书人。渔夫每局可
 只输出一个 JSON 对象：{"advice":"建议"}`;
 
 /** 渔夫的建议。返回 { advice, by } 或 null。 */
-export function adviseFisherman({ team, lie, facts }, opts = {}) {
-  return askJson(FISHERMAN_SYSTEM, `【这局的真实情况】\n${facts}\n\n【渔夫】\n阵营：${team}；能力${lie ? '失效（给坏建议）' : '正常'}`,
-    (o) => { const a = String(o.advice ?? '').trim(); return a && [...a].length <= 80 ? { advice: a } : null; }, opts);
+export function adviseFisherman({ team, lie, facts, avoid = [] }, opts = {}) {
+  const ban = lie ? [] : avoid; // 失效时的坏建议可以点邪恶玩家（让他相信一个邪恶玩家）
+  const list = ban.length ? `\n【不能点名】${ban.map((q) => `${q.seat}号 ${q.name}`).join('、')}` : '';
+  return askJson(FISHERMAN_SYSTEM, `【这局的真实情况】\n${facts}\n\n【渔夫】\n阵营：${team}；能力${lie ? '失效（给坏建议）' : '正常'}${list}`,
+    (o) => { const a = String(o.advice ?? '').trim(); return a && [...a].length <= 80 && !namesAny(a, ban) ? { advice: a } : null; }, opts);
+}
+
+/** 文字里有没有点到这些人（座位号或名字）。「1号」不算「11号」里的。 */
+export function namesAny(text, people) {
+  const t = String(text ?? '');
+  return people.some((q) => new RegExp(`(?<!\\d)${q.seat}\\s*号|(?:#|seat\\s*|no\\.\\s*)${q.seat}(?!\\d)`, 'i').test(t)
+    || (String(q.name ?? '').trim().length >= 2 && t.includes(String(q.name).trim())));
 }
 
 // ───────────── 局势（将军）和责任（政客）：2026-11-16 用户要按大家的语音来判 ─────────────

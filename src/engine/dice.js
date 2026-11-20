@@ -42,6 +42,11 @@ export const DICE = {
   sageDead: { base: 0.5, balance: -1.5 },
   // 官方博学者页：「避免提供恶魔是谁这种信息，否则可能导致游戏快速结束」。善良明显落后时才偶尔放开（storyteller.savantFacts）
   savantDemon: { base: 0.2, balance: -1.5 },
+  // 2026-11-20 用户：夜半狂欢那局信息指向性太强，第二天就把恶魔打出去了。
+  // 博学者的真话把邪恶圈到一两个人里（「死了 1 个人，死者里有 1 名邪恶」「X 是邪恶的」）：善良落后时才多给
+  savantSharp: { base: 0.25, balance: -1.5 },
+  // 能力正常的气球驾驶员看到恶魔：善良领先、前两晚少给（还有外来者、爪牙可以给）
+  balloonDemon: { base: 0.5, balance: -1.5, early: -0.8 },
   mathFar: { base: 0.5 },
   boffinProof: { base: 0.75 },
   // 官方麻脸巫婆页范例：最后一夜造出善良恶魔，「说书人只杀死了邪恶的恶魔」。善良落后时多照做（storyteller.pitPlan）

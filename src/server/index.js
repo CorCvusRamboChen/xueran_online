@@ -13,6 +13,7 @@ import { Room, UserError } from './room.js';
 import { VoiceHub } from './voice.js';
 import { ttsHandler, ttsEnabled, bakedCount, ttsUrl } from './tts.js';
 import { forLang, normLang } from '../shared/i18n/server.js';
+import { evilTilt, forgetRates } from './winrate.js';
 import { saveSoon, flushAll, loadAll, archiveGame, listGames, getGame, statsFor, statsAll, archiveMark, markStatsFor, allPlayerWins, forgetSave } from './store.js';
 import { SOLO_GUILD, soloEnabled, soloIdentity, setupSoloRoom, seatSolo, soloEvictions } from './solo.js';
 import { WALLET, awardWins, seedWallet } from './wallet.js';
@@ -414,8 +415,10 @@ function roomFor(guildId, channelId, hostId) {
     }
     room.onPos = (r, id, move) => { broadcastPos(r, id, move); saveSoon(r); };
     room.onQuiet = saveSoon;
+    room.evilTilt = (script) => evilTilt(script); // AI 说书人帮邪恶的程度跟着这台服务器的真实胜率走
     room.onEnded = (r) => { // 永久存档这一局；赢的真人各得一枚金币
       archiveGame(r);
+      forgetRates();
       try {
         const got = awardWins(r);
         if (got.length) r.announce(`赢的一方 ${got.map((id) => `**${r.game.name(id)}**`).join('、')} 各得 **1 枚金币**。`, 'end');

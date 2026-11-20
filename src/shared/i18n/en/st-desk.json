@@ -292,5 +292,11 @@
   "**全员失忆结束了。**从今天起，每个人都知道了自己的角色。": "**The amnesia is over.** From today, everyone knows their character.",
   "全员失忆：现在有 **{0}** 人知道了自己是谁（第 4 天所有人都会知道）。": "All Amnesiacs: **{0}** players now know who they are (everyone will know on day 4).",
   "**你弄清了自己是谁：{0}**（{1}）——{2}": "**You've figured out who you are: {0}** ({1}) — {2}",
-  "你猜：{0}\n说书人的回答：**{1}**{2}{3}": "Your guess: {0}\nThe Storyteller's answer: **{1}**{2}{3}"
+  "你猜：{0}\n说书人的回答：**{1}**{2}{3}": "Your guess: {0}\nThe Storyteller's answer: **{1}**{2}{3}",
+  "帮邪恶的程度 {0}{1}：{2}": "How much the AI helps evil: {0}{1} — {2}",
+  "手动设定（BOTC_EVIL_TILT）": "set by hand (BOTC_EVIL_TILT)",
+  "这个剧本": "this script",
+  "所有剧本": "all scripts",
+  "还没有可用的对局": "no usable games yet",
+  "{0}最近 {1} 局（AI 说书、真人 ≥ {2}）邪恶赢了 {3} 局（{4}%）": "{0}: evil won {3} of the last {1} games (AI Storyteller, ≥ {2} humans, {4}%)"
 }
