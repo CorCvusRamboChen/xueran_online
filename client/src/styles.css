@@ -117,7 +117,8 @@ b { color: var(--opt-hi); font-weight: 900; }
 /* ── 布局 ── */
 .game { display: grid; padding-bottom: calc(76px + var(--saib)); }
 .scene { position: relative; background: #000; padding: 44px 0 70px; overflow: hidden; }
-.where { position: absolute; left: 0; top: 10px; z-index: 950; }
+.where { position: absolute; left: 0; top: 10px; z-index: 950; display: flex; gap: 6px; align-items: center; }
+.where .tag { position: static; }
 .dock { padding: 12px; }
 .drawer { display: none; }
 .drawer.open {
@@ -726,7 +727,14 @@ body:has(.lobby) { padding-top: 0; } /* 大厅背景图铺到灵动岛底下，�
 .bb-item { font: 700 12px var(--sans); color: var(--muted); letter-spacing: 1px; }
 .bb-item b { font: 700 18px/1 var(--cond); margin-right: 3px; }
 .bb-note { font: 400 11px var(--sans); color: #8f8a7e; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.board-bar { max-width: calc(100% - 104px); } /* 说明和人数同一排：太长时截断，不压到两边的按钮 */
+.board-bar { max-width: calc(100% - 104px); }
+/* 电脑上：人数条跟在左上角地名、剧本名后面排成一排（2026-11-20 用户：剧本名挪到左上角）；在街上（没有 .where）时还是居中那份 */
+.where { right: 12px; }
+.where .board-bar { position: static; transform: none; max-width: none; min-width: 0; flex: 0 1 auto; }
+.where .board-bar { gap: 8px; padding: 5px 8px; } .where .bb-n { letter-spacing: 1px; } .where .bb-item b { margin-right: 2px; }
+.where { gap: 4px; } .where > .tag { letter-spacing: 1px; }
+.scene:has(.where .board-bar) .board-bar.solo { display: none; }
+@media (max-width: 859px) { .where .board-bar { display: none; } .scene:has(.where .board-bar) .board-bar.solo { display: flex; } .where { right: auto; } } /* 说明和人数同一排：太长时截断，不压到两边的按钮 */
 .board-bar:has(.bb-note) { gap: 9px; padding: 5px 12px; }
 .board-bar:has(.bb-note) .bb-item { letter-spacing: 0; }
 .board-bar:has(.bb-note) .bb-note { letter-spacing: -.2px; }
@@ -1866,7 +1874,7 @@ span.lr-newbie { cursor: default; }
 
 /* 画面上的播报、音效、音乐、设置、语音归位、技能表：电脑和手机都收进一个齿轮，点开是一列（2026-11-20 用户：收束进一个齿轮） */
 .sound-toggles { flex-direction: column; align-items: flex-end; }
-@media (min-width: 860px) { .sound-toggles { top: 10px; } } /* 右上角只剩齿轮：和剧本人数条同一排 */
+@media (min-width: 860px) { .sound-toggles, .scene:has(.minimap) .sound-toggles, .scene:has(.vote-stats) .sound-toggles, .scene:has(.cs:not(.moved)) .sound-toggles { top: auto; bottom: 84px; flex-direction: column-reverse; } } /* 齿轮在右下角倒计时上面（2026-11-20 用户），点开往上展开 */
 .scene:has(.minimap) .sound-toggles, .scene:has(.cs:not(.moved)) .sound-toggles, .scene:has(.vote-stats) .sound-toggles { flex-direction: column-reverse; } /* 齿轮在下面时往上展开 */
 .st-gear { display: grid; place-items: center; width: 34px; height: 34px; padding: 0 !important; font-size: 18px !important; }
 .st-items { display: none; }
@@ -1989,7 +1997,14 @@ span.lr-newbie { cursor: default; }
 .extras ul { margin: 4px 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
 
 /* 传奇角色的「传奇」下标：牌子右下角一个小签，顶栏说明里名字后面一个下标 */
-.fab-name { color: #d8b56f; text-decoration: underline; text-decoration-color: #c9a86a; text-decoration-thickness: 1.5px; text-underline-offset: 3px; cursor: help; }
+.fab-name { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; cursor: help; outline: none; }
+.fab-name:hover, .fab-name:focus-visible { color: var(--cream); }
+.fab-tip { position: fixed; z-index: 7000; width: 300px; padding: 10px 12px; background: #121413; border: 1px solid rgba(226, 181, 44, .4); box-shadow: 0 14px 34px rgba(0, 0, 0, .65);
+  white-space: normal; text-align: left; pointer-events: none; }
+.fab-tip-kind { display: block; font: 11px/1.4 var(--sans); letter-spacing: .2em; color: var(--muted); }
+.fab-tip b { display: block; font: 900 17px/1.3 var(--serif); color: var(--opt-hi); margin: 2px 0 4px; }
+.fab-tip p { margin: 0 0 4px; font: 13px/1.6 var(--sans); color: var(--cream); }
+.fab-tip p.muted { font-size: 12px; color: var(--muted); margin: 0; }
 /* 顶栏说明长的剧本：说明另起一行，票数条往下让 */
 
 /* 赛后：总结 + 军事法庭（2026-11-19 用户） */

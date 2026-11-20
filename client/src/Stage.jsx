@@ -185,7 +185,12 @@ export function SoundToggles({ onFixVoice = null, onSheet = null }) {
   }, [open]);
   return (
     <div className="sound-toggles" ref={ref}>
-      <button type="button" className={`st-gear ${open ? 'on' : ''}`} onClick={() => setOpen((x) => !x)} aria-expanded={open} aria-label="声音和设置" title="声音和设置">⚙</button>
+      <button type="button" className={`st-gear ${open ? 'on' : ''}`} onClick={() => setOpen((x) => !x)} aria-expanded={open} aria-label="声音和设置" title="声音和设置">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3.2" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+        </svg>
+      </button>
       <div className={`st-items ${open ? 'open' : ''}`}>
       {ttsSupported && <button type="button" className={tts ? 'on' : ''} onClick={() => setTts(!tts)} title="AI 房主的语音播报">{tts ? '播报 开' : '播报 关'}</button>}
       <button type="button" className={sfx ? 'on' : ''} onClick={() => setSfx(!sfx)} title="脚步声、敲门声">{sfx ? '音效 开' : '音效 关'}</button>

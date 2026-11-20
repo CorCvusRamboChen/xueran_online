@@ -64,8 +64,25 @@ function markFabled(text, script) {
   const names = fabledOf(script).map((id) => FABLED[id].name);
   if (!names.length) return text;
   const of = (name) => FABLED[fabledOf(script).find((id) => FABLED[id].name === name)];
-  // 传奇角色的名字下面画一道金色下划线（2026-11-20 用户：角标的意思是下划线，不是「传奇」两个字）
-  return text.split(new RegExp(`(${names.join('|')})`)).map((part, i) => (names.includes(part) ? <span key={i} className="fab-name" title={`传奇角色 · ${part}：${of(part)?.ability ?? ''}`}>{part}</span> : part));
+  // 传奇角色的名字下面画一道下划线，颜色不变；鼠标放上去弹出详细介绍（2026-11-20 用户）
+  return text.split(new RegExp(`(${names.join('|')})`)).map((part, i) => (names.includes(part) ? <FabName key={i} name={part} f={of(part)} /> : part));
+}
+/** 传奇角色的名字：下划线；鼠标放上去（手机上点一下）在旁边弹出这张传奇角色的介绍。弹层挂在 body 上，顶栏截断也不会被裁掉。 */
+function FabName({ name, f }) {
+  const [at, setAt] = useState(null);
+  const show = (e) => { const r = e.currentTarget.getBoundingClientRect(); setAt({ x: Math.min(Math.max(12, r.left + r.width / 2 - 150), window.innerWidth - 312), y: r.bottom + 8 }); };
+  return (
+    <span className="fab-name" tabIndex={0} onMouseEnter={show} onMouseLeave={() => setAt(null)} onFocus={show} onBlur={() => setAt(null)} onClick={(e) => (at ? setAt(null) : show(e))}>
+      {name}
+      {at && createPortal(
+        <div className="fab-tip" style={{ left: at.x, top: at.y }} role="tooltip">
+          <span className="fab-tip-kind">传奇角色</span>
+          <b>{name}</b>
+          <p>{f?.ability}</p>
+          {f?.detail && <p className="muted">{f.detail}</p>}
+        </div>, document.body)}
+    </span>
+  );
 }
 /** 顶部常驻：这局的板子配置（几个镇民、外来者、爪牙、恶魔）。 */
 /** 夜半狂欢换了恶魔时顶栏的说明（亡骨魔 −1 外来者换成对应的）。 */
@@ -75,15 +92,14 @@ function boardNote(script, swap) {
   const what = swap === 'lilmonsta' ? ['小怪宝：没有恶魔玩家、多一个爪牙，爪牙每晚选谁照看（他「是恶魔」）', '小怪宝 +1 爪牙'] : ['利维坦：不杀人，处决第二名善良或第 5 天结束邪恶获胜', '利维坦 不杀人'];
   return [note[0].replace('亡骨魔在场 −1 外来者', what[0]), note[1].replace('亡骨魔−1', what[1])];
 }
-function BoardBar({ n, script }) {
+function BoardBar({ n, script, inline = false }) {
   const d = script === 'rag' && DISTRIBUTION[n] ? [n - ragnarokWolves(n), 0, 0, ragnarokWolves(n)] : DISTRIBUTION[n]; // 诸神黄昏：猎手和狼人
   if (!d) return null;
   const parts = [['镇民', d[0], 'var(--int)'], ['外来者', d[1], 'var(--psy)'], ['爪牙', d[2], '#c9762e'], ['恶魔', d[3], 'var(--phy)']];
   const full = boardNote(script, rolesOf('mo', 'demon').find((r) => r !== 'alhadikhia'));
   const note = full?.[1] ?? '';
   return (
-    <div className="board-bar" title={full?.[0] ?? ''}>{/* 说明和人数在同一排（2026-11-20 用户）；太长就截断，悬停看全文 */}
-      <span className="bb-script">{SCRIPTS[script]?.name ?? SCRIPTS.tb.name}</span>
+    <div className={`board-bar${inline ? ' inline' : ' solo'}`} title={full?.[0] ?? ''}>{/* 说明和人数在同一排（2026-11-20 用户）；太长就截断，悬停看全文 */}
       <span className="bb-n">{n} 人局</span>
       {parts.map(([k, v, c]) => <span key={k} className="bb-item"><b style={{ color: c }}>{v}</b>{k}</span>)}
       {note && <span className="bb-note">{markFabled(note, script)}</span>}
@@ -419,7 +435,7 @@ function Game({ s, act, ask }) {
     { id: 'votes', icon: 'roster', label: '关键信息', dot: s.votes?.length && tab !== 'votes' && s.votes.at(-1).at > Date.now() - 60_000 ? '' : 0 },
     { id: 'roster', icon: 'roster', label: '镇民' },
     { id: 'roles', icon: 'grim', label: '角色' },
-    { id: 'extras', icon: 'grim', label: '传奇·旅行者' }, // 2026-11-19 用户：角色右边介绍传奇角色和旅行者
+    (fabledOf(s.script).length || travellersOf(s.script).length) && { id: 'extras', icon: 'grim', label: fabledOf(s.script).length ? '传奇' : '旅行者' }, // 2026-11-20 用户：收成一个词，有传奇角色就叫传奇，只有旅行者叫旅行者
     s.isST && { id: 'grim', icon: 'grim', label: '魔典', dot: stTodo(s.st) },
     s.isHost && { id: 'menu', icon: 'menu', label: s.isST ? '说书人' : '房主' },
   ].filter(Boolean);
@@ -437,11 +453,11 @@ function Game({ s, act, ask }) {
       <PeltFx s={s} />{/* 扔东西的动画：全场都看得到 */}
       <CourtFx s={s} />{/* 赛后军事法庭：全场同时看战犯被吊起来 */}
       <section className="scene">
-        {!roaming && <Tag className="where">{place}</Tag>}
+        {!roaming && <div className="where"><Tag>{place}</Tag><Tag className="where-script">{SCRIPTS[s.script]?.name ?? SCRIPTS.tb.name}</Tag><BoardBar n={s.players.filter((p) => !p.traveller).length} script={s.script} inline /></div>}
         {s.spectator && s.phase !== 'ended' && (
           <div className="spectator-bar">观战中{s.settings?.spectatorGrimoire ? ' · 你能看到所有人的身份，别在语音里说' : ' · 看不到任何人的身份'}{(s.watchers?.length ?? 0) > 1 ? ` · 观战 ${s.watchers.length} 人` : ''}</div>
         )}
-        <BoardBar n={s.players.filter((p) => !p.traveller).length} script={s.script} /> {/* 旅行者不算进人数配置 */}
+        <BoardBar n={s.players.filter((p) => !p.traveller).length} script={s.script} /> {/* 旅行者不算进人数配置。电脑上不在街上时，这一条跟在左上角地名、剧本名后面（.where 里那份），这份藏起来 */}
         {/* 票数统计块（VoteStats）2026-11-20 用户说不需要，不再显示 */}
         {roaming ? (
           <TownMap s={s} onMove={me ? (x, y, run) => { predictMove(s, x, y, run); return act('move', { x, y, run }); } : () => null} />
