@@ -13,7 +13,7 @@ import { SETUPS, pickPreset, PRESET_SHARE } from '../shared/setups.js';
 import { buildRoles, easeNewbies } from '../engine/assign.js';
 import { narration } from './narration.js';
 import { ttsUrl } from './tts.js';
-import { judgeStatement, judgeMadness, judgeBreak, looksBroken, judgeAvailable, judgeAmnesiac, adviseFisherman, looksInjected, speakSeat7, judgeLead, judgeResponsible, readTable, judgeAfterGame } from './judge.js';
+import { judgeStatement, judgeArtist, judgeMadness, judgeBreak, looksBroken, judgeAvailable, judgeAmnesiac, adviseFisherman, looksInjected, speakSeat7, judgeLead, judgeResponsible, readTable, judgeAfterGame } from './judge.js';
 import { parseTable, describeTable, tableLead } from '../engine/tableRead.js';
 import { feedbackAct } from './feedback.js';
 import { openDraft, draftAct, draftView, applyDraft, dropDraft } from './draft.js';
@@ -2720,7 +2720,7 @@ export class Room {
     // 问得有歧义（「1-5」可能是 1 到 5 号，也可能是 1 号和 5 号）、看不懂、或者不是是非题：不答，让他重新问，这次不算用掉
     // （2026-11-12 用户定；艺术家页：「如果你不能用这三种答案进行回答，让他重新问一个问题」）。
     // 模型的理由记进说书人记录（以前丢掉了，事后看不出它怎么理解的问题）；理由不给玩家看，免得漏出真实情况
-    this.aiAsk(uid, 'artist', (this.stmtJudge ?? judgeStatement)(`（这是一个是非问题：答案为"是"就判 true，为"不是"就判 false。玩家说的数字一般指座位号。如果这个问题有歧义——同一句话能读出两种意思、两种意思的答案不一样，比如「1-5」可能是 1 号到 5 号、也可能是 1 号和 5 号——或者看不懂在问什么，或者根本不是能用「是 / 不是 / 我不知道」回答的问题（比如「有几个爪牙」「谁是恶魔」），判 unknown，reason 以「歧义：」开头说明为什么要重问）${text}`, g.atheist && !g.evilOf(g.get(uid)) ? g.factsFake() : g.factsSNV())) // 无神论者局：按说书人假装的邪恶阵营判（2026-11-19）
+    this.aiAsk(uid, 'artist', (this.stmtJudge ?? judgeArtist)(text, g.atheist && !g.evilOf(g.get(uid)) ? g.factsFake() : g.factsSNV())) // 无神论者局：按说书人假装的邪恶阵营判（2026-11-19）
       .then((res) => {
         if (this.game !== g) return;
         if (res?.reason) { this.stNote(`艺术家 ${g.name(uid)} 问「${text}」，说书人的理解：${res.reason}（${res.verdict}）`); g.record('st', `艺术家的问题「${text}」，说书人判 ${res.verdict}：${res.reason}`); }
