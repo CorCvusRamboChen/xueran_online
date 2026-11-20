@@ -770,7 +770,7 @@ export class Storyteller {
   }
 
   /** 筑梦师看到的 [善良角色, 邪恶角色]。邪恶那一项几乎都用在场爪牙。lie 时两个都错，同一套假世界里同一个人每晚答案一样。不会给涡流（涡流在场时必须都错，给了就等于说破）。 */
-  dreamerRoles(t, lie, w = null) {
+  dreamerRoles(t, lie, w = null, viewer = null) {
     const g = this.g;
     const said = w?.dream?.[t.id];
     if (lie && said && !said.includes(t.role)) return said; // 这人的角色变成了当时的假答案：不能再说，重编
@@ -783,7 +783,8 @@ export class Storyteller {
     const seen = live.filter((r) => ROLES[r].team === 'minion').length ? live.filter((r) => ROLES[r].team === 'minion') : live; // 给在场的角色才迷惑得了人
     const fakeEvil = this.choose('dreamerEvil', seen.length && this.roll('dreamerSeen', {}, { who: t.id }) ? seen : evilPool, { who: t.id, truth: t.role, lie: !!lie });
     const cover = !lie && !trueGood ? this.coverOf(t) : null;
-    const fakeGood = cover ?? this.choose('dreamerGood', all(['townsfolk', 'outsider']), { who: t.id, truth: t.role, lie: !!lie });
+    const goods = all(['townsfolk', 'outsider']); const notMine = goods.filter((r) => r !== viewer?.role && r !== viewer?.shownRole); // 不报筑梦师自己的角色
+    const fakeGood = cover ?? this.choose('dreamerGood', notMine.length ? notMine : goods, { who: t.id, truth: t.role, lie: !!lie });
     if (lie) {
       if (w) (w.dream ??= {})[t.id] = [fakeGood, fakeEvil];
       return [fakeGood, fakeEvil];
@@ -1128,7 +1129,7 @@ export class Storyteller {
       target = this.choose('pairTarget', wrong.length ? wrong : others, { who: p.id, lie });
       const w = this.snvWorld(p, lie);
       const key = `${kind}-${p.id}`;
-      role = (w.pairRole ??= {})[key] ?? this.choose('pairRole', pool.filter((r) => r !== target.role), { who: p.id });
+      role = (w.pairRole ??= {})[key] ?? this.choose('pairRole', pool.filter((r) => r !== target.role && r !== p.role && r !== p.shownRole), { who: p.id }); // 不报他自己的角色
       w.pairRole[key] = role;
       g.flag(p, `${by}看到了假的${kind === 'outsider' ? '外来者' : '镇民'} ${g.name(target.id)}`);
     } else {
@@ -1145,7 +1146,8 @@ export class Storyteller {
   falseRoleSNV(p, target, w) {
     const g = this.g;
     const kind = w?.demon === target.id ? ['demon'] : w?.evil.has(target.id) ? ['minion'] : ['townsfolk', 'outsider'];
-    const pool = rolesOf(g.script).filter((r) => kind.includes(ROLES[r].team) && r !== target.role);
+    const own = (r) => r === p.role || r === p.shownRole; // 假信息不报他自己的角色：一看就是假的，全员失忆时还等于告诉他自己是谁
+    const pool = rolesOf(g.script).filter((r) => kind.includes(ROLES[r].team) && r !== target.role && !own(r));
     const r = this.choose('falseRole', pool.length ? pool : rolesOf(g.script).filter((x) => x !== target.role), { who: p.id, about: target.id, truth: target.role });
     g.flag(p, `看到了错误的角色（真实是${ROLES[target.role].name}）`);
     return r;

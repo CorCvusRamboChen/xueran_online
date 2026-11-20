@@ -35,6 +35,27 @@ test('全员失忆：每天问一次（死了也能问）；问过就不能再�
   assert.equal(g.amnKnownCount(), 1);
 });
 
+test('全员失忆：变了角色、看魔典、假信息都不说出他自己的角色（2026-11-21 用户：给信息时说了自己是魔鬼代言人）', () => {
+  const g = new Game(players(8), { script: 'amn', roles: ['spy', 'washerwoman', 'empath', 'chef', 'monk', 'saint', 'pithag', 'imp'], rng: makeRng(5), misregister: 0 });
+  g.startNight(); for (const pr of g.nightPrompts()) g.autoChoose(pr.playerId);
+  const r = g.resolveNight();
+  const spy = r.messages.filter((m) => m.playerId === 'p1').map((m) => m.text).join('\n');
+  assert.match(spy, /1号 玩家1 — 失忆的爪牙/, '间谍看魔典：自己那一行只写失忆的爪牙');
+  assert.doesNotMatch(spy, /玩家1 — 间谍/);
+  assert.match(spy, /2号 玩家2 — 洗衣妇/, '别人的照常');
+  // 麻脸巫婆把 3 号变成别的镇民：只说变成了失忆的镇民
+  g.dawn(); g.endDay?.();
+  g.startNight();
+  g.submitChoice('p7', ['p3'], { role: 'oracle' });
+  for (const pr of g.nightPrompts()) if (!g.choices[pr.playerId]) g.autoChoose(pr.playerId);
+  let n = g.resolveNight(); const msgs = [...n.messages];
+  while (n.pause) { g.autoChoose(n.pause); n = g.resolveNight(); msgs.push(...n.messages); }
+  const p3 = msgs.filter((m) => m.playerId === 'p3').map((m) => m.text).join('\n');
+  assert.equal(g.get('p3').role, 'oracle');
+  assert.match(p3, /失忆的镇民/);
+  assert.doesNotMatch(p3, /神谕者/);
+});
+
 function mockVoice() {
   return { async findSquare() { return 'sq'; }, async setAsleep() {}, async openRoom() { return 'r'; }, async closeRoom() {}, async addToRoom() {}, async removeFromRoom() {}, async moveAll() {}, async setMuted() {} };
 }
@@ -47,6 +68,8 @@ test('全员失忆（房间）：自己的角色卡只写「失忆的 X」；问
   await room.act('u1', 'start');
   const g = room.game;
   try {
+    room.deliver([{ playerId: 'u2', text: '测试信息' }]);
+    assert.match(room.viewFor('u2').self.inbox.at(-1).voice, /^amn_/, '信息上写的说话人不是他的真角色');
     const card = room.viewFor('u2').self.role;
     assert.match(card.id, /^amn_/);
     assert.match(card.name, /^失忆的/);

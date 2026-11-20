@@ -20,6 +20,9 @@ export const ALL_AMNESIAC_METHODS = {
   /** 给本人看的「失忆的 X」角色 id（amn_townsfolk / amn_outsider / amn_minion / amn_demon）。按他以为的角色类型（疯子以为自己是恶魔）。 */
   amnRoleOf(p) { return `amn_${ROLES[p.shownRole ?? p.role]?.team ?? 'townsfolk'}`; },
 
+  /** 告诉本人「你现在是谁」时用的名字：还失忆的人只说是哪一类（失忆的镇民 / 外来者 / 爪牙 / 恶魔）。 */
+  amnName(p, roleId) { return this.allAmn(p) ? ROLES[`amn_${ROLES[roleId]?.team ?? 'townsfolk'}`].name : ROLES[roleId].name; },
+
   /** 现在有几个人知道自己是谁（黄昏公布）。 */
   amnKnownCount() { return this.players.filter((p) => !p.traveller && (this.allKnown || this.amnesiacKnown?.[p.id])).length; },
 

@@ -158,7 +158,7 @@ export const BMR_METHODS = {
   ghostLunatic(p) { return !!p && p.role === 'lunatic' && !p.alive && !!p.lunaticGhost; },
   /** 第一次"死亡"时私下告诉僵怖（或以为自己是僵怖的疯子）：你还在场。白天死的等入夜再说。 */
   zombuulNote(p, messages) {
-    const m = { playerId: p.id, text: '你第一次死亡了——但僵怖并没有真的死：大家看到你死了，你仍在场。之后每个白天没人死亡的夜里，你照样醒来杀人；再死一次才是真的死亡。' };
+    const m = { playerId: p.id, text: this.allAmn?.(p) ? '你第一次死亡了——但你并没有真的死：大家看到你死了，你仍在场。之后每个白天没人死亡的夜里，你照样醒来杀人；再死一次才是真的死亡。' : '你第一次死亡了——但僵怖并没有真的死：大家看到你死了，你仍在场。之后每个白天没人死亡的夜里，你照样醒来杀人；再死一次才是真的死亡。' };
     if (this.phase === 'night') messages.push(m); else (this.evilMessages ??= []).push(m);
   },
 

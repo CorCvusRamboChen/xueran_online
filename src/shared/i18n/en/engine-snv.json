@@ -513,5 +513,12 @@
  "只剩两名存活玩家：说书人始终没有被处决，善良落败（场上其实没有邪恶）": "Only two players are alive: the Storyteller was never executed, so good loses (there was actually no evil in play)",
  "所有暴乱都死了": "Every Riot is dead",
  "恶魔已死，但双子挡着善良，只剩两名存活玩家，邪恶获胜": "The Demon is dead, but the twins block good and only two players remain alive: evil wins",
- "，获得了{0}的能力": ", gained the {0} ability"
+ "，获得了{0}的能力": ", gained the {0} ability",
+ "你第一次死亡了——但你并没有真的死：大家看到你死了，你仍在场。之后每个白天没人死亡的夜里，你照样醒来杀人；再死一次才是真的死亡。": "You have died for the first time — but you are not really dead: everyone sees you as dead, yet you are still in play. On each night after a day with no deaths you still wake and kill; dying a second time is your real death.",
+ "说书人叫醒了你：**你现在是邪恶的恶魔**（具体是哪个角色你还不知道）。原来的恶魔代替你死去了。从下一个夜晚起由你杀人。（你不知道爪牙是谁。）": "The Storyteller woke you: **you are now the evil Demon** (you don't yet know which character). The old Demon died in your place. From the next night on, you kill. (You don't know who the Minions are.)",
+ "你变成了 **{0}**。你的阵营没有变。": "You became the **{0}**. Your alignment has not changed.",
+ "说书人叫醒了你：**你的角色和阵营都变了。你现在是{0}，属于{1}阵营。**": "The Storyteller woke you: **your character and alignment have both changed. You are now the {0}, on the {1} team.**",
+ "{0}：**明天白天和夜晚，你要「疯狂」地证明自己是{1}**，不然你可能被处决。": "{0}: **tomorrow, day and night, you must be \"mad\" that you are the {1}**, or you might be executed.",
+ "说书人叫醒了你": "The Storyteller woke you",
+ "洗脑师选中了你": "The Cerenovus chose you"
 }

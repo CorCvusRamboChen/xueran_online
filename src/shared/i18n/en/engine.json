@@ -266,5 +266,6 @@
  "你不是法官": "You aren't the Judge.",
  "你这局已经用过了": "You've already used it this game.",
  "只能用在别人发起的提名上": "Only usable on a nomination made by someone else.",
- "法官 {0} 宣布这次处决强制{1}": "The Judge {0} forces this vote's result: {1}"
+ "法官 {0} 宣布这次处决强制{1}": "The Judge {0} forces this vote's result: {1}",
+ "（死亡）": " (dead)"
 }

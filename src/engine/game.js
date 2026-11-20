@@ -874,8 +874,10 @@ export class Game {
   }
   setShownRole(id, role) { const p = this.get(id); if (p) p.shownRole = role; }
 
-  grimoire() {
+  /** viewer：看魔典的人（间谍、寡妇）。全员失忆时他还不知道自己是谁，他自己那一行只写「失忆的 X」。 */
+  grimoire(viewer = null) {
     return this.players.map((p) => {
+      if (p.id === viewer && this.allAmn?.(p)) return `${this.evilOf(p) ? '【邪】' : '【善】'}${p.seat}号 ${p.name} — ${ROLES[this.amnRoleOf(p)].name}${p.alive ? '' : '（死亡）'}`;
       const tags = [];
       if (!p.alive) tags.push(p.ghostVote ? '死亡（有幽灵票）' : '死亡');
       if (p.role === 'drunk') tags.push(`以为自己是${ROLES[p.shownRole].name}`);

@@ -757,7 +757,7 @@ export const SNV_METHODS = {
     this.demonExecuted = false; // 有人接任：主谋的额外一天只看「恶魔死于处决导致没有恶魔」
     this.log.push(`${this.name(heir.id)} 成为了${ROLES[d.role].name}`);
     this.record('death', `${this.name(heir.id)} 接任，成为新的${ROLES[d.role].name}`);
-    messages.push({ playerId: heir.id, text: `恶魔死去了——**你现在是${ROLES[d.role].name}**。${ROLES[d.role].ability ? `你的能力：${ROLES[d.role].ability}` : ''}` });
+    messages.push({ playerId: heir.id, text: `恶魔死去了——**你现在是${this.amnName(heir, d.role)}**。${ROLES[d.role].ability && !this.allAmn(heir) ? `你的能力：${ROLES[d.role].ability}` : ''}` });
   },
 
   /**
@@ -800,7 +800,8 @@ export const SNV_METHODS = {
       this.snvDie(d, 'fanggu', messages);
       this.changeRole(t, 'fanggu');
       t.evil = true;
-      say(t, '方古选中了你：**你现在是邪恶的方古。** 原来的方古代替你死去了。从下一个夜晚起由你杀人。（你不知道爪牙是谁。）');
+      say(t, this.allAmn(t) ? '说书人叫醒了你：**你现在是邪恶的恶魔**（具体是哪个角色你还不知道）。原来的恶魔代替你死去了。从下一个夜晚起由你杀人。（你不知道爪牙是谁。）'
+        : '方古选中了你：**你现在是邪恶的方古。** 原来的方古代替你死去了。从下一个夜晚起由你杀人。（你不知道爪牙是谁。）');
       this.record('death', `${this.tag(t.id)} 被转化成新的方古`);
       this.afterChange(say);
       return;
@@ -936,7 +937,7 @@ export const SNV_METHODS = {
     if (lunatic && demon) this.tellLunatic(demon, say);
     // 寡妇首夜看魔典（先看，再选人）
     for (const w of this.players.filter((p) => this.abilityOf(p) === 'widow' && p.alive && !this.used[p.id])) say(w, `魔典（和说书人看到的一样）：
-${this.grimoire()}
+${this.grimoire(w.id)}
 现在选一名玩家：他中毒，直到你死亡。`);
     // 科学怪人：恶魔和他都知道恶魔拿到了哪个能力（人少也告诉）
     const boffin = this.players.find((p) => p.role === 'boffin');
@@ -1184,7 +1185,7 @@ ${this.grimoire()}
             const pool = this.alive().filter((q) => !this.evilOf(q) && !this.players.some((x) => x.role === 'damsel'));
             const st = pool.length ? this.st.choose('pithagDamsel', pool) : t;
             if (st !== t) this.record('st', `相克：麻脸巫婆要造落难少女，说书人改让 ${this.tag(st.id)} 变成落难少女`);
-            this.changeRole(st, 'damsel'); say(st, '你变成了 **落难少女**。你的阵营没有变。'); this.afterChange(say); changed.push(st.id); continue;
+            this.changeRole(st, 'damsel'); say(st, `你变成了 **${this.amnName(st, 'damsel')}**。你的阵营没有变。`); this.afterChange(say); changed.push(st.id); continue;
           }
           if (['politician', 'ogre'].includes(c.role) && this.evilOf(t)) t.noTurnGood = true; // 相克：被变成政客 / 食人魔的邪恶玩家不能靠自身能力转为善良
           this.changeRole(t, c.role);
@@ -1193,7 +1194,7 @@ ${this.grimoire()}
           if (ROLES[c.role].team === 'demon') {
             this.pitNight = this.st.pitPlan(t, wasDemon, old);
           }
-          say(t, `你变成了 **${ROLES[t.shownRole].name}**。你的阵营没有变，你仍然是**${this.evilOf(t) ? '邪恶' : '善良'}**的。`); // 变成酒鬼、疯子的人只知道他以为的角色
+          say(t, `你变成了 **${this.amnName(t, t.shownRole)}**。你的阵营没有变，你仍然是**${this.evilOf(t) ? '邪恶' : '善良'}**的。`); // 变成酒鬼、疯子的人只知道他以为的角色
           this.afterChange(say);
           changed.push(t.id);
         } break;
@@ -1208,8 +1209,9 @@ ${this.grimoire()}
           this.swapRoles(p, t);
           p.evil = this.evilOf(t); t.evil = was;
           this.addFx('poison', t.id, null, 'never', '舞蛇人');
-          say(p, `你选中了恶魔！**你现在是${ROLES[p.role].name}，属于${this.evilOf(p) ? '邪恶' : '善良'}阵营。**`);
-          say(t, `舞蛇人选中了你。**你现在是${ROLES[t.role].name}，属于${this.evilOf(t) ? '邪恶' : '善良'}阵营**，并且中毒了。`);
+          say(p, `你选中了恶魔！**你现在是${this.amnName(p, p.role)}，属于${this.evilOf(p) ? '邪恶' : '善良'}阵营。**`);
+          say(t, this.allAmn(t) ? `说书人叫醒了你：**你的角色和阵营都变了。你现在是${this.amnName(t, t.role)}，属于${this.evilOf(t) ? '邪恶' : '善良'}阵营。**` // 全员失忆：不说是舞蛇人换的（等于告诉他现在是舞蛇人）
+            : `舞蛇人选中了你。**你现在是${ROLES[t.role].name}，属于${this.evilOf(t) ? '邪恶' : '善良'}阵营**，并且中毒了。`);
           this.afterChange(say);
           changed.push(p.id);
         } break;
@@ -1226,7 +1228,7 @@ ${this.grimoire()}
           if (broken(p)) { this.flag(p, '洗脑师失效，目标没有疯狂'); continue; }
           this.madness[t.id] = { role: c.role, night: this.night, claimed: false, by: p.id };
           this.record('st', `洗脑师让 ${this.tag(t.id)} 疯狂证明自己是 ${ROLES[c.role].name}`);
-          say(t, `洗脑师选中了你：**明天白天和夜晚，你要「疯狂」地证明自己是${ROLES[c.role].name}**，不然你可能被处决。`);
+          say(t, `${t.id === p.id && this.allAmn(t) ? '说书人叫醒了你' : '洗脑师选中了你'}：**明天白天和夜晚，你要「疯狂」地证明自己是${ROLES[c.role].name}**，不然你可能被处决。`);
         } break;
         case 'widow': for (const p of this.holders('widow')) {
           if (this.used[p.id]) continue;
@@ -1487,7 +1489,7 @@ ${this.grimoire()}
           if (sitter) { this.monsta = null; this.record('st', `工程师选了恶魔：照看小怪宝的 ${this.tag(sitter.id)} 变成${ROLES[c.role].name}，小怪宝离场`); }
           for (const t of ts) {
             this.changeRole(t, c.role);
-            say(t, `说书人叫醒了你：**你现在是${ROLES[c.role].name}**。${ROLES[c.role].ability}`);
+            say(t, `说书人叫醒了你：**你现在是${this.amnName(t, c.role)}**。${this.allAmn(t) ? '' : ROLES[c.role].ability}`);
             this.record('st', `${this.tag(t.id)} 被工程师变成了${ROLES[c.role].name}`);
             changed.push(t.id);
           }
@@ -1584,7 +1586,7 @@ ${this.grimoire()}
         } break;
         case 'spy': for (const p of this.holders('spy')) {
           if (broken(p)) this.flag(p, '间谍失效（魔典照看，说书人可以给他看错的）');
-          say(p, `魔典（和说书人看到的一样）：\n${this.grimoire()}${this.bluffs?.length ? `\n恶魔拿到的伪装（不在场的角色）：${this.bluffs.map((r) => ROLES[r].name).join('、')}` : ''}`);
+          say(p, `魔典（和说书人看到的一样）：\n${this.grimoire(p.id)}${this.bluffs?.length ? `\n恶魔拿到的伪装（不在场的角色）：${this.bluffs.map((r) => ROLES[r].name).join('、')}` : ''}`);
         } break;
         case 'farmer': for (const id of this.farmerDue.splice(0)) {
           const heir = this.st.farmerHeir(this.get(id));
@@ -1669,7 +1671,7 @@ ${this.grimoire()}
           }
           this.record('st', `理发师：恶魔交换了 ${this.tag(a.id)} 和 ${this.tag(b.id)} 的角色`);
           this.swapRoles(a, b);
-          for (const q of [a, b]) say(q, `你的角色被换了：**你现在是${ROLES[q.role].name}**。阵营不变，你仍然是**${this.evilOf(q) ? '邪恶' : '善良'}**的。`);
+          for (const q of [a, b]) say(q, `你的角色被换了：**你现在是${this.amnName(q, q.role)}**。阵营不变，你仍然是**${this.evilOf(q) ? '邪恶' : '善良'}**的。`);
           this.afterChange(say);
           changed = [a.id, b.id];
         } break;
@@ -1693,7 +1695,7 @@ ${this.grimoire()}
           const t = this.choiceOfSNV(p)?.targets[0]; if (!t) continue;
           const lie = this.lieMode(p);
           if (lie) this.flag(p, '筑梦师的两个角色都是错的');
-          const [good, evil] = this.st.dreamerRoles(t, !!lie, lie ? this.st.snvWorld(p, lie) : null);
+          const [good, evil] = this.st.dreamerRoles(t, !!lie, lie ? this.st.snvWorld(p, lie) : null, p);
           tell(p, `${this.name(t.id)} 是 **${ROLES[good].name}** 或 **${ROLES[evil].name}**。`, `你看到了两个角色：**${ROLES[good].name}**、**${ROLES[evil].name}**。`);
         } break;
         case 'flowergirl': for (const p of this.holders('flowergirl')) {

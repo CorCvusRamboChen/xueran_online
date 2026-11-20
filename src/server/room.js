@@ -245,9 +245,15 @@ export class Room {
     (this.pubLog ??= []).push({ day: night ? g.day + 1 : g.day, night, text, at: Date.now() });
   }
   /** 自己夜里选了谁：只给自己看（「身份」页的记录里）。同一夜改了选择就改这一条。 */
+  /** 全员失忆：还不知道自己是谁的人，信息上的「谁在说话」不能是他的角色（2026-11-21 用户：给信息时说了自己是魔鬼代言人），只写「失忆的 X」。 */
+  maskVoice(playerId, voice) {
+    const g = this.game; const p = g?.get?.(playerId);
+    return voice && ROLES[voice] && !voice.startsWith('amn_') && g?.allAmn?.(p) ? g.amnRoleOf(p) : voice;
+  }
   myAct(uid, text, voice) {
     if (this.isFake(uid)) return;
     const g = this.game;
+    voice = this.maskVoice(uid, voice);
     const list = (this.acts ??= new Map()).get(uid) ?? [];
     const last = list.at(-1);
     if (last?.night === g.night) Object.assign(last, { text, voice });
@@ -265,6 +271,7 @@ export class Room {
   stNote(text) { if (this.stId) { this.stLog.push({ id: ++this.logSeq, text }); if (this.stLog.length > 60) this.stLog.shift(); } }
   tell(playerId, text, voice = null) {
     const g = this.game;
+    voice = this.maskVoice(playerId, voice);
     const list = this.inbox.get(playerId) ?? [];
     list.push({ id: ++this.logSeq, phase: g.phase === 'night' ? `第${g.night}夜` : `第${g.day}天`, text, voice });
     this.inbox.set(playerId, list);
@@ -990,7 +997,7 @@ export class Room {
       const voice = p?.shownRole ?? null;
       const why = this.stId ? this.infoWhy(m) : null;
       if (!why) { this.tell(m.playerId, m.text, voice); continue; }
-      this.pendingInfo.set(newId(), { ...m, voice, why });
+      this.pendingInfo.set(newId(), { ...m, voice: this.maskVoice(m.playerId, voice), why });
     }
   }
 
