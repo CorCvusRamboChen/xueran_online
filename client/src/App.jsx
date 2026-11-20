@@ -480,6 +480,7 @@ function Game({ s, act, ask }) {
         <SoundToggles onFixVoice={me && s.phase !== 'ended' && !soloMode ? () => act('fixVoice') : null} onSheet={!roaming && !skills ? () => setSkills(true) : null} />
         <SkillCheck check={check} onClose={closeCheck} />
         <MicDemand me={me} day={s.day} />
+        <MadnessBrief me={me} gameId={s.gameId} />
         {me?.mic && me.micOn && <div className="mic-chip" title="收音页开着：说书人听得到你。关掉收音页大约 45 秒后，这里会重新提醒。">● 收音开着</div>}
         <HudBar items={items} active={tab} onPick={pick} label={t.label}
           timer={timerSpec && { label: timerSpec.label, secs: timerSecs, urgent }} />
@@ -883,6 +884,52 @@ function MadnessPanel({ me }) {
   );
 }
 
+/** 被洗脑的各条注意事项（2026-11-20 用户：被洗脑之后屏幕上要显示被洗脑的各个注意事项）。弹窗和画面上的小牌子共用。 */
+function MadnessRules({ me }) {
+  const role = me.madness.role;
+  return (
+    <ol className="mad-rules">
+      <li><b>目标</b>：今天要<b>真心实意、尽最大努力</b>让大家相信你就是<b>{role}</b>——给理由、讲你拿到的信息和做过的事、回应别人的质疑、一直坚持这个说法。</li>
+      <li className="must"><b>不能默许</b>：有人说你被洗脑了、问你「是不是疯了」，要<b>马上坚决否认</b>；有人也跳了{role}，要<b>站出来和他争</b>，坚持你才是。不吭声就等于默认自己被洗脑，<b>会被处决</b>。说书人第一次遇到时会私下提醒你一次。</li>
+      <li><b>这些都算没有疯狂</b>：只干巴巴说一句就转去聊别的；阴阳怪气、敷衍、故意演砸、笑场；暗示自己是被逼的（「懂的都懂」「我只能说我是……」「你们自己理解」）；故意聊爆、说出自己真正的角色。</li>
+      <li><b>说书人怎么听</b>：{me.mic ? <>打开收音页，说书人在哪都听得到你{me.micOn ? <>（<b>现在开着</b>）</> : <>（<b>现在没开</b>，不开很可能被处决）</>}。</> : me.hearing ? '在广场上说，机器人听得到；进屋里私聊时听不到。' : '说书人现在听不到语音，会按局势判定你够不够疯狂。'}</li>
+      <li><b>死了也一样</b>：死人破坏疯狂照样会被处决（算当天的处决）。</li>
+    </ol>
+  );
+}
+
+/**
+ * 刚被洗脑：先弹一张须知卡，点「我知道了」才关（这次洗脑记在本机，刷新不再弹）；之后画面上一直挂一个「你被洗脑了 · 须知」的小牌子，点开再看。
+ * 要开收音的，卡片上直接有「打开收音」。
+ */
+function MadnessBrief({ me, gameId }) {
+  const key = me?.madness ? `botc-mad-${gameId}-${me.madness.role}-${me.madness.night ?? ''}` : null;
+  const seen = () => { try { return !!key && localStorage.getItem(key) === '1'; } catch { return false; } };
+  const [open, setOpen] = useState(() => !!key && !seen());
+  useEffect(() => { if (key && !seen()) setOpen(true); }, [key]);
+  if (!me?.madness) return null;
+  const close = () => { try { localStorage.setItem(key, '1'); } catch { /* 隐私模式 */ } setOpen(false); };
+  return <>
+    <button type="button" className={`mad-chip${me.mic && !me.micOn ? ' warn' : ''}`} onClick={() => setOpen(true)} title="被洗脑的注意事项">
+      <span className="mad-chip-dot" aria-hidden="true" />你被洗脑了：你是<b>{me.madness.role}</b><span className="mad-chip-more">须知</span>
+    </button>
+    {open && createPortal(
+      <div className="sheet-bg gossip-bg" role="presentation" onClick={(e) => e.target === e.currentTarget && close()}>
+        <div className="gossip-modal mad-brief" role="alertdialog" aria-label="你被洗脑了">
+          <span className="mad-kicker">疯狂</span>
+          <h3>你被洗脑了：你是「{me.madness.role}」</h3>
+          <MadnessRules me={me} />
+          <div className="btn-row">
+            {me.mic && !me.micOn && <Btn kind="primary" onClick={() => openMic(me.mic)}>打开收音</Btn>}
+            <Btn kind={me.mic && !me.micOn ? 'secondary' : 'primary'} onClick={close}>我知道了</Btn>
+          </div>
+        </div>
+      </div>,
+      document.body,
+    )}
+  </>;
+}
+
 /** 为什么所有人都要开收音：灵言师听关键词，将军、政客要听大家的发言判局势和责任。 */
 export function listenReason(why = ['mezepheles']) {
   const parts = [];
@@ -896,7 +943,7 @@ export function listenReason(why = ['mezepheles']) {
 function MicDemand({ me, day }) {
   const [later, setLater] = useState(null); // 今天点过「等会儿再开」（令牌整局不变，按天记，第二天再提醒）
   const [opened, setOpened] = useState(false);
-  if (!me?.mic || me.micOn || later === `${me.mic}-${day}`) return null;
+  if (!me?.mic || me.micOn || later === `${me.mic}-${day}` || me.madness) return null; // 被洗脑的：MadnessBrief 的须知卡里有「打开收音」
   return createPortal(
     <div className="sheet-bg gossip-bg" role="presentation">
       <div className="gossip-modal mic-demand" role="alertdialog" aria-label="打开收音">

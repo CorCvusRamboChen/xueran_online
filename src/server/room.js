@@ -4126,7 +4126,7 @@ export class Room {
     return {
       gained: p.gained && !g.hidden(p) ? { id: p.gained, name: ROLES[p.gained].name, ability: ROLES[p.gained].ability } : null,
       klutz: (day || !!g.klutzNow) && g.pendingKlutz === uid, // 夜里死的要等天亮才选，不然死讯提前暴露（夜里被处决的已经公开了）
-      madness: g.madness?.[uid] ? { role: ROLES[g.madness[uid].role].name, claimed: !!g.madness[uid].claimed } : null,
+      madness: g.madness?.[uid] ? { role: ROLES[g.madness[uid].role].name, claimed: !!g.madness[uid].claimed, night: g.madness[uid].night } : null,
       mutant: day && this.thinksMutant(p), // 畸形秀演员：不能让人相信自己是外来者（收音弹窗的文字用）
       canJuggle: day && inScript('juggler', g.script) && g.juggleLog?.[uid] !== g.day && (g.day === 1 || (ab === 'juggler' && g.jugglerDay?.[uid] === g.day)),
       canSavant: day && p.alive && tryAs('savant') && g.savantDay?.[uid] !== g.day,
