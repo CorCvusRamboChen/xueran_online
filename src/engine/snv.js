@@ -27,13 +27,15 @@ const T = listsOf('snv');
 const goodOf = (script) => { const l = listsOf(script); return [...l.tf, ...l.out]; };
 /**
  * 失忆者的隐藏能力从这里挑：这套引擎能结算的镇民能力（官方：可以是任何现有能力，最好慢慢猜得出来）。不在场的优先。
- * · 夜里有动静的：醒来拿到裸的结果，慢慢猜。调查员、钟表匠只有首夜一条，女裁缝每局一次，难猜一点。
+ * · 夜里有动静的：醒来拿到裸的结果，慢慢猜。钟表匠只有首夜一条，女裁缝每局一次，难猜一点。
  * · 白天要自己去用的（猎手的枪、博学者、艺术家、渔夫、特赦）：猜中前也能去试（官方：「将那名玩家视作具有该能力一样」），
  *   试中了照常生效，试错了什么也不发生（和食人族一样）。
  * 官方要「让这一能力容易被猜测」，推荐夜里能察觉到的能力：白天的那几个难猜，抽中的机会压低（DAY_SHARE）。
  * 不放被动的（贤者、士兵）和会换角色的（舞蛇人、哲学家）。
+ * 也不放一看信息就知道是什么能力的（2026-11-21 用户：失忆者直接报「6、3 号里有哥布林」，都不用猜了）：
+ * 调查员（两个人 + 一个爪牙角色）、筑梦师（选一人看到一善一恶两个角色）。官方要「随着时间的推移逐渐弄清楚」，裸信息得有好几种解释。
  */
-export const AMNESIAC_POOL = ['empath', 'dreamer', 'chambermaid', 'flowergirl', 'towncrier', 'oracle', 'mathematician', 'investigator', 'clockmaker', 'seamstress', 'balloonist',
+export const AMNESIAC_POOL = ['empath', 'chambermaid', 'flowergirl', 'towncrier', 'oracle', 'mathematician', 'clockmaker', 'seamstress', 'balloonist',
   'slayer', 'savant', 'artist', 'fisherman',
   'amn_gun', 'amn_judge', 'amn_pardon', 'amn_detect', 'amn_echo']; // 最后一行是失忆者专用的原创变种（roles.js 的 AMNESIAC_ONLY）
 export const AMNESIAC_DAY = new Set(['slayer', 'savant', 'artist', 'fisherman', 'amn_gun', 'amn_judge', 'amn_pardon']);

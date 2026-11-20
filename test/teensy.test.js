@@ -345,3 +345,9 @@ test('失忆者的原创能力：恶魔探测、处决回声只给裸的结果',
   r = night(g);
   assert.match(text(r.messages, 'p1'), /你得知：\*\*是\*\*/);
 });
+
+test('失忆者的能力池：不放一看信息就认得出的调查员、筑梦师（2026-11-21 用户：失忆者直接报「6、3 号里有哥布林」）', () => {
+  assert.ok(!AMNESIAC_POOL.includes('investigator'));
+  assert.ok(!AMNESIAC_POOL.includes('dreamer'));
+  assert.ok(AMNESIAC_POOL.length >= 15);
+});
