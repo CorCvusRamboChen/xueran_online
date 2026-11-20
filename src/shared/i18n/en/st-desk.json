@@ -162,9 +162,11 @@
   "大家知道你是谁、会什么": "Everyone knows who you are and what you do",
   "别人只能举手流放你，不能处决你": "Others can only vote to exile you, not execute you",
   "已经有人当了": "Already taken",
-  "在这里怎么玩": "How it plays here",
-  "左边挑一个旅行者。": "Pick a Traveller on the left.",
-  "再看看": "Not yet",
   "以{0}加入": "Join as {0}",
-  "当天处决过一个人以后，你这边会出现一排人名：点一个就再提名他（今天被提名过的也行），过存活玩家一半就处决。": "Once someone has been executed that day, a row of names appears for you: click one to nominate them again (even if already nominated today); half the living players is enough to execute."
+  "当天处决过一个人以后，你这边会出现一排人名：点一个就再提名他（今天被提名过的也行），过存活玩家一半就处决。": "Once someone has been executed that day, a row of names appears for you: click one to nominate them again (even if already nominated today); half the living players is enough to execute.",
+  "晚来的客人": "LATE ARRIVALS",
+  "壹": "I",
+  "贰": "II",
+  "叁": "III",
+  "点一张卡片挑一个旅行者": "Click a card to pick a Traveller"
 }

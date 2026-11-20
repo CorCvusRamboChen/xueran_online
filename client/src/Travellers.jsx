@@ -25,7 +25,10 @@ const HOW = {
   butcher: ['白天有按钮', '当天处决过一个人以后，你这边会出现一排人名：点一个就再提名他（今天被提名过的也行），过存活玩家一半就处决。'],
 };
 
-/** 观战的人：以旅行者身份加入。左边挑旅行者，右边看能力和在这里怎么玩，再加入。 */
+/**
+ * 观战的人：以旅行者身份加入。卡片网格（2026-11-20 用户：这个布局就很好，只是要美化）：
+ * 每张卡片是羊皮纸标记 + 名字 + 什么时候要操作 + 能力；选中的卡片描金。底栏写选了谁、在这里怎么玩，再「以 X 加入」。
+ */
 export function TravellerJoin({ s, act }) {
   const [open, setOpen] = useState(false);
   const [pick, setPick] = useState(null);
@@ -34,52 +37,53 @@ export function TravellerJoin({ s, act }) {
   if (!open) {
     return (
       <div className="btn-row gossip-row">
-        <Btn kind="primary" onClick={() => { setOpen(true); setPick(s.travellers.find((t) => !t.taken)?.id ?? null); }} title="开局后才来的人可以当旅行者加入：说书人决定你的阵营，随时可以离开；别人只能流放你，不能处决你">以旅行者身份加入</Btn>
+        <Btn kind="primary" onClick={() => setOpen(true)} title="开局后才来的人可以当旅行者加入：说书人决定你的阵营，随时可以离开；别人只能流放你，不能处决你">以旅行者身份加入</Btn>
       </div>
     );
   }
   const chosen = s.travellers.find((t) => t.id === pick);
-  const how = chosen ? HOW[chosen.id] : null;
   const join = async () => { setBusy(true); const ok = await act('traveller', { role: pick }); setBusy(false); if (ok) setOpen(false); };
   return createPortal(
     <div className="trv-modal" role="dialog" aria-label="以旅行者身份加入" onClick={(e) => e.target === e.currentTarget && setOpen(false)}>
       <div className="trv-box">
         <header className="trv-head">
           <div>
+            <span className="trv-kicker">晚来的客人</span>
             <h3>以旅行者身份加入</h3>
-            <p className="muted">开局后才来也能玩：挑一个旅行者，现在就坐进这一局。</p>
+            <p>开局后才来也能玩：挑一个旅行者，现在就坐进这一局。</p>
           </div>
           <button type="button" className="fb-close" onClick={() => setOpen(false)} aria-label="关闭">×</button>
         </header>
         <div className="trv-rules">
-          <div><b>阵营由说书人定</b><span>大多是善良；邪恶的会知道恶魔是谁</span></div>
-          <div><b>角色公开，阵营保密</b><span>大家知道你是谁、会什么</span></div>
-          <div><b>随时可以离开</b><span>别人只能举手流放你，不能处决你</span></div>
+          <div><i aria-hidden="true">壹</i><b>阵营由说书人定</b><span>大多是善良；邪恶的会知道恶魔是谁</span></div>
+          <div><i aria-hidden="true">贰</i><b>角色公开，阵营保密</b><span>大家知道你是谁、会什么</span></div>
+          <div><i aria-hidden="true">叁</i><b>随时可以离开</b><span>别人只能举手流放你，不能处决你</span></div>
         </div>
-        <div className="trv-body">
-          <div className="trv-list" role="listbox" aria-label="旅行者">
-            {s.travellers.map((t) => (
-              <button key={t.id} type="button" role="option" aria-selected={pick === t.id} disabled={t.taken} className={`trv-row${pick === t.id ? ' on' : ''}`} onClick={() => setPick(t.id)}>
-                <span className="trv-token sm" aria-hidden="true">{[...t.name][0]}</span>
-                <span className="trv-row-main"><b>{t.name}</b><small>{t.taken ? '已经有人当了' : HOW[t.id]?.[0] ?? ''}</small></span>
-              </button>
-            ))}
-          </div>
-          <section className="trv-detail" aria-live="polite">
-            {chosen ? <>
-              <div className="trv-detail-head">
-                <span className="trv-token lg" aria-hidden="true">{[...chosen.name][0]}</span>
-                <div><span className="trv-kicker">旅行者</span><h4>{chosen.name}</h4>{how && <span className="trv-tag">{how[0]}</span>}</div>
-              </div>
-              <p className="trv-ability">{chosen.ability}</p>
-              {how ? <div className="trv-how"><span className="trv-kicker">在这里怎么玩</span><p>{how[1]}</p></div> : <span />}
-            </> : <p className="muted">左边挑一个旅行者。</p>}
-            <div className="trv-actions">
-              <Btn kind="ghost" onClick={() => setOpen(false)}>再看看</Btn>
-              <Btn kind="primary" disabled={!chosen || chosen.taken || busy} onClick={join}>{chosen ? `以${chosen.name}加入` : '加入这一局'}</Btn>
+        <div className="trv-grid">
+          {s.travellers.map((t) => (
+            <button key={t.id} type="button" disabled={t.taken} className={`trv-card${pick === t.id ? ' on' : ''}`} aria-pressed={pick === t.id} onClick={() => setPick(t.id)}>
+              <span className="trv-token" aria-hidden="true">{[...t.name][0]}</span>
+              <span className="trv-card-head">
+                <span className="trv-name">{t.name}</span>
+                <span className={`trv-tag${t.taken ? ' off' : ''}`}>{t.taken ? '已经有人当了' : HOW[t.id]?.[0] ?? '旅行者'}</span>
+              </span>
+              <span className="trv-ability">{t.ability}</span>
+              {pick === t.id && <span className="trv-check" aria-hidden="true">✓</span>}
+            </button>
+          ))}
+        </div>
+        <footer className={`trv-foot${chosen ? ' on' : ''}`}>
+          {chosen ? (
+            <div className="trv-chosen">
+              <span className="trv-token sm" aria-hidden="true">{[...chosen.name][0]}</span>
+              <div><b>{chosen.name}</b>{HOW[chosen.id] && <span>{HOW[chosen.id][1]}</span>}</div>
             </div>
-          </section>
-        </div>
+          ) : <span className="trv-hint">点一张卡片挑一个旅行者</span>}
+          <div className="trv-btns">
+            <Btn kind="ghost" onClick={() => setOpen(false)}>取消</Btn>
+            <Btn kind="primary" disabled={!chosen || chosen.taken || busy} onClick={join}>{chosen ? `以${chosen.name}加入` : '加入这一局'}</Btn>
+          </div>
+        </footer>
       </div>
     </div>,
     document.body,
