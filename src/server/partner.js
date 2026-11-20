@@ -47,6 +47,13 @@ export function partnerPlatform({ url, token, fetch: f = globalThis.fetch, name 
       }
       return { channelId: s.channelId, serverMute: s.serverMute, serverDeaf: s.serverDeaf };
     },
+    /** 不看缓存，问对方最新的语音状态（推送可能先后颠倒，账对不上时用）。 */
+    async fresh(gid, uid) {
+      const j = await call('state', { guildId: gid, userIds: [uid] });
+      put(gid, uid, j.states?.[uid]);
+      const s = states.get(`${gid}:${uid}`);
+      return { channelId: s.channelId, serverMute: s.serverMute, serverDeaf: s.serverDeaf };
+    },
     async edit(gid, uid, patch) {
       const body = { guildId: gid, userId: uid };
       if ('mute' in patch) body.mute = patch.mute;

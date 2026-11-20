@@ -207,3 +207,51 @@ test('闭着麦跑去别的频道：先解开（不影响他在别处聊天）�
   await v.setAsleep(['a'], false, 'square');
   assert.equal(states.get('a').serverDeaf, false);
 });
+
+// 2026-11-20 用户：天亮只解开了闭麦，没解开闭耳。
+test('漏掉一次状态变化：过时的「没闭耳」让账以为是管理员解开的；天亮照样把机器人闭的耳朵解开', async () => {
+  const { client, states, put } = fakeClient();
+  const hub = mk(client, tmp());
+  const v = hub.forGuild('g', 'room1');
+  v.setScope(() => new Set(['square']));
+  put('a', 'square');
+  await v.setAsleep(['a'], true, 'square');
+  assert.equal(states.get('a').serverDeaf, true);
+  // 一条过时的状态（耳朵没闭）到了，之后真实状态（闭着）那一条没来
+  states.get('a').serverDeaf = false;
+  client.emit(Events.VoiceStateUpdate, null, { guild: client.guilds.cache.get('g'), id: 'a', ...states.get('a') });
+  await settle();
+  states.get('a').serverDeaf = true;
+  await v.setAsleep(['a'], false, 'square');
+  assert.equal(states.get('a').serverMute, false);
+  assert.equal(states.get('a').serverDeaf, false, '闭耳也解开了');
+  assert.ok(!hub.held.has('g:a'));
+});
+
+test('合作机器人的推送先后颠倒：账对不上时再问一次最新状态，不会把机器人闭的耳朵当成管理员解开的', async () => {
+  const truth = new Map(); const cache = new Map(); const bus = new EventEmitter();
+  const platform = {
+    onReady() {}, onVoice: (fn) => bus.on('voice', fn), hasGuild: () => true,
+    async state(_g, uid) { return { ...cache.get(uid) }; },
+    async fresh(_g, uid) { cache.set(uid, { ...truth.get(uid) }); return { ...truth.get(uid) }; },
+    async edit(_g, uid, patch) {
+      const t = truth.get(uid);
+      if ('mute' in patch) t.serverMute = patch.mute;
+      if ('deaf' in patch) t.serverDeaf = patch.deaf;
+      cache.set(uid, { ...t });
+    },
+  };
+  const hub = new VoiceHub(platform, { file: path.join(tmp(), 'held.json'), oldFile: null, sweepMs: 0 });
+  const v = hub.forGuild('g', 'room1');
+  v.setScope(() => new Set(['square']));
+  truth.set('a', { channelId: 'square', serverMute: false, serverDeaf: false }); cache.set('a', { ...truth.get('a') });
+  await v.setAsleep(['a'], true, 'square');
+  assert.deepEqual(truth.get('a'), { channelId: 'square', serverMute: true, serverDeaf: true });
+  cache.set('a', { channelId: 'square', serverMute: true, serverDeaf: false }); // 晚到的旧推送
+  bus.emit('voice', 'g', 'a');
+  await settle();
+  assert.equal(hub.held.get('g:a').deaf, true, '问过最新状态：耳朵还是机器人闭的');
+  cache.set('a', { channelId: 'square', serverMute: true, serverDeaf: false }); // 天亮前缓存又是旧的
+  await v.setAsleep(['a'], false, 'square');
+  assert.deepEqual(truth.get('a'), { channelId: 'square', serverMute: false, serverDeaf: false }, '麦和耳朵都解开');
+});

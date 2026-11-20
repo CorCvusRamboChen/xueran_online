@@ -179,7 +179,11 @@ export class VoiceHub {
     if (!e) return;
     const i = k.indexOf(':');
     const gid = k.slice(0, i); const uid = k.slice(i + 1);
-    const vs = this.p.hasGuild(gid) ? await this.p.state(gid, uid) : null;
+    let vs = this.p.hasGuild(gid) ? await this.p.state(gid, uid) : null;
+    // 2026-11-20 用户：天亮只解了闭麦、没解闭耳。推过来的状态可能是过时的（合作机器人的推送先后颠倒）：
+    // 账和状态对不上时（要让给管理员、或者要解开却看着没闭），能问到最新的就再问一次
+    const doubt = (s) => s?.channelId && ((e.mute && !s.serverMute) || (e.deaf && !s.serverDeaf) || (e.yieldMute && s.serverMute) || (e.yieldDeaf && s.serverDeaf));
+    if (doubt(vs) && this.p.fresh) vs = await this.p.fresh(gid, uid).catch(() => vs);
     if (vs?.channelId && observed && e.reasons.size && this.inScope(e.room, vs.channelId, fallback)) {
       if (e.mute && !vs.serverMute) { e.mute = false; e.yieldMute = true; }
       if (e.deaf && !vs.serverDeaf) { e.deaf = false; e.yieldDeaf = true; }
@@ -192,6 +196,9 @@ export class VoiceHub {
     if (vs?.channelId) {
       const here = this.inScope(e.room, vs.channelId, fallback);
       const patch = {};
+      // 让给管理员之后又闭上了、但没看到那一次的状态变化（事件漏了 / 晚到时原因已经没了）：多半是机器人自己闭的，照样算账上的，到时候解开
+      if (e.yieldMute && vs.serverMute && !wantMute) { e.yieldMute = false; e.mute = true; }
+      if (e.yieldDeaf && vs.serverDeaf && !wantDeaf) { e.yieldDeaf = false; e.deaf = true; }
       // 闭：只在本局频道里；解：只解自己闭上的。人跑去别的频道了也先解开（服务器闭麦跟着人走，
       // 不能让他在别处聊天也被闭着），回到本局频道时再闭上
       if (wantMute && here && !vs.serverMute) patch.mute = true;
