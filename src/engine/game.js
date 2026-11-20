@@ -10,6 +10,7 @@
 // 白天：nominate → voteOrder / recordVote → endDay
 
 import { TRAVELLER_METHODS } from './travellers.js';
+import { ROCHAMBEAU_METHODS } from './rochambeau.js';
 import {
   ROLES, TOWNSFOLK, OUTSIDERS, MINIONS, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, SCRIPTS, engineOf, ragnarokWolves, inScript, rolesOf,
 } from './roles.js';
@@ -217,7 +218,8 @@ export class Game {
       'harpyMad', 'farmerDue', 'rkDue', 'damselTried', 'damselGuessed', 'boom', 'boffin', 'seat7', 'lunaticTold', 'lunaticTellTo', 'heard',
       'pixie', 'mez', 'execHist', 'nomBy', 'blockVoters', 'politicianDone', 'fibbinUsed', 'riotChain',
       'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared', 'aiLead', 'politicianEval', 'scapegoatDay', 'gunDay', 'judgeUsed',
-      'leviDue', 'goblinClaimDay', 'widowTold', 'baristaFx', 'harlotAsk', 'matronDay', 'butcherDay', 'mezEasy', 'nomHistory', 'demonSwap', 'monsta', 'lleechHost', 'lleechDue', 'fear', 'fearNews', 'evilHist'];
+      'leviDue', 'goblinClaimDay', 'widowTold', 'baristaFx', 'harlotAsk', 'matronDay', 'butcherDay', 'mezEasy', 'nomHistory', 'demonSwap', 'monsta', 'lleechHost', 'lleechDue', 'fear', 'fearNews', 'evilHist',
+      'rochDone', 'bhEvilTf', 'fauxPaw', 'bh', 'acro', 'lycanNight', 'hatterDue', 'hatterNight'];
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -367,8 +369,9 @@ export class Game {
     }
     if (this.engine === 'snv') {
       this.startNightSNV();
-      this.apprenticeSetup?.(); // 学徒（冒名钓鱼）
-      if (this.night === 1) this.evilMessages = this.evilInfoSNV();
+      this.apprenticeSetup?.(); // 学徒（瓦釜雷鸣）
+      if (this.night === 1) this.rochSetup?.(); // 赏金猎人转邪恶的镇民、半兽人的失足（心理博弈）
+      if (this.night === 1) this.evilMessages = [...this.evilInfoSNV(), ...(this.rochEvilNews?.() ?? [])];
       return this.nightPrompts();
     }
     // 第一夜一开始就告诉恶魔和爪牙彼此是谁（投毒者选人之前就知道恶魔）；房间马上发出去
@@ -911,3 +914,4 @@ export class Game {
 Object.assign(Game.prototype, BMR_METHODS);
 Object.assign(Game.prototype, SNV_METHODS);
 Object.assign(Game.prototype, TRAVELLER_METHODS);
+Object.assign(Game.prototype, ROCHAMBEAU_METHODS);

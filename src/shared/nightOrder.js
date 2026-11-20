@@ -334,6 +334,49 @@ NIGHT_ORDER.cat = {
   ],
 };
 
+// 心理博弈（Rochambeau v11）：照官方英文总表的顺序，只列这个剧本里会醒的（2026-11-20）
+NIGHT_ORDER.roc = {
+  first: [
+    ['minioninfo', '7 人及以上：爪牙互认、得知恶魔'],
+    ['demoninfo', '7 人及以上：恶魔得知爪牙和 3 个伪装'],
+    ['poisoner', '选一人中毒'],
+    ['widow', '看魔典，选一人中毒；之后一名善良玩家得知寡妇在场'],
+    ['godfather', '得知在场的外来者'],
+    ['seamstress', '每局一次：选两人，得知他们是不是同一阵营'],
+    ['noble', '得知三人，其中恰好一个是邪恶的'],
+    ['bountyhunter', '得知一名邪恶玩家（开局时一名镇民被转成了邪恶）'],
+    ['nightwatchman', '每局一次：选一人，他得知你是守夜人'],
+    ['highpriestess', '得知一名说书人觉得你最该去聊的玩家'],
+  ],
+  other: [
+    ['poisoner', '选一人中毒'],
+    ['innkeeper', '选两人：今晚不会死，其中一人醉酒'],
+    ['gambler', '选一人并猜他的角色：猜错自己死'],
+    ['acrobat', '选一人：他今晚醉酒或中毒，你就死'],
+    ['pithag', '选一人和一个不在场的角色：他变成那个角色'],
+    ['lycanthrope', '选一名存活玩家：善良的就死，今晚恶魔不造成死亡'],
+    ['po', '选一人杀死；上次没选人，这次选三个'],
+    ['vigormortis', '选一人杀死；杀死的爪牙保留能力'],
+    ['assassin', '每局一次：选一人，他死亡（无视保护）'],
+    ['godfather', '今天白天有外来者死了才醒：选一人杀死'],
+    ['gossip', '今天白天的声明是真的：说书人杀一人'],
+    ['hatter', '帽匠今天死了：爪牙和恶魔可以换成同类型的新角色'],
+    ['tinker', '随时可能死'],
+    ['moonchild', '被杀了就醒：选一人，他是善良的就死'],
+    ['towncrier', '得知今天有没有爪牙提名过'],
+    ['seamstress', '每局一次：选两人，得知他们是不是同一阵营'],
+    ['bountyhunter', '得知的人死了才醒：得知另一名邪恶玩家'],
+    ['nightwatchman', '每局一次：选一人，他得知你是守夜人'],
+    ['highpriestess', '得知一名说书人觉得你最该去聊的玩家'],
+    ['leviathan', '天亮时说书人宣布现在是第几天'],
+  ],
+  why: [
+    '心理博弈（Rochambeau，作者 Habby）：很多能力要「赌」——赌徒猜角色、杂技演员赌谁没中毒、半兽人赌谁是好人、造谣者赌自己的声明。',
+    '半兽人杀了好人，当晚恶魔就不杀人：今晚是谁动的手，本身就是线索。帽匠死了，邪恶可以整体换一套角色。',
+    '赏金猎人会把一名镇民变成邪恶：邪恶多一个人，这个人不知道队友是谁。',
+  ],
+};
+
 // 2026-11-14 的四个社区剧本：照官方英文总表（nightsheet.json）的顺序，只列这个剧本里会醒的
 NIGHT_ORDER.hhr = {
   first: [
@@ -637,13 +680,13 @@ for (const [script, o] of Object.entries(NIGHT_ORDER)) {
  */
 export const MIX_STEPS = {
   first: ['alchemist', 'apprentice', 'barista', 'bureaucrat', 'thief', 'philosopher', 'sailor', 'lleech', 'lilmonsta', 'engineer', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'fearmonger', 'pukka', 'pixie', 'huntsman',
-    'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'grandmother', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress', 'noble', 'balloonist', 'shugenja', 'villageidiot',
+    'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'grandmother', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress', 'noble', 'balloonist', 'shugenja', 'villageidiot', 'bountyhunter', 'nightwatchman',
     'butler', 'spy', 'ogre', 'highpriestess', 'general', 'chambermaid', 'mathematician'],
-  other: ['barista', 'bureaucrat', 'thief', 'harlot', 'bonecollector', 'poppygrower', 'philosopher', 'sailor', 'engineer', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist', 'fearmonger',
-    'imp', 'lleech', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'alhadikhia', 'lilmonsta', 'assassin', 'godfather', 'gossip',
+  other: ['barista', 'bureaucrat', 'thief', 'harlot', 'bonecollector', 'poppygrower', 'philosopher', 'sailor', 'engineer', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'acrobat', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist', 'fearmonger', 'lycanthrope',
+    'imp', 'lleech', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'alhadikhia', 'lilmonsta', 'assassin', 'godfather', 'gossip', 'hatter',
     'barber', 'sweetheart', 'sage', 'professor', 'huntsman', 'farmer', 'tinker', 'moonchild', 'grandmother', 'ravenkeeper', // 照官方英文总表（11-11 用户定：和集石百科不一样时以英文新表为准）
     'washerwoman', 'librarian', 'investigator', 'chef', 'clockmaker', 'noble', 'shugenja', 'empath', 'fortuneteller', 'undertaker', 'dreamer', 'amn_detect', 'amn_echo', 'flowergirl', 'towncrier', 'oracle', 'seamstress',
-    'juggler', 'balloonist', 'villageidiot', 'butler', 'spy', 'highpriestess', 'general', 'chambermaid', 'mathematician'],
+    'juggler', 'balloonist', 'villageidiot', 'bountyhunter', 'nightwatchman', 'butler', 'spy', 'highpriestess', 'general', 'chambermaid', 'mathematician'],
 };
 
 /** 黯月初升的结算步骤（engine/bmr.js 用）：去掉不是角色的信息步骤；教父首夜那一步是"得知外来者"。 */

@@ -510,7 +510,7 @@ export const SNV_METHODS = {
     return this.st.misregister(p, by, help);
   },
   /** 被检测时登记成邪恶吗。 */
-  seenEvil(p, by, help) { const e = this.evilOf(p); return this.misregSNV(p, by, help) ? !e : e; },
+  seenEvil(p, by, help) { if (this.fauxPawOn?.(p)) return true; const e = this.evilOf(p); return this.misregSNV(p, by, help) ? !e : e; }, // 半兽人的失足：始终被当作邪恶
   /** 被检测时登记成恶魔吗（陌客可能）。 */
   seenDemon(p, by) { return this.demonNow(p) || (p.role === 'recluse' && this.misregSNV(p, by)); },
   /** 这个人现在是不是恶魔：恶魔角色，或者正在照看小怪宝的爪牙。 */
@@ -695,6 +695,7 @@ export const SNV_METHODS = {
     const aliveBefore = this.townAlive(); // 红唇女郎的「五名玩家存活」不算旅行者（官方）
     p.alive = false;
     if (this.phase === 'night' && cause !== 'execution') this.nightDeaths.push(p.id); // 夜里的处决当场公布，不等天亮
+    if (ab === 'hatter' && !off) this.hatterDied(p); // 帽匠：当晚开茶会
     if (p.role === 'vigormortis') { for (const q of this.players) if (q.kept) q.kept = false; this.vigKept = []; } // 亡骨魔死了：保留的能力和毒都结束（官方：亡骨魔死亡或离场时移除）
     if (this.phase === 'night' && cause === 'demon') (this.demonKills ??= []).push(p.id);
     const why = {
@@ -703,6 +704,7 @@ export const SNV_METHODS = {
       harpy: '没能疯狂地证明，被鹰身女妖的能力杀死', boomdandy: '死于炸弹人的炸弹',
       assassin: '被刺客刺杀', godfather: '被教父杀死', gambler: '赌错了角色', gossip: '因造谣者的声明而死', tinker: '修补匠突然死亡',
       golem: '被魔像提名，不是恶魔所以死了', lleech: '宿主死了，痢蛭随之死亡', riot: '被提名，死于暴乱', psychopath: '被精神病患者杀死',
+      acrobat: '杂技演员选中的人醉酒或中毒了', lycanthrope: '被半兽人杀死',
       alhadikhia: '被哈迪寂亚选中，选择了死去', alhadikhia3: '被哈迪寂亚选中，三个人都选了活，一起死去', moonchild: '被月之子带走', grandmother: '孙子被恶魔杀死，祖母随之而去',
     }[cause] ?? cause;
     this.log.push(`${this.name(p.id)} 死亡（${cause}）`);
@@ -782,6 +784,7 @@ export const SNV_METHODS = {
   /** 恶魔 d 对 t 下手。 */
   demonHit(d, t, messages) {
     if (!t?.alive) return;
+    if (this.lycanNight === this.night) { this.record('st', `恶魔对 ${this.tag(t.id)} 下手，但半兽人今晚已经杀了人：恶魔不造成死亡`); return; }
     const safe = this.safeFrom(t, 'demon');
     if (safe) { this.record('st', `恶魔对 ${this.tag(t.id)} 下手，但${safe}：没有死`); return; } // 被僧侣保护的小恶魔自刀也无事发生（官方）
     if (d.role === 'imp' && t.id === d.id) { this.snvDie(d, 'starpass', messages); return; }
@@ -1012,8 +1015,9 @@ ${this.grimoire()}
     if (roleOptions) roleOptions = roleOptions.filter((r) => r !== 'lilmonsta'); // 小怪宝没有恶魔玩家，工程师、麻脸巫婆不能造出它
     if (role === 'ah_choice') roleOptions = ['ah_live', 'ah_die'];
     if (role === 'harlot_ask') roleOptions = ['harlot_yes', 'harlot_no'];
+    if (role === 'hatter_pick') roleOptions = this.scriptRoles().filter((r) => ROLES[r].team === team(p) && r !== 'lilmonsta' && (r === p.role || !this.players.some((q) => q.role === r))); // 帽匠的茶会：同类型、不在场的角色
     if (role === 'cerenovus' && inScript('goblin', this.script)) roleOptions = [...roleOptions, 'goblin']; // 相克：洗脑师可以让人对「自己是哥布林」疯狂
-    return { playerId: p.id, role: this.hidden(p) && role !== 'ah_choice' && role !== 'harlot_ask' ? p.role : role, count: spec.count, options, optional: !!spec.optional, pickRole: !!spec.role, roleOptions, waiting: false };
+    return { playerId: p.id, role: this.hidden(p) && role !== 'ah_choice' && role !== 'harlot_ask' && role !== 'hatter_pick' ? p.role : role, count: spec.count, options, optional: !!spec.optional, pickRole: !!spec.role, roleOptions, waiting: false };
   },
 
   nightPromptsSNV() {
@@ -1075,6 +1079,7 @@ ${this.grimoire()}
     const skip = () => { this.choices[playerId] = { targets: [], role: null }; };
     if (pr.role === 'ah_choice') { this.choices[playerId] = { targets: [], role: this.rng() < 0.6 ? 'ah_live' : 'ah_die' }; return; } // 机器人：多半选活
     if (pr.role === 'harlot_ask') { this.choices[playerId] = { targets: [], role: this.rng() < (this.evilOf(p) ? 0.35 : 0.6) ? 'harlot_yes' : 'harlot_no' }; return; } // 机器人：善良的多半同意
+    if (pr.role === 'hatter_pick') { const others = pr.roleOptions.filter((r) => r !== p.role); this.choices[playerId] = { targets: [], role: others.length && this.rng() < 0.4 ? others[Math.floor(this.rng() * others.length)] : null }; return; } // 机器人：多半不换
     if (pr.optional && this.rng() < 0.5) return skip();
     let opts = pr.options;
     const prey = opts.filter((id) => !this.evilOf(this.get(id)) && this.get(id).alive);
@@ -1116,6 +1121,7 @@ ${this.grimoire()}
     if (m?.as === 'harlot_ask') return `流莺 **${this.name(this.harlotAsk?.harlot)}** 选中了你。**同意**的话，她会得知你的角色，但你们两个可能同时死亡；**拒绝**就什么都不会发生。`;
     if (m?.as === 'ah_choice') return `哈迪寂亚选中了你（这次选的三个人：${(this.ahNight?.targets ?? []).map((id) => this.name(id)).join('、')}）。悄悄决定：**活下去**，还是**死去**。如果三个人最后都活着，三个人一起死。`;
     if (m?.as === 'barber') return '理发师死了：你可以选两名玩家交换他们的角色（不能选其他恶魔），也可以放弃。';
+    if (m?.as === 'hatter_pick') return '**帽匠死了，茶会开始**：你可以换成剧本里另一个同类型、不在场的角色（爪牙换爪牙、恶魔换恶魔），也可以不换。换了以后原来的能力不再生效。';
     if (m?.as === 'lm_sit') return '**小怪宝**：替你们爪牙决定今晚由谁照看它——选一名活着的爪牙（可以选你自己）。照看的人「是恶魔」，他死了善良获胜。';
     if (this.hidden(this.get(m.who))) return '轮到你了：选人吧（你不知道这是什么能力）。';
     return `轮到你了：今晚你要行使「${ROLES[m?.as]?.name ?? ''}」的能力。`;
@@ -1148,6 +1154,11 @@ ${this.grimoire()}
       if (this.players.some((q) => q.role === 'goon')) for (const p of this.holders(step)) if (p.id !== this.blocked) for (const t of this.choiceOfSNV(p)?.targets ?? []) this.goonSNV(p, t, { assassin: step === 'assassin' });
       switch (step) {
         case 'barista': this.baristaStep(messages); break;
+        case 'acrobat': this.acrobatStep(); break;
+        case 'lycanthrope': this.lycanStep(messages); break;
+        case 'hatter': if (this.hatterStep(i, messages, say) === 'pause') return pause(); break;
+        case 'bountyhunter': this.bountyStep(tell); break;
+        case 'nightwatchman': this.nightwatchStep(say); break;
         case 'harlot': if (this.harlotStep(i, messages) === 'pause') return pause(); break;
         case 'bonecollector': if (this.boneStep(i, steps, messages) === 'pause') return pause(); break;
         case 'philosopher': for (const p of this.holders('philosopher')) {
@@ -1730,6 +1741,7 @@ ${this.grimoire()}
       if (this.baristaAgain?.(step, i, messages)) return pause(); // 咖啡师：能力生效两次
       if (this.midCheck(steps, i, changed, messages)) return pause();
     }
+    this.acrobatCheck?.(messages); // 杂技演员：选的人到夜晚结束时醉酒或中毒了没有
     this.poppyReveal(messages); // 罂粟种植者今晚（在他那一步之后）死了：当晚互认
     if (this.pendingGoonNews) { const gn = this.get(this.pendingGoonNews); say(gn, `你的阵营变了——你现在是**${this.evilOf(gn) ? '邪恶' : '善良'}**的。`); }
     this.fx = this.fx.filter((f) => f.until !== 'dawn');

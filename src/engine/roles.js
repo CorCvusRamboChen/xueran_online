@@ -242,6 +242,20 @@ const LUF = {
 // ───────────────────────── 七步成诗（2025 剧本世界杯冠军）里新出现的角色 ─────────────────────────
 // 来自实验性角色和其他版本。能力文字照官方百科用自己的话写，口径见 references/seat7.md；顺序看 shared/nightOrder.js。
 const BS7 = {
+  // 《心理博弈》（Rochambeau v11）新加的 5 个实验性角色，能力原文照集石百科（2026-11-20）。结算在 engine/rochambeau.js
+  bountyhunter: { name: '赏金猎人', en: 'Bounty Hunter', team: 'townsfolk', edition: 'experimental', firstNight: 1, otherNight: 1,
+    ability: '在你的首个夜晚，你会得知一名邪恶玩家。每当你得知的玩家死亡，你会在当晚得知另一名邪恶玩家。[会有一名镇民转变为邪恶阵营]' },
+  acrobat: { name: '杂技演员', en: 'Acrobat', team: 'townsfolk', edition: 'experimental', firstNight: 0, otherNight: 1,
+    choose: { count: 1 },
+    ability: '每个夜晚*，你要选择一名玩家：如果当晚他醉酒或中毒，你死亡。' },
+  lycanthrope: { name: '半兽人', en: 'Lycanthrope', team: 'townsfolk', edition: 'experimental', firstNight: 0, otherNight: 1,
+    choose: { count: 1, alive: true },
+    ability: '每个夜晚*，你要选择一名存活玩家：如果他是善良的，他死亡，并且当晚恶魔不会造成死亡。会有一名善良玩家始终被当作邪恶阵营。' },
+  nightwatchman: { name: '守夜人', en: 'Nightwatchman', team: 'townsfolk', edition: 'experimental', firstNight: 1, otherNight: 1,
+    choose: { count: 1, optional: true, once: true },
+    ability: '每局游戏限一次，在夜晚时，你可以选择一名玩家：他会得知你是守夜人。' },
+  hatter: { name: '帽匠', en: 'Hatter', team: 'outsider', edition: 'experimental', firstNight: 0, otherNight: 0,
+    ability: '如果你死亡，当晚爪牙和恶魔玩家可以选择变成新的爪牙和恶魔角色。' },
   noble: { name: '贵族', en: 'Noble', team: 'townsfolk', firstNight: 1, otherNight: 0,
     ability: '在你的首个夜晚，你会得知三名玩家：其中有且只有一名是邪恶的。' },
   shugenja: { name: '修行者', en: 'Shugenja', team: 'townsfolk', firstNight: 1, otherNight: 0,
@@ -401,6 +415,8 @@ const PROMPT_ONLY = {
   harlot_ask: { name: '流莺选中了你', en: 'Harlot', team: 'traveller', firstNight: 0, otherNight: 0, choose: { count: 0, role: true },
     ability: '流莺想知道你的角色。同意的话，她会得知你的角色，但你们两个可能同时死亡。' },
   harlot_yes: { name: '同意', en: 'Yes', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
+  hatter_pick: { name: '帽匠的茶会', en: 'Hatter', team: 'minion', firstNight: 0, otherNight: 0, choose: { count: 0, role: true, optional: true },
+    ability: '帽匠死了：你可以换成剧本里另一个同类型、不在场的角色，也可以不换。' },
   harlot_no: { name: '拒绝', en: 'No', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
 };
 
@@ -478,6 +494,11 @@ export const SCRIPTS = {
   oe: { id: 'oe', name: '横行霸道', en: 'Outed Evil', engine: 'snv', players: [7, 15], sentinel: true,
     roles: ['alchemist', 'sailor', 'general', 'fortuneteller', 'snakecharmer', 'monk', 'savant', 'juggler', 'fisherman', 'huntsman', 'tealady', 'cannibal', 'poppygrower',
       'damsel', 'politician', 'barber', 'goon', 'heretic', 'poisoner', 'fearmonger', 'goblin', 'devilsadvocate', 'psychopath', 'lleech', 'imp'] },
+  // 心理博弈（Rochambeau v11.0.0，作者 Habby，剧本世界杯 32 强；botcscripts 87 号；2026-11-20 用户：按 v11 做）。
+  // v11 改动：莽夫换成陌客；私酒贩子规则：麻脸巫婆 + 利维坦的相克不生效（我们本来就没做这条相克）。中文社区常玩 v9，角色不一样
+  roc: { id: 'roc', name: '心理博弈', en: 'Rochambeau', engine: 'snv', players: [5, 15],
+    roles: ['noble', 'bountyhunter', 'highpriestess', 'towncrier', 'innkeeper', 'gambler', 'acrobat', 'lycanthrope', 'gossip', 'nightwatchman', 'seamstress', 'cannibal', 'mayor',
+      'tinker', 'recluse', 'moonchild', 'hatter', 'godfather', 'poisoner', 'pithag', 'assassin', 'widow', 'po', 'vigormortis', 'leviathan'] },
   rag: { id: 'rag', name: '诸神黄昏', en: 'Ragnarök', engine: 'ww', werewolf: true, ragnarok: true, players: RAG_PLAYERS, roles: ['ww_hunter', 'ww_wolf'] },
   // 娱乐模式：经典网杀「预女猎守」，不是血染。规则和人数表在 werewolf.js / werewolf-roles.js，房间流程在 server/werewolfRoom.js
   ww: { id: 'ww', name: '狼人杀', en: 'Werewolf', engine: 'ww', werewolf: true, players: WW_PLAYERS, roles: Object.keys(WW_ROLES) },
