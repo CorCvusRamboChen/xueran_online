@@ -5,48 +5,81 @@ import { createPortal } from 'react-dom';
 import { Panel, Btn } from './ui.jsx';
 import { useCountdown } from './util.jsx';
 
-/** 观战的人：以旅行者身份加入（白天）。 */
+// 每个旅行者在这里怎么玩（2026-11-20 用户：旅行者页面优化）：什么时候要操作、操作在哪。
+const HOW = {
+  bureaucrat: ['夜里会醒', '每晚选一个人：他明天的票算三票。'],
+  thief: ['夜里会醒', '每晚选一个人：他明天的票算负数，帮你压住他想处决的人。'],
+  gunslinger: ['白天有按钮', '每天第一次投票统计后，可以开枪打一个刚投过票的人。'],
+  scapegoat: ['不用操作', '你的阵营有人被处决时，说书人可能让你替他上台。'],
+  beggar: ['白天投票', '你自己没有票，要等死人把幽灵票给你才能投。'],
+  judge: ['白天有按钮', '整局一次：别人发起提名后，你可以让这次处决强制成功或失败。'],
+  matron: ['白天有按钮', '每天可以让至多三对玩家换座位；大家不能离座去私聊。'],
+  voudon: ['改规则', '只有你和死人能投票，而且投票不用过半。'],
+  apprentice: ['首夜', '首夜拿到一个能力：善良是镇民的，邪恶是爪牙的。'],
+  bishop: ['改规则', '只有说书人能提名，每天至少提一个和你对立阵营的人。'],
+  gnome: ['白天有按钮', '大家会知道你的同伴；谁提名他，你可以杀死提名的人。'],
+  deviant: ['白天表演', '白天表现得有趣（过半的人点了「他很有趣」），当天就不能被流放。'],
+  bonecollector: ['夜里会醒', '整局一次：夜里选一个死人，他到黄昏前重新拿回能力。'],
+  barista: ['不用操作', '每晚说书人挑一个人：让他清醒健康，或者能力生效两次。'],
+  harlot: ['夜里会醒', '每晚找一个活人：他同意就告诉你他的角色，但你们俩可能一起死。'],
+  butcher: ['白天有按钮', '当天处决过一个人以后，你这边会出现一排人名：点一个就再提名他（今天被提名过的也行），过存活玩家一半就处决。'],
+};
+
+/** 观战的人：以旅行者身份加入。左边挑旅行者，右边看能力和在这里怎么玩，再加入。 */
 export function TravellerJoin({ s, act }) {
   const [open, setOpen] = useState(false);
   const [pick, setPick] = useState(null);
+  const [busy, setBusy] = useState(false);
   if (!s.canTravel) return null;
   if (!open) {
     return (
       <div className="btn-row gossip-row">
-        <Btn kind="primary" onClick={() => setOpen(true)} title="开局后才来的人可以当旅行者加入：说书人决定你的阵营，随时可以离开；别人只能流放你，不能处决你">以旅行者身份加入</Btn>
+        <Btn kind="primary" onClick={() => { setOpen(true); setPick(s.travellers.find((t) => !t.taken)?.id ?? null); }} title="开局后才来的人可以当旅行者加入：说书人决定你的阵营，随时可以离开；别人只能流放你，不能处决你">以旅行者身份加入</Btn>
       </div>
     );
   }
   const chosen = s.travellers.find((t) => t.id === pick);
+  const how = chosen ? HOW[chosen.id] : null;
+  const join = async () => { setBusy(true); const ok = await act('traveller', { role: pick }); setBusy(false); if (ok) setOpen(false); };
   return createPortal(
     <div className="trv-modal" role="dialog" aria-label="以旅行者身份加入" onClick={(e) => e.target === e.currentTarget && setOpen(false)}>
       <div className="trv-box">
         <header className="trv-head">
           <div>
             <h3>以旅行者身份加入</h3>
-            <p className="muted">开局后才来的人可以当旅行者，现在就坐进这一局。</p>
+            <p className="muted">开局后才来也能玩：挑一个旅行者，现在就坐进这一局。</p>
           </div>
           <button type="button" className="fb-close" onClick={() => setOpen(false)} aria-label="关闭">×</button>
         </header>
-        <ul className="trv-rules">
-          <li><b>阵营由说书人定</b>：大多是善良；邪恶的会知道恶魔是谁。</li>
-          <li><b>角色公开，阵营不公开</b>：大家知道你是哪个旅行者、会什么。</li>
-          <li><b>随时可以离开</b>：别人只能举手「流放」你，不能提名处决你。</li>
-        </ul>
-        <div className="trv-grid">
-          {s.travellers.map((t) => (
-            <button key={t.id} type="button" disabled={t.taken} className={`trv-card${pick === t.id ? ' on' : ''}`} aria-pressed={pick === t.id} onClick={() => setPick(t.id)}>
-              <span className="trv-token" aria-hidden="true">{[...t.name][0]}</span>
-              <span className="trv-name">{t.name}{t.taken && <em>已有人</em>}</span>
-              <span className="trv-ability">{t.ability}</span>
-            </button>
-          ))}
+        <div className="trv-rules">
+          <div><b>阵营由说书人定</b><span>大多是善良；邪恶的会知道恶魔是谁</span></div>
+          <div><b>角色公开，阵营保密</b><span>大家知道你是谁、会什么</span></div>
+          <div><b>随时可以离开</b><span>别人只能举手流放你，不能处决你</span></div>
         </div>
-        <footer className="trv-foot">
-          <span className="muted">{chosen ? `选了：${chosen.name}` : '先选一个旅行者'}</span>
-          <Btn kind="ghost" onClick={() => setOpen(false)}>取消</Btn>
-          <Btn kind="primary" disabled={!pick} onClick={async () => { if (await act('traveller', { role: pick })) setOpen(false); }}>加入这一局</Btn>
-        </footer>
+        <div className="trv-body">
+          <div className="trv-list" role="listbox" aria-label="旅行者">
+            {s.travellers.map((t) => (
+              <button key={t.id} type="button" role="option" aria-selected={pick === t.id} disabled={t.taken} className={`trv-row${pick === t.id ? ' on' : ''}`} onClick={() => setPick(t.id)}>
+                <span className="trv-token sm" aria-hidden="true">{[...t.name][0]}</span>
+                <span className="trv-row-main"><b>{t.name}</b><small>{t.taken ? '已经有人当了' : HOW[t.id]?.[0] ?? ''}</small></span>
+              </button>
+            ))}
+          </div>
+          <section className="trv-detail" aria-live="polite">
+            {chosen ? <>
+              <div className="trv-detail-head">
+                <span className="trv-token lg" aria-hidden="true">{[...chosen.name][0]}</span>
+                <div><span className="trv-kicker">旅行者</span><h4>{chosen.name}</h4>{how && <span className="trv-tag">{how[0]}</span>}</div>
+              </div>
+              <p className="trv-ability">{chosen.ability}</p>
+              {how ? <div className="trv-how"><span className="trv-kicker">在这里怎么玩</span><p>{how[1]}</p></div> : <span />}
+            </> : <p className="muted">左边挑一个旅行者。</p>}
+            <div className="trv-actions">
+              <Btn kind="ghost" onClick={() => setOpen(false)}>再看看</Btn>
+              <Btn kind="primary" disabled={!chosen || chosen.taken || busy} onClick={join}>{chosen ? `以${chosen.name}加入` : '加入这一局'}</Btn>
+            </div>
+          </section>
+        </div>
       </div>
     </div>,
     document.body,

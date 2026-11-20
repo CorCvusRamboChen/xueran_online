@@ -2246,25 +2246,44 @@ span.lr-newbie { cursor: default; }
 .bishop-picks .opp { margin-left: 6px; font: 11px/1.4 var(--sans); color: #1d1606; background: var(--psy); padding: 0 5px; border-radius: 3px; }
 .info-head .check { color: #0e1010; } /* 说书台卡片上的角色标签：浅色底上用黑字（2026-11-20 用户） */
 
-/* 观战的人以旅行者身份加入（Travellers.jsx TravellerJoin，2026-11-20 改成弹窗） */
-.trv-modal { position: fixed; inset: 0; z-index: 5000; background: rgba(6, 7, 8, .82); display: grid; place-items: center; padding: 16px; overflow-y: auto; }
-.trv-box { width: min(860px, 100%); background: linear-gradient(180deg, #151513, #0f1110); border: 1px solid rgba(226, 181, 44, .28); box-shadow: 0 40px 100px rgba(0, 0, 0, .75); padding: 20px 22px; display: grid; gap: 14px; }
+/* 观战的人以旅行者身份加入（Travellers.jsx TravellerJoin，2026-11-20 改成弹窗；再改成左列表右详情） */
+.trv-modal { position: fixed; inset: 0; z-index: 5000; background: rgba(6, 7, 8, .84); display: grid; place-items: center; padding: 16px; overflow-y: auto; }
+.trv-box { width: min(880px, 100%); background: linear-gradient(180deg, #161614, #0f1110); border: 1px solid rgba(226, 181, 44, .3); box-shadow: 0 40px 100px rgba(0, 0, 0, .75); padding: 22px 24px 24px; display: grid; gap: 16px; }
 .trv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.trv-head h3 { margin: 0; font-size: 24px; letter-spacing: .06em; color: var(--opt-hi); }
-.trv-head p { margin: 4px 0 0; }
-.trv-rules { margin: 0; padding: 10px 14px 10px 30px; background: rgba(255, 255, 255, .03); border-left: 3px solid rgba(226, 181, 44, .5); display: grid; gap: 4px; font-size: 14px; }
-.trv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
-.trv-card { display: grid; grid-template-columns: 52px 1fr; grid-template-rows: auto 1fr; column-gap: 12px; row-gap: 4px; text-align: left; padding: 12px; color: var(--cream); cursor: pointer;
-  background: rgba(255, 255, 255, .03); border: 1px solid var(--line); transition: border-color .15s, background .15s; }
-.trv-card:hover:not(:disabled) { border-color: rgba(233, 228, 216, .4); }
-.trv-card.on { border-color: var(--mot); background: rgba(226, 181, 44, .1); box-shadow: inset 0 0 0 1px var(--mot); }
-.trv-card:disabled { opacity: .45; cursor: not-allowed; }
-.trv-card:focus-visible { outline: 2px solid var(--mot); outline-offset: 2px; }
-.trv-token { grid-row: 1 / 3; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font: 900 22px/1 var(--serif); color: #4a4232;
+.trv-head h3 { margin: 0; font-size: 26px; letter-spacing: .06em; color: var(--opt-hi); }
+.trv-head p { margin: 4px 0 0; font-size: 14px; }
+.trv-rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.trv-rules > div { display: grid; gap: 2px; padding: 10px 12px; background: rgba(255, 255, 255, .03); border-top: 2px solid rgba(226, 181, 44, .55); }
+.trv-rules b { font-size: 14px; color: var(--opt-hi); }
+.trv-rules span { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.trv-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.trv-list { display: grid; gap: 6px; align-content: start; max-height: 420px; overflow-y: auto; padding-right: 2px; }
+.trv-row { display: flex; align-items: center; gap: 12px; padding: 8px 10px; text-align: left; color: var(--cream); cursor: pointer; background: rgba(255, 255, 255, .025); border: 1px solid var(--line); transition: border-color .15s, background .15s; }
+.trv-row:hover:not(:disabled) { border-color: rgba(233, 228, 216, .4); background: rgba(255, 255, 255, .05); }
+.trv-row.on { border-color: var(--mot); background: rgba(226, 181, 44, .12); }
+.trv-row:disabled { opacity: .45; cursor: not-allowed; }
+.trv-row:focus-visible { outline: 2px solid var(--mot); outline-offset: 1px; }
+.trv-row-main { display: grid; gap: 1px; min-width: 0; }
+.trv-row-main b { font: 900 16px/1.2 var(--serif); color: #f0d27a; }
+.trv-row-main small { font-size: 12px; color: var(--muted); }
+.trv-token { width: 52px; height: 52px; flex: none; border-radius: 50%; display: grid; place-items: center; font: 900 22px/1 var(--serif); color: #4a4232;
   background: radial-gradient(circle at 40% 35%, #f6efdc, #ddcfac 72%, #c5b48b); box-shadow: 0 0 0 3px var(--mot), 0 6px 14px rgba(0, 0, 0, .5); }
-.trv-name { font: 900 17px/1.2 var(--serif); color: #f0d27a; display: flex; align-items: center; gap: 6px; }
-.trv-name em { font: normal 11px/1.5 var(--sans); color: #1d1606; background: var(--muted); padding: 0 6px; border-radius: 3px; }
-.trv-ability { font-size: 13px; line-height: 1.55; color: var(--cream); }
-.trv-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
-.trv-foot .muted { margin-right: auto; }
-@media (max-width: 560px) { .trv-box { padding: 16px; } .trv-grid { grid-template-columns: 1fr; } }
+.trv-token.sm { width: 36px; height: 36px; font-size: 16px; box-shadow: 0 0 0 2px var(--mot); }
+.trv-token.lg { width: 76px; height: 76px; font-size: 32px; }
+.trv-detail { display: grid; grid-template-rows: auto auto 1fr auto; gap: 14px; padding: 16px 18px; background: rgba(255, 255, 255, .03); border: 1px solid var(--line); min-height: 320px; }
+.trv-detail-head { display: flex; align-items: center; gap: 16px; }
+.trv-detail-head h4 { margin: 0; font-size: 28px; line-height: 1.15; color: #f0d27a; }
+.trv-kicker { font: 12px/1.3 var(--sans); letter-spacing: .08em; color: var(--muted); }
+.trv-tag { display: inline-block; margin-top: 4px; font: 12px/1.5 var(--sans); color: #1d1606; background: var(--mot); padding: 0 8px; border-radius: 3px; }
+.trv-ability { margin: 0; font-size: 16px; line-height: 1.7; color: var(--cream); }
+.trv-how { align-self: start; padding: 10px 12px; border-left: 3px solid rgba(226, 181, 44, .55); background: rgba(226, 181, 44, .06); }
+.trv-how p { margin: 4px 0 0; font-size: 14px; line-height: 1.6; }
+.trv-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.trv-actions .btn-primary { min-width: 180px; min-height: 46px; font-size: 16px; }
+@media (max-width: 720px) {
+  .trv-box { padding: 16px; }
+  .trv-rules { grid-template-columns: 1fr; }
+  .trv-body { grid-template-columns: 1fr; }
+  .trv-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; }
+  .trv-detail { min-height: 0; }
+}
