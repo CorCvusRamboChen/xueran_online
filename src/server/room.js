@@ -32,6 +32,7 @@ const KILL_SCENE_SCRIPTS = new Set(['tb']); // 破门过场只在暗流涌动（
 const HOME_SCRIPTS = new Set(['tb', 'ngj', 'rag', 'cat', 'ucd', 'ecp', 'bmr', 'hhr', 'pie', 'trust', 'booz', 'sar', 'mo', 'oe', 'roc', 'amn']); // 每人在镇上有个家（白天从自家出门）：和破门是两回事
 const SHARED_HOME_SCRIPTS = new Set(['bmr', 'roc']); // 能当家的房子比人少时合住（黯月初升的地图只有 6 栋）
 const VICTIM_SCENE_MS = 6500;
+const ASK_BUDGET_MS = 30_000; // 艺术家、失忆者、渔夫问说书人：AI 最多等这么久，到点按「没判出来」走兜底（2026-11-21 用户：艺术家有时一直没有回答）
 // 一局里的真人全都离线这么久，就暂停这局、放开所有闭麦闭耳（有人回来自动接着打）
 const IDLE_PAUSE_MS = 3 * 60_000;
 const ST_HOLD_MS = 120_000; // 真人说书：夜晚结算完一直等说书人点天亮；他掉线超过这么久才按建议发信息、自动天亮（2026-11-20）
@@ -2304,7 +2305,7 @@ export class Room {
     if (!isGossip) return;
     const token = {};
     this.gossipToken = token;
-    this.gossipJudging = (this.judge ?? judgeStatement)(text, g.gossipFacts()).then((res) => {
+    this.gossipJudging = (this.stmtJudge ?? judgeStatement)(text, g.gossipFacts()).then((res) => {
       if (this.gossipToken !== token || this.game !== g) return; // 已经入夜结算了，或者换了一局
       this.gossipToken = null;
       const truth = res?.verdict === 'true';
@@ -2656,7 +2657,7 @@ export class Room {
     const evilSide = g.evilOf(p) && p.role !== 'marionette';
     // 2026-11-20 用户：夜半狂欢那局渔夫的建议「核对 3 号和 8 号」直接把恶魔 8 号打了出去。能力正常的建议不许点邪恶玩家（邪恶渔夫不许点恶魔）
     const avoid = fake ? [] : g.players.filter((q) => (evilSide ? (g.demonNow?.(q) ?? ROLES[q.role].team === 'demon') : g.evilOf(q))).map((q) => ({ seat: q.seat, name: q.name }));
-    (this.advise ?? adviseFisherman)({ team: evilSide ? '邪恶' : '善良', lie: !!lie && !fake, facts: fake ? g.factsFake() : g.factsSNV(), avoid }, { lang: this.aiLang() }) // 提线木偶以为自己是好人
+    this.aiAsk(uid, 'fisherman', (this.advise ?? adviseFisherman)({ team: evilSide ? '邪恶' : '善良', lie: !!lie && !fake, facts: fake ? g.factsFake() : g.factsSNV(), avoid }, { lang: this.aiLang() })) // 提线木偶以为自己是好人
       .then((res) => (res?.advice ? reply(res.advice) : fallback()))
       .catch((e) => { console.warn('[botc] 渔夫的建议出错：', e.message); fallback(); });
   }
@@ -2687,7 +2688,7 @@ export class Room {
     const truth = `${ROLES[ability].name}：${ROLES[ability].ability}`;
     if (looksInjected(text)) { this.stNote(`失忆者 ${g.name(uid)} 的猜测像在指挥大模型，没交给模型，按「无关」答`); reply('无关'); return; }
     if (!(this.judgeReady ?? judgeAvailable)()) { reply(guessLevel(text, ability)); return; }
-    (this.amnesiacJudge ?? judgeAmnesiac)(truth, text)
+    this.aiAsk(uid, 'amnesiac', (this.amnesiacJudge ?? judgeAmnesiac)(truth, text))
       .then((res) => reply(res?.level ?? guessLevel(text, ability)))
       .catch((e) => { console.warn('[botc] 判定失忆者的猜测出错：', e.message); reply(guessLevel(text, ability)); });
   }
@@ -2719,7 +2720,7 @@ export class Room {
     // 问得有歧义（「1-5」可能是 1 到 5 号，也可能是 1 号和 5 号）、看不懂、或者不是是非题：不答，让他重新问，这次不算用掉
     // （2026-11-12 用户定；艺术家页：「如果你不能用这三种答案进行回答，让他重新问一个问题」）。
     // 模型的理由记进说书人记录（以前丢掉了，事后看不出它怎么理解的问题）；理由不给玩家看，免得漏出真实情况
-    (this.judge ?? judgeStatement)(`（这是一个是非问题：答案为"是"就判 true，为"不是"就判 false。玩家说的数字一般指座位号。如果这个问题有歧义——同一句话能读出两种意思、两种意思的答案不一样，比如「1-5」可能是 1 号到 5 号、也可能是 1 号和 5 号——或者看不懂在问什么，或者根本不是能用「是 / 不是 / 我不知道」回答的问题（比如「有几个爪牙」「谁是恶魔」），判 unknown，reason 以「歧义：」开头说明为什么要重问）${text}`, g.atheist && !g.evilOf(g.get(uid)) ? g.factsFake() : g.factsSNV()) // 无神论者局：按说书人假装的邪恶阵营判（2026-11-19）
+    this.aiAsk(uid, 'artist', (this.stmtJudge ?? judgeStatement)(`（这是一个是非问题：答案为"是"就判 true，为"不是"就判 false。玩家说的数字一般指座位号。如果这个问题有歧义——同一句话能读出两种意思、两种意思的答案不一样，比如「1-5」可能是 1 号到 5 号、也可能是 1 号和 5 号——或者看不懂在问什么，或者根本不是能用「是 / 不是 / 我不知道」回答的问题（比如「有几个爪牙」「谁是恶魔」），判 unknown，reason 以「歧义：」开头说明为什么要重问）${text}`, g.atheist && !g.evilOf(g.get(uid)) ? g.factsFake() : g.factsSNV())) // 无神论者局：按说书人假装的邪恶阵营判（2026-11-19）
       .then((res) => {
         if (this.game !== g) return;
         if (res?.reason) { this.stNote(`艺术家 ${g.name(uid)} 问「${text}」，说书人的理解：${res.reason}（${res.verdict}）`); g.record('st', `艺术家的问题「${text}」，说书人判 ${res.verdict}：${res.reason}`); }
@@ -2727,6 +2728,33 @@ export class Room {
         answer(res?.verdict ?? 'unknown');
       })
       .catch((e) => { console.warn('[botc] 判定艺术家的问题出错：', e.message); answer('unknown'); });
+  }
+
+  /**
+   * 白天问说书人要等 AI 回答的（艺术家、失忆者、渔夫）：最多等 ASK_BUDGET_MS，到点给 null（调用方按兜底答）。
+   * 等着的记在 waitAsks（也存档）：服务器中途重启（比如上线）时回答就丢了，读档后退回这次提问（refundAsks）。真人说书的有待你决定的卡片，不记。
+   */
+  aiAsk(uid, kind, promise) {
+    const a = !this.stId ? { uid, kind, day: this.game?.day ?? 0 } : null;
+    if (a) (this.waitAsks ??= []).push(a);
+    let timer;
+    const late = new Promise((res) => { timer = setTimeout(() => { console.warn(`[botc] ${kind} 的 AI 回答超过 ${ASK_BUDGET_MS / 1000} 秒，按兜底答`); res(null); }, this.askBudgetMs ?? ASK_BUDGET_MS); });
+    return Promise.race([Promise.resolve(promise), late]).finally(() => { clearTimeout(timer); if (a) this.waitAsks = (this.waitAsks ?? []).filter((x) => x !== a); });
+  }
+
+  /** 读档后：重启前还在等 AI 的提问，这次不算，请他重新问。 */
+  refundAsks() {
+    const g = this.game;
+    const left = (this.waitAsks ?? []).filter((a) => a.stale);
+    this.waitAsks = (this.waitAsks ?? []).filter((a) => !a.stale);
+    for (const a of left) {
+      if (!g?.get?.(a.uid)) continue;
+      if (a.kind === 'artist') delete g.used?.[a.uid];
+      if (a.kind === 'fisherman') delete g.used?.[`fish-${a.uid}`];
+      if (a.kind === 'amnesiac' && g.amnesiacDay?.[a.uid] === a.day) delete g.amnesiacDay[a.uid];
+      g.record('st', `服务器重启，${g.tag(a.uid)} 的提问没来得及回答，退回`);
+      this.tell(a.uid, '服务器刚才重启了，说书人没来得及回答你的问题：这次不算，请重新问。', 'storyteller');
+    }
   }
 
   /** 艺术家问得有歧义：不答、不算用掉，请他换个说法重新问。 */
@@ -3793,7 +3821,7 @@ export class Room {
     return {
       v: 1,
       savedAt: Date.now(),
-      key: this.key, guildId: this.guildId, hostId: this.hostId, settings: this.settings, artistAsks: this.artistAsks ?? [], asks: (this.asks ?? []).map(({ answer, ...a }) => a),
+      key: this.key, guildId: this.guildId, hostId: this.hostId, settings: this.settings, artistAsks: this.artistAsks ?? [], waitAsks: this.waitAsks ?? [], asks: (this.asks ?? []).map(({ answer, ...a }) => a),
       users: [...this.users.values()], lobby: this.lobby, roleAssign: this.roleAssign ?? {}, newbies: this.newbies ?? [],
       game: this.game?.toJSON() ?? null,
       ended: this.ended, square: this.square, log: this.log, logSeq: this.logSeq, logEpoch: this.epoch, stLog: this.stLog,
@@ -3830,7 +3858,7 @@ export class Room {
     this.game = s.game ? (s.game.werewolf ? Werewolf.fromJSON(s.game) : s.game.avalon ? Avalon.fromJSON(s.game) : s.game.mark ? MarkGame.fromJSON(s.game) : Game.fromJSON(s.game)) : null;
     this.wireGame();
     Object.assign(this, {
-      artistAsks: s.artistAsks ?? [], asks: s.asks ?? [], ended: s.ended, square: s.square, log: s.log ?? [], logSeq: s.logSeq ?? 0, epoch: s.logEpoch ?? this.epoch, stLog: s.stLog ?? [],
+      artistAsks: s.artistAsks ?? [], waitAsks: (s.waitAsks ?? []).map((a) => ({ ...a, stale: true })), asks: s.asks ?? [], ended: s.ended, square: s.square, log: s.log ?? [], logSeq: s.logSeq ?? 0, epoch: s.logEpoch ?? this.epoch, stLog: s.stLog ?? [],
       inbox: new Map(s.inbox ?? []), acts: new Map(s.acts ?? []), pendingInfo: new Map(s.pendingInfo ?? []),
       resolving: s.resolving, rkPending: s.rkPending, revivePending: s.revivePending ?? null, deadline: s.deadline, nightBase: s.nightBase ?? s.deadline ?? null, dueFor: s.dueFor ?? {}, dawnAt: s.dawnAt ?? null,
       roamedToday: s.roamedToday, duskDay: s.duskDay, homes: s.homes ?? null, pendingNom: s.pendingNom, lastVote: s.lastVote,
@@ -3863,6 +3891,7 @@ export class Room {
     if (g.werewolf) { this.wwResume(why); return; }
     const left = (until, min = 5000) => Math.max(min, (until ?? 0) - Date.now());
     this.announce(why, 'clock');
+    this.refundAsks();
     this.watchVoice();
     this.syncWatchMute(); // 观战的人重新闭上（重启时都被解开了）
     for (const r of this.rooms.values()) if (r.until) r.timer = this.later(left(r.until), () => this.closeRoom(r.channelId, '时间到'));

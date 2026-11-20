@@ -89,3 +89,31 @@ test('全员失忆（房间）：自己的角色卡只写「失忆的 X」；问
     assert.ok(room._ann.some((t) => /全员失忆结束了/.test(t)));
   } finally { await room.teardown(); }
 });
+
+test('问说书人：AI 一直不回也会在限时内答；服务器重启时还在等的提问退回、可以重新问（2026-11-21 用户：艺术家有时一直没有回答）', async () => {
+  const room = new Room({ key: 'b', guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { mode: 'auto', script: 'amn', shuffle: false, chooseSeconds: 0.05, pauseMs: 5, killSceneMs: 0 } });
+  for (const [id, name] of [['u1', '阿一'], ['u2', '阿二']]) { room.users.set(id, { id, name, avatar: null }); room.online.add(id); }
+  await room.act('u1', 'join'); await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 5 });
+  await room.act('u1', 'start');
+  const g = room.game;
+  let back = null;
+  try {
+    for (const k of room.timers ?? []) clearTimeout(k);
+    g.phase = 'day'; g.day = 1;
+    room.judgeReady = () => true;
+    room.amnesiacJudge = () => new Promise(() => {}); // 永远不回
+    room.askBudgetMs = 50;
+    await room.act('u2', 'amnesiac', { text: '我是厨师吗' });
+    assert.equal(room.waitAsks.length, 1);
+    const snap = JSON.parse(JSON.stringify(room.snapshot())); // 这时候服务器重启
+    await sleep(120);
+    assert.match(room.viewFor('u2').self.inbox.at(-1).text, /说书人的回答/, '限时到了按兜底答');
+    assert.equal(room.waitAsks.length, 0);
+    back = new Room({ key: 'b', guildId: 'g', hostId: 'u1', voice: mockVoice() }).restore(snap);
+    back.paused = false; back.ended = false;
+    back.refundAsks();
+    assert.match(back.viewFor('u2').self.inbox.at(-1).text, /服务器刚才重启了/);
+    assert.equal(back.game.amnesiacDay.u2, undefined, '退回：今天还能再问');
+  } finally { await room.teardown(); if (back) await back.teardown(); }
+});

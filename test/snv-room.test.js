@@ -138,7 +138,7 @@ test('博学者、艺术家、公开声明、公开猜测都走得通；别人�
 
   room.judgeReady = () => true;
   const asked = [];
-  room.judge = async (text, facts) => { asked.push({ text, facts }); return { verdict: 'true', reason: '测试', by: '假的' }; };
+  room.stmtJudge = async (text, facts) => { asked.push({ text, facts }); return { verdict: 'true', reason: '测试', by: '假的' }; };
   await room.act('u2', 'artist', { text: '恶魔在座位上吗' });
   await until(() => room.viewFor('u2').self.inbox.some((m) => m.text.includes('说书人的回答')));
   assert.match(asked[0].facts, /梦殒春宵/);
@@ -590,7 +590,7 @@ test('艺术家：问得有歧义（「1-5」）不答、不算用掉，让他�
   await until(() => g.phase === 'day');
   room.judgeReady = () => true;
   let next = { verdict: 'unknown', reason: '歧义：1-5 可能是 1 到 5 号，也可能是 1 号和 5 号' };
-  room.judge = async () => next;
+  room.stmtJudge = async () => next;
   await room.act('u2', 'artist', { text: '1-5有坏人吗' });
   await until(() => room.viewFor('u2').self.inbox.some((m) => m.text.includes('有歧义')));
   assert.equal(room.viewFor('u2').self.canArtist, true, '不算用掉');
@@ -599,5 +599,17 @@ test('艺术家：问得有歧义（「1-5」）不答、不算用掉，让他�
   await room.act('u2', 'artist', { text: '1到5号有坏人吗' });
   await until(() => room.viewFor('u2').self.inbox.some((m) => m.text.includes('说书人的回答')));
   assert.equal(room.viewFor('u2').self.canArtist, false, '问清楚了才算用掉');
+  await room.teardown();
+});
+
+test('艺术家：接了 AI、没有替换判定函数时也能答（2026-11-21 线上：法官的 judge 方法和判定钩子同名，艺术家一问就报错、一直没有回答）', async () => {
+  const room = await snvRoom({ u2: 'artist', 'bot-1': 'nodashii' });
+  const g = room.game;
+  await untilDay(room);
+  await until(() => g.phase === 'day');
+  room.judgeReady = () => true; // 没配密钥：judgeStatement 直接返回 null
+  await room.act('u2', 'artist', { text: '1号是恶魔吗' });
+  await until(() => room.viewFor('u2').self.inbox.some((m) => m.text.includes('说书人的回答')));
+  assert.match(room.viewFor('u2').self.inbox.at(-1).text, /我不知道/);
   await room.teardown();
 });

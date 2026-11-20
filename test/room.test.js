@@ -825,7 +825,7 @@ test('造谣者自由声明：只有真造谣者的才问 AI；判为真今晚�
     await assert.rejects(room.act('u2', 'gossip', { statement: { kind: 'free', text: '3号 是恶魔' } }), /没配 AI/);
     const asked = [];
     room.judgeReady = () => true;
-    room.judge = async (text, facts) => { asked.push({ text, facts }); return { verdict: 'true', reason: '测试', by: '假的' }; };
+    room.stmtJudge = async (text, facts) => { asked.push({ text, facts }); return { verdict: 'true', reason: '测试', by: '假的' }; };
     assert.equal(room.viewFor('u2').self.gossipFree, true);
     await room.act('u1', 'gossip', { statement: { kind: 'free', text: '我们之中有两个爪牙' } });
     assert.equal(asked.length, 0, '不是造谣者的不问 AI');
@@ -857,7 +857,7 @@ test('造谣：不是造谣者的人第二天还能再发表声明（每人每�
     let inconclusive = false;
     try {
       room.judgeReady = () => true;
-      room.judge = async () => ({ verdict: 'false', reason: '测试', by: '假的' });
+      room.stmtJudge = async () => ({ verdict: 'false', reason: '测试', by: '假的' });
       const g = room.game;
       for (let day = 1; day <= 2; day++) {
         await untilDayBMR(room);

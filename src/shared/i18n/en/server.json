@@ -514,5 +514,7 @@
  "收到了，谢谢！": "Got it, thanks!",
  "要交给一名真人玩家": "Pick a human player",
  "他现在不在线，交不过去": "They're offline right now, so Host can't be passed to them",
- "{0} 把房主交给了 {1}": "{0} made {1} the Host"
+ "{0} 把房主交给了 {1}": "{0} made {1} the Host",
+ "服务器刚才重启了，说书人没来得及回答你的问题：这次不算，请重新问。": "The server just restarted and the Storyteller didn't get to answer your question: it doesn't count, please ask again.",
+ "服务器重启，{0} 的提问没来得及回答，退回": "Server restarted: {0}'s question went unanswered and was refunded"
 }

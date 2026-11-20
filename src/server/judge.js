@@ -1,17 +1,18 @@
 // 造谣者的自由声明：把整局的真实情况交给大模型，问"这句话真不真"。
-// 先问 OpenRouter 上的 Jev Router（typesafe/jev-router）：它按每句话的难度自动挑模型和思考强度，
-// 实测拿真实对局的材料（三千多字）判一句 2–5 秒，简单的走 GLM-5.3 快速版、要推理的换 GLM-5.3 完整版，一句不到一分钱。
-// 它判不出来（unknown）或者失败了（超时、报错、格式不对），再交给 DeepSeek 官方的深度思考模型（判得更准，但要好几秒、偶尔想很久），
-// 最后是 DeepSeek 官方的快速模型。都是 OpenAI 兼容接口，直接发 HTTP，不装 SDK。
-// 密钥放在 .env（OPENROUTER_API_KEY / DEEPSEEK_API_KEY / DEEPSEEK_FAST_API_KEY），一个都没配就不开放自由声明，只能用固定句式。
-// DeepSeek 快速模型没单独配密钥就用 DEEPSEEK_API_KEY。timeout：每一家各自最多等多久。OPENROUTER_MODEL 可以换别的模型。
-// （~typesafe/jev-latest 是"决策模型"，不能用 chat/completions，所以用 Router；OpenRouter 上 Claude、Gemini 从这台服务器调会被拒（403）。）
+// 只用 DeepSeek 官方接口（2026-11-21 起不用 OpenRouter），见下面 PROVIDERS 的说明。
+// 都是 OpenAI 兼容接口，直接发 HTTP，不装 SDK。密钥在 .env（DEEPSEEK_API_KEY / DEEPSEEK_FAST_API_KEY），一个都没配就不开放自由声明，只能用固定句式。
+// DeepSeek 快速模型没单独配密钥就用 DEEPSEEK_API_KEY。timeout：每一家各自最多等多久。
 
+// 2026-11-21 用户：不用 OpenRouter，只用 DeepSeek。线上实测（服务器上，三千字材料）：两个模型默认都开深度思考，
+// flash 要 6 秒以上（8 秒限时几乎次次超时），pro 要 12–16 秒；关掉思考（thinking: disabled）都在 1 秒左右。
+// 所以先问不思考的 pro；它判不出（unknown）再交给思考的 pro；最后是不思考的 flash。
+const DS = 'https://api.deepseek.com/chat/completions';
+const NO_THINK = { thinking: { type: 'disabled' } };
 const PROVIDERS = [
   // escalate：判成 unknown 时先不算数、记着，再问下一家（下一家也判不出或者失败了，就用记着的这个）
-  { name: 'Jev', url: 'https://openrouter.ai/api/v1/chat/completions', key: () => process.env.OPENROUTER_API_KEY, model: () => process.env.OPENROUTER_MODEL || 'typesafe/jev-router', timeout: 12_000, escalate: true },
-  { name: 'DeepSeek', url: 'https://api.deepseek.com/chat/completions', key: () => process.env.DEEPSEEK_API_KEY, model: () => process.env.DEEPSEEK_MODEL || 'deepseek-v4-pro', timeout: 20_000 },
-  { name: 'DeepSeek 快速', url: 'https://api.deepseek.com/chat/completions', key: () => process.env.DEEPSEEK_FAST_API_KEY || process.env.DEEPSEEK_API_KEY, model: () => process.env.DEEPSEEK_FAST_MODEL || 'deepseek-flash', timeout: 8_000 },
+  { name: 'DeepSeek 判定', url: DS, key: () => process.env.DEEPSEEK_API_KEY, model: () => process.env.DEEPSEEK_MODEL || 'deepseek-v4-pro', body: NO_THINK, timeout: 12_000, escalate: true },
+  { name: 'DeepSeek', url: DS, key: () => process.env.DEEPSEEK_API_KEY, model: () => process.env.DEEPSEEK_MODEL || 'deepseek-v4-pro', timeout: 22_000 }, // 深度思考：慢，只在判不出时用；askJson、疯狂判定不用它
+  { name: 'DeepSeek 快速', url: DS, key: () => process.env.DEEPSEEK_FAST_API_KEY || process.env.DEEPSEEK_API_KEY, model: () => process.env.DEEPSEEK_FAST_MODEL || 'deepseek-flash', body: NO_THINK, timeout: 10_000 },
 ];
 
 /** 有没有配好至少一家（没有就不显示"自由声明"）。 */
@@ -91,6 +92,7 @@ export async function judgeStatement(statement, facts, { timeoutMs = 25_000, pro
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: p.model(),
+          ...(p.body ?? {}),
           response_format: { type: 'json_object' },
           messages: [
             { role: 'system', content: system },
@@ -114,7 +116,7 @@ export async function judgeStatement(statement, facts, { timeoutMs = 25_000, pro
 }
 
 // ───────────── 窃窃私语：失忆者猜能力、渔夫要建议 ─────────────
-// 不是判真假，所以单独问：同样先 Jev，再 DeepSeek。只要快模型就够（一句话的事），失败了调用方用规则兜底。
+// 不是判真假，所以单独问：先不思考的 pro，再不思考的 flash。只要快模型就够（一句话的事），失败了调用方用规则兜底。
 
 const EN_NOTE = '\n\n【语言】这一桌玩家用的是英文界面：JSON 里所有要给玩家看的文字（句子、理由、总结、发言）都用自然的英文写；角色名用官方英文名（如 Washerwoman、Imp）；规定了取值的字段（枚举、座位号、数字）照旧。';
 
@@ -128,7 +130,7 @@ async function askJson(system, user, check, { providers = PROVIDERS.filter((p) =
       const r = await fetchImpl(p.url, {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: p.model(), response_format: { type: 'json_object' }, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
+        body: JSON.stringify({ model: p.model(), ...(p.body ?? {}), response_format: { type: 'json_object' }, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
         signal: AbortSignal.timeout(p.timeout ?? 12_000),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
