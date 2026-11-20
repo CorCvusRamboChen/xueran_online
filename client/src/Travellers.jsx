@@ -27,7 +27,7 @@ const HOW = {
 
 /**
  * 观战的人：以旅行者身份加入。卡片网格（2026-11-20 用户：这个布局就很好，只是要美化）：
- * 每张卡片是羊皮纸标记 + 名字 + 什么时候要操作 + 能力；选中的卡片描金。底栏写选了谁、在这里怎么玩，再「以 X 加入」。
+ * 每张卡片是名字 + 什么时候要操作 + 能力（不画圆形标记：旅行者不是普通角色，用户 2026-11-20 说只要名字）；选中的卡片描金。底栏写选了谁、在这里怎么玩，再「以 X 加入」。
  */
 export function TravellerJoin({ s, act }) {
   const [open, setOpen] = useState(false);
@@ -62,7 +62,6 @@ export function TravellerJoin({ s, act }) {
         <div className="trv-grid">
           {s.travellers.map((t) => (
             <button key={t.id} type="button" disabled={t.taken} className={`trv-card${pick === t.id ? ' on' : ''}`} aria-pressed={pick === t.id} onClick={() => setPick(t.id)}>
-              <span className="trv-token" aria-hidden="true">{[...t.name][0]}</span>
               <span className="trv-card-head">
                 <span className="trv-name">{t.name}</span>
                 <span className={`trv-tag${t.taken ? ' off' : ''}`}>{t.taken ? '已经有人当了' : HOW[t.id]?.[0] ?? '旅行者'}</span>
@@ -75,7 +74,6 @@ export function TravellerJoin({ s, act }) {
         <footer className={`trv-foot${chosen ? ' on' : ''}`}>
           {chosen ? (
             <div className="trv-chosen">
-              <span className="trv-token sm" aria-hidden="true">{[...chosen.name][0]}</span>
               <div><b>{chosen.name}</b>{HOW[chosen.id] && <span>{HOW[chosen.id][1]}</span>}</div>
             </div>
           ) : <span className="trv-hint">点一张卡片挑一个旅行者</span>}
