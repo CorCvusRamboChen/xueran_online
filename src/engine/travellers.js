@@ -124,6 +124,7 @@ export const TRAVELLER_METHODS = {
     const t = twice ? pickOne(doubles, this.rng) : pickOne(broken.length && roll < 0.8 ? broken : pool, this.rng);
     this.baristaFx = { id: t.id, night: this.night, twice: !!twice, done: false };
     this.record('st', `咖啡师：${this.tag(t.id)} ${twice ? '今晚能力生效两次' : '直到黄昏清醒且健康，获得正确信息'}`);
+    this.st.note(`咖啡师选了 ${this.tag(t.id)}：${twice ? '今晚能力生效两次' : '直到黄昏清醒且健康'}`); // 真人说书的「AI 今晚替你做的判定」里看得到
     messages.push({ playerId: t.id, text: twice ? '**咖啡师**的能力对你生效（第二种）：今晚你的**能力生效两次**——你会被叫醒再选一次。' : '**咖啡师**的能力对你生效（第一种）：直到下个黄昏，你**清醒且健康，并获得正确信息**。' });
   },
   /** 咖啡师第二种：这一步结算完，叫醒他再选一次，这一步再结算一遍。 */
@@ -165,6 +166,7 @@ export const TRAVELLER_METHODS = {
     messages.push({ playerId: h.id, text: `${this.name(t.id)} 同意了：他的角色是 **${ROLES[role].name}**。` });
     if (on && ROLES[t.role]?.team !== 'demon' && this.st.roll('harlotDeath', {}, { who: h.id, with: t.id })) {
       this.record('st', `流莺：说书人让 ${this.tag(h.id)} 和 ${this.tag(t.id)} 一起死去`);
+      this.st.note(`流莺 ${this.tag(h.id)} 和 ${this.tag(t.id)} 一起死去`);
       this.snvDie(h, 'harlot', messages); this.snvDie(t, 'harlot', messages);
     }
     return null;

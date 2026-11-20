@@ -1569,6 +1569,7 @@ export class Room {
     let msg;
     try { msg = g.addTraveller({ id: uid, name: user.name }, role, evil); } catch (e) { throw new UserError(e.message); }
     this.tell(uid, msg, 'clock');
+    this.stNote(`旅行者 ${g.name(uid)}（${ROLES[role].name}）加入：AI 按局势让他站${evil ? '邪恶' : '善良'}阵营`);
     this.pub(`**${g.name(uid)}** 以旅行者身份加入了：**${ROLES[role].name}**——${ROLES[role].ability}`, 'day');
     if (role === 'gnome') { const a = g.gnomePickAmigo(g.get(uid)); if (a) this.pub(`说书人宣布：侏儒的同伴是 **${g.name(a.id)}**（和侏儒同一阵营）。`, 'day'); }
     this.syncWatchMute?.();

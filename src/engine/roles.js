@@ -371,6 +371,8 @@ export const SCRIPT_TRAVELLERS = {
   snv: ['deviant', 'bonecollector', 'barista', 'harlot', 'butcher'],
   bs7: ['gnome', 'bureaucrat', 'scapegoat', 'harlot'],                // TPI 官方仓库 wc25/seat7/script.json、集石百科「七步成诗」页
   cat: ['barista', 'harlot', 'bonecollector', 'apprentice', 'beggar'], // botcscripts 第 3 号 v11.1.10
+  // 夜半狂欢：剧本卡（botcscripts 104 号 v3.8.0）没列旅行者，网上也没找到别人配好的；用户 2026-11-20 同意借梦殒春宵的五个（同一套引擎、同样玩信息和疯狂）
+  mo: ['deviant', 'bonecollector', 'barista', 'harlot', 'butcher'],
 };
 // 传奇角色（集石百科「传奇角色」页）：不是玩家拿的角色，是说书人给这一局加的全场规则；会告诉所有人加了哪些。
 // 剧本里用 sentinel / ivory / fibbin 标记（夜半狂欢：哨兵、圣洁之魂；裁缝与暴乱：骗人精）

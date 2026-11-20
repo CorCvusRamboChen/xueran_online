@@ -120,5 +120,19 @@
   "主教在场：等你提名": "Bishop in play: waiting for your nomination",
   "AI 今晚替你做的判定 · {0}": "Calls the AI made for you tonight · {0}",
   "等你点天亮": "Waiting for you to call dawn",
-  "说书人掉线了：待发的信息照建议发出，自动天亮": "The Storyteller disconnected: pending info was sent as suggested and dawn came automatically"
+  "说书人掉线了：待发的信息照建议发出，自动天亮": "The Storyteller disconnected: pending info was sent as suggested and dawn came automatically",
+  "开局后才来的人可以当旅行者，现在就坐进这一局。": "Arrived after the game started? Join as a Traveller and take a seat now.",
+  "{0}：大多是善良；邪恶的会知道恶魔是谁。": "{0}: usually good; an evil Traveller learns who the Demon is.",
+  "阵营由说书人定": "The Storyteller picks your team",
+  "{0}：大家知道你是哪个旅行者、会什么。": "{0}: everyone knows which Traveller you are and what you can do.",
+  "角色公开，阵营不公开": "Your character is public, your team is not",
+  "{0}：别人只能举手「流放」你，不能提名处决你。": "{0}: others can only vote to exile you, not nominate you for execution.",
+  "随时可以离开": "You can leave any time",
+  "已有人": "Taken",
+  "先选一个旅行者": "Pick a Traveller first",
+  "加入这一局": "Join this game",
+  "咖啡师选了 {0}：{1}": "The Barista picked {0}: {1}",
+  "直到黄昏清醒且健康": "sober and healthy until dusk",
+  "流莺 {0} 和 {1} 一起死去": "Harlot {0} and {1} die together",
+  "旅行者 {0}（{1}）加入：AI 按局势让他站{2}阵营": "Traveller {0} ({1}) joined: the AI put them on the {2} team based on the state of the game"
 }
