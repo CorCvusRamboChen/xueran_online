@@ -725,7 +725,11 @@ body:has(.lobby) { padding-top: 0; } /* 大厅背景图铺到灵动岛底下，�
 .bb-n { font: 900 12px var(--sans); letter-spacing: 2px; color: var(--paper); }
 .bb-item { font: 700 12px var(--sans); color: var(--muted); letter-spacing: 1px; }
 .bb-item b { font: 700 18px/1 var(--cond); margin-right: 3px; }
-.bb-note { font: 400 11px var(--sans); color: #6f6b62; }
+.bb-note { font: 400 11px var(--sans); color: #8f8a7e; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.board-bar { max-width: calc(100% - 104px); } /* 说明和人数同一排：太长时截断，不压到两边的按钮 */
+.board-bar:has(.bb-note) { gap: 9px; padding: 5px 12px; }
+.board-bar:has(.bb-note) .bb-item { letter-spacing: 0; }
+.board-bar:has(.bb-note) .bb-note { letter-spacing: -.2px; }
 @media (max-width: 859px) { .board-bar { top: 6px; gap: 8px; padding: 3px 8px; } .bb-note { display: none; } .bb-item b { font-size: 15px; } }
 /* 投票：中间的举手按钮 */
 .vote-center { gap: 8px; }
@@ -1860,16 +1864,17 @@ span.lr-newbie { cursor: default; }
 
 @supports (height: 100dvh) { :root { --vh: 100dvh; } }
 
-/* 画面上的播报、音效、音乐、设置、语音归位、技能表：电脑上一排摊开；手机上收进一个齿轮，点开是一列 */
-.st-gear { display: none; }
-.st-items { display: contents; }
+/* 画面上的播报、音效、音乐、设置、语音归位、技能表：电脑和手机都收进一个齿轮，点开是一列（2026-11-20 用户：收束进一个齿轮） */
+.sound-toggles { flex-direction: column; align-items: flex-end; }
+@media (min-width: 860px) { .sound-toggles { top: 10px; } } /* 右上角只剩齿轮：和剧本人数条同一排 */
+.scene:has(.minimap) .sound-toggles, .scene:has(.cs:not(.moved)) .sound-toggles, .scene:has(.vote-stats) .sound-toggles { flex-direction: column-reverse; } /* 齿轮在下面时往上展开 */
+.st-gear { display: grid; place-items: center; width: 34px; height: 34px; padding: 0 !important; font-size: 18px !important; }
+.st-items { display: none; }
+.st-items.open { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 6px; min-width: 132px; background: rgba(10, 12, 12, .95); border: 1px solid var(--line); box-shadow: 0 12px 28px rgba(0, 0, 0, .5); }
+.st-items.open button { font-size: 13px !important; padding: 8px 12px !important; text-align: left; }
+.st-items.open .vol-wrap { display: flex; } .st-items.open .vol-wrap > button { flex: 1; }
+.st-items.open .vol-panel { right: calc(100% + 8px); top: 0; }
 @media (max-width: 859px) {
-  .sound-toggles { flex-direction: column; align-items: flex-end; }
-  .st-gear { display: grid; place-items: center; width: 34px; height: 34px; padding: 0 !important; font-size: 18px !important; }
-  .st-items { display: none; }
-  .st-items.open { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 6px; background: rgba(10, 12, 12, .95); border: 1px solid var(--line); }
-  .st-items.open button { font-size: 13px !important; padding: 8px 12px !important; text-align: left; }
-  .st-items.open .vol-wrap { display: flex; } .st-items.open .vol-wrap > button { flex: 1; }
   /* 齿轮里点开的音量面板：不跟着按钮往上弹出屏幕，固定在屏幕上半部 */
   .scene .sound-toggles .vol-panel, .scene:has(.minimap) .sound-toggles .vol-panel, .scene:has(.vote-stats) .sound-toggles .vol-panel {
     position: fixed; left: calc(8px + var(--sail)); right: calc(8px + var(--sair)); top: calc(48px + var(--sait)); bottom: auto; width: auto; max-height: calc(var(--vh) - 140px - var(--sait) - var(--saib));
@@ -1984,11 +1989,8 @@ span.lr-newbie { cursor: default; }
 .extras ul { margin: 4px 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
 
 /* 传奇角色的「传奇」下标：牌子右下角一个小签，顶栏说明里名字后面一个下标 */
-.fab-name { color: #c9a86a; }
-.fab-name sub { font-size: 8px; margin-left: 1px; color: #a88c58; }
+.fab-name { color: #d8b56f; text-decoration: underline; text-decoration-color: #c9a86a; text-decoration-thickness: 1.5px; text-underline-offset: 3px; cursor: help; }
 /* 顶栏说明长的剧本：说明另起一行，票数条往下让 */
-.board-bar.two .bb-note { position: absolute; top: calc(100% - 1px); left: 50%; transform: translateX(-50%); white-space: nowrap; background: rgba(8, 10, 10, .86); border: 1px solid var(--line); border-top: 0; padding: 2px 10px 3px; }
-.scene:has(.board-bar.two) .vote-stats, .town:has(.board-bar.two) .vote-stats { top: 66px; }
 
 /* 赛后：总结 + 军事法庭（2026-11-19 用户） */
 .after-game { margin: 10px 0; display: grid; gap: 10px; }

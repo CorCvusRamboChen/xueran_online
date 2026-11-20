@@ -201,8 +201,18 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
 
 /**
  * 说书人的座位（2026-11-18 用户：说书人在台上也要展示）：放在圈的左下角外面（左上角有存活人数的信息条），不占玩家的座位。
- * 真人说书显示他的头像（说话、闭麦标记照常）；AI 说书显示 ★。有无神论者的剧本可以在提名时点他（被提名 / 上处决台也标出来）。
+ * 真人说书显示他的头像（说话、闭麦标记照常）；AI 说书显示说书人的标志（打开的魔典，2026-11-20 用户：不要星星）。有无神论者的剧本可以在提名时点他（被提名 / 上处决台也标出来）。
  */
+/** 说书人的标志：一本打开的魔典，书脊上方一枚钟。 */
+const StIcon = () => (
+  <svg viewBox="0 0 40 40" width="62%" height="62%" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round">
+    <path d="M20 13c-4-2.6-9-3.2-14-2.4v19c5-.8 10-.2 14 2.4 4-2.6 9-3.2 14-2.4v-19c-5-.8-10-.2-14 2.4z" />
+    <path d="M20 13v19" />
+    <path d="M10 15.5c2.6-.3 5 .1 7 1M10 20c2.6-.3 5 .1 7 1M23 16.5c2-.9 4.4-1.3 7-1M23 21c2-.9 4.4-1.3 7-1" strokeWidth="1.4" opacity=".8" />
+    <circle cx="20" cy="7" r="3.2" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 function StSeat({ s, pickable, picked, vote, tk, onTap }) {
   const st = s.storyteller;
   const target = 'storyteller';
@@ -214,9 +224,9 @@ function StSeat({ s, pickable, picked, vote, tk, onTap }) {
     <button type="button" className={cls} onClick={() => can && onTap?.({ id: target })}
       title={`说书人：${st.name}${s.stNominable ? '\n这个剧本有无神论者：可以提名说书人。处决说书人时，真有无神论者善良赢，没有就邪恶赢' : ''}`}>
       <div className="token-face">
-        {st.human ? <Portrait p={face} size={Math.round(tk * 0.85)} frame="#e8c66a" /> : <div className="st-star" style={{ width: Math.round(tk * 0.85), height: Math.round(tk * 0.85) }}>★</div>}
+        {st.human ? <Portrait p={face} size={Math.round(tk * 0.85)} frame="#e8c66a" /> : <div className="st-star" style={{ width: Math.round(tk * 0.85), height: Math.round(tk * 0.85) }}><StIcon /></div>}
       </div>
-      <div className="token-name">{st.human ? `说书人 · ${st.name}` : 'AI 说书人'}</div>
+      <div className="token-name">{st.human ? `说书人 · ${st.name}` : '说书人'}</div>
       {(s.stNominated || onBlock) && <div className="token-tags">{onBlock ? '处决台上' : '被提名'}</div>}
     </button>
   );

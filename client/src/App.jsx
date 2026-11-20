@@ -54,8 +54,8 @@ const BOARD_NOTE = {
   oe: ['传奇角色哨兵：外来者可能 +1 或 −1；有巡山人时落难少女一定在场（没外来者就换掉一个镇民）；异端分子对调胜负；痢蛭和异端分子不同时在场',
     '哨兵 ±1 · 巡山人带落难少女 · 异端分子对调胜负'],
   // 2026-11-19 用户：夜半狂欢顶上只写了哨兵，缺了气球驾驶员这些也会改外来者人数的角色。常显短句要列全；传奇角色名字后面带「传奇」下标（BoardBar 自动加）
-  mo: ['传奇角色哨兵：外来者可能 +1 或 −1；气球驾驶员在场 +0~1 外来者；有巡山人时落难少女一定在场（没外来者就换掉一个镇民）；亡骨魔在场 −1 外来者；偶尔是无神论者局（没有邪恶）',
-    '哨兵 ±1 · 气球驾驶员 +0~1 · 巡山人带落难少女 · 亡骨魔 −1 · 可能没有邪恶'],
+  mo: ['传奇角色哨兵：外来者可能 +1 或 −1；传奇角色圣洁之魂：邪恶玩家最多比开局多一名；气球驾驶员在场 +0~1 外来者；有巡山人时落难少女一定在场（没外来者就换掉一个镇民）；亡骨魔在场 −1 外来者；偶尔是无神论者局（没有邪恶）',
+    '哨兵±1 · 圣洁之魂 邪恶至多+1 · 气球+0~1 · 亡骨魔−1 · 巡山人带落难少女 · 或无邪恶'],
   sar: ['所有善良都是女裁缝，所有邪恶都是暴乱（爪牙加恶魔的位置全是暴乱）；传奇角色骗人精：整局一次，一名善良玩家可能拿到错误信息', '全员女裁缝 vs 全员暴乱 · 骗人精 一次假信息'],
   booz: ['男爵 +2、方古 +1 外来者；气球驾驶员 +0~1；有巡山人时落难少女一定在场；提线木偶坐在恶魔旁边', '男爵 +2 · 方古 +1 · 气球驾驶员 +0~1 · 巡山人带落难少女'],
 };
@@ -64,7 +64,8 @@ function markFabled(text, script) {
   const names = fabledOf(script).map((id) => FABLED[id].name);
   if (!names.length) return text;
   const of = (name) => FABLED[fabledOf(script).find((id) => FABLED[id].name === name)];
-  return text.split(new RegExp(`(${names.join('|')})`)).map((part, i) => (names.includes(part) ? <span key={i} className="fab-name" title={`传奇角色 · ${part}：${of(part)?.ability ?? ''}`}>{part}<sub>传奇</sub></span> : part));
+  // 传奇角色的名字下面画一道金色下划线（2026-11-20 用户：角标的意思是下划线，不是「传奇」两个字）
+  return text.split(new RegExp(`(${names.join('|')})`)).map((part, i) => (names.includes(part) ? <span key={i} className="fab-name" title={`传奇角色 · ${part}：${of(part)?.ability ?? ''}`}>{part}</span> : part));
 }
 /** 顶部常驻：这局的板子配置（几个镇民、外来者、爪牙、恶魔）。 */
 /** 夜半狂欢换了恶魔时顶栏的说明（亡骨魔 −1 外来者换成对应的）。 */
@@ -72,7 +73,7 @@ function boardNote(script, swap) {
   const note = BOARD_NOTE[script];
   if (script !== 'mo' || !note || !swap || swap === 'vigormortis') return note;
   const what = swap === 'lilmonsta' ? ['小怪宝：没有恶魔玩家、多一个爪牙，爪牙每晚选谁照看（他「是恶魔」）', '小怪宝 +1 爪牙'] : ['利维坦：不杀人，处决第二名善良或第 5 天结束邪恶获胜', '利维坦 不杀人'];
-  return [note[0].replace('亡骨魔在场 −1 外来者', what[0]), note[1].replace('亡骨魔 −1', what[1])];
+  return [note[0].replace('亡骨魔在场 −1 外来者', what[0]), note[1].replace('亡骨魔−1', what[1])];
 }
 function BoardBar({ n, script }) {
   const d = script === 'rag' && DISTRIBUTION[n] ? [n - ragnarokWolves(n), 0, 0, ragnarokWolves(n)] : DISTRIBUTION[n]; // 诸神黄昏：猎手和狼人
@@ -81,7 +82,7 @@ function BoardBar({ n, script }) {
   const full = boardNote(script, rolesOf('mo', 'demon').find((r) => r !== 'alhadikhia'));
   const note = full?.[1] ?? '';
   return (
-    <div className={`board-bar ${note.length > 14 ? 'two' : ''}`} title={full?.[0] ?? ''}>{/* 说明长了就另起一行，不撑宽顶栏 */}
+    <div className="board-bar" title={full?.[0] ?? ''}>{/* 说明和人数在同一排（2026-11-20 用户）；太长就截断，悬停看全文 */}
       <span className="bb-script">{SCRIPTS[script]?.name ?? SCRIPTS.tb.name}</span>
       <span className="bb-n">{n} 人局</span>
       {parts.map(([k, v, c]) => <span key={k} className="bb-item"><b style={{ color: c }}>{v}</b>{k}</span>)}
@@ -441,7 +442,7 @@ function Game({ s, act, ask }) {
           <div className="spectator-bar">观战中{s.settings?.spectatorGrimoire ? ' · 你能看到所有人的身份，别在语音里说' : ' · 看不到任何人的身份'}{(s.watchers?.length ?? 0) > 1 ? ` · 观战 ${s.watchers.length} 人` : ''}</div>
         )}
         <BoardBar n={s.players.filter((p) => !p.traveller).length} script={s.script} /> {/* 旅行者不算进人数配置 */}
-        <VoteStats s={s} />
+        {/* 票数统计块（VoteStats）2026-11-20 用户说不需要，不再显示 */}
         {roaming ? (
           <TownMap s={s} onMove={me ? (x, y, run) => { predictMove(s, x, y, run); return act('move', { x, y, run }); } : () => null} />
         ) : dash && night ? (
@@ -459,8 +460,7 @@ function Game({ s, act, ask }) {
         {!roaming && !dash && me && meP && (night || s.transit === 'dawn') && <AliveStrip s={s} />}
         {night && me?.killedTonight && <DoorKick />}
         {!roaming && skills && <CheatSheet s={s} onClose={() => setSkills(false)} />}
-        {/* 夜里、广场上也在右上角放一个「技能表」按钮（地图上的在小地图左边，由 TownMap 自己放） */}
-        {!roaming && !skills && s.script !== 'mark' && <button type="button" className="mm-sheet-btn scene-sheet-btn" onClick={() => setSkills(true)} title="所有角色的技能">技能表</button>}
+        {/* 右上角单独的「技能表」按钮去掉了（和齿轮里的重复，2026-11-20 用户）；地图上小地图左边那个由 TownMap 自己放 */}
         <SoundToggles onFixVoice={me && s.phase !== 'ended' && !soloMode ? () => act('fixVoice') : null} onSheet={!roaming && !skills ? () => setSkills(true) : null} />
         <SkillCheck check={check} onClose={closeCheck} />
         <MicDemand me={me} day={s.day} />

@@ -168,5 +168,8 @@
   "壹": "I",
   "贰": "II",
   "叁": "III",
-  "点一张卡片挑一个旅行者": "Click a card to pick a Traveller"
+  "点一张卡片挑一个旅行者": "Click a card to pick a Traveller",
+  "传奇角色哨兵：外来者可能 +1 或 −1；传奇角色圣洁之魂：邪恶玩家最多比开局多一名；气球驾驶员在场 +0~1 外来者；有巡山人时落难少女一定在场（没外来者就换掉一个镇民）；亡骨魔在场 −1 外来者；偶尔是无神论者局（没有邪恶）": "Fabled Sentinel: maybe +1 or −1 Outsider; Fabled Spirit of Ivory: at most one more evil player than at setup; Balloonist in play: +0–1 Outsider; with the Huntsman, the Damsel is always in play (replacing a Townsfolk if there are no Outsiders); Vigormortis in play: −1 Outsider; occasionally an Atheist game (no evil)",
+  "哨兵±1 · 圣洁之魂 邪恶至多+1 · 气球+0~1 · 亡骨魔−1 · 巡山人带落难少女 · 或无邪恶": "Sentinel ±1 · Spirit of Ivory evil +1 max · Balloonist +0–1 · Vigormortis −1 · Huntsman→Damsel · maybe no evil",
+  "亡骨魔−1": "Vigormortis −1"
 }
