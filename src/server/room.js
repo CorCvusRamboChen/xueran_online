@@ -2932,9 +2932,10 @@ export class Room {
     const p = g?.get(id);
     const real = ROLES[p.role].name;
     const thinks = p.shownRole && p.shownRole !== p.role ? ROLES[p.shownRole]?.name : null; // 疯子、酒鬼以为的角色
-    if (!m || (m.checks ?? 0) >= BREAK_CHECKS || !(looksBroken(text, real) || (thinks && looksBroken(text, thinks))) || due.role === p.role) return;
+    // 疯子、酒鬼不知道自己的真实角色：说到「疯子」不算说出真实角色，只看他以为的角色（2026-11-21：疯子说「我疯子」被当成破坏疯狂处决）
+    if (!m || (m.checks ?? 0) >= BREAK_CHECKS || !looksBroken(text, thinks ?? real) || due.role === p.role) return;
     m.checks = (m.checks ?? 0) + 1;
-    const res = await (this.breakJudge ?? judgeBreak)(ROLES[due.role].name, thinks ? `${real}（他以为自己是${thinks}）` : real, this.heardLines(id).slice(-5)).catch(() => null);
+    const res = await (this.breakJudge ?? judgeBreak)(ROLES[due.role].name, thinks ? `${thinks}（这是他以为的角色；他的真实角色是${real}，但他自己不知道）` : real, this.heardLines(id).slice(-5)).catch(() => null);
     if (res && this.game === g) { const recent = this.heardLines(id).slice(-5); if (recent.at(-1) !== text) recent.push(text); noteHeard(g, { id, kind: 'break', claim: ROLES[due.role].name, verdict: res.verdict, reason: res.reason, lines: recent }); }
     if (res?.verdict !== 'true' || !open() || g.madness[id] !== m) return;
     g.record('st', `${g.tag(id)} 破坏了疯狂（${res.by}）：${res.reason}`);

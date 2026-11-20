@@ -2496,7 +2496,7 @@ ${this.grimoire(w.id)}
   /** 给 AI 判定用的整局真实情况。 */
   factsSNV() {
     const TEAM = { townsfolk: '镇民', outsider: '外来者', minion: '爪牙', demon: '恶魔' };
-    const ppl = this.players.map((q) => `${q.seat}号 ${q.name}：${ROLES[q.role].name}（${TEAM[team(q)]}${q.gained ? `，获得了${ROLES[q.gained].name}的能力` : ''}），${this.evilOf(q) ? '邪恶' : '善良'}阵营，${q.alive ? '存活' : '已死亡'}`);
+    const ppl = this.players.map((q) => `${q.seat}号 ${q.name}：${ROLES[q.role].name}（${TEAM[team(q)]}${q.gained ? `，获得了${ROLES[q.gained].name}的能力` : ''}${q.shownRole && q.shownRole !== q.role && ROLES[q.shownRole] && !q.shownRole.startsWith('amn_') ? `，以为自己是${ROLES[q.shownRole].name}` : ''}），${this.evilOf(q) ? '邪恶' : '善良'}阵营，${q.alive ? '存活' : '已死亡'}`);
     const tl = this.timeline.map((e) => `[${e.when}] ${e.text}`);
     return [`剧本：${SCRIPTS[this.script].name}。现在是第 ${this.day} 天白天，共 ${this.players.length} 名玩家。`, '玩家：', ...ppl, '', '复盘时间线（到现在为止）：', ...tl].join('\n');
   },

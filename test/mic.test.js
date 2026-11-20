@@ -326,9 +326,20 @@ test('破坏疯狂：疯子说出他以为的角色也算；放过一次就不�
   g.st.madnessPenalty = () => { rolls++; return false; };
   await room.hearBreak('u2', '其实我是方古');
   assert.equal(asked.length, 1, '他以为的角色名也送去判');
-  assert.match(asked[0].real, /以为自己是方古/);
+  assert.match(asked[0].real, /^方古（这是他以为的角色/, '送去判的是他自己知道的角色');
   await room.hearBreak('u2', '我是被逼的');
   assert.equal(rolls, 1, '这次疯狂只掷一次');
+  assert.ok(p.alive);
+  await room.teardown();
+});
+
+test('破坏疯狂：疯子不知道自己是疯子，说到「疯子」不算说出真实角色（2026-11-21 线上被这样处决过）', async () => {
+  const { room, g, asked } = await breakRoom();
+  const p = g.get('u2');
+  p.role = 'lunatic';
+  p.shownRole = 'fanggu';
+  await room.hearBreak('u2', '我疯子吧哈哈');
+  assert.equal(asked.length, 0, '说到真实角色名不送去判');
   assert.ok(p.alive);
   await room.teardown();
 });

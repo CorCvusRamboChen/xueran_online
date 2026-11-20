@@ -520,5 +520,6 @@
  "说书人叫醒了你：**你的角色和阵营都变了。你现在是{0}，属于{1}阵营。**": "The Storyteller woke you: **your character and alignment have both changed. You are now the {0}, on the {1} team.**",
  "{0}：**明天白天和夜晚，你要「疯狂」地证明自己是{1}**，不然你可能被处决。": "{0}: **tomorrow, day and night, you must be \"mad\" that you are the {1}**, or you might be executed.",
  "说书人叫醒了你": "The Storyteller woke you",
- "洗脑师选中了你": "The Cerenovus chose you"
+ "洗脑师选中了你": "The Cerenovus chose you",
+ "{0}号 {1}：{2}（{3}{4}{5}），{6}阵营，{7}": "#{0} {1}: {2} ({3}{4}{5}), {6} team, {7}"
 }
