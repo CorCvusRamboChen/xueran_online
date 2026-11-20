@@ -1794,22 +1794,20 @@ function StDesk({ s, act, name }) {
   const st = s.st;
   const night = s.phase === 'night';
   const todo = stTodo(st);
-  const left = useCountdown(st.held);
   return (
     <div className="desk">
       {night && (
-        <Panel title="今夜" tone="mot" extra={st.held ? <span className="muted">{left > 0 ? `${left} 秒后自动天亮` : '马上天亮'}</span> : null}>
+        <Panel title="今夜" tone="mot" extra={st.held ? <span className="st-clock">等你点天亮</span> : null}>
+          <ol className="st-steps">
+            {['大家选择', '结算', '你过目', '天亮'].map((t, i) => {
+              const at = st.resolved ? 2 : st.waiting.length || st.rkPending ? 0 : 1;
+              return <li key={t} className={i < at ? 'done' : i === at ? 'now' : ''}>{t}</li>;
+            })}
+          </ol>
           {!st.resolved && st.waiting.length > 0 && <p className="lead">还在等：{st.waiting.map(name).join('、')}（到时间没选的随机）</p>}
           {!st.resolved && !st.waiting.length && <p className="lead">大家都选好了，正在结算……</p>}
           {st.rkPending && <p className="lead">守鸦人 {name(st.rkPending)} 正在选人。</p>}
           {st.resolved && <p className="lead">{!st.pendingInfo.length ? '结算完了：看一眼 AI 替你做的判定，没问题就天亮。' : st.notes?.length ? `结算完了：还有 ${st.pendingInfo.length} 条信息等你过目，再看一眼 AI 替你做的判定，然后点「天亮」。` : `结算完了：还有 ${st.pendingInfo.length} 条信息等你过目，处理完就天亮。`}</p>}
-          {st.notes?.length > 0 && (
-            <div className="st-notes">
-              <Tag>AI 今晚替你做的判定</Tag>
-              <ul>{st.notes.map((t, i) => <li key={i}>{t}</li>)}</ul>
-              <p className="muted">不同意的话，天亮前点肖像改：杀死、复活、下毒、改角色。</p>
-            </div>
-          )}
           <div className="btn-row">
             {st.pendingInfo.length > 1 && <Btn onClick={() => act('info', { action: 'sendAll' })}>全部照建议发</Btn>}
             <Btn kind="primary" onClick={() => act('dawn')}>{st.resolved ? '天亮' : '现在就结算'}</Btn>
@@ -1822,7 +1820,7 @@ function StDesk({ s, act, name }) {
         <div key={q.uid} className="info-item ask-item">
           <div className="info-head"><b>{name(q.uid)}</b><Check color="var(--mot)">艺术家的问题</Check></div>
           <p className="lead">{q.text}</p>
-          <AiSays v={q.suggest === 'retry' ? '问得有歧义，让他重问' : { true: '是', false: '不是', unknown: '我不知道' }[q.suggest]} />
+          <AiSays none={q.noAi} v={q.suggest === 'retry' ? '问得有歧义，让他重问' : { true: '是', false: '不是', unknown: '我不知道' }[q.suggest]} />
           <div className="btn-row">
             {[['true', '是'], ['false', '不是'], ['unknown', '我不知道'], ['retry', '有歧义，请他重问']].map(([v, label]) => (
               <Btn key={v} kind={q.suggest === v ? 'primary' : 'secondary'} onClick={() => act('st', { action: 'artistAnswer', target: q.uid, text: v })}>{label}</Btn>
@@ -1831,6 +1829,13 @@ function StDesk({ s, act, name }) {
         </div>
       ))}
       {st.asks?.map((a) => <AskItem key={a.id} a={a} name={name} act={act} />)}
+      {night && st.notes?.length > 0 && (
+        <details className="st-notes" open={st.notes.length <= 2}>
+          <summary>AI 今晚替你做的判定 · {st.notes.length}</summary>
+          <ul>{st.notes.map((t, i) => <li key={i}>{t.replace(/（局势：[^）]*）$/, '')}</li>)}</ul>
+          <p className="muted">不同意的话，天亮前点肖像改：杀死、复活、下毒、改角色。</p>
+        </details>
+      )}
       {!night && todo === 0 && <p className="muted">现在没有要你拿主意的事。流程（自由活动、提名、投票、黄昏）机器人在跑，你可以在「房主」菜单里提前推进。</p>}
       {s.bluffs && <p className="muted">恶魔的伪装：{s.bluffs.join('、')}</p>}
       <p className="muted">点肖像（或「镇民」面板）可以杀死、复活、下毒、改角色、私下传话。</p>
@@ -1839,14 +1844,14 @@ function StDesk({ s, act, name }) {
   );
 }
 
-const AiSays = ({ v }) => <p className="ai-says">{v == null ? 'AI 还在想……' : <>AI 建议：<b>{v}</b></>}</p>;
+const AiSays = ({ v, none = false }) => <p className="ai-says">{none ? '没接 AI：你来判断' : v == null ? 'AI 还在想……' : <>AI 建议：<b>{v}</b></>}</p>;
 
 /** 一件要说书人拿主意的事：渔夫要建议、失忆者猜能力、AI 听到的疯狂。 */
 function AskItem({ a, name, act }) {
   const [text, setText] = useState(a.suggest ?? '');
   useEffect(() => { if (a.suggest && !text) setText(a.suggest); }, [a.suggest]);
   const go = (answer, extra = {}) => act('stAsk', { id: a.id, answer, ...extra });
-  const head = { fisherman: '渔夫来请教建议', amnesiac: '失忆者猜自己的能力', mad: '疯狂：要不要处决' }[a.kind];
+  const head = { fisherman: '渔夫来请教建议', amnesiac: '失忆者猜自己的能力', mad: '疯狂：要不要处决', bishop: '主教在场：由你提名' }[a.kind];
   return (
     <div className={`info-item ask-item ask-${a.kind}`}>
       <div className="info-head"><b>{name(a.who)}</b><Check color="var(--mot)">{head}</Check></div>
@@ -1865,6 +1870,18 @@ function AskItem({ a, name, act }) {
         <div className="btn-row">
           {['无关', '有关', '接近', '完美'].map((v) => <Btn key={v} kind={a.suggest === v ? 'primary' : 'secondary'} onClick={() => go(v)}>{v}</Btn>)}
         </div>
+      </>}
+      {a.kind === 'bishop' && <>
+        <p className="lead">{a.why}</p>
+        <p className="muted">点一个人提名，他辩护后自动投票；处决了就入夜，没处决可以接着提名。标「对立」的是和主教阵营相反的玩家。</p>
+        <div className="bishop-picks">
+          {a.options?.map((o) => (
+            <Btn key={o.id} kind={o.opp ? 'secondary' : 'ghost'} disabled={a.busy} onClick={() => go('nominate', { text: o.id })}>
+              {name(o.id)}{o.opp && <span className="opp">对立</span>}
+            </Btn>
+          ))}
+        </div>
+        <div className="btn-row"><Btn kind="ghost" disabled={a.busy} onClick={() => go('done')}>今天提名完了，入夜</Btn></div>
       </>}
       {a.kind === 'mad' && <>
         <p className="lead">{a.why}</p>

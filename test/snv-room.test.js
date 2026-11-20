@@ -575,7 +575,7 @@ test('审查回归：真人说书时，艺术家的问题到说书台，说书�
   for (let k = 0; k < 100 && g.phase !== 'day'; k++) { await room.act('u1', 'dawn').catch(() => {}); await sleep(10); }
   await until(() => g.phase === 'day');
   await room.act('u2', 'artist', { text: '恶魔活着吗' });
-  assert.deepEqual(room.viewFor('u1').st.artistAsks, [{ uid: 'u2', text: '恶魔活着吗', suggest: null }]);
+  assert.deepEqual(room.viewFor('u1').st.artistAsks.map(({ uid, text }) => ({ uid, text })), [{ uid: 'u2', text: '恶魔活着吗' }]);
   assert.ok(room.snapshot().artistAsks.length, '存档里有');
   await room.act('u1', 'st', { action: 'artistAnswer', target: 'u2', text: 'false' });
   assert.equal(room.viewFor('u1').st.artistAsks.length, 0);

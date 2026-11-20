@@ -33,7 +33,7 @@ const SHARED_HOME_SCRIPTS = new Set(['bmr']); // 能当家的房子比人少时�
 const VICTIM_SCENE_MS = 6500;
 // 一局里的真人全都离线这么久，就暂停这局、放开所有闭麦闭耳（有人回来自动接着打）
 const IDLE_PAUSE_MS = 3 * 60_000;
-const ST_HOLD_MS = 120_000; // 真人说书：夜晚结算完最多等说书人这么久，到点按建议发信息、自动天亮（2026-11-20）
+const ST_HOLD_MS = 120_000; // 真人说书：夜晚结算完一直等说书人点天亮；他掉线超过这么久才按建议发信息、自动天亮（2026-11-20）
 const NIGHT_MIN_MS = 25_000; // 最短夜晚：大家都选完了也要到 25 秒才天亮（11-12 用户定，见 beginNight）
 const MOONCHILD_WAIT_MS = 20_000; // 月之子 / 呆瓜黄昏被处决：入夜前等他公开选人这么久，超时随机选（用户 2026-11-03 嫌 30 秒卡，缩到 20 秒）
 /**
@@ -1015,7 +1015,8 @@ export class Room {
     if (m.review) return m.review;
     const p = g?.get(m.playerId);
     if (!p) return null;
-    if (g.broken(p)) return p.role === 'drunk' || p.shownRole !== p.role && ROLES[p.role]?.team === 'outsider' ? `他其实是${ROLES[p.role].name}：这是 AI 编的假信息，可以改` : '他中毒 / 醉酒了：这是 AI 编的假信息，可以改';
+    if (g.broken(p)) return p.shownRole && p.shownRole !== p.role ? `他其实是${ROLES[p.role].name}：这是 AI 编的假信息，可以改` : '他中毒 / 醉酒了：这是 AI 编的假信息，可以改';
+    if (g.deadDrunk && !p.alive && p.role !== 'ravenkeeper') return '他已经死了（房规：死后照样拿信息，真假由 AI 按局势定），可以改';
     const mis = g.st.decisions.filter((d) => d.kind === 'misregister' && d.chosen === true && d.night === g.night && g.get(d.who)).map((d) => g.name(d.who));
     const hit = mis.find((n) => m.text.includes(n));
     if (hit) return `${hit} 今晚被误登记了：这条信息按误登记算的，可以改`;
@@ -1031,15 +1032,20 @@ export class Room {
 
   /** 真人说书、夜晚结算完：要不要停在天亮前等说书人。要等就定好最晚什么时候自动天亮，返回 true。 */
   holdNight(g) {
+    if (g.winner || g.phase !== 'night') return false; // 夜里已经分出胜负：直接结束，不要停在天亮前（以前卡在这里，整局结束不了）
     if (!this.pendingInfo.size && !this.nightNotes(g).length) return false;
     const night = g.night;
-    this.held = { night, until: Date.now() + (this.settings.stHoldMs ?? ST_HOLD_MS) };
+    // 不倒计时（2026-11-20 用户：有真人了就不要倒计时，让他来）：一直等他点「天亮」。
+    // 只兜一种情况：说书人掉线了，过一阵还没回来，就照建议发出去、自动天亮，免得整局卡死
+    this.held = { night };
     this.cancel(this.holdTimer);
-    this.holdTimer = this.later(this.held.until - Date.now(), () => {
-      if (this.game !== g || g.phase !== 'night' || g.night !== night) return;
-      this.stNote('说书人没来得及处理：待发的信息照建议发出，自动天亮');
+    const check = () => {
+      if (this.game !== g || g.phase !== 'night' || g.night !== night || !this.held) return;
+      if (this.online.has(this.stId)) { this.holdTimer = this.later(this.settings.stHoldMs ?? ST_HOLD_MS, check); return; }
+      this.stNote('说书人掉线了：待发的信息照建议发出，自动天亮');
       this.forceDawn().catch((e) => console.warn('[botc] 自动天亮出错：', e.message));
-    });
+    };
+    this.holdTimer = this.later(this.settings.stHoldMs ?? ST_HOLD_MS, check);
     this.stNote(`夜晚结算完毕。今晚死亡：${g.nightDeaths.map((id) => g.name(id)).join('、') || '无'}。${this.pendingInfo.size ? `有 ${this.pendingInfo.size} 条信息等你过目。` : ''}看完点「天亮」。`);
     this.changed();
     return true;
@@ -1345,6 +1351,10 @@ export class Room {
   /** 一轮投票结束后：该入夜就入夜，否则继续等提名。 */
   afterVote() {
     if (!this.noms) return;
+    if (this.bishopManual === this.game.day) { // 真人说书的主教：处决了就入夜，否则等说书人接着提名或点「提名完了」
+      if (this.game.executedToday) { this.bishopManual = null; this.later(this.settings.pauseMs, () => this.autoDusk()); } else this.bishopAsk();
+      return;
+    }
     if (this.bishopQueue) { // 主教：说书人一个接一个提名，提完就入夜
       if (this.bishopQueue.length && !this.game.executedToday) this.later(this.settings.pauseMs, () => this.bishopNext());
       else { this.bishopQueue = null; this.later(this.settings.pauseMs, () => this.autoDusk()); }
@@ -1683,6 +1693,14 @@ export class Room {
   bishopDay() {
     const g = this.game;
     const b = g.travellerOf('bishop');
+    // 真人说书（2026-11-20 用户问「主教在场时什么意思」）：提谁、提几个是说书人的判断，不再由 AI 替他挑
+    if (this.stId) {
+      this.noms = { until: 0, paused: null, timeUp: false, skips: new Set(), bishop: true };
+      this.bishopManual = g.day;
+      this.announce('主教在场：今天只有说书人提名。', 'vote');
+      this.bishopAsk();
+      return;
+    }
     const pool = g.alive().filter((p) => !p.traveller && !g.nominees.has(p.id));
     const opp = pool.filter((p) => g.evilOf(p) !== g.evilOf(b));
     let list;
@@ -1699,6 +1717,32 @@ export class Room {
     this.bishopQueue = list.map((p) => p.id);
     this.announce(`主教在场：今天只有说书人提名，一共会提名 ${list.length} 人。`, 'vote');
     this.bishopNext();
+  }
+
+  /** 真人说书、主教在场：说书台上放一张「提名谁」的卡片（每轮投完再放一次，直到他点「今天提名完了」）。 */
+  bishopAsk() {
+    const g = this.game;
+    this.asks = (this.asks ?? []).filter((a) => a.kind !== 'bishop');
+    const b = g.travellerOf('bishop');
+    this.addAsk({ kind: 'bishop', who: b?.id ?? g.players[0].id, why: `每天至少要提名一名和主教（${b ? g.name(b.id) : '?'}）对立阵营的玩家` });
+  }
+
+  /** 说书人（主教在场）提名一个人：直接进辩护，接着投票。 */
+  bishopNominate(id) {
+    const g = this.requireGame();
+    const p = g.get(id);
+    if (!g.bishopOn?.()) throw new UserError('主教不在场时由玩家提名');
+    if (g.phase !== 'day' || this.roam) throw new UserError('回到广场后才能提名');
+    if (this.pendingNom || this.vote) throw new UserError('还有一场提名/投票没结束');
+    if (!p?.alive) throw new UserError('只能提名活着的玩家');
+    if (g.nominees.has(p.id)) throw new UserError(`${g.name(p.id)} 今天已经被提名过了`);
+    if (p.traveller) throw new UserError('旅行者不能被提名处决');
+    this.asks = (this.asks ?? []).filter((a) => a.kind !== 'bishop');
+    g.nominees.add(p.id); (g.nomBy ??= {})[p.id] = 'storyteller';
+    g.record('nominate', `说书人（主教）提名了 ${g.tag(p.id)}`);
+    this.announce(`**说书人**提名了 **${g.name(p.id)}**`, 'vote');
+    this.pendingNom = { nominator: 'storyteller', nominee: p.id };
+    this.nomStage('defend');
   }
 
   bishopNext() {
@@ -2486,6 +2530,7 @@ export class Room {
     if (!p || s.spoke || g.phase !== 'day') return;
     const lastChance = g.aliveCount() <= 4;
     const late = g.aliveCount() <= Math.ceil(g.players.length / 2);
+    if (harpy && !(g.harpyMad?.id === SEAT7 && g.harpyMad.night === g.night && !g.harpyMad.claimed)) return; // 等它开口的两秒里已经说过 / 换了一天
     if (!harpy && !lastChance && !g.st.roll('seat7Speak', { nominated, late }, { who: SEAT7 })) return;
     s.spoke = g.day;
     if (harpy) {
@@ -2647,7 +2692,7 @@ export class Room {
       this.artistReply(uid, text, g.artistAnswer(uid, verdict));
       this.changed();
     };
-    if (!(this.judgeReady ?? judgeAvailable)()) { if (!st) answer('unknown'); return; }
+    if (!(this.judgeReady ?? judgeAvailable)()) { if (st) st.noAi = true; else answer('unknown'); return; }
     if (looksInjected(text)) { this.stNote(`艺术家 ${g.name(uid)} 的问题像在指挥大模型，没交给模型，答「我不知道」`); answer('unknown'); return; }
     // 问得有歧义（「1-5」可能是 1 到 5 号，也可能是 1 号和 5 号）、看不懂、或者不是是非题：不答，让他重新问，这次不算用掉
     // （2026-11-12 用户定；艺术家页：「如果你不能用这三种答案进行回答，让他重新问一个问题」）。
@@ -3330,7 +3375,7 @@ export class Room {
     if (a.kind === 'mad' && (this.asks ?? []).some((x) => x.kind === 'mad' && x.who === a.who && x.day === g.day)) return null; // 同一个人一天提一次就够
     const ask = { id: newId(), day: g.day, night: g.phase === 'night', ...a };
     (this.asks ??= []).push(ask);
-    const what = { fisherman: '渔夫来请教建议', amnesiac: `失忆者猜自己的能力：${a.text ?? ''}`, mad: `可能要因为疯狂处决：${a.why ?? ''}` }[a.kind];
+    const what = { fisherman: '渔夫来请教建议', amnesiac: `失忆者猜自己的能力：${a.text ?? ''}`, mad: `可能要因为疯狂处决：${a.why ?? ''}`, bishop: '主教在场：等你提名' }[a.kind];
     this.stNote(`${g.name(a.who)} ${what}`);
     this.changed();
     return ask;
@@ -3342,7 +3387,7 @@ export class Room {
     const ask = (this.asks ?? []).find((x) => x.id === id);
     if (!ask) throw new UserError('这件事已经处理过了');
     const done = () => { this.asks = this.asks.filter((x) => x !== ask); };
-    if (answer === 'drop') { done(); return; }
+    if (answer === 'drop' && ask.kind !== 'bishop') { done(); return; }
     if (ask.kind === 'fisherman') {
       const said = String(text ?? ask.suggest ?? '').trim();
       if (!said) throw new UserError('写一句建议');
@@ -3357,6 +3402,11 @@ export class Room {
       if (ask.answer) ask.answer(answer);
       else { this.tell(ask.who, `你猜：${ask.text}
 说书人的回答：**${answer}**`, 'storyteller'); g.record('info', `${g.tag(ask.who)} 猜"${ask.text}"，答：${answer}`); } // 重启过：只回答，不解锁按钮
+      return;
+    }
+    if (ask.kind === 'bishop') {
+      if (answer === 'done') { done(); this.bishopManual = null; this.later(this.settings.pauseMs, () => this.autoDusk()); return; }
+      this.bishopNominate(text);
       return;
     }
     if (ask.kind === 'mad') {
@@ -3380,17 +3430,7 @@ export class Room {
     const p = g.get(target);
     if (!p) throw new UserError('选择一名玩家');
     switch (action) {
-      case 'nominate': { // 主教在场：只有说书人可以提名
-        if (!g.bishopOn?.()) throw new UserError('主教不在场时由玩家提名');
-        if (this.pendingNom || this.vote) throw new UserError('还有一场提名/投票没结束');
-        if (g.nominees.has(p.id)) throw new UserError(`${g.name(p.id)} 今天已经被提名过了`);
-        if (p.traveller) throw new UserError('旅行者不能被提名处决');
-        g.nominees.add(p.id); (g.nomBy ??= {})[p.id] = 'storyteller';
-        g.record('nominate', `说书人（主教）提名了 ${g.tag(p.id)}`);
-        this.announce(`**说书人**提名了 **${g.name(p.id)}**`, 'vote');
-        this.pendingNom = { nominator: 'storyteller', nominee: p.id };
-        break;
-      }
+      case 'nominate': this.bishopNominate(p.id); break; // 主教在场：只有说书人可以提名
       case 'kill': g.stKill(p.id); break;
       case 'artistAnswer': {
         const ask = this.artistAsks?.find((x) => x.uid === p.id);
@@ -3986,10 +4026,11 @@ export class Room {
     }
     if (isST) {
       view.st = {
-        artistAsks: this.artistAsks ?? [],
-        asks: (this.asks ?? []).map(({ id, kind, who, text, truth, hint, suggest, why, day }) => ({ id, kind, who, text, truth, hint, suggest, why, day })),
+        artistAsks: (this.artistAsks ?? []).map(({ uid, text, suggest, noAi }) => ({ uid, text, suggest, ...(noAi ? { noAi: true } : {}) })),
+        asks: (this.asks ?? []).map(({ id, kind, who, text, truth, hint, suggest, why, day, noAi }) => ({ id, kind, who, text, truth, hint, suggest, why, day, noAi: !!noAi,
+          ...(kind === 'bishop' ? { options: g.alive().filter((q) => !q.traveller && !g.nominees.has(q.id)).map((q) => ({ id: q.id, opp: g.evilOf(q) !== g.evilOf(g.get(who)) })), busy: !!(this.pendingNom || this.vote) } : {}) })),
         notes: this.nightNotes(g), // AI 今晚替他做的判定
-        held: this.held && g.phase === 'night' ? this.held.until : null, // 停在天亮前等他：最晚到这个时刻自动天亮
+        held: !!this.held && g.phase === 'night', // 停在天亮前等他点「天亮」（不倒计时）
         log: this.stLog.slice(-30),
         pendingInfo: [...this.pendingInfo.entries()].map(([id, m]) => ({ id, playerId: m.playerId, text: m.text, voice: m.voice, why: m.why ?? null })),
         waiting: g.phase === 'night' && !this.resolving ? g.missingChoices() : [],

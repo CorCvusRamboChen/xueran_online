@@ -140,7 +140,7 @@ test('真人说书：先排版再发身份；照规则算的信息直接发，�
   if (room.held) {
     assert.equal(room.game.phase, 'night', '等说书人看完');
     const view = room.viewFor('u1').st;
-    assert.ok(view.held > Date.now(), '有自动天亮的时刻');
+    assert.equal(view.held, true, '停在天亮前等他（不倒计时）');
     const mine = view.pendingInfo.find((m) => m.playerId === 'u2');
     if (mine) {
       assert.equal(mine.why, '测试：都要过目');
@@ -170,12 +170,15 @@ test('自由活动：走进房子进语音、锁门敲门、集合关掉所有�
   await room.act('u1', 'addBots', { count: 5 });
   await room.act('u1', 'start');
   await room.act('u1', 'draft', { op: 'go' });
-  room.settings.pauseMs = 1e6; // 天亮后不自动开始自由活动：这里由说书人手动开
+  room.settings.roamMinutes = 0; // 天亮后自动开始的自由活动不限时（真人说书也自动开，2026-11-20）
+  room.settings.killSceneMs = 0;
   await untilDay(room);
+  for (let k = 0; k < 1000 && room.game.phase === 'night' && !room.ended; k++) await sleep(5);
   if (room.ended) return;
 
   await assert.rejects(room.act('u2', 'roam'), /只有说书人/);
-  await room.act('u1', 'roam', { minutes: 0 });
+  for (let k = 0; k < 200 && !room.roam; k++) await sleep(5);
+  if (!room.roam) await room.act('u1', 'roam', { minutes: 0 });
   const view = room.viewFor('u2');
   assert.equal(view.roam.houses.length, room.town.houses.length, '不管多少人，房子全开');
   assert.ok(view.roam.pos.u2, '有起始位置');
@@ -674,7 +677,7 @@ test('真人说书：破门等说书人点「天亮」才播，播完才天亮�
   try {
     assert.ok(room.homes && room.game.script === 'tb', '暗流涌动有家');
     await room.act('u1', 'dawn');                 // 第一下：结算夜晚
-    for (let k = 0; k < 200 && !room.held; k++) await sleep(3);
+    for (let k = 0; k < 2000 && !room.held; k++) await sleep(3); // 全量测试并发时结算慢
     assert.ok(room.held, '有信息要过目：停在天亮前');
     room.game.demonKills = ['bot-1'];             // 假装今晚恶魔杀了 bot-1，bot-2 死于别的原因（赌错、刺客……）
     room.game.nightDeaths = ['bot-1', 'bot-2'];

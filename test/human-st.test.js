@@ -125,9 +125,10 @@ test('流程自动：没有要说书人判断的信息就和 AI 说书一样自�
   } finally { await room.teardown(); }
 });
 
-test('到点自动天亮：说书人一直不处理，待发的信息照建议发出去', async () => {
+test('说书人在就一直等他（不倒计时）；掉线了才把待发的信息照建议发出去、自动天亮', async () => {
   const room = await humanRoom(6);
   room.settings.stHoldMs = 60;
+  room.online.delete('st'); // 掉线
   try {
     await room.act('st', 'start');
     await room.act('st', 'draft', { op: 'go' });
@@ -169,5 +170,60 @@ test('待你决定：渔夫的建议、失忆者的回答、AI 听到的疯狂�
     await room.act('st', 'stAsk', { id: mad.id, answer: 'execute' });
     assert.ok(g.executedToday, '说书人定了才处决');
     assert.equal(room.viewFor('u2').st, undefined, '玩家看不到说书台');
+  } finally { await room.teardown(); }
+});
+
+test('主教在场（真人说书）：提名由说书人点，不再由 AI 挑；投完没处决可以接着提，点「提名完了」入夜', async () => {
+  const room = await humanRoom(6, 'bmr');
+  try {
+    await room.act('st', 'start');
+    await room.act('st', 'draft', { op: 'go' });
+    const g = room.game;
+    g.phase = 'day'; g.day = 1; room.roamedToday = true;
+    const bishop = g.players[0];
+    g.bishopOn = () => true;
+    g.travellerOf = () => bishop;
+    room.openNominations();
+    assert.equal(room.bishopQueue ?? null, null, 'AI 不替说书人挑');
+    const card = room.viewFor('st').st.asks.find((a) => a.kind === 'bishop');
+    assert.ok(card?.options.length, '卡片上列出能提名的人');
+    assert.ok(card.options.some((o) => o.opp), '标出和主教对立的');
+    const target = card.options[0].id;
+    await room.act('st', 'stAsk', { id: card.id, answer: 'nominate', text: target });
+    assert.equal(room.pendingNom?.nominee, target);
+    assert.equal(room.pendingNom?.nominator, 'storyteller');
+    assert.ok(!room.viewFor('st').st.asks.some((a) => a.kind === 'bishop'), '提名中卡片收起来');
+    await assert.rejects(room.act('st', 'st', { action: 'nominate', target: card.options[1].id }), /还有一场提名/);
+    // 跳过投票：模拟投完没处决
+    room.pendingNom = null; room.vote = null;
+    room.afterVote();
+    const again = room.viewFor('st').st.asks.find((a) => a.kind === 'bishop');
+    assert.ok(again && !again.options.some((o) => o.id === target), '没处决：再放一张卡片，提过的人不在里面');
+    await room.act('st', 'stAsk', { id: again.id, answer: 'done' });
+    await until(() => g.phase !== 'day' || room.duskDay === g.day, 3000);
+    assert.ok(g.phase !== 'day' || room.duskDay === g.day, '提名完了就入夜');
+  } finally { await room.teardown(); }
+});
+
+test('说书人在线时停在天亮前一直等，不会自己天亮', async () => {
+  const room = await humanRoom(6);
+  room.settings.stHoldMs = 30;
+  try {
+    await room.act('st', 'start');
+    await room.act('st', 'draft', { op: 'go' });
+    const g = room.game;
+    room.infoWhy = () => '测试';
+    for (let k = 0; k < 400 && !room.held && g.phase === 'night'; k++) {
+      if (!room.resolving) for (const pr of g.nightPrompts()) if (!room.isFake(pr.playerId) && !g.choices[pr.playerId]) await room.act(pr.playerId, 'choose', { night: g.night, targets: pr.options.slice(0, pr.count) }).catch(() => {});
+      if (room.rkPending === 'u2') await room.act('u2', 'ravenkeeper', { target: 'u2' }).catch(() => {});
+      await sleep(5);
+    }
+    if (!room.held) return;
+    await sleep(200);
+    assert.equal(g.phase, 'night', '过了好几轮兜底时间还在等');
+    assert.equal(room.viewFor('st').st.held, true);
+    await room.act('st', 'dawn');
+    await until(() => g.phase !== 'night' || room.ended, 3000);
+    assert.notEqual(g.phase, 'night');
   } finally { await room.teardown(); }
 });

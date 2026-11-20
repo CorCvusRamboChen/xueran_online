@@ -112,7 +112,8 @@ export function draftAct(room, p = {}) {
     case 'go': {
       const left = plan.seats.filter((x) => !x.fake && !room.lobby.some((q) => q.id === x.id));
       if (left.length) { dropDraft(room, `${left.map((x) => x.name).join('、')} 已经离开座位`); return null; }
-      if (!d.roles.some((r) => team(r) === 'demon') && !plan.riot) throw new UserError('至少要有一个恶魔');
+      // 无神论者局（没有邪恶）、小怪宝（恶魔由爪牙轮流照看，没有恶魔玩家）、暴乱：本来就没有恶魔玩家
+      if (!d.roles.some((r) => team(r) === 'demon') && !plan.riot && !d.roles.includes('atheist') && plan.demonSwap !== 'lilmonsta') throw new UserError('至少要有一个恶魔');
       room.draft = null;
       return { ...plan, roles: [...d.roles], drunkAs: d.drunkAs, pick: { drunkAs: d.drunkAs, bluffs: [...d.bluffs], redHerring: d.redHerring } };
     }
@@ -141,7 +142,17 @@ function counts(d) {
   const have = { townsfolk: 0, outsider: 0, minion: 0, demon: 0, traveller: 0 };
   for (const r of d.roles) have[team(r)] = (have[team(r)] ?? 0) + 1;
   const mods = d.roles.map((r) => ({ role: r, text: /\[([^\]]*)\]\s*$/.exec(ROLES[r]?.ability ?? '')?.[1] ?? null })).filter((x) => x.text && /外来者|镇民|爪牙|恶魔/.test(x.text));
-  return { base: { townsfolk: t, outsider: o, minion: m, demon: dm }, have, mods: mods.map((x) => ({ role: x.role, name: ROLES[x.role].name, text: x.text })) };
+  // 定数的（男爵 +2、方古 +1、亡骨魔 -1）直接算进人数表；「-1 或 +1」「+0 或 +1」这种由说书人定的不算，只列出来
+  const base = { townsfolk: t, outsider: o, minion: m, demon: dm };
+  for (const x of mods) {
+    const k = /^([+\-−])\s*(\d+)\s*外来者$/.exec(x.text.trim());
+    if (!k) continue;
+    const n = Number(k[2]) * (k[1] === '+' ? 1 : -1);
+    const most = rolesOf(d.plan.script, 'outsider').length;
+    const add = Math.max(-base.outsider, Math.min(n, most - base.outsider));
+    base.outsider += add; base.townsfolk -= add;
+  }
+  return { base, have, mods: mods.map((x) => ({ role: x.role, name: ROLES[x.role].name, text: x.text })) };
 }
 
 /** 发给说书人的排版台。 */
