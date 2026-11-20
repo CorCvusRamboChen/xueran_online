@@ -16,9 +16,10 @@
   --psy: #9a7fd6;   /* 外来者 */
   --mot: #e2b52c;   /* 爪牙；也是「你」 */
   --phy: #db5444;   /* 恶魔 */
-  --serif: "Noto Serif SC", "Songti SC", serif;
-  --sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --cond: "Barlow Condensed", "Noto Sans SC", sans-serif;
+  /* 英文、数字用 Source Serif 4 / Source Sans 3，中文落到 Noto SC（两家同源，混排不跳）；英文页不加载 Noto SC */
+  --serif: "Source Serif 4", "Noto Serif SC", "Songti SC", Georgia, serif;
+  --sans: "Source Sans 3", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --cond: "Barlow Condensed", "Source Sans 3", "Noto Sans SC", sans-serif;
   --num: "Libre Baskerville", "Noto Serif SC", serif;
   --margin: clamp(16px, 3vw, 48px);
   --max: 1320px;
@@ -452,3 +453,23 @@ html[lang="en"] .tag, html[lang="en"] .sec-num span { letter-spacing: 1px; }
 .ms-group li small { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
 .ms-fun { border-color: rgba(201, 162, 39, .45); }
 .ms-fun h3 { color: #e8c66a; }
+
+/* 英文页的排版：拉丁字行距收一点，长段落限宽，数字用等高数字 */
+html[lang="en"] body { line-height: 1.62; font-feature-settings: "kern", "liga"; }
+html[lang="en"] h1, html[lang="en"] h2, html[lang="en"] h3 { letter-spacing: -.005em; line-height: 1.12; }
+html[lang="en"] .lead, html[lang="en"] .sec-head > p, html[lang="en"] .st-copy > p { max-width: 62ch; }
+.stat-num, .step-num { font-variant-numeric: lining-nums tabular-nums; }
+
+/* ── logo（2026-11-20，方向 B「标签里的钟楼」，源文件在 design/logo/）：图形 + 字，字用正文的衬线体 ── */
+.brand { gap: 10px; }
+.brand-mark { width: 40px; height: 36px; color: var(--paper); flex: none; }
+.brand-name { font: 900 19px/1 var(--serif); color: var(--paper); letter-spacing: 3px; white-space: nowrap; }
+html[lang="en"] .brand-name { font-size: 17px; letter-spacing: .3px; }
+.brand-sub { margin-left: -2px; }
+.foot .brand-mark { width: 30px; height: 27px; }
+@media (max-width: 700px) {
+  .brand-mark { width: 28px; height: 26px; }
+  .brand-name { font-size: 16px; letter-spacing: 2px; }
+  html[lang="en"] .brand-name { font-size: 14px; }
+}
+@media (max-width: 420px) { html[lang="en"] .brand-name { display: none; } }

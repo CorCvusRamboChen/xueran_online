@@ -2,12 +2,29 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<script>
+// 按浏览器选语言（2026-11-20）：没手动选过、浏览器的语言里一个中文都没有，就去英文页；搜索引擎的爬虫不跳
+(function () {
+  try {
+    if (localStorage.getItem('botc-site-lang') || /bot|crawl|spider|slurp|preview|facebookexternalhit/i.test(navigator.userAgent)) return;
+    var l = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ''];
+    if (!l.some(function (x) { return /^zh/i.test(x); })) location.replace('en/' + location.search + location.hash);
+  } catch (e) { /* 隐私模式：留在中文 */ }
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>血染钟楼 Online</title>
 <meta name="description" content="在 Discord 里开一局血染钟楼：AI 房主当说书人，走进房子自动进那间的语音。17 个剧本和狼人杀、阿瓦隆等 4 个娱乐模式，规则照官方百科，村规一键开关，中英双语。">
 <meta property="og:title" content="血染钟楼 Online · Discord 活动">
 <meta property="og:description" content="没人当说书人？AI 房主来。把机器人拉进你的服务器，今晚就开一局。">
-<meta property="og:image" content="https://rambooo.com/botc/media/trailer/poster.jpg">
+<meta property="og:image" content="https://rambooo.com/botc/media/brand/og-zh.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
 <meta property="og:url" content="https://rambooo.com/botc/">
 <link rel="alternate" hreflang="zh-CN" href="https://rambooo.com/botc/">
 <link rel="alternate" hreflang="en" href="https://rambooo.com/botc/en/">
@@ -15,13 +32,14 @@
 <meta name="theme-color" content="#0e1010">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Libre+Baskerville:ital@1&family=Noto+Sans+SC:wght@400;700;900&family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=7">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Libre+Baskerville:ital@1&family=Source+Serif+4:wght@400;700;900&family=Source+Sans+3:wght@400;700;900&family=Noto+Sans+SC:wght@400;700;900&family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=9">
 <script>document.documentElement.classList.add('js')</script>
 </head>
 <body>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-logo" viewBox="30 40 196 176"><path fill="currentColor" fill-rule="evenodd" d="M30.00 40.00H226.00L202.00 216.00H30.00ZM122.00 50.00L149.71 98.00V216.00H94.29V98.00Z"/><path fill="currentColor" d="M113.00 216.00v-26.00a9.00 9.00 0 0 1 18.00 0v26.00z"/><path fill="#c63d2a" d="M108.00 124.00a14.00 14.00 0 1 0 28.00 0a14.00 14.00 0 1 0 -28.00 0z"/></symbol>
   <symbol id="i-discord" viewBox="0 0 127.14 96.36"><path fill="currentColor" d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15ZM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69Zm42.24 0C78.41 65.69 73.25 60 73.25 53s5-12.74 11.44-12.74S96.23 46 96.12 53s-5.04 12.69-11.43 12.69Z"/></symbol>
   <symbol id="i-github" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></symbol>
   <symbol id="i-speaker" viewBox="0 0 24 24"><path fill="currentColor" d="M11 4.2v15.6a1 1 0 0 1-1.7.7L5.6 17H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h2.6l3.7-3.5a1 1 0 0 1 1.7.7Zm3.5 2.6a1 1 0 0 1 1.4 0 7.3 7.3 0 0 1 0 10.4 1 1 0 0 1-1.4-1.4 5.3 5.3 0 0 0 0-7.6 1 1 0 0 1 0-1.4Z"/></symbol>
@@ -32,7 +50,7 @@
 </svg>
 
 <header class="topbar">
-  <a class="brand" href="#top"><span class="tag tag-light">血染钟楼</span><span class="brand-sub">Online</span></a>
+  <a class="brand" href="#top" aria-label="血染钟楼 Online"><svg class="brand-mark" aria-hidden="true"><use href="#i-logo"/></svg><span class="brand-name">血染钟楼</span><span class="brand-sub">Online</span></a>
   <nav class="tabs" aria-label="页面导航">
     <a href="#scripts">剧本</a>
     <a href="#voice">Discord 语音</a>
@@ -43,7 +61,7 @@
     <a href="#faq">问答</a>
   </nav>
   <div class="top-actions">
-    <a class="btn btn-secondary lang-switch" href="en/" hreflang="en" lang="en" title="English version">English</a>
+    <a class="btn btn-secondary lang-switch" href="en/" hreflang="en" lang="en" title="English version" data-set-lang="en">English</a>
     <a class="btn btn-secondary" href="https://github.com/CorCvusRamboChen/xueran_online" target="_blank" rel="noopener">
       <svg class="ico" aria-hidden="true"><use href="#i-github"/></svg><span>GitHub 仓库</span>
     </a>
@@ -414,17 +432,17 @@
 
 <footer class="foot">
   <div class="foot-row">
-    <a class="brand" href="#top"><span class="tag tag-light">血染钟楼</span><span class="brand-sub">Online</span></a>
+    <a class="brand" href="#top" aria-label="血染钟楼 Online"><svg class="brand-mark" aria-hidden="true"><use href="#i-logo"/></svg><span class="brand-name">血染钟楼</span><span class="brand-sub">Online</span></a>
     <nav class="foot-links" aria-label="页脚">
       <a href="#scripts">剧本</a><a href="#voice">Discord 语音</a><a href="#storyteller">AI 说书人</a><a href="#rules">按照百科</a><a href="#houserules">村规开关</a><a href="#marks">连线标记</a><a href="#faq">问答</a>
       <a href="https://github.com/CorCvusRamboChen/xueran_online" target="_blank" rel="noopener">GitHub 仓库</a>
       <a href="https://github.com/CorCvusRamboChen/xueran_online/issues" target="_blank" rel="noopener">提问题</a>
-      <a href="en/" hreflang="en" lang="en">English</a>
+      <a href="en/" hreflang="en" lang="en" data-set-lang="en">English</a>
     </nav>
   </div>
   <p class="legal">非官方粉丝作品，不以盈利为目的，与 The Pandemonium Institute 无关。游戏画面均为内测版实机录制，其中宣传片里的 Discord 语音频道部分为示意动画，部分玩家由机器人扮演。</p>
 </footer>
 
-<script src="main.js?v=7" defer></script>
+<script src="main.js?v=9" defer></script>
 </body>
 </html>
