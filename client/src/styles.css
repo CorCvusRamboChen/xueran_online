@@ -2325,7 +2325,7 @@ span.lr-newbie { cursor: default; }
 .mad-rules { margin: 0 0 14px; padding-left: 22px; display: grid; gap: 10px; font: 15px/1.65 var(--serif); color: var(--cream); }
 .mad-rules li::marker { color: var(--psy); font-weight: 900; }
 .mad-rules li.must { padding: 8px 10px; margin-left: -6px; background: rgba(219, 84, 68, .12); border-left: 3px solid var(--phy); }
-.mad-chip { position: absolute; left: 0; top: 48px; z-index: 950; display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; cursor: pointer;
+.mad-chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; cursor: pointer;
   font: 13px/1.4 var(--sans); color: var(--cream); background: rgba(30, 20, 46, .92); border: 1px solid rgba(154, 127, 214, .7); }
 .mad-chip b { color: #d9c9ff; }
 .mad-chip:hover { border-color: #c2b0f0; }
@@ -2333,4 +2333,6 @@ span.lr-newbie { cursor: default; }
 .mad-chip.warn .mad-chip-dot { background: var(--phy); box-shadow: 0 0 8px var(--phy); }
 .mad-chip-more { font-size: 12px; color: #1d1606; background: var(--psy); padding: 0 6px; border-radius: 3px; }
 @keyframes madpulse { 50% { opacity: .35; } }
-@media (max-width: 859px) { .mad-chip { top: 70px; left: 8px; font-size: 12px; } }
+.mad-chip.loose { position: absolute; left: 72px; bottom: 12px; z-index: 950; } /* 没有存活条时也放在左下角同一个位置 */
+.scene:has(.alive-strip .mad-chip) .mad-chip.loose { display: none; } /* 有存活条：用存活条上面那个 */
+@media (max-width: 859px) { .mad-chip { font-size: 12px; } .mad-chip.loose { left: 8px; bottom: 8px; } }

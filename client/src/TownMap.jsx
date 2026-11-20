@@ -1,6 +1,7 @@
 // 白天自由活动的小镇（斜视角，镜头跟着自己走）。地面、建筑、小人画在 Pixi 画布上（world/World.js），
 // 头像、名字、敲门气泡、地名和小地图是 HTML，每帧按画布给的屏幕坐标摆放。
 // 点哪儿走到哪儿（点房子就走进去），拖动可以看别处，滚轮缩放；走进房子就进那间的私聊语音。
+import { MadChip } from './MadChip.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getMap, positionAt, pathLength, SPEED, speedOf } from '../../src/shared/map.js';
 import { Portrait, serverNow } from './util.jsx';
@@ -38,6 +39,7 @@ export function AliveStrip({ s, watching = null, onWatch = null }) {
   return (
     <div className="alive-strip" onPointerDown={(e) => e.stopPropagation()}>
       {menuPlayer && <MarkMenu s={s} player={menuPlayer} mark={marks[menu.id]} at={menu} onClose={() => setMenu(null)} />}
+      <MadChip me={s.self} />{/* 被洗脑：须知小牌子放在存活条上面（2026-11-20 用户） */}
       <span className="as-label">存活 {alive.length} / {s.players.length}</span>
       <div className="as-faces">
         {s.players.map((p) => {

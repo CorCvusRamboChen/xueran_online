@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { openMic, login, openSocket, report, listenSpeaking, fromKook, fromBrowserLink, soloMode } from './connect.js';
 import { Town, PaintFilters } from './Town.jsx';
 import { TownMap, AliveStrip } from './TownMap.jsx';
+import { MadChip, MAD_OPEN } from './MadChip.jsx';
 import { CheatSheet, useSheetMode } from './CheatSheet.jsx';
 import { DemonDash, DoorKick } from './KillScenes.jsx';
 import { useAmbience } from './world/ambience.js';
@@ -907,12 +908,11 @@ function MadnessBrief({ me, gameId }) {
   const seen = () => { try { return !!key && localStorage.getItem(key) === '1'; } catch { return false; } };
   const [open, setOpen] = useState(() => !!key && !seen());
   useEffect(() => { if (key && !seen()) setOpen(true); }, [key]);
+  useEffect(() => { const f = () => setOpen(true); window.addEventListener(MAD_OPEN, f); return () => window.removeEventListener(MAD_OPEN, f); }, []);
   if (!me?.madness) return null;
   const close = () => { try { localStorage.setItem(key, '1'); } catch { /* 隐私模式 */ } setOpen(false); };
   return <>
-    <button type="button" className={`mad-chip${me.mic && !me.micOn ? ' warn' : ''}`} onClick={() => setOpen(true)} title="被洗脑的注意事项">
-      <span className="mad-chip-dot" aria-hidden="true" />你被洗脑了：你是<b>{me.madness.role}</b><span className="mad-chip-more">须知</span>
-    </button>
+    <MadChip me={me} loose />{/* 有存活条时这个藏起来，用存活条上面那个 */}
     {open && createPortal(
       <div className="sheet-bg gossip-bg" role="presentation" onClick={(e) => e.target === e.currentTarget && close()}>
         <div className="gossip-modal mad-brief" role="alertdialog" aria-label="你被洗脑了">
