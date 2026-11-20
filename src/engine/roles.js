@@ -434,7 +434,8 @@ export const SCRIPTS = {
     roles: ['noble', 'librarian', 'shugenja', 'balloonist', 'villageidiot', 'dreamer', 'oracle', 'innkeeper', 'seamstress', 'fisherman', 'farmer', 'virgin', 'magician',
       'drunk', 'recluse', 'saint', 'damsel', 'harpy', 'boomdandy', 'scarletwoman', 'boffin', 'baron', 'pukka', 'imp', 'vigormortis'] },
   // 最有名的自定义剧本之一（作者 Emily，v11.1），只用三个基础剧本和实验性角色；中文名是本项目起的（官方没有译名）
-  cat: { id: 'cat', name: '冒名钓鱼', en: 'Catfishing', engine: 'snv',
+  // 中文社区叫《瓦釜雷鸣》（钟楼剧本博物馆第 15 期，剧本卡写 Catfishing、作者 Emily）；2026-11-20 用户叫它瓦釜雷鸣，名字从本项目起的「冒名钓鱼」改过来
+  cat: { id: 'cat', name: '瓦釜雷鸣', en: 'Catfishing', engine: 'snv',
     roles: ['investigator', 'chef', 'grandmother', 'balloonist', 'dreamer', 'fortuneteller', 'snakecharmer', 'gambler', 'savant', 'philosopher', 'ravenkeeper', 'amnesiac', 'cannibal',
       'drunk', 'recluse', 'sweetheart', 'mutant', 'lunatic', 'godfather', 'cerenovus', 'pithag', 'widow', 'imp', 'vigormortis', 'fanggu'] },
   // 社区热门剧本 Uncertain Death（作者 Matt，botcscripts 1.0.1，三份推荐名单都有）。中文名是本项目起的。2026-11-11 用户要的
