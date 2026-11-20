@@ -148,6 +148,12 @@ test('舞蛇人：选中恶魔互换角色和阵营，原恶魔中毒；不是�
   assert.ok(g.get('p3').alive, '原恶魔的选择作废');
   assert.match(text(r.messages, 'p1'), /亡骨魔/);
   assert.match(text(r.messages, 'p6'), /舞蛇人/);
+  // 换不回来：新舞蛇人（原恶魔）一直中毒，选中新恶魔也不交换（官方百科：中毒标记到他死亡或离场为止）
+  day(g); g.endDay();
+  night(g, { p6: ['p1'], p5: { targets: ['p2'], role: 'sage' }, p1: ['p7'] });
+  assert.equal(g.get('p1').role, 'vigormortis', '换不回来');
+  assert.equal(g.get('p6').role, 'snakecharmer');
+  assert.ok(g.isPoisoned(g.get('p6')));
 });
 
 test('舞蛇人：首夜换到恶魔，当晚不用杀人；失效的舞蛇人选中恶魔算没有正常生效', () => {
