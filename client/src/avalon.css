@@ -110,6 +110,10 @@
 .av-next b.now { background: var(--mot); border-color: var(--mot); color: #1d1606; }
 .av-next b.last { border-color: var(--phy); color: var(--phy); }
 .av-next b.now.last { background: var(--phy); color: #fff; }
+/* 发言顺序：说过的变暗，队长（最后归票）用金框，不是"第 5 次组队"的红 */
+.av-speakers b.done { opacity: .45; }
+.av-speakers b.last { border-color: var(--mot); color: var(--mot); }
+.av-speakers b.now.last { background: var(--mot); color: #1d1606; }
 
 /* 车队记录 */
 .av-cars { margin-top: 10px; }

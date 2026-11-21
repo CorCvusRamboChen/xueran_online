@@ -268,7 +268,6 @@
  "任务 {0}（{1} 人）": "Quest {0} ({1} players)",
  "现在不在阿瓦隆对局里": "You are not in a game of Avalon",
  "未知操作": "Unknown action.",
- "队长 **{0}** 提名 {1} 去做{2}第 {3} 次组队{4}）。所有人投票：赞成还是反对？": "Leader **{0}** proposes {1} for {2} proposal #{3}{4}). Everyone votes: Approve or Reject?",
  "任务 {0}（第 {1} 轮": "Quest {0} (round {1},",
  "第 {0} 轮任务（": "the Round {0} Quest (",
  "，再被否决坏人直接获胜": "; if rejected, Evil wins",
@@ -372,5 +371,13 @@
  "警上 PK 发言结束，警下请投票。": "Runoff speeches are over. Voters, please vote.",
  "现在开始竞选警长。想当警长的请上警。": "The Sheriff election begins. Run for Sheriff if you want the badge.",
  "警长 **{0}** 出局：请移交警徽或撕掉。": "Sheriff **{0}** is out: pass the badge or tear it up.",
- "狼人 {0} 投 {1}": "Werewolf {0} votes {1}"
+ "狼人 {0} 投 {1}": "Werewolf {0} votes {1}",
+ "现在不是发言的时候": "It isn't time to speak",
+ "队长 **{0}** 提名 {1} 去做{2}第 {3} 次组队{4}）。{5}": "Leader **{0}** proposes {1} for {2} proposal #{3}{4}). {5}",
+ "从 **{0}** 开始依次发言，队长最后归票（可以换人），然后投票。": "Speeches go in seat order starting with **{0}**; the Leader finalises last (and may swap members), then everyone votes.",
+ "所有人投票：赞成还是反对？": "Everyone votes: Approve or Reject?",
+ "队长 **{0}** 归票：说说为什么是这支队伍，可以换人，说完开始投票。": "Leader **{0}** finalises: explain the team and swap members if needed; the vote starts after.",
+ "**{0}** 发言（{1}/{2}）。": "**{0}** is speaking ({1}/{2}).",
+ "队长 **{0}** 归票时换了人：{1}。": "Leader **{0}** changed the team when finalising: {1}.",
+ "发言结束，所有人投票：赞成还是反对？": "Speeches are over. Everyone votes: Approve or Reject?"
 }

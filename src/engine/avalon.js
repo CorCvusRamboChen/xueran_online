@@ -39,8 +39,10 @@ export const MAX_REJECTS = 5;
  * 房主能开关的可选角色和可选规则。默认照常见推荐：派西维尔和莫甘娜成对出现；坏人有第三个位置（7 人及以上）时放莫德雷德；奥伯伦默认不放。
  * merlin：梅林和刺客（规则书：大多数局都放，但不是必须；不放就是基础局，三次任务成功好人直接赢）。
  * targeting：官方可选规则「自选任务」——队长自己挑做哪个任务，每个任务只做一次，第 5 个任务要先成功两个才能做。
+ * speech：顺序发言（中文圈的通行玩法；规则书本身是自由讨论）：队长先提名（发车），从队长的下一个座位起每人说一轮，
+ *   队长最后发言（归票），可以调整队伍，然后全体投票。房间默认开（server/avalon.js），这里默认关，方便单测规则。
  */
-export const DEFAULT_OPTIONS = { merlin: true, percival: true, morgana: true, mordred: true, oberon: false, lady: false, targeting: false };
+export const DEFAULT_OPTIONS = { merlin: true, percival: true, morgana: true, mordred: true, oberon: false, lady: false, targeting: false, speech: false };
 
 export const isGood = (role) => !!AVALON_ROLES[role]?.good;
 
@@ -88,7 +90,7 @@ export class Avalon {
     this.options = { ...DEFAULT_OPTIONS, ...options };
     const list = roles ?? shuffleArr(avalonRoles(n, this.options), rng);
     this.players = players.map((p, i) => ({ id: p.id, name: p.name, seat: i + 1, role: list[i], alive: true }));
-    this.stage = 'reveal';      // reveal 身份确认 / propose 队长组队 / vote 全体投票 / quest 出任务票 / lady 湖中仙女 / assassin 刺杀 / ended
+    this.stage = 'reveal';      // reveal 身份确认 / propose 队长组队 / speech 顺序发言 / vote 全体投票 / quest 出任务票 / lady 湖中仙女 / assassin 刺杀 / ended
     this.round = 1;             // 第几轮任务（1–5）：做过几个任务再加一
     this.questNo = this.options.targeting ? null : 1; // 这一轮做哪个任务（1–5）：平常就是第几轮；自选任务时由队长组队时选
     this.leader = leader ?? Math.floor(rng() * n); // 队长的座位下标
@@ -97,6 +99,8 @@ export class Avalon {
     this.votes = {};            // 这次投票：id → true 赞成 / false 反对（全部投完才公开）
     this.cards = {};            // 这次任务：id → true 成功 / false 失败（永远不公开谁出了什么）
     this.quests = QUEST_SIZES[n].map((size, i) => ({ size, need: failsNeeded(n, i + 1), result: null, fails: null, team: null, leader: null }));
+    this.speakers = [];         // 顺序发言：这次组队的发言顺序（队长的下一个座位起，队长最后）
+    this.speakerIdx = 0;        // 轮到第几个人
     this.proposals = [];        // 每次组队：{ round, quest, attempt, leader, team, votes, approved }，投完公开
     this.ready = [];            // 身份确认：看完的人
     // 湖中仙女：给第一任队长右手边（上一个座位）的人。官方推荐 7 人及以上用，这里不强制
@@ -138,7 +142,7 @@ export class Avalon {
   idsWith(...roles) { return this.players.filter((p) => roles.includes(p.role)).map((p) => p.id); }
   wins(side) { return this.quests.filter((q) => q.result === side).length; }
 
-  require(stage) { if (this.stage !== stage) throw new Error(stage === 'propose' ? '现在不是组队的时候' : stage === 'vote' ? '现在不是投票的时候' : stage === 'quest' ? '现在不是出任务的时候' : stage === 'lady' ? '现在不是湖中仙女的时候' : stage === 'assassin' ? '现在不是刺杀的时候' : '现在不能这么做'); }
+  require(stage) { if (this.stage !== stage) throw new Error(stage === 'propose' ? '现在不是组队的时候' : stage === 'vote' ? '现在不是投票的时候' : stage === 'speech' ? '现在不是发言的时候' : stage === 'quest' ? '现在不是出任务的时候' : stage === 'lady' ? '现在不是湖中仙女的时候' : stage === 'assassin' ? '现在不是刺杀的时候' : '现在不能这么做'); }
 
   /**
    * 开局时这个人知道什么（只给本人）：sees 是看到的人和看到的方式。
@@ -183,8 +187,40 @@ export class Avalon {
     if (ids.some((x) => !this.get(x))) throw new Error('只能选这局的玩家');
     this.team = this.players.map((p) => p.id).filter((x) => ids.includes(x)); // 按座位排
     this.votes = {};
-    this.stage = 'vote';
+    if (this.options.speech) {
+      this.speakers = this.players.map((_, i) => this.players[(this.leader + 1 + i) % this.n].id); // 下一个座位起，最后一个是队长
+      this.speakerIdx = 0;
+      this.stage = 'speech';
+    } else this.stage = 'vote';
     return this.team;
+  }
+
+  /** 顺序发言：现在轮到谁（不在发言阶段是 null）。 */
+  speaker() { return this.stage === 'speech' ? this.speakers[this.speakerIdx] ?? null : null; }
+
+  /**
+   * 发言的人说完了（或到点）。队长是最后一个：归票时可以换队员（team，人数要对），说完就开始投票。
+   * 返回 { vote：是不是进入了投票, changed：队长归票时换没换人 }。
+   */
+  endSpeech(id, team = null) {
+    this.require('speech');
+    if (id !== this.speaker()) throw new Error('现在不是你发言');
+    let changed = false;
+    if (team && id === this.leaderId()) {
+      const ids = [...new Set(team)];
+      if (ids.length !== this.quest().size) throw new Error(`这一轮要选 ${this.quest().size} 个人`);
+      if (ids.some((x) => !this.get(x))) throw new Error('只能选这局的玩家');
+      const next = this.players.map((p) => p.id).filter((x) => ids.includes(x));
+      changed = next.join() !== this.team.join();
+      this.team = next;
+    }
+    this.speakerIdx += 1;
+    if (this.speakerIdx < this.speakers.length) return { vote: false, changed };
+    this.speakers = [];
+    this.speakerIdx = 0;
+    this.votes = {};
+    this.stage = 'vote';
+    return { vote: true, changed };
   }
 
   /** 全体投票（每人一票，投完之前可以改）。返回是不是所有人都投完了。 */
@@ -267,6 +303,8 @@ export class Avalon {
     this.round += 1;
     this.attempt = 1;
     this.team = [];
+    this.speakers = [];
+    this.speakerIdx = 0;
     this.votes = {};
     this.cards = {};
     this.questNo = this.options.targeting ? null : this.round;
@@ -346,6 +384,7 @@ export class Avalon {
     const { avalon, ...rest } = s;
     Object.assign(g, rest);
     if (!('questNo' in rest)) g.questNo = g.round; // 加自选任务之前的存档
+    g.speakers ??= []; g.speakerIdx ??= 0;        // 加顺序发言之前的存档
     return g;
   }
 }

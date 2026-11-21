@@ -29,13 +29,15 @@ export function AvalonGame({ s, act, ask, parts: { History, SoundToggles, Watche
   // 这一轮做哪个任务：平常服务器定好了；自选任务时队长先在面板里挑
   const questNo = a.questNo ?? (a.stage === 'propose' && leaderMe ? pickQuest : null);
   // 现在点肖像是在选什么：队长选队员 / 湖中仙女选人 / 刺客指认 / 同伴给刺客出主意（刺客只能指认好人：这时坏人亮明身份一起商量，坏人都不在里面，奥伯伦也算）
+  const regroup = a.stage === 'speech' && leaderMe && a.speaker === s.me; // 队长归票：可以换人
   const pickSpec = s.phase === 'ended' ? null
+    : regroup && questNo ? { count: a.quests[questNo - 1].size, options: s.players.map((p) => p.id), what: 'regroup' }
     : a.stage === 'propose' && leaderMe ? (questNo ? { count: a.quests[questNo - 1].size, options: s.players.map((p) => p.id), what: 'team' } : null)
       : a.stage === 'lady' && a.lady?.options ? { count: 1, options: a.lady.options, what: 'lady' }
         : assassinMe ? { count: 1, options: me.assassinOptions ?? [], what: 'assassin' }
           : a.stage === 'assassin' && me?.canSuggest ? { count: 1, options: me.assassinOptions ?? [], what: 'suggest' } : null;
   const pickKey = `${a.stage}-${a.round}-${a.attempt}-${pickSpec?.what}`;
-  useEffect(() => { setPicked([]); }, [pickKey, pickQuest]);
+  useEffect(() => { setPicked(pickSpec?.what === 'regroup' ? [...a.team] : []); }, [pickKey, pickQuest]); // 归票时先放上原来的队伍
   useEffect(() => { setPickQuest(null); }, [`${a.stage}-${a.round}-${a.attempt}`]);
   const onTap = (p) => {
     if (!pickSpec?.options.includes(p.id)) return;
@@ -54,7 +56,8 @@ export function AvalonGame({ s, act, ask, parts: { History, SoundToggles, Watche
     const t = [];
     if (a.leader === p.id && a.stage !== 'assassin') t.push('队长');
     if (a.lady?.holder === p.id && a.stage !== 'ended') t.push('湖中仙女');
-    if (a.team.includes(p.id) && a.stage === 'vote') t.push('队员');
+    if (a.speaker === p.id) t.push('发言中');
+    if (a.team.includes(p.id) && (a.stage === 'vote' || a.stage === 'speech')) t.push('队员');
     if (a.stage === 'vote' && a.voted.includes(p.id)) t.push('已投');
     if (showLast && p.id in last.votes) t.push(last.votes[p.id] ? '赞成' : '反对');
     if (a.stage === 'quest' && a.played.includes(p.id)) t.push('已出票');
@@ -78,7 +81,7 @@ export function AvalonGame({ s, act, ask, parts: { History, SoundToggles, Watche
     { id: 'roles', icon: 'grim', label: '角色' },
   ].filter(Boolean);
   const shown = tab ?? (me ? 'role' : 'board');
-  const hot = !!pickSpec || (a.stage === 'vote' && me && me.myVote == null) || (a.stage === 'quest' && a.team.includes(s.me) && me?.myCard == null) || (a.stage === 'reveal' && me && !me.ready);
+  const hot = !!pickSpec || (a.stage === 'speech' && a.speaker === s.me) || (a.stage === 'vote' && me && me.myVote == null) || (a.stage === 'quest' && a.team.includes(s.me) && me?.myCard == null) || (a.stage === 'reveal' && me && !me.ready);
   const [dockMin, toggleDock, dockRef] = useDockSheet(hot);
 
   return (
@@ -220,6 +223,33 @@ function Stage({ s, a, me, av, act, name, picked, pickSpec, g, questNo, setPickQ
           </Panel>
         )}
       </>
+    );
+  }
+
+  if (a.stage === 'speech') {
+    const mineTurn = a.speaker === s.me;
+    const leaderTurn = a.speaker === a.leader;
+    const changed = mineTurn && leaderTurn && picked.length === q?.size && [...picked].sort().join() !== [...a.team].sort().join();
+    return (
+      <Panel title={`发言 · 第${cnNum(a.round)}轮第 ${a.attempt} 次组队`} tone={mineTurn ? 'mot' : 'light'} className={mineTurn ? 'choose-pnl' : ''}>
+        <p className="lead">队长 <b>{name(a.leader)}</b> 提名{qLabel ? `去做${qLabel}` : ''}：{a.team.map((id) => <span key={id} className="chip">{name(id)}</span>)}</p>
+        <p className="av-next av-speakers">
+          <span>发言顺序</span>
+          {a.speakers.map((id, k) => <b key={id} className={`${k === a.speakerIdx ? 'now' : ''} ${k < a.speakerIdx ? 'done' : ''} ${id === a.leader ? 'last' : ''}`} title={id === a.leader ? '队长最后归票' : name(id)}>{g(id)?.seat}号</b>)}
+        </p>
+        {mineTurn && !leaderTurn && <>
+          <p className="lead">轮到你发言了：说说你怎么看这支队伍、你觉得谁可疑。</p>
+          <div className="btn-row"><Btn kind="primary" onClick={() => av('speechDone')}>我说完了</Btn></div>
+        </>}
+        {mineTurn && leaderTurn && <>
+          <p className="lead">轮到你归票：大家都说完了。可以点座位圈上的肖像换人，确定以后开始投票。</p>
+          <Chips ids={picked} need={q.size} name={name} />
+          <div className="btn-row">
+            <Btn kind="primary" disabled={picked.length !== q.size} onClick={() => av('speechDone', { team: picked })}>{changed ? '换成这支队伍，开始投票' : '就这支队伍，开始投票'}</Btn>
+          </div>
+        </>}
+        {!mineTurn && <p className="muted">现在是 <b>{name(a.speaker)}</b> {leaderTurn ? '归票（队长还可以换人）' : '发言'}。一人一轮，队长最后归票，然后所有人投票。</p>}
+      </Panel>
     );
   }
 
@@ -590,8 +620,10 @@ export function AvalonSettings({ st, set, n, Toggle }) {
           <h4>流程</h4>
           <Toggle label="湖中仙女（第 2、3、4 轮后查一个人的阵营）" on={!!st.avalonLady} onChange={(v) => set({ avalonLady: v })} />
           <Toggle label="自选任务（队长挑做哪个任务）" on={!!st.avalonTargeting} onChange={(v) => set({ avalonTargeting: v })} />
+          <Toggle label="顺序发言（队长提名后每人说一轮，队长最后归票）" on={st.avalonSpeech !== false} onChange={(v) => set({ avalonSpeech: v })} />
+          <Toggle label="发言时只有发言的人能说话" on={st.speechMute} disabled={st.avalonSpeech === false} onChange={(v) => set({ speechMute: v })} />
           <Toggle label="随机排座位" on={st.shuffle} onChange={(v) => set({ shuffle: v })} />
-          <p className="muted setting-note">队长组队 2 分钟、投票 1 分钟、出任务票 45 秒，到点没动作的替他随机选。湖中仙女官方推荐 7 人及以上用。自选任务是规则书里的可选规则：每个任务只做一次，第 5 个要先成功两个，7 人起第 4 个仍要 2 张失败票。</p>
+          <p className="muted setting-note">队长组队 2 分钟、每人发言 1 分钟、投票 1 分钟、出任务票 45 秒，到点没动作的替他随机选（发言到点就轮到下一个）。规则书里是自由讨论；顺序发言是中文圈常见的打法：从队长的下一个座位开始，队长最后归票、可以换人。湖中仙女官方推荐 7 人及以上用。自选任务是规则书里的可选规则：每个任务只做一次，第 5 个要先成功两个，7 人起第 4 个仍要 2 张失败票。</p>
         </div>
         <div className="setting-group">
           <h4>观战</h4>

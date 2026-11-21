@@ -201,7 +201,6 @@
  "流程": "Flow",
  "湖中仙女（第 2、3、4 轮后查一个人的阵营）": "Lady of the Lake (after rounds 2, 3 and 4, learn one player's alignment)",
  "自选任务（队长挑做哪个任务）": "Targeting (the Leader picks which Quest to attempt)",
- "队长组队 2 分钟、投票 1 分钟、出任务票 45 秒，到点没动作的替他随机选。湖中仙女官方推荐 7 人及以上用。自选任务是规则书里的可选规则：每个任务只做一次，第 5 个要先成功两个，7 人起第 4 个仍要 2 张失败票。": "The Leader gets 2 minutes to propose, voting 1 minute, Quest cards 45 seconds; anyone who runs out of time gets a random choice. The Lady of the Lake is officially recommended for 7+ players. Targeting is an optional rulebook variant: each Quest is attempted only once, Quest 5 needs two successes first, and from 7 players Quest 4 still needs 2 Fail cards.",
  "阿瓦隆 · 全部角色": "Avalon · All characters",
  "《抵抗组织：阿瓦隆》原版规则：不杀人、不处决，靠组队、投票和任务分胜负。": "The original rules of The Resistance: Avalon. No killing and no executions: teams, votes and Quests decide the game.",
  "每轮：队长提名队员 → 所有人同时投赞成 / 反对，过半通过 → 队员秘密出成功 / 失败（好人只能出成功）。三次成功好人赢（除非刺客认出梅林），三次失败或同一轮连续 5 次否决坏人赢。7 人及以上第 4 轮要 {0} 张失败票才失败。": "Each round: the Leader proposes a team → everyone votes Approve / Reject at once, and a majority sends it → team members secretly play Success / Fail (Good can only play Success). Three successes win for Good (unless the Assassin finds Merlin); three failures, or 5 rejected proposals in a row in one round, win for Evil. With 7+ players, round 4 needs {0} Fail cards to fail.",
@@ -614,5 +613,18 @@
  "自爆": "Self-destruct",
  "只有你看得到这个按钮。{0}": "Only you can see this button. {0}",
  "上警阶段自爆会吞掉警徽（第一次推迟到明天竞选，第二次警徽流失）。": "Self-destructing during the election swallows the badge (the first time, the election moves to tomorrow; the second time, the badge is lost).",
- "自爆后有遗言。": "You get last words after self-destructing."
+ "自爆后有遗言。": "You get last words after self-destructing.",
+ "发言 · 第{0}轮第 {1} 次组队": "Discussion · Round {0}, proposal #{1}",
+ "去做{0}": " for {0}",
+ "发言顺序": "Speaking order",
+ "队长最后归票": "The Leader speaks last and finalises the team",
+ "轮到你发言了：说说你怎么看这支队伍、你觉得谁可疑。": "Your turn to speak: say what you think of this team and who you suspect.",
+ "轮到你归票：大家都说完了。可以点座位圈上的肖像换人，确定以后开始投票。": "Your turn to finalise: everyone has spoken. Tap portraits on the ring to swap members, then start the vote.",
+ "换成这支队伍，开始投票": "Use this team and start the vote",
+ "就这支队伍，开始投票": "Keep this team and start the vote",
+ "现在是 {0} {1}。一人一轮，队长最后归票，然后所有人投票。": "It's {0}'s turn {1}. One turn each; the Leader finalises last, then everyone votes.",
+ "归票（队长还可以换人）": "to finalise (the Leader can still swap members)",
+ "顺序发言（队长提名后每人说一轮，队长最后归票）": "Ordered speeches (after the proposal everyone speaks once; the Leader finalises last)",
+ "发言时只有发言的人能说话": "Only the current speaker can talk",
+ "队长组队 2 分钟、每人发言 1 分钟、投票 1 分钟、出任务票 45 秒，到点没动作的替他随机选（发言到点就轮到下一个）。规则书里是自由讨论；顺序发言是中文圈常见的打法：从队长的下一个座位开始，队长最后归票、可以换人。湖中仙女官方推荐 7 人及以上用。自选任务是规则书里的可选规则：每个任务只做一次，第 5 个要先成功两个，7 人起第 4 个仍要 2 张失败票。": "The Leader gets 2 minutes to propose, 1 minute per speech, voting 1 minute, Quest cards 45 seconds; anyone who runs out of time gets a random choice (a speech that runs out passes to the next player). The rulebook uses free discussion; ordered speeches are the common Chinese house style: starting from the seat after the Leader, the Leader speaks last and may swap members. The Lady of the Lake is officially recommended for 7+ players. Targeting is an optional rule from the rulebook: each Quest is done once, Quest 5 needs two successes first, and from 7 players Quest 4 still needs 2 Fail cards."
 }

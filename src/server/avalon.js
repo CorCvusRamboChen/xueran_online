@@ -10,6 +10,7 @@ export const AVALON_SETTINGS = {
   avalonRoles: { merlin: true, percival: true, morgana: true, mordred: true, oberon: false }, // 可选角色（merlin：梅林和刺客一起）
   avalonTargeting: false, // 官方可选规则「自选任务」
   avalonLady: false,      // 湖中仙女（官方的可选规则，推荐 7 人及以上）
+  avalonSpeech: true,     // 顺序发言：队长提名后从下一个座位起每人说一轮，队长最后归票（可以换人），再投票
 };
 
 /** 阿瓦隆对局里房间接受的操作：大厅那些、语音归位、结束、阿瓦隆自己的。自由活动、私聊房子、提名投票这些血染的都不要。 */
@@ -17,7 +18,7 @@ export const AV_ACTIONS = new Set(['join', 'leave', 'claimHost', 'releaseHost', 
   'start', 'history', 'stats', 'pastGame', 'fixVoice', 'end', 'fullLog', 'avalon']);
 
 // 各步的时限（秒）：到点没动作的替他随机选，和血染夜里选人一样
-const LIMITS = { reveal: 30, propose: 120, vote: 60, quest: 45, lady: 60, assassin: 150 };
+const LIMITS = { reveal: 30, propose: 120, speech: 60, vote: 60, quest: 45, lady: 60, assassin: 150 };
 const PAUSE_MS = 3500; // 开票 / 翻任务票后停一下再进下一步，让大家看清结果
 
 const pickN = (arr, k) => {
@@ -49,13 +50,21 @@ export class AvalonTable {
     }
     if (typeof p.avalonLady === 'boolean') s.avalonLady = p.avalonLady;
     if (typeof p.avalonTargeting === 'boolean') s.avalonTargeting = p.avalonTargeting;
+    if (typeof p.avalonSpeech === 'boolean') s.avalonSpeech = p.avalonSpeech;
+  }
+
+  /** 这一步的时限（秒）。顺序发言每人用房间的「发言时长」（默认 90 秒，阿瓦隆封顶 60 秒）；测试里没给 speech 的用组队的。 */
+  secs(stage) {
+    if (stage !== 'speech') return this.limits[stage];
+    if (this.limits === LIMITS) return Math.min(this.room.settings.speechSeconds ?? 60, 60);
+    return this.limits.speech ?? this.limits.propose;
   }
 
   // ───────────── 开局 ─────────────
   async start(seats) {
     const r = this.room;
     const s = r.settings;
-    const g = new Avalon(seats.map(({ id, name }) => ({ id, name })), { options: { ...AVALON_SETTINGS.avalonRoles, ...s.avalonRoles, lady: !!s.avalonLady, targeting: !!s.avalonTargeting } });
+    const g = new Avalon(seats.map(({ id, name }) => ({ id, name })), { options: { ...AVALON_SETTINGS.avalonRoles, ...s.avalonRoles, lady: !!s.avalonLady, targeting: !!s.avalonTargeting, speech: s.avalonSpeech !== false } });
     r.game = g;
     r.homes = null;
     const square = await r.safeVoice((v) => v.findSquare(r.hostId, seats.map((p) => p.id)));
@@ -89,13 +98,13 @@ export class AvalonTable {
   arm(stage) {
     const r = this.room;
     r.cancel(this.timer);
-    r.deadline = Date.now() + this.limits[stage] * 1000;
+    r.deadline = Date.now() + this.secs(stage) * 1000;
     const key = this.key();
-    this.timer = r.later(this.limits[stage] * 1000, () => { if (this.key() === key) this.timeout(); });
+    this.timer = r.later(this.secs(stage) * 1000, () => { if (this.key() === key) this.timeout(); });
   }
 
   /** 现在处在哪一步（计时器到点时核对一下，免得上一步的计时器碰到下一步）。 */
-  key() { const g = this.g; return g && `${g.stage}-${g.round}-${g.attempt}`; }
+  key() { const g = this.g; return g && `${g.stage}-${g.round}-${g.attempt}-${g.speakerIdx ?? 0}`; }
 
   begin() {
     const r = this.room;
@@ -152,6 +161,7 @@ export class AvalonTable {
       case 'ready': if (g.setReady(uid)) this.begin(); break;
       case 'propose':
         this.propose(uid, Array.isArray(p.team) ? p.team : [], p.quest ?? null); break;
+      case 'speechDone': this.endSpeech(uid, Array.isArray(p.team) ? p.team : null); break;
       case 'vote': this.vote(uid, !!p.yes); break;
       case 'quest': this.play(uid, !!p.success); break;
       case 'lady': this.useLady(uid, p.target); break;
@@ -165,10 +175,41 @@ export class AvalonTable {
     const r = this.room;
     const g = this.g;
     g.propose(uid, team, questNo);
-    r.announce(`队长 **${g.name(uid)}** 提名 ${g.team.map((id) => `**${g.name(id)}**`).join('、')} 去做${g.options.targeting ? `任务 ${g.questNo}（第 ${g.round} 轮` : `第 ${g.round} 轮任务（`}第 ${g.attempt} 次组队${g.attempt === MAX_REJECTS ? '，再被否决坏人直接获胜' : ''}）。所有人投票：赞成还是反对？`, 'vote');
+    const speech = g.stage === 'speech';
+    r.announce(`队长 **${g.name(uid)}** 提名 ${g.team.map((id) => `**${g.name(id)}**`).join('、')} 去做${g.options.targeting ? `任务 ${g.questNo}（第 ${g.round} 轮` : `第 ${g.round} 轮任务（`}第 ${g.attempt} 次组队${g.attempt === MAX_REJECTS ? '，再被否决坏人直接获胜' : ''}）。${speech ? `从 **${g.name(g.speaker())}** 开始依次发言，队长最后归票（可以换人），然后投票。` : '所有人投票：赞成还是反对？'}`, 'vote');
+    if (speech) { this.openSpeech(); r.changed(); return; }
+    this.openVote();
+    r.changed();
+  }
+
+  /** 顺序发言：轮到一个人。开了「发言时闭麦」就只有他能说话；机器人说两三秒就过。 */
+  openSpeech() {
+    const r = this.room;
+    const g = this.g;
+    const id = g.speaker();
+    if (!id || r.ended) return;
+    const last = id === g.leaderId();
+    r.speakOnly(id);
+    r.announce(last ? `队长 **${g.name(id)}** 归票：说说为什么是这支队伍，可以换人，说完开始投票。` : `**${g.name(id)}** 发言（${g.speakerIdx + 1}/${g.speakers.length}）。`, 'info');
+    this.arm('speech');
+    if (r.isFake(id)) r.later(this.wait(2000, 4000), () => { if (g.speaker() === id) this.endSpeech(id); });
+  }
+
+  /** 发言的人说完了（队长归票时可以带上新的队伍）。 */
+  endSpeech(uid, team = null) {
+    const r = this.room;
+    const g = this.g;
+    const { vote, changed } = g.endSpeech(uid, team);
+    if (changed) r.announce(`队长 **${g.name(uid)}** 归票时换了人：${g.team.map((id) => `**${g.name(id)}**`).join('、')}。`, 'vote');
+    if (vote) { r.speakOnly(null); r.announce('发言结束，所有人投票：赞成还是反对？', 'vote'); this.openVote(); } else this.openSpeech();
+    r.changed();
+  }
+
+  openVote() {
+    const r = this.room;
+    const g = this.g;
     this.arm('vote');
     for (const p of g.players) if (r.isFake(p.id)) r.later(this.wait(1200, 4000), () => { if (g.stage === 'vote' && !(p.id in g.votes)) this.vote(p.id, this.botVote(p.id)); });
-    r.changed();
   }
 
   vote(uid, yes) {
@@ -266,6 +307,7 @@ export class AvalonTable {
         this.botPropose(leader, true);
         break;
       }
+      case 'speech': this.endSpeech(g.speaker()); break;
       case 'vote': {
         const miss = g.missingVotes();
         // 超时按赞成算：随机的话，第 5 次组队时掉线的好人有一半机会直接把胜利送给坏人
@@ -311,6 +353,7 @@ export class AvalonTable {
     r.cancel(this.timer);
     r.deadline = null;
     r.ended = true;
+    r.speakOnly(null);
     r.announce(`${g.winner === 'good' ? '好人获胜！' : '坏人获胜！'}${g.winReason}。`, 'end');
     this.story(g.winner === 'good' ? '亚瑟王的胜利' : '莫德雷德的胜利', g.winner === 'good' ? '圆桌还在。骑士们第一次看清了彼此的脸。' : '王冠落进了泥里。笑得最开心的那个人，一直坐在你旁边。');
     r.changed();
@@ -327,7 +370,7 @@ export class AvalonTable {
     if (r.roam) { r.endRoam(); r.deadline = null; } // 旧版存档可能停在自由活动里：直接回圆桌，下面接着组队
     if (g.next) { r.later(this.wait(3000), () => this.runNext()); return; } // 停在两步之间（比如翻完任务票正要开始下一轮）
     if (g.stage === 'propose' && r.deadline == null) { r.later(this.wait(3000), () => this.openPropose()); return; } // 自由活动刚结束、还没轮到队长
-    if (!this.limits[g.stage]) return;
+    if (!this.secs(g.stage)) return;
     const left = Math.max(this.wait(10_000), (r.deadline ?? 0) - Date.now());
     r.deadline = Date.now() + left;
     const key = this.key();
@@ -335,6 +378,7 @@ export class AvalonTable {
     // 机器人接着做它该做的
     if (g.stage === 'reveal') { for (const p of g.players) if (r.isFake(p.id)) g.setReady(p.id); if (g.ready.length === g.n) r.later(this.wait(1500), () => this.begin()); }
     if (g.stage === 'propose' && r.isFake(g.leaderId())) r.later(this.wait(3000), () => { if (g.stage === 'propose') this.botPropose(g.leaderId()); });
+    if (g.stage === 'speech') { r.speakOnly(g.speaker()); if (r.isFake(g.speaker())) r.later(this.wait(2000), () => { if (g.stage === 'speech' && r.isFake(g.speaker())) this.endSpeech(g.speaker()); }); }
     if (g.stage === 'vote') for (const p of g.players) if (r.isFake(p.id) && !(p.id in g.votes)) r.later(this.wait(1200, 3000), () => { if (g.stage === 'vote' && !(p.id in g.votes)) this.vote(p.id, this.botVote(p.id)); });
     if (g.stage === 'quest') for (const id of g.missingCards()) if (r.isFake(id)) r.later(this.wait(1500, 3000), () => { if (g.stage === 'quest' && !(id in g.cards)) this.play(id, this.botCard(id)); });
     if (g.stage === 'lady' && r.isFake(g.lady.holder)) r.later(this.wait(3000), () => { if (g.stage === 'lady') this.useLady(g.lady.holder, pickN(g.ladyOptions(), 1)[0]); });
@@ -458,6 +502,9 @@ export class AvalonTable {
         targeting: !!g.options.targeting,
         leader: stage === 'reveal' ? null : g.leaderId(),
         team: g.team,
+        speaker: g.speaker(),                                        // 顺序发言：现在轮到谁
+        speakers: stage === 'speech' ? g.speakers : [],             // 这次的发言顺序（队长最后）
+        speakerIdx: stage === 'speech' ? g.speakerIdx : 0,
         quests: g.quests,
         proposals: g.proposals,
         voted: stage === 'vote' ? Object.keys(g.votes) : [],      // 谁投了（投的什么开票前不公开）

@@ -326,7 +326,8 @@ test('房间：机器人能跑完整局（真人超时由系统代选），视�
 
 test('房间：真人当队长、投票、出任务票都走 act', async () => {
   const room = await avalonRoom(4);
-  room.av.limits = { reveal: 30, propose: 30, vote: 30, quest: 30, lady: 30, assassin: 30 };
+  room.av.limits = { reveal: 30, propose: 30, speech: 30, vote: 30, quest: 30, lady: 30, assassin: 30 };
+  room.av.speed = 0.002;
   await room.act('u1', 'start');
   const g = room.game;
   g.leader = g.players.findIndex((p) => p.id === 'u1'); // 让真人当第一任队长
@@ -336,7 +337,19 @@ test('房间：真人当队长、投票、出任务票都走 act', async () => {
   await assert.rejects(room.act('bot-1', 'avalon', { kind: 'propose', team: ['u1', 'bot-1'] }), /只有队长/);
   await assert.rejects(room.act('u1', 'avalon', { kind: 'propose', team: ['u1'] }), /要选 2 个人/);
   await room.act('u1', 'avalon', { kind: 'propose', team: ['u1', 'bot-1'] });
-  assert.equal(g.stage, 'vote');
+  // 顺序发言：从队长的下一个座位起，队长最后归票
+  assert.equal(g.stage, 'speech');
+  const order = room.viewFor('u1').avalon.speakers;
+  assert.equal(order.length, g.n);
+  assert.equal(order.at(-1), 'u1', '队长最后发言');
+  assert.equal(order[0], g.players[(g.leader + 1) % g.n].id, '从队长的下一个座位开始');
+  await assert.rejects(room.act('u1', 'avalon', { kind: 'speechDone' }), /不是你发言/, '没轮到不能说完');
+  await assert.rejects(room.act('u1', 'avalon', { kind: 'vote', yes: true }), /不是投票的时候/, '发言没结束不能投票');
+  await until(() => g.speaker() === 'u1');
+  await assert.rejects(room.act('u1', 'avalon', { kind: 'speechDone', team: ['u1'] }), /要选 2 个人/);
+  await room.act('u1', 'avalon', { kind: 'speechDone', team: ['bot-2', 'u1'] });
+  assert.equal(g.stage, 'vote', '队长归票完开始投票');
+  assert.deepEqual([...g.team].sort(), ['bot-2', 'u1'], '归票时换了人');
   await room.act('u1', 'avalon', { kind: 'vote', yes: true });
   assert.equal(room.viewFor('u1').self.myVote, true);
   assert.equal(room.viewFor('bot-1').self.myVote, null, '开票前看不到别人投的什么');
@@ -408,4 +421,30 @@ test('房间：存档读档后接着跑完', async () => {
   await until(() => back.ended, 15000);
   assert.ok(back.ended);
   await back.teardown();
+});
+
+test('顺序发言：队长提名后从下一个座位起每人一轮，队长最后归票（可以换人），然后投票；被否决后下一任队长重新来', () => {
+  const players = Array.from({ length: 6 }, (_, i) => ({ id: `p${i + 1}`, name: `玩家${i + 1}` }));
+  const g = new Avalon(players, { options: { speech: true }, leader: 2 });
+  for (const p of players) g.setReady(p.id);
+  g.begin();
+  g.propose('p3', ['p3', 'p5']);
+  assert.equal(g.stage, 'speech');
+  assert.deepEqual(g.speakers, ['p4', 'p5', 'p6', 'p1', 'p2', 'p3'], '队长 3 号：从 4 号起，队长最后');
+  assert.throws(() => g.endSpeech('p5'), /不是你发言/);
+  assert.throws(() => g.vote('p1', true), /不是投票的时候/);
+  for (const id of ['p4', 'p5', 'p6', 'p1', 'p2']) assert.equal(g.endSpeech(id, ['p1', 'p2']).vote, false, '不是队长：带队伍也不改');
+  assert.deepEqual(g.team, ['p3', 'p5']);
+  const out = g.endSpeech('p3', ['p6', 'p3']);
+  assert.deepEqual(out, { vote: true, changed: true });
+  assert.deepEqual(g.team, ['p3', 'p6'], '归票换了人，按座位排');
+  assert.equal(g.stage, 'vote');
+  for (const p of players) g.vote(p.id, false);
+  g.tally();
+  assert.equal(g.stage, 'propose');
+  assert.equal(g.leaderId(), 'p4');
+  g.propose('p4', ['p4', 'p1']);
+  assert.equal(g.speaker(), 'p5', '新队长的下一个座位先说');
+  const back = Avalon.fromJSON(JSON.parse(JSON.stringify(g)));
+  assert.equal(back.speaker(), 'p5', '存档读回来接着发言');
 });
