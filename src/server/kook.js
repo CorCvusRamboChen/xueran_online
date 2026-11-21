@@ -219,14 +219,15 @@ const kmd = (content) => ({ type: 'section', text: { type: 'kmarkdown', content 
 const chn = (id) => `(chn)${id}(chn)`;
 
 // 服务器里的布局（2026-11-21 用户：KOOK 服务器支持几桌同时玩，频道我们自己布置）：
-//   「血染钟楼」分组：📜 怎么玩（说明 + 桌子一览，机器人随时更新）
+//   📌 欢迎（新人必看、公告、桌子一览，只读）、💬 社区（闲聊、约局、复盘、反馈、闲聊语音），见 setup
 //   每一桌一个分组「🎲 N号桌」：💬 N号桌（文字：领进入链接、聊天）+ 🔊 N号桌·广场（语音）
 //   私聊房间开在这一桌的分组里（createRoom 跟着广场的分组走），一桌的东西都在一处，几桌同时玩互不打扰。
 // 每一桌的文字频道就是一个房间（房间 key = 服务器:文字频道），广场固定是这一桌的语音频道。
 export const TABLE_NAMES = (n) => ({ category: `🎲 ${n}号桌`, text: `💬 ${n}号桌`, voice: `🔊 ${n}号桌·广场` });
-const HUB_NAMES = { category: '🕯 血染钟楼', guide: '📜 怎么玩' };
+const HUB_NAMES = { category: '📌 欢迎', welcome: '👋 新人必看', announce: '📢 公告', board: '📋 桌子一览' };
+const COMMUNITY_NAMES = { category: '💬 社区', chat: '💬 闲聊', lfg: '🙋 约局', replay: '📖 复盘分享', feedback: '💡 建议反馈', voice: '🔊 闲聊语音' };
 
-/** 布局存档：{ [服务器]: { hub: { category, guide, boardMsg }, tables: [{ n, category, text, voice }] } } */
+/** 布局存档：{ [服务器]: { hub: { category, welcome, announce, board, boardMsg }, community: {…}, tables: [{ n, category, text, voice, card }] } } */
 function layoutStore(file) {
   let data = {};
   let seen = 0;
@@ -318,11 +319,12 @@ export class KookBot extends EventEmitter {
       const gid = await this.guildOfChannel(ch);
       if (!(await this.isAdmin(gid, uid))) { await this.say(ch, '只有服务器主和有「频道管理」权限的人能布置桌子。'); return; }
       const have = this.layout.get(gid)?.tables.length ?? 0;
-      const want = /^(加桌|add)$/.test(verb) ? have + 1 : Math.max(have, Math.min(MAX_TABLES, Math.max(1, num ?? 3)));
+      // 不写数字：已有几桌就几桌（第一次 3 桌）；写了数字只加不减（减桌要管理员自己删频道）
+      const want = /^(加桌|add)$/.test(verb) ? have + 1 : num ? Math.max(have, Math.min(MAX_TABLES, Math.max(1, num))) : have || 3;
       if (want > MAX_TABLES) { await this.say(ch, `最多 ${MAX_TABLES} 桌。`); return; }
       try {
         const lay = await this.setup(gid, want);
-        await this.say(ch, `布置好了：${lay.tables.length} 桌。说明和桌子一览在 ${chn(lay.hub.guide)}；想玩的人进一桌的文字频道点按钮领链接。`);
+        await this.say(ch, `布置好了：${lay.tables.length} 桌。新人必看在 ${chn(lay.hub.welcome)}，桌子一览在 ${chn(lay.hub.board)}；想玩的人进一桌的文字频道点按钮领链接。`);
       } catch (e) {
         console.warn('[kook] 布置桌子失败：', e.message);
         await this.say(ch, `布置失败：${e.message}（机器人要有「频道管理」「管理角色权限」权限）`);
@@ -335,7 +337,7 @@ export class KookBot extends EventEmitter {
   helpText() {
     return '**血染钟楼机器人**\n'
       + '`/血染`：在这个频道发一张开局卡片\n'
-      + `\`/血染 布置 3\`：管理员用，建好 3 桌（每桌一个文字频道 + 一个广场语音，最多 ${MAX_TABLES} 桌）；再发一次会补上被删掉的频道\n`
+      + `\`/血染 布置 3\`：管理员用，布置整个服务器（欢迎、社区分区）并建好 3 桌（每桌一个文字频道 + 一个广场语音，最多 ${MAX_TABLES} 桌）；再发一次会补上被删掉的频道\n`
       + '`/血染 加桌`：管理员用，再加一桌';
   }
 
@@ -350,43 +352,126 @@ export class KookBot extends EventEmitter {
     return (g.roles ?? []).some((r) => mine.has(String(r.role_id)) && (Number(r.permissions) & ADMIN_PERM));
   }
 
-  /** 建（或补齐）布局：一个说明分组 + n 桌。已有的频道还在就沿用，被删掉的重建。返回布局。 */
+  /**
+   * 建（或补齐）整个服务器的布局，按 Discord 社区常见的分区（欢迎 → 社区 → 游戏），每个分组四五个频道：
+   *   📌 欢迎：👋 新人必看（欢迎 + 怎么玩 + 规则）、📢 公告、📋 桌子一览 —— 都只读，只有管理员和机器人能发
+   *   💬 社区：💬 闲聊、🙋 约局、📖 复盘分享、💡 建议反馈、🔊 闲聊语音
+   *   🎲 N号桌 × n：💬 N号桌、🔊 N号桌·广场（私聊房间也开在这里）
+   * 已有的频道还在就沿用（名字、分组对不上的改回来），被删掉的重建；服务器建好时默认的「文字频道」「语音频道」
+   * 收进社区当闲聊，空下来的默认分组删掉。返回布局。
+   */
   async setup(gid, n) {
-    const old = this.layout.get(gid) ?? { hub: {}, tables: [] };
-    const alive = async (id) => !!id && !!(await this.api.get('/channel/view', { target_id: id }).catch(() => null));
-    const mk = (body) => this.api.post('/channel/create', { guild_id: gid, ...body }).then((c) => String(c.id));
-    const hub = { ...old.hub };
-    if (!(await alive(hub.category))) { hub.category = await mk({ name: HUB_NAMES.category, is_category: 1 }); hub.guide = null; }
-    let freshGuide = false;
-    if (!(await alive(hub.guide))) { hub.guide = await mk({ name: HUB_NAMES.guide, type: 1, parent_id: hub.category }); hub.boardMsg = null; freshGuide = true; }
+    const old = this.layout.get(gid) ?? {};
+    const g = await this.api.get('/guild/view', { guild_id: gid });
+    const all = (g.channels ?? []).map((c) => ({ ...c, id: String(c.id), parent_id: String(c.parent_id ?? '') }));
+    const byId = new Map(all.map((c) => [c.id, c]));
+    const used = new Set();
+    // 一个位置：先认存档里的 id，再按名字认（含默认频道的旧名），都没有就建
+    const ensure = async (id, { name, parent = null, cat = false, type = 1, alias = [], extra = {} }) => {
+      let c = id && byId.get(String(id));
+      if (id && !c) { const v = await this.api.get('/channel/view', { target_id: id }).catch(() => null); if (v) { c = { ...v, id: String(v.id), parent_id: String(v.parent_id ?? '') }; byId.set(c.id, c); } } // 接口给的列表里不一定有分组
+      if (!c) c = all.find((x) => !used.has(x.id) && !!x.is_category === cat && (x.name === name || alias.includes(x.name)) && (cat || x.type === type));
+      if (c) {
+        used.add(c.id);
+        const patch = {};
+        if (c.name !== name) patch.name = name;
+        if (!cat && parent && c.parent_id !== parent) patch.parent_id = parent;
+        if (Object.keys(patch).length) await this.api.post('/channel/update', { channel_id: c.id, ...patch }).catch((e) => console.warn('[kook] 改频道失败：', e.message));
+        return { id: c.id, fresh: false };
+      }
+      const made = await this.api.post('/channel/create', cat ? { guild_id: gid, name, is_category: 1 } : { guild_id: gid, name, type, ...(parent ? { parent_id: parent } : {}), ...extra });
+      used.add(String(made.id));
+      return { id: String(made.id), fresh: true };
+    };
+
+    // 📌 欢迎
+    const hub = { ...(old.hub ?? {}) };
+    hub.category = (await ensure(hub.category, { name: HUB_NAMES.category, cat: true, alias: ['🕯 血染钟楼'] })).id;
+    const welcome = await ensure(hub.welcome, { name: HUB_NAMES.welcome, parent: hub.category });
+    const announce = await ensure(hub.announce, { name: HUB_NAMES.announce, parent: hub.category });
+    const board = await ensure(hub.board, { name: HUB_NAMES.board, parent: hub.category, alias: ['📜 怎么玩'] });
+    Object.assign(hub, { welcome: welcome.id, announce: announce.id, board: board.id });
+    if (board.fresh) hub.boardMsg = null;
+    for (const ch of [hub.welcome, hub.announce, hub.board]) await this.readOnly(ch).catch((e) => console.warn('[kook] 设只读失败：', e.message));
+
+    // 💬 社区（收编默认的「文字分组 / 文字频道 / 语音频道」）
+    const com = { ...(old.community ?? {}) };
+    com.category = (await ensure(com.category, { name: COMMUNITY_NAMES.category, cat: true, alias: ['文字分组'] })).id;
+    com.chat = (await ensure(com.chat, { name: COMMUNITY_NAMES.chat, parent: com.category, alias: ['文字频道'] })).id;
+    const lfg = await ensure(com.lfg, { name: COMMUNITY_NAMES.lfg, parent: com.category });
+    com.lfg = lfg.id;
+    com.replay = (await ensure(com.replay, { name: COMMUNITY_NAMES.replay, parent: com.category })).id;
+    com.feedback = (await ensure(com.feedback, { name: COMMUNITY_NAMES.feedback, parent: com.category })).id;
+    com.voice = (await ensure(com.voice, { name: COMMUNITY_NAMES.voice, parent: com.category, type: 2, alias: ['语音频道'], extra: { limit_amount: 50 } })).id;
+
+    // 🎲 每一桌
     const tables = [];
     for (let i = 1; i <= n; i++) {
       const names = TABLE_NAMES(i);
-      const t = { n: i, ...(old.tables.find((x) => x.n === i) ?? {}) };
-      if (!(await alive(t.category))) { t.category = await mk({ name: names.category, is_category: 1 }); t.text = null; t.voice = null; }
-      let freshText = false;
-      if (!(await alive(t.text))) { t.text = await mk({ name: names.text, type: 1, parent_id: t.category }); freshText = true; }
-      if (!(await alive(t.voice))) t.voice = await mk({ name: names.voice, type: 2, parent_id: t.category, limit_amount: 30 });
+      const t = { n: i, ...((old.tables ?? []).find((x) => x.n === i) ?? {}) };
+      t.category = (await ensure(t.category, { name: names.category, cat: true })).id;
+      const text = await ensure(t.text, { name: names.text, parent: t.category });
+      t.text = text.id;
+      t.voice = (await ensure(t.voice, { name: names.voice, parent: t.category, type: 2, extra: { limit_amount: 30 } })).id;
       tables.push(t);
       this.guildOf.set(t.text, gid);
-      if (freshText || !t.card) t.card = (await this.postLauncher(t.text, t).catch(() => null))?.msg_id ?? null;
+      if (text.fresh || !t.card) t.card = (await this.postLauncher(t.text, t).catch(() => null))?.msg_id ?? null;
     }
-    const lay = { hub, tables };
+
+    // 默认的「语音分组」里的频道都搬走了：空分组删掉
+    for (const c of all) {
+      if (c.is_category && c.name === '语音分组' && !used.has(c.id) && !all.some((x) => x.parent_id === c.id && !used.has(x.id))) {
+        await this.api.post('/channel/delete', { channel_id: c.id }).catch(() => {});
+      }
+    }
+    // 分组排序：欢迎、社区、各桌
+    const order = [hub.category, com.category, ...tables.map((t) => t.category)];
+    for (const [i, id] of order.entries()) await this.api.post('/channel/update', { channel_id: id, level: i + 1 }).catch(() => {});
+    // 分组里的频道也排好（建服时的默认频道 level 是 200，不排的话新建的会跑到它前面）
+    const inner = [[hub.welcome, hub.announce, hub.board], [com.chat, com.lfg, com.replay, com.feedback, com.voice], ...tables.map((t) => [t.text, t.voice])];
+    for (const list of inner) for (const [i, id] of list.entries()) await this.api.post('/channel/update', { channel_id: id, level: i + 1 }).catch(() => {});
+
+    const lay = { hub, community: com, tables };
     this.layout.set(gid, lay);
-    if (freshGuide) await this.api.post('/message/create', { type: 10, target_id: hub.guide, content: this.guideCard() }).catch((e) => console.warn('[kook] 发说明失败：', e.message));
+    if (welcome.fresh) for (const c of [this.welcomeCard(lay), this.rulesCard()]) await this.api.post('/message/create', { type: 10, target_id: hub.welcome, content: c }).catch((e) => console.warn('[kook] 发新人必看失败：', e.message));
+    if (lfg.fresh) await this.api.post('/channel/update', { channel_id: com.lfg, topic: '想开一局在这里喊：几点、几个人、想玩哪个剧本' }).catch(() => {});
     this.boardShown.delete(gid);
     await this.refreshBoard(gid).catch((e) => console.warn('[kook] 发桌子一览失败：', e.message));
     return lay;
   }
 
-  guideCard() {
+  /** 只读频道：全体成员能看不能发，机器人能发（管理员本来就能发）。 */
+  async readOnly(ch) {
+    const set = async (type, value, allow, deny) => {
+      await this.api.post('/channel-role/create', { channel_id: ch, type, value }).catch(() => {});
+      await this.api.post('/channel-role/update', { channel_id: ch, type, value, allow, deny });
+    };
+    if (this.me?.id) await set('user_id', String(this.me.id), PERM.view | PERM.send, 0);
+    await set('role_id', EVERYONE, PERM.view, PERM.send);
+  }
+
+  welcomeCard(lay) {
     return card('secondary', [
-      { type: 'header', text: { type: 'plain-text', content: '怎么玩血染钟楼' } },
-      kmd('1. 挑一桌没人玩的（看下面的**桌子一览**），进这一桌的 🔊 广场语音。\n'
-        + '2. 在这一桌的 💬 文字频道点「领取我的进入链接」，机器人只发给你自己，在浏览器里打开就进了这一桌。\n'
-        + '3. 第一个进来的是房主，人齐了在网页里开局。\n'
-        + '夜里机器人会在这一桌的广场里闭麦闭耳；白天私聊时把人拉进这一桌分组下的临时语音房间，聊完送回广场。几桌同时玩互不打扰。'),
-      { type: 'context', elements: [{ type: 'plain-text', content: '没进本桌广场语音的人夜里不会被闭麦，私聊也拉不到他。' }] },
+      { type: 'header', text: { type: 'plain-text', content: '欢迎来到血染钟楼' } },
+      kmd('这里用 KOOK 语音 + 网页玩《血染钟楼》，**AI 说书人**主持，不用真人说书人也能开。\n\n'
+        + '**三步开一局**\n'
+        + `1. 看 ${chn(lay.hub.board)}，挑一桌空着的，进这一桌的 🔊 广场语音。\n`
+        + '2. 在这一桌的 💬 文字频道点「领取我的进入链接」，机器人只发给你自己，用浏览器打开。\n'
+        + '3. 第一个进来的是房主，人齐了在网页里开局。第一次玩可以先点网页里的「新手教程」。\n\n'
+        + `人不够就去 ${chn(lay.community.lfg)} 喊一声；打完可以在 ${chn(lay.community.replay)} 晒复盘；有问题、想要新功能去 ${chn(lay.community.feedback)}。`),
+      { type: 'context', elements: [{ type: 'plain-text', content: '夜里机器人会在本桌广场闭麦闭耳，白天私聊会把人拉进本桌分组下的临时房间，聊完送回广场。几桌同时玩互不打扰。' }] },
+    ]);
+  }
+
+  rulesCard() {
+    return card('warning', [
+      { type: 'header', text: { type: 'plain-text', content: '规则' } },
+      kmd('1. **友善**：对事不对人。骗人是游戏的一部分，游戏外不翻旧账。\n'
+        + '2. **不聊场外**：游戏中不在别的频道、私信、别的语音里透露角色和信息；死了也别剧透给还活着的人。\n'
+        + '3. **不晒身份**：不截图、不拍屏证明自己的角色，只能用嘴说。\n'
+        + '4. **玩完再走**：进了桌就打完；有事要走先跟房主说一声。\n'
+        + '5. **夜里闭麦是正常的**：机器人闭的麦和耳机别自己解，天亮会自动解开。\n'
+        + '6. **对新人耐心**：规则问题帮忙解释；说书人的裁决有疑问，赛后去建议反馈里说。'),
     ]);
   }
 
@@ -410,14 +495,14 @@ export class KookBot extends EventEmitter {
   /** 桌子一览：内容变了才改（第一次发一条新的，记下消息 id）。 */
   async refreshBoard(gid) {
     const lay = this.layout.get(gid);
-    if (!lay?.hub?.guide || !lay.tables.length) return;
+    if (!lay?.hub?.board || !lay.tables.length) return;
     const content = this.boardCard(gid);
     if (this.boardShown.get(gid) === content) return;
     if (lay.hub.boardMsg) {
       const ok = await this.api.post('/message/update', { msg_id: lay.hub.boardMsg, content }).then(() => true).catch(() => false);
       if (ok) { this.boardShown.set(gid, content); return; }
     }
-    const m = await this.api.post('/message/create', { type: 10, target_id: lay.hub.guide, content });
+    const m = await this.api.post('/message/create', { type: 10, target_id: lay.hub.board, content });
     lay.hub.boardMsg = m?.msg_id ?? null;
     this.layout.set(gid, lay);
     this.boardShown.set(gid, content);

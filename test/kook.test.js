@@ -31,6 +31,7 @@ function fakeKook() {
   const channels = new Map([['square', { id: 'square', guild_id: 'G', parent_id: 'cat', type: 2 }], ['text', { id: 'text', guild_id: 'G', type: 1 }]]);
   let seq = 0;
   const messages = new Map();
+  const roles = [];
   const handlers = {
     'GET /user/me': () => ({ id: 'BOT', username: '血染机器人', identify_num: '0001' }),
     'GET /channel-user/get-joined-channel': (q) => ({ items: voice.get(q.user_id) ? [{ id: voice.get(q.user_id) }] : [] }),
@@ -40,12 +41,13 @@ function fakeKook() {
     'POST /channel/move-user': (b) => { for (const u of b.user_ids) { if (!voice.get(u)) throw new Error('用户不在语音'); voice.set(u, b.target_id); } return []; },
     'GET /channel/view': (q) => { const c = channels.get(q.target_id); if (!c) throw new Error('频道不存在'); return c; },
     'POST /channel/create': (b) => { const c = { id: `room${++seq}`, guild_id: b.guild_id, name: b.name, parent_id: b.parent_id ?? '', type: b.is_category ? 0 : b.type ?? 1, is_category: !!b.is_category }; channels.set(c.id, c); return c; },
-    'GET /guild/view': () => ({ id: 'G', user_id: 'OWNER', roles: [{ role_id: 7, permissions: 32 }, { role_id: 8, permissions: 2048 }] }),
+    'GET /guild/view': () => ({ id: 'G', user_id: 'OWNER', roles: [{ role_id: 7, permissions: 32 }, { role_id: 8, permissions: 2048 }], channels: [...channels.values()] }),
+    'POST /channel/update': (b) => { const c = channels.get(b.channel_id); if (!c) throw new Error('频道不存在'); for (const k of ['name', 'parent_id', 'level', 'topic']) if (k in b) c[k] = b[k]; return c; },
+    'POST /channel-role/update': (b) => { roles.push(b); return b; },
     'POST /message/update': (b) => { if (!messages.has(b.msg_id)) throw new Error('消息不存在'); messages.set(b.msg_id, b.content); return []; },
     'POST /channel/delete': (b) => { channels.delete(b.channel_id); return []; },
     'GET /channel/user-list': (q) => [...voice].filter(([, ch]) => ch === q.channel_id).map(([id]) => ({ id })),
     'POST /channel-role/create': () => ({}),
-    'POST /channel-role/update': (b) => b,
     'POST /channel-role/delete': () => [],
     'GET /user/view': (q) => ({ id: q.user_id, username: 'xiaoming', nickname: '小明', avatar: 'https://img.kookapp.cn/a.png', roles: q.user_id === 'MOD' ? [7] : [8] }),
     'POST /message/create': (b) => { const id = `m${++seq}`; messages.set(id, b.content); return { msg_id: id }; },
@@ -61,7 +63,7 @@ function fakeKook() {
     try { body = { code: 0, message: 'ok', data: h ? h(args) : [] }; } catch (e) { body = { code: 40000, message: e.message }; }
     return { status: 200, json: async () => body };
   };
-  return { fetch, calls, voice, mic, headset, channels, messages };
+  return { fetch, calls, voice, mic, headset, channels, messages, roles };
 }
 
 class NoWS { constructor() { this.readyState = 0; } on() {} send() {} terminate() {} }
@@ -209,6 +211,7 @@ test('KOOK 布置桌子：只有服务器主 / 频道管理能布置；每桌一
   const cards = k.calls.filter(([key, b]) => key === 'POST /message/create' && b.type === 10 && /botc-join/.test(b.content)).map(([, b]) => b.target_id);
   assert.deepEqual(cards, lay.tables.map((t) => t.text), '每一桌的文字频道一张开局卡片');
   assert.match(k.messages.get(lay.hub.boardMsg), /桌子一览/);
+  assert.equal(k.calls.find(([key, b]) => key === 'POST /message/create' && b.content.includes('桌子一览'))[1].target_id, lay.hub.board);
   assert.match(k.messages.get(lay.hub.boardMsg), /1号桌.*空着/);
 
   // 再发一次：不重复建；删掉的频道补回来
@@ -251,4 +254,41 @@ test('KOOK 桌子的进入链接：门票的频道是这一桌的文字频道，
   assert.ok(sent.content.includes(`(chn)${t.voice}(chn)`), '提醒进本桌广场');
   const url = JSON.parse(sent.content)[0].modules.find((m) => m.type === 'action-group').elements[0].value;
   assert.equal(verifyTicket('sec', new URL(url).searchParams.get('kt')).c, t.text);
+});
+
+test('KOOK 布置整个服务器：欢迎（只读）、社区、各桌三个分区；建服时默认的文字/语音频道收进社区，空掉的默认分组删掉', async () => {
+  const k = fakeKook();
+  for (const c of [
+    { id: 'dcat1', name: '文字分组', is_category: true, type: 0, parent_id: '' },
+    { id: 'dtext', name: '文字频道', type: 1, parent_id: 'dcat1' },
+    { id: 'dcat2', name: '语音分组', is_category: true, type: 0, parent_id: '' },
+    { id: 'dvoice', name: '语音频道', type: 2, parent_id: 'dcat2' },
+  ]) k.channels.set(c.id, c);
+  const bot = await mkBot(k);
+  await say(bot, 'OWNER', '/血染 布置 2', 'dtext');
+  const lay = bot.layout.get('G');
+  assert.equal(lay.community.category, 'dcat1', '默认的文字分组改成社区');
+  assert.equal(k.channels.get('dcat1').name, '💬 社区');
+  assert.equal(lay.community.chat, 'dtext');
+  assert.equal(k.channels.get('dtext').name, '💬 闲聊');
+  assert.equal(lay.community.voice, 'dvoice');
+  assert.equal(k.channels.get('dvoice').parent_id, 'dcat1', '默认语音频道搬进社区');
+  assert.ok(!k.channels.has('dcat2'), '空掉的语音分组删了');
+  for (const id of [lay.community.lfg, lay.community.replay, lay.community.feedback]) assert.equal(k.channels.get(id).parent_id, 'dcat1');
+  for (const id of [lay.hub.welcome, lay.hub.announce, lay.hub.board]) {
+    assert.equal(k.channels.get(id).parent_id, lay.hub.category);
+    assert.ok(k.roles.some((r) => r.channel_id === id && r.type === 'role_id' && r.value === '0' && (r.deny & (1 << 12))), '全体成员不能发言');
+    assert.ok(k.roles.some((r) => r.channel_id === id && r.type === 'user_id' && r.value === 'BOT' && (r.allow & (1 << 12))), '机器人能发');
+  }
+  const welcome = k.calls.filter(([key, b]) => key === 'POST /message/create' && b.target_id === lay.hub.welcome).map(([, b]) => b.content);
+  assert.equal(welcome.length, 2, '欢迎 + 规则');
+  assert.ok(welcome[0].includes(`(chn)${lay.hub.board}(chn)`));
+  const order = [lay.hub.category, 'dcat1', ...lay.tables.map((t) => t.category)].map((id) => k.channels.get(id).level);
+  assert.deepEqual(order, [1, 2, 3, 4], '欢迎、社区、各桌');
+
+  // 再布置一次：什么都不新建，欢迎卡片不重发
+  const n = k.calls.filter(([key]) => key === 'POST /channel/create').length;
+  await say(bot, 'OWNER', '/血染 布置', 'dtext');
+  assert.equal(k.calls.filter(([key]) => key === 'POST /channel/create').length, n);
+  assert.equal(k.calls.filter(([key, b]) => key === 'POST /message/create' && b.target_id === lay.hub.welcome).length, 2);
 });

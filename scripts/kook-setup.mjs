@@ -17,5 +17,5 @@ if (!gid) {
 }
 const lay = await bot.setup(String(gid), Math.max(1, Math.min(10, Number(n) || 3)));
 for (const t of lay.tables) console.log(`${t.n}号桌：文字 ${t.text}，广场 ${t.voice}，分组 ${t.category}`);
-console.log(`说明频道 ${lay.hub.guide}，桌子一览消息 ${lay.hub.boardMsg}`);
+console.log(`新人必看 ${lay.hub.welcome}，桌子一览 ${lay.hub.board}（消息 ${lay.hub.boardMsg}），社区 ${lay.community.category}`);
 process.exit(0);
