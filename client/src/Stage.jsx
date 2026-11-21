@@ -131,20 +131,23 @@ function Gallows({ p }) {
   );
 }
 
-/** 盯着自己的私密信息：新到的弹一个技能检定。 */
+/**
+ * 盯着自己的私密信息：新到的弹一个技能检定。一起到的几条排队一条条弹（以前只弹最后一条：
+ * 恶魔先收到「疯子今晚选了谁」、紧接着「疯子选好了，轮到你」，前一条就被盖掉了）。
+ */
 export function useChecks(inbox, epoch) {
   const seen = useRef(null);
   const epochRef = useRef(epoch);
-  const [check, setCheck] = useState(null);
+  const [queue, setQueue] = useState([]);
   useEffect(() => {
     const list = inbox ?? [];
     const last = list.at(-1)?.id ?? 0;
     if (realign(seen, epochRef, epoch, last)) return;
     const fresh = list.filter((m) => m.id > seen.current);
     seen.current = Math.max(seen.current, last);
-    if (fresh.length) setCheck({ ...fresh.at(-1), key: fresh.at(-1).id });
+    if (fresh.length) setQueue((q) => [...q, ...fresh.map((m) => ({ ...m, key: m.id }))].slice(-4));
   }, [inbox, epoch]);
-  return [check, useCallback(() => setCheck(null), [])];
+  return [queue[0] ?? null, useCallback(() => setQueue((q) => q.slice(1)), [])];
 }
 
 export function SkillCheck({ check, onClose }) {

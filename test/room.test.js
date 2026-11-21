@@ -1515,3 +1515,30 @@ test('最短夜晚：大家都选完了也要等到 25 秒才天亮；房主立�
     assert.notEqual(g.phase, 'night', '到点就天亮');
   } finally { room.reset(); }
 });
+
+test('疯子选完：真恶魔的选人面板一直挂着「疯子今晚选了谁」（只发私密信息时会被紧跟的「轮到你」盖掉）', async () => {
+  const { room } = setup('auto');
+  await room.act('u1', 'join'); await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 7 });
+  await room.act('u1', 'settings', { script: 'bmr' });
+  await room.act('u1', 'assignRole', { player: 'u1', role: 'pukka' });
+  await room.act('u1', 'assignRole', { player: 'u2', role: 'lunatic' });
+  await room.act('u1', 'start');
+  try {
+    const g = room.game;
+    const bot = g.players.find((p) => p.id !== 'u1' && p.id !== 'u2');
+    g.choices = { ...g.choices, u2: { targets: [bot.id], role: null } };
+    assert.equal(room.lunaticPickFor('u1', { waiting: false }), `疯子 ${g.name('u2')} 今晚选了：${g.name(bot.id)}。`);
+    assert.equal(room.lunaticPickFor('u1', { waiting: true }), null, '还在等疯子时不显示');
+    assert.equal(room.lunaticPickFor('u2', { waiting: false }), null, '疯子自己看不到');
+    g.choices.u2 = { targets: [], role: null };
+    assert.match(room.lunaticPickFor('u1', { waiting: false }), /没有选人/);
+    // 身份页一直写着谁是疯子：第一夜结束后才有，只给真恶魔
+    if (g.phase === 'night' && g.night === 1) assert.equal(room.lunaticKnownFor('u1'), null, '第一夜还没告诉');
+    g.night = 2;
+    assert.deepEqual(room.lunaticKnownFor('u1'), { id: 'u2', as: g.get('u2').shownRole });
+    assert.deepEqual(room.viewFor('u1').self.lunatic, { id: 'u2', as: g.get('u2').shownRole });
+    assert.equal(room.viewFor('u2').self.lunatic, null, '疯子自己不知道');
+    assert.equal(room.lunaticKnownFor(bot.id), null, '别人不知道');
+  } finally { await room.teardown(); }
+});

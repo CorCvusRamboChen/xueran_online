@@ -985,6 +985,33 @@ export class Room {
     return [targets.map((x) => g.name(x)).join('、'), role ? `角色「${ROLES[role].name}」` : ''].filter(Boolean).join(' ');
   }
 
+  /**
+   * 真恶魔选人的面板上一直挂着「疯子今晚选了谁」：原来只发一条私密信息，紧接着又来一条「疯子选好了，轮到你」，
+   * 弹窗只弹最后一条，恶魔就看不到疯子的刀口（2026-11-21 九人局）。文案和引擎发的那条一样（英文版已有翻译）。
+   */
+  lunaticPickFor(uid, prompt) {
+    const g = this.game;
+    if (!prompt || prompt.waiting || ROLES[g.get(uid)?.role]?.team !== 'demon') return null;
+    const lun = g.players.find((q) => q.role === 'lunatic' && q.id !== uid && g.choices?.[q.id]);
+    if (!lun) return null;
+    const c = g.choices[lun.id];
+    const ts = Array.isArray(c) ? c : c.targets ?? [];
+    return `疯子 ${g.name(lun.id)} 今晚${ts.length ? `选了：${ts.map((t) => g.name(t)).join('、')}` : '没有选人'}。`;
+  }
+
+  /**
+   * 真恶魔的身份页上一直写着谁是疯子（以前只在第一夜发一条私密信息，弹窗 9 秒就关了，之后找不到）。
+   * 梦殒春宵引擎按 lunaticTellTo（每个被告知过的恶魔）；黯月初升只告诉第一夜的恶魔，第一夜结束后才显示。
+   */
+  lunaticKnownFor(uid) {
+    const g = this.game;
+    if (!g || ROLES[g.get(uid)?.role]?.team !== 'demon') return null;
+    const lun = g.players.find((q) => q.role === 'lunatic' && q.id !== uid);
+    if (!lun) return null;
+    const told = g.lunaticTellTo ? g.lunaticTellTo.includes(uid) : uid === g.firstDemon && (g.night > 1 || g.phase !== 'night');
+    return told ? { id: lun.id, as: lun.shownRole ?? null } : null;
+  }
+
   /** 自动模式直接告诉玩家；真人模式先进说书人的待审队列。 */
   deliver(messages) {
     const g = this.game;
@@ -4113,6 +4140,7 @@ export class Room {
           chosen: g.choices[uid] ? (Array.isArray(g.choices[uid]) ? g.choices[uid] : g.choices[uid].targets) : null,
           chosenRole: g.choices[uid]?.role ?? null,
           optional: !!prompt.optional, pickRole: !!prompt.pickRole, roleOptions: prompt.roleOptions ?? null, waiting: !!prompt.waiting,
+          lunaticPick: this.lunaticPickFor(uid, prompt),
         },
         moonchild: g.pendingMoonchild === uid ? 'real' : this.moonchildFakes?.has(uid) ? 'fake' : null,
         gossipDone: !!g.gossipSaid?.[uid],
@@ -4135,6 +4163,7 @@ export class Room {
           bluffsMine: uid === g.firstDemon,
           bluffsShared: !!g.bluffsShared || !!this.settings.minionBluffs,
         }),
+        lunatic: this.lunaticKnownFor(uid),
       };
     }
     if (isST) {

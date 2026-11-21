@@ -514,6 +514,12 @@ function Game({ s, act, ask }) {
           {shown === 'role' && me && <RoleCard me={me} />}
           {shown === 'role' && me?.bluffs && <BluffCards me={me} act={act} />}
           {shown === 'role' && me && !me.bluffs && <EvilNote me={me} />}
+          {shown === 'role' && me?.lunatic && (
+            <div className="bluffs">
+              <Tag tone="phy">疯子</Tag>
+              <p className="muted"><b>{name(me.lunatic.id)}</b> 是疯子：他以为自己是{ROLE_NAMES[me.lunatic.as] ?? '恶魔'}。每晚他选了谁，轮到你选人时会写在选人面板上。</p>
+            </div>
+          )}
           {shown === 'log' && <History log={s.log} players={s.players} ask={ask} epoch={s.logEpoch} />}
           {shown === 'votes' && <KeyInfo votes={s.votes} knives={s.knives} execs={s.execs} pubs={s.pubs} g={g} name={name} />}
           {shown === 'roster' && <Roster s={s} onTap={s.isST ? (p) => setSheet(p.id) : null} />}
@@ -1153,6 +1159,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
     return (
       <Panel title={v.who} tone={teamTone(roleId)} className="choose-pnl" extra={<Check color={v.color}>{v.skill}</Check>}>
         <p className="flavor-line">「{rk ? FLAVOR.ravenkeeper.wake : v.flavor?.wake}」</p>
+        {prompt?.lunaticPick && <p className="lead lunatic-pick">{prompt.lunaticPick}</p>}
         <p className="lead">{hint}</p>
         {roleId === 'imp' && <p className="muted">也可以选你自己：你会死去，一个活着的爪牙接任小恶魔（官方规则的"自杀传位"）。想空刀就选一名已经死了的玩家：今晚没人死。</p>}
         {roleId === 'po' && pickSpec.count === 3 && <p className="muted">你上次没有选人：今晚要选三名玩家。</p>}
