@@ -309,8 +309,11 @@ test('KOOK 小屋：布置时每桌建好隐藏的小屋；私聊借空小屋（
   await say(bot, 'OWNER', '/血染 布置 1');
   const [t] = bot.layout.get('G').tables;
   assert.equal(t.huts.length, 8);
+  const hutCat = bot.layout.get('G').hutCategory;
+  assert.ok(k.perms.get(hutCat).get('role_id:0').deny & (1 << 11), '普通成员看不到这个分组');
+  assert.ok(k.channels.get(hutCat).level > k.channels.get(t.category).level, '排在各桌后面');
   for (const ch of t.huts) {
-    assert.equal(k.channels.get(ch).parent_id, t.category);
+    assert.equal(k.channels.get(ch).parent_id, bot.layout.get('G').hutCategory, '小屋都在最底下的「私聊小屋」分组');
     assert.equal(k.channels.get(ch).type, 2);
     const every = k.perms.get(ch).get('role_id:0');
     assert.ok(every.deny & (1 << 11) && every.deny & (1 << 15), '全体成员看不见、进不去');

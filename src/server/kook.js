@@ -267,6 +267,7 @@ const voiceName = (t) => `**「${TABLE_NAMES(t.n).voice}」**`; // 语音频道�
 export const TABLE_NAMES = (n) => ({ category: `🎲 ${n}号桌`, text: `💬 ${n}号桌`, voice: `🔊 ${n}号桌·广场`, hut: (i) => `🏠 ${n}号桌·小屋${i}` });
 export const HUTS = 8; // 每桌预先建几间小屋（地图上的房子加私聊，一般用不了这么多）
 const HUB_NAMES = { category: '📌 欢迎', welcome: '👋 新人必看', announce: '📢 公告', board: '📋 桌子一览' };
+const HUTS_CATEGORY = '🔒 私聊小屋（机器人用）';
 const COMMUNITY_NAMES = { category: '💬 社区', chat: '💬 闲聊', lfg: '🙋 约局', replay: '📖 复盘分享', feedback: '💡 建议反馈', voice: '🔊 闲聊语音' };
 
 /** 布局存档：{ [服务器]: { hub: { category, welcome, announce, board, boardMsg }, community: {…}, tables: [{ n, category, text, voice, card }] } } */
@@ -447,6 +448,11 @@ export class KookBot extends EventEmitter {
     com.feedback = (await ensure(com.feedback, { name: COMMUNITY_NAMES.feedback, parent: com.category })).id;
     com.voice = (await ensure(com.voice, { name: COMMUNITY_NAMES.voice, parent: com.category, type: 2, alias: ['语音频道'], extra: { limit_amount: 50 } })).id;
 
+    // 🔒 私聊小屋：所有桌的小屋放在最底下一个分组里（服务器主、管理员看得到所有频道，KOOK 藏不住；
+    // 放在一起他们折叠一次就清爽了。2026-11-21 用户）。普通成员连这个分组都看不到。
+    const hutCat = await ensure(old.hutCategory, { name: HUTS_CATEGORY, cat: true });
+    if (hutCat.fresh) await this.hide(hutCat.id).catch((e) => console.warn('[kook] 藏小屋分组失败：', e.message));
+
     // 🎲 每一桌
     const tables = [];
     for (let i = 1; i <= n; i++) {
@@ -458,7 +464,7 @@ export class KookBot extends EventEmitter {
       t.voice = (await ensure(t.voice, { name: names.voice, parent: t.category, type: 2, extra: { limit_amount: 30 } })).id;
       const huts = [];
       for (let j = 1; j <= HUTS; j++) {
-        const h = await ensure(t.huts?.[j - 1], { name: names.hut(j), parent: t.category, type: 2, extra: { limit_amount: 20 } });
+        const h = await ensure(t.huts?.[j - 1], { name: names.hut(j), parent: hutCat.id, type: 2, extra: { limit_amount: 20 } });
         if (h.fresh) await this.hide(h.id).catch((e) => console.warn('[kook] 藏小屋失败：', e.message));
         huts.push(h.id);
       }
@@ -477,13 +483,13 @@ export class KookBot extends EventEmitter {
       }
     }
     // 分组排序：欢迎、社区、各桌
-    const order = [hub.category, com.category, ...tables.map((t) => t.category)];
+    const order = [hub.category, com.category, ...tables.map((t) => t.category), hutCat.id];
     for (const [i, id] of order.entries()) await this.api.post('/channel/update', { channel_id: id, level: i + 1 }).catch(() => {});
     // 分组里的频道也排好（建服时的默认频道 level 是 200，不排的话新建的会跑到它前面）
-    const inner = [[hub.welcome, hub.announce, hub.board], [com.chat, com.lfg, com.replay, com.feedback, com.voice], ...tables.map((t) => [t.text, t.voice, ...t.huts])];
+    const inner = [[hub.welcome, hub.announce, hub.board], [com.chat, com.lfg, com.replay, com.feedback, com.voice], ...tables.map((t) => [t.text, t.voice]), tables.flatMap((t) => t.huts)];
     for (const list of inner) for (const [i, id] of list.entries()) await this.api.post('/channel/update', { channel_id: id, level: i + 1 }).catch(() => {});
 
-    const lay = { hub, community: com, tables };
+    const lay = { hub, community: com, hutCategory: hutCat.id, tables };
     this.layout.set(gid, lay);
     if (welcome.fresh) for (const c of [this.welcomeCard(lay), this.rulesCard()]) await this.api.post('/message/create', { type: 10, target_id: hub.welcome, content: c }).catch((e) => console.warn('[kook] 发新人必看失败：', e.message));
     if (lfg.fresh) await this.api.post('/channel/update', { channel_id: com.lfg, topic: '想开一局在这里喊：几点、几个人、想玩哪个剧本' }).catch(() => {});
