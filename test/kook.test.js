@@ -32,6 +32,7 @@ function fakeKook() {
   let seq = 0;
   const messages = new Map();
   const roles = [];
+  const perms = new Map(); // 频道 → "type:value" → 覆写
   const handlers = {
     'GET /user/me': () => ({ id: 'BOT', username: '血染机器人', identify_num: '0001' }),
     'GET /channel-user/get-joined-channel': (q) => ({ items: voice.get(q.user_id) ? [{ id: voice.get(q.user_id) }] : [] }),
@@ -43,12 +44,13 @@ function fakeKook() {
     'POST /channel/create': (b) => { const c = { id: `room${++seq}`, guild_id: b.guild_id, name: b.name, parent_id: b.parent_id ?? '', type: b.is_category ? 0 : b.type ?? 1, is_category: !!b.is_category }; channels.set(c.id, c); return c; },
     'GET /guild/view': () => ({ id: 'G', user_id: 'OWNER', roles: [{ role_id: 7, permissions: 32 }, { role_id: 8, permissions: 2048 }], channels: [...channels.values()] }),
     'POST /channel/update': (b) => { const c = channels.get(b.channel_id); if (!c) throw new Error('频道不存在'); for (const k of ['name', 'parent_id', 'level', 'topic']) if (k in b) c[k] = b[k]; return c; },
-    'POST /channel-role/update': (b) => { roles.push(b); return b; },
+    'POST /channel-role/update': (b) => { roles.push(b); if (!perms.has(b.channel_id)) perms.set(b.channel_id, new Map()); perms.get(b.channel_id).set(`${b.type}:${b.value}`, b); return b; },
+    'GET /channel-role/index': (q) => ({ permission_overwrites: [], permission_users: [...(perms.get(q.channel_id)?.values() ?? [])].filter((b) => b.type === 'user_id').map((b) => ({ user: { id: b.value }, allow: b.allow, deny: b.deny })) }),
     'POST /message/update': (b) => { if (!messages.has(b.msg_id)) throw new Error('消息不存在'); messages.set(b.msg_id, b.content); return []; },
     'POST /channel/delete': (b) => { channels.delete(b.channel_id); return []; },
     'GET /channel/user-list': (q) => [...voice].filter(([, ch]) => ch === q.channel_id).map(([id]) => ({ id })),
     'POST /channel-role/create': () => ({}),
-    'POST /channel-role/delete': () => [],
+    'POST /channel-role/delete': (b) => { perms.get(b.channel_id)?.delete(`${b.type}:${b.value}`); return []; },
     'GET /user/view': (q) => ({ id: q.user_id, username: 'xiaoming', nickname: '小明', avatar: 'https://img.kookapp.cn/a.png', roles: q.user_id === 'MOD' ? [7] : [8] }),
     'POST /message/create': (b) => { const id = `m${++seq}`; messages.set(id, b.content); return { msg_id: id }; },
   };
@@ -63,7 +65,7 @@ function fakeKook() {
     try { body = { code: 0, message: 'ok', data: h ? h(args) : [] }; } catch (e) { body = { code: 40000, message: e.message }; }
     return { status: 200, json: async () => body };
   };
-  return { fetch, calls, voice, mic, headset, channels, messages, roles };
+  return { fetch, calls, voice, mic, headset, channels, messages, roles, perms };
 }
 
 class NoWS { constructor() { this.readyState = 0; } on() {} send() {} terminate() {} }
@@ -299,4 +301,42 @@ test('KOOK 布置整个服务器：欢迎（只读）、社区、各桌三个分
   const cardIds = lay.tables.map((t) => t.card);
   assert.deepEqual(k.calls.filter(([key, b]) => key === 'POST /message/update' && cardIds.includes(b.msg_id)).map(([, b]) => b.msg_id), cardIds, '已经发出去的开局卡片改成最新写法，不重发');
   assert.ok(!k.messages.get(cardIds[0]).includes('(chn)' + lay.tables[0].voice), '开局卡片里语音频道只写名字');
+});
+
+test('KOOK 小屋：布置时每桌建好隐藏的小屋；私聊借空小屋（不建频道），还回去时收回权限、改回名字，下次再借', async () => {
+  const k = fakeKook();
+  const bot = await mkBot(k);
+  await say(bot, 'OWNER', '/血染 布置 1');
+  const [t] = bot.layout.get('G').tables;
+  assert.equal(t.huts.length, 8);
+  for (const ch of t.huts) {
+    assert.equal(k.channels.get(ch).parent_id, t.category);
+    assert.equal(k.channels.get(ch).type, 2);
+    const every = k.perms.get(ch).get('role_id:0');
+    assert.ok(every.deny & (1 << 11) && every.deny & (1 << 15), '全体成员看不见、进不去');
+  }
+  k.voice.set('A', t.voice); k.voice.set('B', t.voice);
+  const hub = new VoiceHub(bot.platform, { file: path.join(tmp(), 'held.json'), oldFile: null, sweepMs: 0 });
+  const v = hub.forGuild('G', 'kook-G:' + t.text);
+  const scope = new Set([t.voice, ...t.huts]);
+  v.setScope(() => scope);
+  const before = k.calls.length;
+  const ch = await v.openRoom('铁匠铺', ['kook-A', 'kook-B'], null, t.voice);
+  const used = k.calls.slice(before).map(([key]) => key);
+  assert.equal(ch, t.huts[0], '借第一间小屋');
+  assert.ok(!used.includes('POST /channel/create'), '不现建频道');
+  assert.equal(k.voice.get('A'), ch);
+  assert.equal(k.voice.get('B'), ch);
+  assert.ok(k.perms.get(ch).has('user_id:A') && k.perms.get(ch).has('user_id:B'));
+  await new Promise((ok) => setTimeout(ok, 0));
+  assert.equal(k.channels.get(ch).name, '铁匠铺', '借出去时改成这次私聊的名字');
+  assert.equal(await v.openRoom('教堂', ['kook-A'], null, t.voice), t.huts[1], '借出去的不再借');
+
+  await v.closeRoom(ch, t.voice);
+  assert.ok(k.channels.has(ch), '小屋不删');
+  assert.equal(k.voice.get('B'), t.voice, '送回广场');
+  assert.ok(!k.perms.get(ch).has('user_id:A') && !k.perms.get(ch).has('user_id:B'), '收回进屋的人的权限');
+  assert.ok(k.perms.get(ch).has('user_id:BOT'), '机器人的留着');
+  assert.equal(k.channels.get(ch).name, '🏠 1号桌·小屋1', '名字改回去');
+  assert.equal(await v.openRoom('磨坊', ['kook-B'], null, t.voice), ch, '还回去的可以再借');
 });

@@ -58,8 +58,12 @@ export function kookApi(token, { fetch: f = globalThis.fetch, base = BASE } = {}
 /**
  * KOOK 的平台接口（给 voice.js 的 VoiceHub 用）。
  * bus：'ready'（网关连上了）、'voice'(guildId, kook-用户id)、'reset'（网关重连了，缓存作废）。
+ * huts(guildId) → [{ ch, name, square }]：布置好的桌子预先建的「小屋」（隐藏的语音频道）。私聊先借空小屋，
+ * 只开人的权限、拉进去（约 0.5 秒）；借完了才现建频道（建频道 + 一个个设权限要 2–3 秒，2026-11-21 用户嫌进屋等太久）。
  */
-export function kookPlatform(api, bus, { botId = () => null } = {}) {
+export function kookPlatform(api, bus, { botId = () => null, huts = () => [] } = {}) {
+  const busy = new Set();    // 借出去的小屋
+  const checked = new Set(); // 这次启动后看过里面有没有人的小屋（重启前借出去的还有人在里面，不能再借）
   const where = new Map(); // "guild:用户" → { ch, at }
   const mutes = new Map(); // guild → { mic: Set, headset: Set, at }
   bus.on('reset', () => { where.clear(); mutes.clear(); });
@@ -93,6 +97,36 @@ export function kookPlatform(api, bus, { botId = () => null } = {}) {
   }
 
   const view = (id) => api.get('/channel/view', { target_id: id });
+  const listOf = (d) => (Array.isArray(d) ? d : d?.items ?? []);
+  const grant = (ch, ids) => Promise.all(ids.map((id) => overwrite(ch, 'user_id', raw(id), MEMBER_ALLOW, 0).catch((e) => console.warn('[kook] 开房间权限失败：', e.message))));
+  const hutOf = (gid, ch) => huts(gid).find((h) => h.ch === ch) ?? null;
+
+  /** 借一间这一桌的空小屋，改成这次私聊的名字；没有空的返回 null。 */
+  async function takeHut(gid, squareId, name) {
+    for (const h of huts(gid).filter((x) => x.square === squareId)) {
+      if (busy.has(h.ch)) continue;
+      if (!checked.has(h.ch)) {
+        const inside = await api.get('/channel/user-list', { channel_id: h.ch }).catch(() => null);
+        if (inside == null) continue; // 频道被删了
+        checked.add(h.ch);
+        if (listOf(inside).length) { busy.add(h.ch); continue; }
+      }
+      busy.add(h.ch);
+      api.post('/channel/update', { channel_id: h.ch, name: name.slice(0, 100) }).catch(() => {}); // 改名不用等
+      return h.ch;
+    }
+    return null;
+  }
+
+  /** 还回小屋：收回所有人的权限（机器人的留着），名字改回去。 */
+  async function returnHut(h) {
+    const r = await api.get('/channel-role/index', { channel_id: h.ch }).catch(() => null);
+    const bot = String(botId() ?? '');
+    await Promise.all((r?.permission_users ?? []).map((u) => String(u.user?.id ?? '')).filter((id) => id && id !== bot)
+      .map((id) => api.post('/channel-role/delete', { channel_id: h.ch, type: 'user_id', value: id }).catch(() => {})));
+    await api.post('/channel/update', { channel_id: h.ch, name: h.name }).catch(() => {});
+    busy.delete(h.ch);
+  }
 
   return {
     onReady(fn) { bus.on('ready', fn); },
@@ -119,12 +153,14 @@ export function kookPlatform(api, bus, { botId = () => null } = {}) {
     },
     async isVoiceChannel(_gid, id) { return (await view(id).catch(() => null))?.type === 2; },
     async createRoom(gid, name, ids, squareId) {
+      const hut = squareId ? await takeHut(gid, squareId, name) : null;
+      if (hut) { await grant(hut, ids); return hut; }
       const sq = squareId ? await view(squareId).catch(() => null) : null;
       const c = await api.post('/channel/create', { guild_id: gid, name: name.slice(0, 100), type: 2, ...(sq?.parent_id ? { parent_id: sq.parent_id } : {}) });
       // 先给机器人和本局的人开权限，再对全体成员关掉（顺序反了机器人自己就进不去了）
       const bot = botId();
       if (bot) await overwrite(c.id, 'user_id', bot, BOT_ALLOW, 0).catch((e) => console.warn('[kook] 给机器人开房间权限失败：', e.message));
-      for (const id of ids) await overwrite(c.id, 'user_id', raw(id), MEMBER_ALLOW, 0).catch((e) => console.warn('[kook] 开房间权限失败：', e.message));
+      await grant(c.id, ids);
       await overwrite(c.id, 'role_id', EVERYONE, 0, EVERYONE_DENY).catch((e) => console.warn('[kook] 关掉全体成员的房间权限失败：', e.message));
       return c.id;
     },
@@ -135,7 +171,11 @@ export function kookPlatform(api, bus, { botId = () => null } = {}) {
       return (Array.isArray(list) ? list : list?.items ?? []).map((u) => ours(u.id));
     },
     async exists(_gid, ch) { return !!(await view(ch).catch(() => null)); },
-    async deleteChannel(_gid, ch) { await api.post('/channel/delete', { channel_id: ch }); },
+    async deleteChannel(gid, ch) {
+      const h = hutOf(gid, ch);
+      if (h) { await returnHut(h); return; } // 小屋不删，还回去下次再借
+      await api.post('/channel/delete', { channel_id: ch });
+    },
   };
 }
 
@@ -224,7 +264,8 @@ const voiceName = (t) => `**「${TABLE_NAMES(t.n).voice}」**`; // 语音频道�
 //   每一桌一个分组「🎲 N号桌」：💬 N号桌（文字：领进入链接、聊天）+ 🔊 N号桌·广场（语音）
 //   私聊房间开在这一桌的分组里（createRoom 跟着广场的分组走），一桌的东西都在一处，几桌同时玩互不打扰。
 // 每一桌的文字频道就是一个房间（房间 key = 服务器:文字频道），广场固定是这一桌的语音频道。
-export const TABLE_NAMES = (n) => ({ category: `🎲 ${n}号桌`, text: `💬 ${n}号桌`, voice: `🔊 ${n}号桌·广场` });
+export const TABLE_NAMES = (n) => ({ category: `🎲 ${n}号桌`, text: `💬 ${n}号桌`, voice: `🔊 ${n}号桌·广场`, hut: (i) => `🏠 ${n}号桌·小屋${i}` });
+export const HUTS = 8; // 每桌预先建几间小屋（地图上的房子加私聊，一般用不了这么多）
 const HUB_NAMES = { category: '📌 欢迎', welcome: '👋 新人必看', announce: '📢 公告', board: '📋 桌子一览' };
 const COMMUNITY_NAMES = { category: '💬 社区', chat: '💬 闲聊', lfg: '🙋 约局', replay: '📖 复盘分享', feedback: '💡 建议反馈', voice: '🔊 闲聊语音' };
 
@@ -266,7 +307,8 @@ export class KookBot extends EventEmitter {
     this.tableStatus = null;
     this.boardShown = new Map(); // 服务器 → 上次写进桌子一览的内容
     this.bus = new EventEmitter();
-    this.platform = kookPlatform(this.api, this.bus, { botId: () => this.me?.id ?? null });
+    const huts = (gid) => (this.layout.get(gid)?.tables ?? []).flatMap((t) => (t.huts ?? []).map((ch, i) => ({ ch, name: TABLE_NAMES(t.n).hut(i + 1), square: t.voice })));
+    this.platform = kookPlatform(this.api, this.bus, { botId: () => this.me?.id ?? null, huts });
     this.gateway = new KookGateway(this.api, { WS });
     this.gateway.on('reset', () => this.bus.emit('reset'));
     this.gateway.on('hello', () => this.bus.emit('ready'));
@@ -414,6 +456,13 @@ export class KookBot extends EventEmitter {
       const text = await ensure(t.text, { name: names.text, parent: t.category });
       t.text = text.id;
       t.voice = (await ensure(t.voice, { name: names.voice, parent: t.category, type: 2, extra: { limit_amount: 30 } })).id;
+      const huts = [];
+      for (let j = 1; j <= HUTS; j++) {
+        const h = await ensure(t.huts?.[j - 1], { name: names.hut(j), parent: t.category, type: 2, extra: { limit_amount: 20 } });
+        if (h.fresh) await this.hide(h.id).catch((e) => console.warn('[kook] 藏小屋失败：', e.message));
+        huts.push(h.id);
+      }
+      t.huts = huts;
       tables.push(t);
       this.guildOf.set(t.text, gid);
       // 卡片已经发过：改成最新的写法（改不了就重发）；新频道发一张
@@ -431,7 +480,7 @@ export class KookBot extends EventEmitter {
     const order = [hub.category, com.category, ...tables.map((t) => t.category)];
     for (const [i, id] of order.entries()) await this.api.post('/channel/update', { channel_id: id, level: i + 1 }).catch(() => {});
     // 分组里的频道也排好（建服时的默认频道 level 是 200，不排的话新建的会跑到它前面）
-    const inner = [[hub.welcome, hub.announce, hub.board], [com.chat, com.lfg, com.replay, com.feedback, com.voice], ...tables.map((t) => [t.text, t.voice])];
+    const inner = [[hub.welcome, hub.announce, hub.board], [com.chat, com.lfg, com.replay, com.feedback, com.voice], ...tables.map((t) => [t.text, t.voice, ...t.huts])];
     for (const list of inner) for (const [i, id] of list.entries()) await this.api.post('/channel/update', { channel_id: id, level: i + 1 }).catch(() => {});
 
     const lay = { hub, community: com, tables };
@@ -441,6 +490,16 @@ export class KookBot extends EventEmitter {
     this.boardShown.delete(gid);
     await this.refreshBoard(gid).catch((e) => console.warn('[kook] 发桌子一览失败：', e.message));
     return lay;
+  }
+
+  /** 小屋：全体成员看不见、进不去，机器人能管；借出去时再给进屋的人开权限。 */
+  async hide(ch) {
+    const set = async (type, value, allow, deny) => {
+      await this.api.post('/channel-role/create', { channel_id: ch, type, value }).catch(() => {});
+      await this.api.post('/channel-role/update', { channel_id: ch, type, value, allow, deny });
+    };
+    if (this.me?.id) await set('user_id', String(this.me.id), BOT_ALLOW, 0);
+    await set('role_id', EVERYONE, 0, EVERYONE_DENY);
   }
 
   /** 只读频道：全体成员能看不能发，机器人能发（管理员本来就能发）。 */
