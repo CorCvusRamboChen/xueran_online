@@ -84,11 +84,21 @@ if (PARTNER_URL && PARTNER_TOKEN && PARTNER_GUILDS.size) {
 let kookHub = null;
 let kookReady = Promise.resolve();
 if (KOOK_TOKEN) {
-  const kook = new KookBot({ token: KOOK_TOKEN, publicUrl: PUBLIC_URL, ticketSecret: TICKET_SECRET });
+  const kook = new KookBot({ token: KOOK_TOKEN, publicUrl: PUBLIC_URL, ticketSecret: TICKET_SECRET, layoutFile: path.resolve('data/kook-layout.json') });
   kookHub = new VoiceHub(kook.platform, {
     roomAlive: (key) => { const r = rooms.get(key); return !!(r?.game && !r.ended && !r.paused); },
     file: path.resolve('data/voice-held-kook.json'), oldFile: null,
+    // 布置好的桌子：广场固定是这一桌的语音频道（房间 key = kook-服务器:文字频道）
+    pinnedSquare: (gid, key) => kook.squareFor(gid, key.slice(key.indexOf(':') + 1)),
   });
+  // 桌子一览：每一桌现在空着、在大厅、还是在玩
+  kook.tableStatus = (gid, ch) => {
+    const r = rooms.get(`${KOOK_PREFIX}${gid}:${ch}`);
+    if (!r) return { state: 'free' };
+    if (r.game && !r.ended) return { state: 'game', day: r.game.day ?? 0, n: r.game.players?.length ?? r.lobby?.length ?? 0 };
+    const n = r.lobby?.length ?? 0;
+    return n ? { state: 'lobby', n, host: r.users?.get(r.hostId)?.name ?? null } : { state: 'free' };
+  };
   kookReady = kook.ready;
   kook.start().catch((e) => console.error('KOOK 机器人登录失败：', e.message));
 }

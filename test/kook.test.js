@@ -30,6 +30,7 @@ function fakeKook() {
   const mic = new Set(); const headset = new Set();
   const channels = new Map([['square', { id: 'square', guild_id: 'G', parent_id: 'cat', type: 2 }], ['text', { id: 'text', guild_id: 'G', type: 1 }]]);
   let seq = 0;
+  const messages = new Map();
   const handlers = {
     'GET /user/me': () => ({ id: 'BOT', username: '血染机器人', identify_num: '0001' }),
     'GET /channel-user/get-joined-channel': (q) => ({ items: voice.get(q.user_id) ? [{ id: voice.get(q.user_id) }] : [] }),
@@ -38,14 +39,16 @@ function fakeKook() {
     'POST /guild-mute/delete': (b) => { (b.type === 1 ? mic : headset).delete(b.user_id); return []; },
     'POST /channel/move-user': (b) => { for (const u of b.user_ids) { if (!voice.get(u)) throw new Error('用户不在语音'); voice.set(u, b.target_id); } return []; },
     'GET /channel/view': (q) => { const c = channels.get(q.target_id); if (!c) throw new Error('频道不存在'); return c; },
-    'POST /channel/create': (b) => { const c = { id: `room${++seq}`, guild_id: b.guild_id, parent_id: b.parent_id ?? '', type: b.type }; channels.set(c.id, c); return c; },
+    'POST /channel/create': (b) => { const c = { id: `room${++seq}`, guild_id: b.guild_id, name: b.name, parent_id: b.parent_id ?? '', type: b.is_category ? 0 : b.type ?? 1, is_category: !!b.is_category }; channels.set(c.id, c); return c; },
+    'GET /guild/view': () => ({ id: 'G', user_id: 'OWNER', roles: [{ role_id: 7, permissions: 32 }, { role_id: 8, permissions: 2048 }] }),
+    'POST /message/update': (b) => { if (!messages.has(b.msg_id)) throw new Error('消息不存在'); messages.set(b.msg_id, b.content); return []; },
     'POST /channel/delete': (b) => { channels.delete(b.channel_id); return []; },
     'GET /channel/user-list': (q) => [...voice].filter(([, ch]) => ch === q.channel_id).map(([id]) => ({ id })),
     'POST /channel-role/create': () => ({}),
     'POST /channel-role/update': (b) => b,
     'POST /channel-role/delete': () => [],
-    'GET /user/view': (q) => ({ id: q.user_id, username: 'xiaoming', nickname: '小明', avatar: 'https://img.kookapp.cn/a.png' }),
-    'POST /message/create': () => ({ msg_id: 'm1' }),
+    'GET /user/view': (q) => ({ id: q.user_id, username: 'xiaoming', nickname: '小明', avatar: 'https://img.kookapp.cn/a.png', roles: q.user_id === 'MOD' ? [7] : [8] }),
+    'POST /message/create': (b) => { const id = `m${++seq}`; messages.set(id, b.content); return { msg_id: id }; },
   };
   const fetch = async (url, opts) => {
     const u = new URL(url);
@@ -58,7 +61,7 @@ function fakeKook() {
     try { body = { code: 0, message: 'ok', data: h ? h(args) : [] }; } catch (e) { body = { code: 40000, message: e.message }; }
     return { status: 200, json: async () => body };
   };
-  return { fetch, calls, voice, mic, headset, channels };
+  return { fetch, calls, voice, mic, headset, channels, messages };
 }
 
 class NoWS { constructor() { this.readyState = 0; } on() {} send() {} terminate() {} }
@@ -183,4 +186,69 @@ test('KOOK 网关：等 HELLO，事件按 sn 去重转发，握手失败断开�
   gw2.stopped = true;
   sockets.at(-1).push({ s: 1, d: { code: 40101 } });
   assert.equal(sockets.at(-1).readyState, 3);
+});
+
+const say = (bot, author, content, ch = 'text') => bot.onEvent({ type: 9, channel_type: 'GROUP', target_id: ch, author_id: author, content, extra: { guild_id: 'G', author: { bot: false } } });
+
+test('KOOK 布置桌子：只有服务器主 / 频道管理能布置；每桌一个分组（文字 + 广场语音）、各发一张开局卡片，说明频道有桌子一览', async () => {
+  const k = fakeKook();
+  const bot = await mkBot(k);
+  await say(bot, 'NOBODY', '/血染 布置 3');
+  assert.ok(!k.calls.some(([key]) => key === 'POST /channel/create'), '普通成员不能布置');
+  await say(bot, 'MOD', '/血染 布置 3');
+  const lay = bot.layout.get('G');
+  assert.equal(lay.tables.length, 3);
+  for (const t of lay.tables) {
+    assert.equal(k.channels.get(t.category).is_category, true);
+    assert.equal(k.channels.get(t.text).parent_id, t.category);
+    assert.equal(k.channels.get(t.voice).parent_id, t.category);
+    assert.equal(k.channels.get(t.voice).type, 2);
+    assert.equal(bot.squareFor('G', t.text), t.voice);
+  }
+  assert.match(k.channels.get(lay.tables[1].voice).name, /2号桌·广场/);
+  const cards = k.calls.filter(([key, b]) => key === 'POST /message/create' && b.type === 10 && /botc-join/.test(b.content)).map(([, b]) => b.target_id);
+  assert.deepEqual(cards, lay.tables.map((t) => t.text), '每一桌的文字频道一张开局卡片');
+  assert.match(k.messages.get(lay.hub.boardMsg), /桌子一览/);
+  assert.match(k.messages.get(lay.hub.boardMsg), /1号桌.*空着/);
+
+  // 再发一次：不重复建；删掉的频道补回来
+  const before = k.calls.filter(([key]) => key === 'POST /channel/create').length;
+  k.channels.delete(lay.tables[0].voice);
+  await say(bot, 'OWNER', '/血染 布置');
+  const made = k.calls.filter(([key]) => key === 'POST /channel/create').slice(before);
+  assert.equal(made.length, 1, '只补被删掉的那个语音频道');
+  assert.equal(bot.layout.get('G').tables.length, 3, '不写数字不减桌');
+  await say(bot, 'OWNER', '/血染 加桌');
+  assert.equal(bot.layout.get('G').tables.length, 4);
+});
+
+test('KOOK 桌子：广场固定是这一桌的语音频道（不看房主在哪）；桌子一览跟着房间状态改', async () => {
+  const k = fakeKook();
+  const bot = await mkBot(k);
+  await say(bot, 'OWNER', '/血染 布置 2');
+  const [t1, t2] = bot.layout.get('G').tables;
+  const hub = new VoiceHub(bot.platform, { file: path.join(tmp(), 'held.json'), oldFile: null, sweepMs: 0, pinnedSquare: (gid, key) => bot.squareFor(gid, key.slice(key.indexOf(':') + 1)) });
+  assert.equal(await hub.forGuild('G', 'kook-G:' + t2.text).findSquare('kook-A', ['kook-A']), t2.voice, '房主 A 在别的语音，广场还是 2 号桌的');
+  assert.equal(await hub.forGuild('G', 'kook-G:text').findSquare('kook-A', ['kook-A']), 'square', '不是布置好的桌子：照旧用房主所在的语音');
+
+  bot.tableStatus = (gid, ch) => (ch === t1.text ? { state: 'game', day: 2, n: 8 } : { state: 'lobby', n: 3, host: '小明' });
+  await bot.refreshBoard('G');
+  const board = k.messages.get(bot.layout.get('G').hub.boardMsg);
+  assert.match(board, /1号桌.*正在玩（第 2 天，8 人）/);
+  assert.match(board, /2号桌.*大厅里 3 人，房主 小明/);
+  const n = k.calls.length;
+  await bot.refreshBoard('G');
+  assert.equal(k.calls.length, n, '内容没变不改消息');
+});
+
+test('KOOK 桌子的进入链接：门票的频道是这一桌的文字频道，提醒进本桌广场', async () => {
+  const k = fakeKook();
+  const bot = await mkBot(k);
+  await say(bot, 'OWNER', '/血染 布置 1');
+  const [t] = bot.layout.get('G').tables;
+  await bot.onEvent({ type: 255, channel_type: 'PERSON', target_id: 'A', extra: { type: 'message_btn_click', body: { value: 'botc-join', user_id: 'A', target_id: t.text, user_info: {} } } });
+  const sent = k.calls.filter(([key]) => key === 'POST /message/create').at(-1)[1];
+  assert.ok(sent.content.includes(`(chn)${t.voice}(chn)`), '提醒进本桌广场');
+  const url = JSON.parse(sent.content)[0].modules.find((m) => m.type === 'action-group').elements[0].value;
+  assert.equal(verifyTicket('sec', new URL(url).searchParams.get('kt')).c, t.text);
 });

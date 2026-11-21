@@ -1,5 +1,6 @@
 // KOOK（开黑啦）版：机器人连 KOOK 网关收事件，用 HTTP 接口管语音；玩家在浏览器里玩，KOOK 里聊语音。
 //
+// 布置桌子：管理员发「/血染 布置 3」，机器人建好几桌（每桌一个文字频道 + 广场语音，见下面 TABLE_NAMES），几桌可以同时玩。
 // 怎么开一局：在文字频道发「/血染」→ 机器人发一张卡片 → 每个人点「领取我的进入链接」→ 机器人只给他本人
 // 发一条临时消息（别人看不到），里面是带签名的进入链接（见 tickets.js）。点开就进了这个频道的房间。
 // 房主所在的语音频道就是广场；夜里闭麦闭耳、开私聊房间拉人，和 Discord 版一样（账和规矩在 voice.js）。
@@ -7,6 +8,8 @@
 // 机器人需要的服务器权限：查看频道、发消息、频道管理、管理角色权限（给私聊房间设权限）、语音管理（拉人）、
 // 服务器闭麦、服务器静音。接口文档：https://developer.kookapp.cn/doc/reference
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import path from 'node:path';
 import WebSocket from 'ws';
 import { signTicket, TICKET_HOURS } from './tickets.js';
 
@@ -204,22 +207,62 @@ export class KookGateway extends EventEmitter {
   }
 }
 
-const LAUNCH_CMD = /^[/.。!！]?\s*(血染钟楼|血染|botc)\s*$/i;
+// 「/血染」开卡片；「/血染 布置 3」「/血染 加桌」「/血染 帮助」见 KookBot.command
+const LAUNCH_CMD = /^[/.。!！]?\s*(?:血染钟楼|血染|botc)(?:\s+(\S+)(?:\s+(\d+))?)?\s*$/i;
 const JOIN_VALUE = 'botc-join';
+const MAX_TABLES = 10;
+const ADMIN_PERM = (1 << 0) | PERM.manageChannels; // 管理员、频道管理：才能布置桌子
+const BOARD_MS = 30_000; // 桌子一览多久刷新一次（只在内容变了时才改消息，省机器人每天的发消息额度）
 
 const card = (theme, modules) => JSON.stringify([{ type: 'card', theme, size: 'lg', modules }]);
 const kmd = (content) => ({ type: 'section', text: { type: 'kmarkdown', content } });
+const chn = (id) => `(chn)${id}(chn)`;
 
-/** 整个 KOOK 机器人：网关 + 接口 + 平台接口 + 发卡片、发进入链接。 */
+// 服务器里的布局（2026-11-21 用户：KOOK 服务器支持几桌同时玩，频道我们自己布置）：
+//   「血染钟楼」分组：📜 怎么玩（说明 + 桌子一览，机器人随时更新）
+//   每一桌一个分组「🎲 N号桌」：💬 N号桌（文字：领进入链接、聊天）+ 🔊 N号桌·广场（语音）
+//   私聊房间开在这一桌的分组里（createRoom 跟着广场的分组走），一桌的东西都在一处，几桌同时玩互不打扰。
+// 每一桌的文字频道就是一个房间（房间 key = 服务器:文字频道），广场固定是这一桌的语音频道。
+export const TABLE_NAMES = (n) => ({ category: `🎲 ${n}号桌`, text: `💬 ${n}号桌`, voice: `🔊 ${n}号桌·广场` });
+const HUB_NAMES = { category: '🕯 血染钟楼', guide: '📜 怎么玩' };
+
+/** 布局存档：{ [服务器]: { hub: { category, guide, boardMsg }, tables: [{ n, category, text, voice }] } } */
+function layoutStore(file) {
+  let data = {};
+  let seen = 0;
+  // 文件被别的进程改了（比如在服务器上用脚本布置）就重新读，不用重启
+  const fresh = () => {
+    if (!file) return data;
+    try { const m = fs.statSync(file).mtimeMs; if (m !== seen) { data = JSON.parse(fs.readFileSync(file, 'utf8')); seen = m; } } catch { /* 还没布置过 */ }
+    return data;
+  };
+  return {
+    get: (gid) => fresh()[gid] ?? null,
+    set(gid, v) {
+      fresh()[gid] = v;
+      if (!file) return;
+      try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(data, null, 1)); seen = fs.statSync(file).mtimeMs; } catch (e) { console.warn('[kook] 存布局失败：', e.message); }
+    },
+    guilds: () => Object.keys(fresh()),
+  };
+}
+
+/** 整个 KOOK 机器人：网关 + 接口 + 平台接口 + 发卡片、发进入链接、布置桌子。 */
 export class KookBot extends EventEmitter {
-  /** publicUrl：网页地址（进入链接用）；ticketSecret：门票签名密钥。 */
-  constructor({ token, publicUrl, ticketSecret, fetch: f, WS }) {
+  /**
+   * publicUrl：网页地址（进入链接用）；ticketSecret：门票签名密钥；layoutFile：桌子布局存在哪（不给就只在内存里）。
+   * tableStatus(guildId, 文字频道) → { state: 'free'|'lobby'|'game', n?, day?, host? }：桌子一览用，由 index.js 接上房间。
+   */
+  constructor({ token, publicUrl, ticketSecret, fetch: f, WS, layoutFile = null }) {
     super();
     this.api = kookApi(token, { fetch: f });
     this.publicUrl = publicUrl.replace(/\/$/, '');
     this.ticketSecret = ticketSecret;
     this.me = null;
     this.guildOf = new Map(); // 频道 → 服务器（按钮点击事件里没有服务器 id）
+    this.layout = layoutStore(layoutFile);
+    this.tableStatus = null;
+    this.boardShown = new Map(); // 服务器 → 上次写进桌子一览的内容
     this.bus = new EventEmitter();
     this.platform = kookPlatform(this.api, this.bus, { botId: () => this.me?.id ?? null });
     this.gateway = new KookGateway(this.api, { WS });
@@ -233,7 +276,15 @@ export class KookBot extends EventEmitter {
     this.me = await this.api.get('/user/me');
     console.log(`🤖 KOOK 机器人已登录：${this.me.username}#${this.me.identify_num}`);
     this.gateway.start();
+    this.boardTimer = setInterval(() => { for (const gid of this.layout.guilds()) this.refreshBoard(gid).catch((e) => console.warn('[kook] 刷新桌子一览失败：', e.message)); }, BOARD_MS);
+    this.boardTimer.unref?.();
   }
+
+  /** 这一桌（文字频道）固定的广场语音频道；不是布置好的桌子返回 null。 */
+  tableOf(gid, textChannel) {
+    return this.layout.get(gid)?.tables.find((t) => t.text === textChannel) ?? null;
+  }
+  squareFor(gid, textChannel) { return this.tableOf(gid, textChannel)?.voice ?? null; }
 
   async onEvent(d) {
     if (!d) return;
@@ -250,22 +301,142 @@ export class KookBot extends EventEmitter {
       }
       return;
     }
-    // 文字频道里的「/血染」：发开局卡片
+    // 文字频道里的「/血染 ……」
     if ((d.type === 1 || d.type === 9) && d.channel_type === 'GROUP' && !d.extra?.author?.bot && d.author_id !== this.me?.id) {
-      if (LAUNCH_CMD.test(String(d.content ?? '').trim())) {
-        if (d.extra?.guild_id) this.guildOf.set(String(d.target_id), String(d.extra.guild_id));
-        await this.postLauncher(String(d.target_id));
-      }
+      const m = String(d.content ?? '').trim().match(LAUNCH_CMD);
+      if (!m) return;
+      const ch = String(d.target_id);
+      if (d.extra?.guild_id) this.guildOf.set(ch, String(d.extra.guild_id));
+      await this.command(ch, String(d.author_id), (m[1] ?? '').toLowerCase(), m[2] ? Number(m[2]) : null);
     }
   }
 
-  postLauncher(channelId) {
+  async command(ch, uid, verb, num) {
+    if (!verb) { await this.postLauncher(ch); return; }
+    if (/^(帮助|help|\?|？)$/.test(verb)) { await this.say(ch, this.helpText()); return; }
+    if (/^(布置|setup)$/.test(verb) || /^(加桌|add)$/.test(verb)) {
+      const gid = await this.guildOfChannel(ch);
+      if (!(await this.isAdmin(gid, uid))) { await this.say(ch, '只有服务器主和有「频道管理」权限的人能布置桌子。'); return; }
+      const have = this.layout.get(gid)?.tables.length ?? 0;
+      const want = /^(加桌|add)$/.test(verb) ? have + 1 : Math.max(have, Math.min(MAX_TABLES, Math.max(1, num ?? 3)));
+      if (want > MAX_TABLES) { await this.say(ch, `最多 ${MAX_TABLES} 桌。`); return; }
+      try {
+        const lay = await this.setup(gid, want);
+        await this.say(ch, `布置好了：${lay.tables.length} 桌。说明和桌子一览在 ${chn(lay.hub.guide)}；想玩的人进一桌的文字频道点按钮领链接。`);
+      } catch (e) {
+        console.warn('[kook] 布置桌子失败：', e.message);
+        await this.say(ch, `布置失败：${e.message}（机器人要有「频道管理」「管理角色权限」权限）`);
+      }
+      return;
+    }
+    await this.say(ch, this.helpText());
+  }
+
+  helpText() {
+    return '**血染钟楼机器人**\n'
+      + '`/血染`：在这个频道发一张开局卡片\n'
+      + `\`/血染 布置 3\`：管理员用，建好 3 桌（每桌一个文字频道 + 一个广场语音，最多 ${MAX_TABLES} 桌）；再发一次会补上被删掉的频道\n`
+      + '`/血染 加桌`：管理员用，再加一桌';
+  }
+
+  say(ch, content) { return this.api.post('/message/create', { type: 9, target_id: ch, content }); }
+
+  /** 服务器主，或者有管理员 / 频道管理权限的角色。 */
+  async isAdmin(gid, uid) {
+    const g = await this.api.get('/guild/view', { guild_id: gid });
+    if (String(g.user_id) === String(uid)) return true;
+    const u = await this.api.get('/user/view', { user_id: uid, guild_id: gid }).catch(() => null);
+    const mine = new Set((u?.roles ?? []).map(String));
+    return (g.roles ?? []).some((r) => mine.has(String(r.role_id)) && (Number(r.permissions) & ADMIN_PERM));
+  }
+
+  /** 建（或补齐）布局：一个说明分组 + n 桌。已有的频道还在就沿用，被删掉的重建。返回布局。 */
+  async setup(gid, n) {
+    const old = this.layout.get(gid) ?? { hub: {}, tables: [] };
+    const alive = async (id) => !!id && !!(await this.api.get('/channel/view', { target_id: id }).catch(() => null));
+    const mk = (body) => this.api.post('/channel/create', { guild_id: gid, ...body }).then((c) => String(c.id));
+    const hub = { ...old.hub };
+    if (!(await alive(hub.category))) { hub.category = await mk({ name: HUB_NAMES.category, is_category: 1 }); hub.guide = null; }
+    let freshGuide = false;
+    if (!(await alive(hub.guide))) { hub.guide = await mk({ name: HUB_NAMES.guide, type: 1, parent_id: hub.category }); hub.boardMsg = null; freshGuide = true; }
+    const tables = [];
+    for (let i = 1; i <= n; i++) {
+      const names = TABLE_NAMES(i);
+      const t = { n: i, ...(old.tables.find((x) => x.n === i) ?? {}) };
+      if (!(await alive(t.category))) { t.category = await mk({ name: names.category, is_category: 1 }); t.text = null; t.voice = null; }
+      let freshText = false;
+      if (!(await alive(t.text))) { t.text = await mk({ name: names.text, type: 1, parent_id: t.category }); freshText = true; }
+      if (!(await alive(t.voice))) t.voice = await mk({ name: names.voice, type: 2, parent_id: t.category, limit_amount: 30 });
+      tables.push(t);
+      this.guildOf.set(t.text, gid);
+      if (freshText || !t.card) t.card = (await this.postLauncher(t.text, t).catch(() => null))?.msg_id ?? null;
+    }
+    const lay = { hub, tables };
+    this.layout.set(gid, lay);
+    if (freshGuide) await this.api.post('/message/create', { type: 10, target_id: hub.guide, content: this.guideCard() }).catch((e) => console.warn('[kook] 发说明失败：', e.message));
+    this.boardShown.delete(gid);
+    await this.refreshBoard(gid).catch((e) => console.warn('[kook] 发桌子一览失败：', e.message));
+    return lay;
+  }
+
+  guideCard() {
+    return card('secondary', [
+      { type: 'header', text: { type: 'plain-text', content: '怎么玩血染钟楼' } },
+      kmd('1. 挑一桌没人玩的（看下面的**桌子一览**），进这一桌的 🔊 广场语音。\n'
+        + '2. 在这一桌的 💬 文字频道点「领取我的进入链接」，机器人只发给你自己，在浏览器里打开就进了这一桌。\n'
+        + '3. 第一个进来的是房主，人齐了在网页里开局。\n'
+        + '夜里机器人会在这一桌的广场里闭麦闭耳；白天私聊时把人拉进这一桌分组下的临时语音房间，聊完送回广场。几桌同时玩互不打扰。'),
+      { type: 'context', elements: [{ type: 'plain-text', content: '没进本桌广场语音的人夜里不会被闭麦，私聊也拉不到他。' }] },
+    ]);
+  }
+
+  /** 桌子一览的卡片内容。 */
+  boardCard(gid) {
+    const lay = this.layout.get(gid);
+    const line = (t) => {
+      const s = this.tableStatus?.(gid, t.text) ?? { state: 'free' };
+      const what = s.state === 'game' ? `🔴 正在玩${s.day ? `（第 ${s.day} 天` : '（'}，${s.n ?? '?'} 人）`
+        : s.state === 'lobby' ? `🟡 大厅里 ${s.n ?? 0} 人${s.host ? `，房主 ${s.host}` : ''}，可以加入`
+          : '🟢 空着';
+      return `**${t.n}号桌** ${what}　文字 ${chn(t.text)} · 语音 ${chn(t.voice)}`;
+    };
+    return card('info', [
+      { type: 'header', text: { type: 'plain-text', content: '桌子一览' } },
+      kmd(lay.tables.map(line).join('\n')),
+      { type: 'context', elements: [{ type: 'plain-text', content: `每 ${BOARD_MS / 1000} 秒自动更新。桌子不够用请管理员发「/血染 加桌」。` }] },
+    ]);
+  }
+
+  /** 桌子一览：内容变了才改（第一次发一条新的，记下消息 id）。 */
+  async refreshBoard(gid) {
+    const lay = this.layout.get(gid);
+    if (!lay?.hub?.guide || !lay.tables.length) return;
+    const content = this.boardCard(gid);
+    if (this.boardShown.get(gid) === content) return;
+    if (lay.hub.boardMsg) {
+      const ok = await this.api.post('/message/update', { msg_id: lay.hub.boardMsg, content }).then(() => true).catch(() => false);
+      if (ok) { this.boardShown.set(gid, content); return; }
+    }
+    const m = await this.api.post('/message/create', { type: 10, target_id: lay.hub.guide, content });
+    lay.hub.boardMsg = m?.msg_id ?? null;
+    this.layout.set(gid, lay);
+    this.boardShown.set(gid, content);
+  }
+
+  /** 开局卡片。table：布置好的桌子（卡片上写明进哪个语音）；不是桌子的频道就是通用的说法。 */
+  postLauncher(channelId, table = null) {
+    const gid = this.guildOf.get(channelId);
+    table ??= gid ? this.tableOf(gid, channelId) : null;
+    const how = table
+      ? `这里是 **${table.n}号桌**。先进语音 ${chn(table.voice)}（这一桌的广场），再点下面的按钮，机器人会**只给你自己**发一条进入链接（别人看不到），在浏览器里打开就进了这一桌。\n`
+        + '夜里机器人会在这一桌的广场里闭麦闭耳，私聊时把人拉进这一桌分组下的临时房间。'
+      : '想玩的人点下面的按钮，机器人会**只给你自己**发一条进入链接（别人看不到），在浏览器里打开就进了这个频道的房间。\n'
+        + '开局前大家先进同一个语音频道：**房主所在的语音频道就是广场**，夜里机器人会闭麦闭耳，私聊时会把人拉进临时房间。';
     return this.api.post('/message/create', {
       type: 10, target_id: channelId,
       content: card('secondary', [
-        { type: 'header', text: { type: 'plain-text', content: '血染钟楼' } },
-        kmd('想玩的人点下面的按钮，机器人会**只给你自己**发一条进入链接（别人看不到），在浏览器里打开就进了这个频道的房间。\n'
-          + '开局前大家先进同一个语音频道：**房主所在的语音频道就是广场**，夜里机器人会闭麦闭耳，私聊时会把人拉进临时房间。'),
+        { type: 'header', text: { type: 'plain-text', content: table ? `血染钟楼 · ${table.n}号桌` : '血染钟楼' } },
+        kmd(how),
         { type: 'action-group', elements: [{ type: 'button', theme: 'primary', value: JOIN_VALUE, click: 'return-val', text: { type: 'plain-text', content: '领取我的进入链接' } }] },
       ]),
     });
@@ -286,10 +457,12 @@ export class KookBot extends EventEmitter {
     const name = String(u?.nickname || u?.username || info.username || 'KOOK 玩家').slice(0, 24);
     const avatar = u?.avatar || info.avatar || null;
     const url = this.entryUrl({ g: guildId, c: channelId, u: userId, n: name, a: avatar });
+    const table = this.tableOf(guildId, channelId);
     await this.api.post('/message/create', {
       type: 10, target_id: channelId, temp_target_id: userId,
       content: card('primary', [
-        kmd(`**${name}**，这是你自己的进入链接（${TICKET_HOURS} 小时内有效，别转给别人——拿到的人会以你的身份进去）：`),
+        kmd(`**${name}**，这是你自己的进入链接（${TICKET_HOURS} 小时内有效，别转给别人——拿到的人会以你的身份进去）：`
+          + (table ? `\n记得进语音 ${chn(table.voice)}，不然夜里闭麦、私聊拉人都管不到你。` : '')),
         { type: 'action-group', elements: [{ type: 'button', theme: 'primary', value: url, click: 'link', text: { type: 'plain-text', content: '进入血染钟楼' } }] },
         { type: 'context', elements: [{ type: 'plain-text', content: '打不开按钮的话，复制这个地址到浏览器：' }, { type: 'plain-text', content: url }] },
       ]),

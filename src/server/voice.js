@@ -81,9 +81,10 @@ export class VoiceHub {
    * platform：平台接口；直接给 discord.js 的客户端也行（自动包一层）。
    * roomAlive(roomKey)：那一局还在进行（没结束、没暂停）吗。账上挂在已经没了的局上的闭麦，定时清掉。
    */
-  constructor(platform, { roomAlive = null, file = FILE, oldFile = OLD_FILE, sweepMs = SWEEP_MS } = {}) {
+  constructor(platform, { roomAlive = null, file = FILE, oldFile = OLD_FILE, sweepMs = SWEEP_MS, pinnedSquare = null } = {}) {
     this.p = platform?.guilds ? discordPlatform(platform) : platform;
     this.roomAlive = roomAlive;
+    this.pinnedSquare = pinnedSquare; // (guildId, roomKey) → 这一桌固定的广场语音频道 id（KOOK 布置好的桌子），没有就 null
     this.file = file;
     this.held = new Map();    // "guild:user" → { room, reasons: Set('speech'|'watch'|'asleep'), mute, deaf, foreignMute, foreignDeaf, yieldMute, yieldDeaf }
     this.queues = new Map();  // "guild:user" → 这个人上一个还没做完的操作
@@ -282,9 +283,11 @@ export class VoiceHub {
         return p.isVoiceChannel(guildId, channelId);
       },
 
-      /** 广场 = 房主所在语音；房主不在就用玩家最多的那个。 */
+      /** 广场 = 这一桌固定的语音频道（KOOK 布置的桌子）；没有就是房主所在语音；房主不在就用玩家最多的那个。 */
       async findSquare(hostId, playerIds) {
         await guild();
+        const pin = await hub.pinnedSquare?.(guildId, roomKey);
+        if (pin) return pin;
         const hostCh = await chOf(hostId);
         if (hostCh) return hostCh;
         const count = new Map();
