@@ -134,9 +134,13 @@ test('KOOK 机器人：「/血染」发开局卡片；点按钮只给本人发�
   assert.equal(k.calls.filter(([key]) => key === 'POST /message/create').length, 1);
 
   await bot.onEvent({ type: 255, channel_type: 'PERSON', target_id: 'A', extra: { type: 'message_btn_click', body: { value: 'botc-join', user_id: 'A', target_id: 'text', msg_id: 'm1', user_info: { username: 'xiaoming' } } } });
-  const sent = k.calls.filter(([key]) => key === 'POST /message/create').at(-1)[1];
-  assert.equal(sent.temp_target_id, 'A', '临时消息：只有点按钮的人看得到');
-  assert.equal(sent.target_id, 'text');
+  const wait = k.calls.filter(([key]) => key === 'POST /message/create').at(-1)[1];
+  assert.equal(wait.temp_target_id, 'A', '临时消息：只有点按钮的人看得到');
+  assert.equal(wait.target_id, 'text');
+  assert.match(wait.content, /正在生成/, '先马上回一条「正在生成」');
+  const sent = k.calls.filter(([key]) => key === 'POST /message/update').at(-1)[1];
+  assert.equal(sent.temp_target_id, 'A');
+  assert.equal(k.messages.get(sent.msg_id), sent.content, '生成好了把那一条改成链接');
   const url = JSON.parse(sent.content)[0].modules.find((m) => m.type === 'action-group').elements[0].value;
   assert.match(url, /^https:\/\/botc\.example\/\?kt=/);
   const p = verifyTicket('sec', new URL(url).searchParams.get('kt'));
@@ -250,8 +254,9 @@ test('KOOK 桌子的进入链接：门票的频道是这一桌的文字频道，
   await say(bot, 'OWNER', '/血染 布置 1');
   const [t] = bot.layout.get('G').tables;
   await bot.onEvent({ type: 255, channel_type: 'PERSON', target_id: 'A', extra: { type: 'message_btn_click', body: { value: 'botc-join', user_id: 'A', target_id: t.text, user_info: {} } } });
-  const sent = k.calls.filter(([key]) => key === 'POST /message/create').at(-1)[1];
-  assert.ok(sent.content.includes(`(chn)${t.voice}(chn)`), '提醒进本桌广场');
+  const sent = k.calls.filter(([key]) => key === 'POST /message/update').at(-1)[1];
+  assert.ok(sent.content.includes('1号桌·广场'), '提醒进本桌广场');
+  assert.ok(!sent.content.includes(`(chn)${t.voice}(chn)`), '语音频道不能用 (chn) 提及：KOOK 显示成「频道已删除」');
   const url = JSON.parse(sent.content)[0].modules.find((m) => m.type === 'action-group').elements[0].value;
   assert.equal(verifyTicket('sec', new URL(url).searchParams.get('kt')).c, t.text);
 });
@@ -291,4 +296,7 @@ test('KOOK 布置整个服务器：欢迎（只读）、社区、各桌三个分
   await say(bot, 'OWNER', '/血染 布置', 'dtext');
   assert.equal(k.calls.filter(([key]) => key === 'POST /channel/create').length, n);
   assert.equal(k.calls.filter(([key, b]) => key === 'POST /message/create' && b.target_id === lay.hub.welcome).length, 2);
+  const cardIds = lay.tables.map((t) => t.card);
+  assert.deepEqual(k.calls.filter(([key, b]) => key === 'POST /message/update' && cardIds.includes(b.msg_id)).map(([, b]) => b.msg_id), cardIds, '已经发出去的开局卡片改成最新写法，不重发');
+  assert.ok(!k.messages.get(cardIds[0]).includes('(chn)' + lay.tables[0].voice), '开局卡片里语音频道只写名字');
 });

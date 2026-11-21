@@ -216,7 +216,8 @@ const BOARD_MS = 30_000; // 桌子一览多久刷新一次（只在内容变了�
 
 const card = (theme, modules) => JSON.stringify([{ type: 'card', theme, size: 'lg', modules }]);
 const kmd = (content) => ({ type: 'section', text: { type: 'kmarkdown', content } });
-const chn = (id) => `(chn)${id}(chn)`;
+const chn = (id) => `(chn)${id}(chn)`; // 只能提及文字频道：语音频道会显示成「#频道已删除」（2026-11-21 实测）
+const voiceName = (t) => `**「${TABLE_NAMES(t.n).voice}」**`; // 语音频道只写名字
 
 // 服务器里的布局（2026-11-21 用户：KOOK 服务器支持几桌同时玩，频道我们自己布置）：
 //   📌 欢迎（新人必看、公告、桌子一览，只读）、💬 社区（闲聊、约局、复盘、反馈、闲聊语音），见 setup
@@ -415,7 +416,9 @@ export class KookBot extends EventEmitter {
       t.voice = (await ensure(t.voice, { name: names.voice, parent: t.category, type: 2, extra: { limit_amount: 30 } })).id;
       tables.push(t);
       this.guildOf.set(t.text, gid);
-      if (text.fresh || !t.card) t.card = (await this.postLauncher(t.text, t).catch(() => null))?.msg_id ?? null;
+      // 卡片已经发过：改成最新的写法（改不了就重发）；新频道发一张
+      const fixed = !text.fresh && t.card && await this.api.post('/message/update', { msg_id: t.card, content: this.launcherCard(t) }).then(() => true, () => false);
+      if (!fixed) t.card = (await this.postLauncher(t.text, t).catch(() => null))?.msg_id ?? null;
     }
 
     // 默认的「语音分组」里的频道都搬走了：空分组删掉
@@ -483,7 +486,7 @@ export class KookBot extends EventEmitter {
       const what = s.state === 'game' ? `🔴 正在玩${s.day ? `（第 ${s.day} 天` : '（'}，${s.n ?? '?'} 人）`
         : s.state === 'lobby' ? `🟡 大厅里 ${s.n ?? 0} 人${s.host ? `，房主 ${s.host}` : ''}，可以加入`
           : '🟢 空着';
-      return `**${t.n}号桌** ${what}　文字 ${chn(t.text)} · 语音 ${chn(t.voice)}`;
+      return `**${t.n}号桌** ${what}　文字 ${chn(t.text)} · 语音 ${voiceName(t)}`;
     };
     return card('info', [
       { type: 'header', text: { type: 'plain-text', content: '桌子一览' } },
@@ -512,19 +515,21 @@ export class KookBot extends EventEmitter {
   postLauncher(channelId, table = null) {
     const gid = this.guildOf.get(channelId);
     table ??= gid ? this.tableOf(gid, channelId) : null;
+    return this.api.post('/message/create', { type: 10, target_id: channelId, content: this.launcherCard(table) });
+  }
+
+  launcherCard(table) {
     const how = table
-      ? `这里是 **${table.n}号桌**。先进语音 ${chn(table.voice)}（这一桌的广场），再点下面的按钮，机器人会**只给你自己**发一条进入链接（别人看不到），在浏览器里打开就进了这一桌。\n`
+      ? `这里是 **${table.n}号桌**。先进语音 ${voiceName(table)}（这一桌的广场），再点下面的按钮，机器人会**只给你自己**发一条进入链接（别人看不到），在浏览器里打开就进了这一桌。\n`
         + '夜里机器人会在这一桌的广场里闭麦闭耳，私聊时把人拉进这一桌分组下的临时房间。'
       : '想玩的人点下面的按钮，机器人会**只给你自己**发一条进入链接（别人看不到），在浏览器里打开就进了这个频道的房间。\n'
         + '开局前大家先进同一个语音频道：**房主所在的语音频道就是广场**，夜里机器人会闭麦闭耳，私聊时会把人拉进临时房间。';
-    return this.api.post('/message/create', {
-      type: 10, target_id: channelId,
-      content: card('secondary', [
-        { type: 'header', text: { type: 'plain-text', content: table ? `血染钟楼 · ${table.n}号桌` : '血染钟楼' } },
-        kmd(how),
-        { type: 'action-group', elements: [{ type: 'button', theme: 'primary', value: JOIN_VALUE, click: 'return-val', text: { type: 'plain-text', content: '领取我的进入链接' } }] },
-      ]),
-    });
+    return card('secondary', [
+      { type: 'header', text: { type: 'plain-text', content: table ? `血染钟楼 · ${table.n}号桌` : '血染钟楼' } },
+      kmd(how),
+      { type: 'action-group', elements: [{ type: 'button', theme: 'primary', value: JOIN_VALUE, click: 'return-val', text: { type: 'plain-text', content: '领取我的进入链接' } }] },
+      { type: 'context', elements: [{ type: 'plain-text', content: '点了以后马上会出现一条「正在生成」，一两秒后变成你的链接。' }] },
+    ]);
   }
 
   async guildOfChannel(channelId) {
@@ -537,21 +542,23 @@ export class KookBot extends EventEmitter {
 
   /** 给点了按钮的人发他自己的进入链接（临时消息：只有他看得到，也不存进聊天记录）。 */
   async sendTicket(userId, channelId, info) {
+    const temp = { target_id: channelId, temp_target_id: userId };
+    const wait = await this.api.post('/message/create', { type: 10, ...temp, content: card('secondary', [kmd('⏳ 正在生成你的进入链接，一两秒就好……')]) })
+      .catch((e) => { console.warn('[kook] 发「正在生成」失败：', e.message); return null; });
     const guildId = await this.guildOfChannel(channelId);
     const u = await this.api.get('/user/view', { user_id: userId, guild_id: guildId }).catch(() => info);
     const name = String(u?.nickname || u?.username || info.username || 'KOOK 玩家').slice(0, 24);
     const avatar = u?.avatar || info.avatar || null;
     const url = this.entryUrl({ g: guildId, c: channelId, u: userId, n: name, a: avatar });
     const table = this.tableOf(guildId, channelId);
-    await this.api.post('/message/create', {
-      type: 10, target_id: channelId, temp_target_id: userId,
-      content: card('primary', [
+    const content = card('primary', [
         kmd(`**${name}**，这是你自己的进入链接（${TICKET_HOURS} 小时内有效，别转给别人——拿到的人会以你的身份进去）：`
-          + (table ? `\n记得进语音 ${chn(table.voice)}，不然夜里闭麦、私聊拉人都管不到你。` : '')),
+          + (table ? `\n记得进语音 ${voiceName(table)}，不然夜里闭麦、私聊拉人都管不到你。` : '')),
         { type: 'action-group', elements: [{ type: 'button', theme: 'primary', value: url, click: 'link', text: { type: 'plain-text', content: '进入血染钟楼' } }] },
         { type: 'context', elements: [{ type: 'plain-text', content: '打不开按钮的话，复制这个地址到浏览器：' }, { type: 'plain-text', content: url }] },
-      ]),
-    });
+    ]);
+    if (wait?.msg_id && await this.api.post('/message/update', { msg_id: wait.msg_id, content, temp_target_id: userId }).then(() => true, () => false)) return;
+    await this.api.post('/message/create', { type: 10, ...temp, content });
   }
 
   entryUrl(payload) {
