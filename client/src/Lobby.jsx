@@ -717,6 +717,7 @@ const TEAM_HINT = {
 /** 夜间顺序：首夜 / 其他夜晚各一列，每步写这个角色醒来做什么，最后讲为什么这么排（照官方的夜晚顺序表）。 */
 export function NightOrder({ script }) {
   const o = NIGHT_ORDER[script];
+  if (!o) return <p className="muted">这个模式没有夜晚顺序表。</p>; // 以前直接读 o.first，没有表的模式整页黑屏
   // 夜半狂欢的恶魔开关：这局没有的那几个恶魔（亡骨魔 / 小怪宝 / 利维坦）不列
   const here = (([id]) => !['vigormortis', 'lilmonsta', 'leviathan'].includes(id) || rolesOf(script).includes(id));
   const row = (first) => ([id, what], i) => {

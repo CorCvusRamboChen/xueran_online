@@ -311,7 +311,6 @@
  "**{0}** 公开猜测：{1}": "**{0}** publicly guesses: {1}",
  "现在不能这样做": "You can't do that right now.",
  "你今天已经试过了": "You've already tried that today.",
- "{0} {1} 试着用{2}的能力：他没有这个能力": "{0} {1} tried to use the {2} ability: they don't have it",
  "说书人摇了摇头：什么也没有发生。": "The Storyteller shakes their head. Nothing happens.",
  "等这轮提名 / 投票结束": "Wait for this nomination or vote to finish.",
  "现在不能特赦": "You can't pardon right now.",
@@ -529,5 +528,6 @@
  "：超过三人，今晚不拜访": ": more than three, nobody visits tonight",
  "**{0}** 报名今晚拜访**公爵夫人**（现在 {1} 人）。": "**{0}** signed up to visit the **Duchess** tonight (now {1}).",
  "已经黄昏了：明天再猜": "It's already dusk: guess tomorrow",
- "已经黄昏了：明天再用": "It's already dusk: use it tomorrow"
+ "已经黄昏了：明天再用": "It's already dusk: use it tomorrow",
+ "{0}{1} {2} 试着用{3}的能力：他没有这个能力": "{0}{1} {2} tried to use the {3} ability: they don't have it"
 }

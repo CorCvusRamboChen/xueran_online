@@ -117,3 +117,31 @@ test('问说书人：AI 一直不回也会在限时内答；服务器重启时�
     assert.equal(back.game.amnesiacDay.u2, undefined, '退回：今天还能再问');
   } finally { await room.teardown(); if (back) await back.teardown(); }
 });
+
+test('全员失忆：按了不是自己角色的白天按钮（博学者、艺术家、渔夫），只会「摇头」，不会说「只有某某可以」；特赦不给大家显示（2026-11-23）', async () => {
+  const room = new Room({ key: 'a', guildId: 'g', hostId: 'u1', voice: mockVoice(), settings: { mode: 'auto', script: 'amn', shuffle: false, chooseSeconds: 0.05, pauseMs: 5, killSceneMs: 0 } });
+  for (const [id, name] of [['u1', '阿一'], ['u2', '阿二']]) { room.users.set(id, { id, name, avatar: null }); room.online.add(id); }
+  await room.act('u1', 'join'); await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 5 });
+  await room.act('u1', 'assignRole', { player: 'u2', role: 'empath' });
+  await room.act('u1', 'start');
+  const g = room.game;
+  try {
+    for (const k of room.timers ?? []) clearTimeout(k);
+    g.phase = 'day'; g.day = 1; g.block = 'bot-1';
+    room.judgeReady = () => false;
+    const me = room.viewFor('u2').self;
+    assert.equal(me.canSavant, true, '谁都可以去试');
+    assert.equal(me.canPardon, false, '特赦是失忆者的原创能力，全员失忆里没人有');
+    for (const [kind, p] of [['savant', {}], ['artist', { text: '1 号是邪恶的吗' }], ['fisherman', {}]]) {
+      await room.act('u2', kind, p); // 以前这里会报「只有博学者可以这样问」
+      assert.match(room.viewFor('u2').self.inbox.at(-1).text, /摇了摇头/, kind);
+    }
+  } finally { await room.teardown(); }
+});
+
+test('全员失忆有夜晚顺序表（以前没有，打开「夜间顺序」整页黑屏）', async () => {
+  const { NIGHT_ORDER } = await import('../src/shared/nightOrder.js');
+  assert.ok(NIGHT_ORDER.amn.first.length > 5 && NIGHT_ORDER.amn.other.length > 5);
+  assert.equal(NIGHT_ORDER.amn.first[0][0], 'minioninfo');
+});

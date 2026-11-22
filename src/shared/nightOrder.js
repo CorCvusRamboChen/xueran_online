@@ -1,4 +1,4 @@
-import { travellersOf, ROLES } from '../engine/roles.js';
+import { travellersOf, ROLES, rolesOf } from '../engine/roles.js';
 // 三个剧本的夜晚顺序（照官方英文 App 的夜晚总表 nightsheet.json；2026-11-11 用户定：和集石百科不一样的地方以英文新表为准）：前端「角色」页的夜间顺序说明用，黯月初升和梦殒春宵的结算顺序（engine/bmr.js、engine/snv.js）也读这里。
 // 每一步：[角色 id 或步骤 id, 这一步做什么]。不是角色的步骤（爪牙信息、恶魔信息）在 STEP_NAMES 里起名字。
 
@@ -715,6 +715,14 @@ NIGHT_ORDER.rtb = autoOrder(['clockmaker', 'empath', 'dreamer', 'slayer', 'court
   ['涡流在场时，镇民拿到的信息都是错的；白天没有处决，邪恶获胜。', '末日预言者（传奇角色）是白天的公开行动，不在夜里。']);
 NIGHT_ORDER.nfm = autoOrder(['snakecharmer', 'alsaahir', 'slayer', 'philosopher', 'alchemist', 'virgin', 'heretic', 'damsel', 'klutz', 'psychopath', 'goblin', 'boomdandy', 'pukka', 'vortox'], { duchess: true },
   ['戏法师、精神病患者、哥布林、炸弹人都是白天的公开行动。公爵夫人（传奇角色）：今天正好三人拜访时，夜里叫醒这三人。']);
+// 全员失忆（2026-11-23：以前没有这张表，打开「夜间顺序」整个页面黑屏）：角色从三个官方剧本里发，照官方总表排；7 人及以上首夜先做爪牙和恶魔信息
+NIGHT_ORDER.amn = (() => {
+  const o = autoOrder(rolesOf('amn'));
+  o.first = [['minioninfo', DESC.first.minioninfo ?? '爪牙互认、得知恶魔'], ['demoninfo', DESC.first.demoninfo ?? '恶魔得知爪牙和 3 个伪装'], ...o.first];
+  o.why = ['全员失忆：角色从暗流涌动、黯月初升、梦殒春宵里发。夜里每个人照自己真实角色的能力、按官方总表的顺序醒；这一局在场的角色才会醒。',
+    '7 人及以上，首夜先做爪牙信息和恶魔信息（5–6 人没有）。'];
+  return o;
+})();
 NIGHT_ORDER.chat = autoOrder(['highpriestess', 'savant', 'artist', 'fisherman', 'juggler', 'amnesiac', 'lunatic', 'drunk', 'cerenovus', 'goblin', 'yaggababble', 'lleech'], {},
   ['牙噶巴卜首夜得知暗号；之后夜里不醒，白天每公开说一次暗号，当晚就可能多死一人（要开收音页，说书人才听得到）。', '相克：洗脑师可以让人疯狂地证明自己是哥布林。']);
 

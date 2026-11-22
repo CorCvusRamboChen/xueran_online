@@ -2472,12 +2472,13 @@ export class Room {
     const g = this.game;
     const p = g.get(uid);
     const real = { savant: 'savant', artist: 'artist', fisherman: 'fisherman' }[what];
-    if (!['cannibal', 'amnesiac'].includes(p?.role) || g.abilityOf(p) === real) return false;
+    // 全员失忆：还不知道自己是谁的人也一样（2026-11-23：以前回「只有博学者可以这样问」，等于告诉他「你不是博学者」）
+    if (!(['cannibal', 'amnesiac'].includes(p?.role) || g.allAmn?.(p)) || g.abilityOf(p) === real) return false;
     if (!p.alive || g.phase !== 'day') throw new UserError('现在不能这样做');
     if (this.triedToday(uid, what)) throw new UserError('你今天已经试过了');
     (this.cannibalTries ??= {})[`${uid}:${what}`] = g.day;
     if (what === 'savant') g.savantDay[uid] = g.day;
-    g.record('st', `${ROLES[p.role].name} ${g.tag(uid)} 试着用${ROLES[real].name}的能力：他没有这个能力`);
+    g.record('st', `${g.allAmn?.(p) ? '全员失忆 ' : ''}${ROLES[p.role].name} ${g.tag(uid)} 试着用${ROLES[real].name}的能力：他没有这个能力`);
     this.tell(uid, '说书人摇了摇头：什么也没有发生。', 'storyteller');
     return true;
   }
@@ -4295,7 +4296,7 @@ export class Room {
       gnomeAmigo: p.role === 'gnome' ? p.gnomeAmigo ?? null : null,
       canGiveBeggar: day && !g.visAlive(p) && !p.left && p.ghostVote && !!g.travellerOf?.('beggar')?.alive && !this.vote,
       canPsycho: day && p.alive && ab === 'psychopath' && g.psychoDay?.[uid] !== g.day && !this.noms && !this.pendingNom && !this.vote && !this.dusking && this.duskDay !== g.day,
-      canPardon: day && p.alive && (ab === 'amn_pardon' || amn) && !g.used?.[`pardon-${uid}`] && !!g.block && !this.vote && !this.pendingNom,
+      canPardon: day && p.alive && (ab === 'amn_pardon' || (p.role === 'amnesiac' && !g.amnesiacKnown?.[uid])) && !g.used?.[`pardon-${uid}`] && !!g.block && !this.vote && !this.pendingNom,
       // 被提名、还没开始投票：可以公开声明自己是哥布林（谁都可以这么说）
       canGoblin: day && inScript('goblin', g.script) && this.pendingNom?.nominee === uid && !this.vote && !(g.claims?.[uid] === 'goblin' && g.goblinClaimDay?.[uid] === g.day), // 每天都能重新声明（官方）
       // 谁都可以公开猜落难少女（每人一次，诈身份用）；只有真爪牙的第一次猜测算数
