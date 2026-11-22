@@ -143,5 +143,6 @@ test('全员失忆：按了不是自己角色的白天按钮（博学者、艺�
 test('全员失忆有夜晚顺序表（以前没有，打开「夜间顺序」整页黑屏）', async () => {
   const { NIGHT_ORDER } = await import('../src/shared/nightOrder.js');
   assert.ok(NIGHT_ORDER.amn.first.length > 5 && NIGHT_ORDER.amn.other.length > 5);
-  assert.equal(NIGHT_ORDER.amn.first[0][0], 'minioninfo');
+  const ids = NIGHT_ORDER.amn.first.map(([id]) => id);
+  assert.ok(ids.includes('minioninfo') && ids.indexOf('philosopher') < ids.indexOf('minioninfo'), '照官方：哲学家在爪牙信息之前');
 });

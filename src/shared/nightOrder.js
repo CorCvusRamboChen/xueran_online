@@ -611,8 +611,8 @@ NIGHT_ORDER.mo = {
     ['poppygrower', '罂粟种植者在场：跳过爪牙和恶魔信息，只给恶魔 3 个伪装'],
     ['minioninfo', '爪牙互认、得知恶魔（罂粟种植者在场时跳过）'],
     ['demoninfo', '恶魔得知爪牙和 3 个伪装（罂粟种植者在场时只给伪装）'],
-    ['lilmonsta', '小怪宝（换掉亡骨魔时）：爪牙们决定由谁照看小怪宝，他「是恶魔」'],
     ['engineer', '每局一次：选一个恶魔角色或爪牙角色，让邪恶变成它'],
+    ['lilmonsta', '小怪宝（换掉亡骨魔时）：爪牙们决定由谁照看小怪宝，他「是恶魔」'],
     ['poisoner', '选一人中毒到明天黄昏'],
     ['snakecharmer', '选一名存活玩家：选中恶魔就互换角色和阵营，然后他中毒'],
     ['mezepheles', '得知一个关键词'],
@@ -679,14 +679,24 @@ for (const [script, o] of Object.entries(NIGHT_ORDER)) {
  * 失忆者、食人族拿到的能力也按这张表的位置醒。
  */
 export const MIX_STEPS = {
-  first: ['alchemist', 'apprentice', 'barista', 'bureaucrat', 'thief', 'philosopher', 'sailor', 'lleech', 'lilmonsta', 'engineer', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'fearmonger', 'pukka', 'yaggababble', 'pixie', 'huntsman',
-    'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'grandmother', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress', 'noble', 'balloonist', 'shugenja', 'villageidiot', 'bountyhunter', 'nightwatchman',
-    'butler', 'spy', 'ogre', 'highpriestess', 'general', 'chambermaid', 'mathematician'],
-  other: ['barista', 'bureaucrat', 'thief', 'harlot', 'bonecollector', 'poppygrower', 'philosopher', 'sailor', 'engineer', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'acrobat', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist', 'fearmonger', 'lycanthrope',
-    'imp', 'lleech', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'alhadikhia', 'lilmonsta', 'yaggababble', 'legion', 'assassin', 'godfather', 'gossip', 'hatter',
-    'barber', 'sweetheart', 'sage', 'professor', 'huntsman', 'farmer', 'tinker', 'moonchild', 'grandmother', 'ravenkeeper', // 照官方英文总表（11-11 用户定：和集石百科不一样时以英文新表为准）
-    'washerwoman', 'librarian', 'investigator', 'chef', 'clockmaker', 'noble', 'shugenja', 'empath', 'fortuneteller', 'undertaker', 'dreamer', 'amn_detect', 'amn_echo', 'flowergirl', 'towncrier', 'oracle', 'seamstress',
-    'juggler', 'balloonist', 'villageidiot', 'bountyhunter', 'nightwatchman', 'butler', 'spy', 'highpriestess', 'general', 'duchess', 'chambermaid', 'mathematician'],
+  // 2026-11-23 用户：炼金术士不该在哲学家前面——照 TPI 官方仓库 botc-release 的 resources/data/nightsheet.json 整张重排
+  // （官方表后来改过：公爵夫人在其他夜晚最前、牙噶巴卜首夜在爪牙信息前、痢蛭在其他恶魔之后……）。
+  // 官方表里没有的（失忆者的原创能力、其他夜晚只有刚拿到能力才醒的信息角色）跟着它前面那一项。
+  first: [
+    'apprentice', 'barista', 'bureaucrat', 'thief', 'philosopher', 'alchemist', 'yaggababble', 'sailor', 'engineer', 'lilmonsta', 'lleech', 'poisoner', 'widow',
+    'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'fearmonger', 'harpy', 'mezepheles', 'pukka', 'pixie', 'huntsman',
+    'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'butler', 'grandmother', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress',
+    'noble', 'balloonist', 'shugenja', 'villageidiot', 'bountyhunter', 'nightwatchman', 'spy', 'ogre', 'highpriestess', 'general', 'chambermaid', 'mathematician',
+  ],
+  other: [
+    'duchess', 'barista', 'bureaucrat', 'thief', 'harlot', 'bonecollector', 'philosopher', 'poppygrower', 'sailor', 'engineer', 'poisoner', 'courtier', 'innkeeper',
+    'gambler', 'acrobat', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'fearmonger', 'harpy', 'mezepheles', 'exorcist', 'lycanthrope',
+    'legion', 'imp', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'alhadikhia', 'lleech', 'lilmonsta', 'yaggababble',
+    'assassin', 'godfather', 'gossip', 'hatter', 'barber', 'sweetheart', 'sage', 'professor', 'huntsman', 'farmer', 'tinker', 'moonchild', 'grandmother', 'ravenkeeper',
+    'washerwoman', 'librarian', 'investigator', 'chef', 'clockmaker', 'noble', 'shugenja', 'empath', 'fortuneteller', 'undertaker', 'dreamer', 'amn_detect',
+    'amn_echo', 'flowergirl', 'towncrier', 'oracle', 'seamstress', 'juggler', 'balloonist', 'villageidiot', 'bountyhunter', 'nightwatchman', 'butler', 'spy',
+    'highpriestess', 'general', 'chambermaid', 'mathematician',
+  ],
 };
 
 /**
@@ -715,10 +725,16 @@ NIGHT_ORDER.rtb = autoOrder(['clockmaker', 'empath', 'dreamer', 'slayer', 'court
   ['涡流在场时，镇民拿到的信息都是错的；白天没有处决，邪恶获胜。', '末日预言者（传奇角色）是白天的公开行动，不在夜里。']);
 NIGHT_ORDER.nfm = autoOrder(['snakecharmer', 'alsaahir', 'slayer', 'philosopher', 'alchemist', 'virgin', 'heretic', 'damsel', 'klutz', 'psychopath', 'goblin', 'boomdandy', 'pukka', 'vortox'], { duchess: true },
   ['戏法师、精神病患者、哥布林、炸弹人都是白天的公开行动。公爵夫人（传奇角色）：今天正好三人拜访时，夜里叫醒这三人。']);
+// 官方总表里排在爪牙信息之前的几步（哲学家、炼金术士、罂粟种植者、牙噶巴卜……）：7 人以上的表把爪牙和恶魔信息插在它们后面
+const BEFORE_EVIL_INFO = new Set(['apprentice', 'barista', 'bureaucrat', 'thief', 'boffin', 'philosopher', 'alchemist', 'poppygrower', 'yaggababble', 'magician']);
+const withEvilInfo = (first) => {
+  const k = first.filter(([id]) => BEFORE_EVIL_INFO.has(id)).length;
+  return [...first.slice(0, k), ['minioninfo', DESC.first.minioninfo ?? '爪牙互认、得知恶魔'], ['demoninfo', DESC.first.demoninfo ?? '恶魔得知爪牙和 3 个伪装'], ...first.slice(k)];
+};
 // 全员失忆（2026-11-23：以前没有这张表，打开「夜间顺序」整个页面黑屏）：角色从三个官方剧本里发，照官方总表排；7 人及以上首夜先做爪牙和恶魔信息
 NIGHT_ORDER.amn = (() => {
   const o = autoOrder(rolesOf('amn'));
-  o.first = [['minioninfo', DESC.first.minioninfo ?? '爪牙互认、得知恶魔'], ['demoninfo', DESC.first.demoninfo ?? '恶魔得知爪牙和 3 个伪装'], ...o.first];
+  o.first = withEvilInfo(o.first);
   o.why = ['全员失忆：角色从暗流涌动、黯月初升、梦殒春宵里发。夜里每个人照自己真实角色的能力、按官方总表的顺序醒；这一局在场的角色才会醒。',
     '7 人及以上，首夜先做爪牙信息和恶魔信息（5–6 人没有）。'];
   return o;
@@ -726,8 +742,8 @@ NIGHT_ORDER.amn = (() => {
 // 2026-11-23 三个大剧本（7 人以上首夜先做爪牙和恶魔信息）
 const fullOrder = (script, why) => {
   const o = autoOrder(rolesOf(script));
-  o.first = [['minioninfo', DESC.first.minioninfo ?? '爪牙互认、得知恶魔'], ['demoninfo', DESC.first.demoninfo ?? '恶魔得知爪牙和 3 个伪装'], ...o.first];
-  o.why = ['7 人及以上，首夜先做爪牙信息和恶魔信息（5–6 人没有）。', ...why];
+  o.first = withEvilInfo(o.first);
+  o.why = ['7 人及以上，首夜做爪牙信息和恶魔信息（5–6 人没有）。', ...why];
   return o;
 };
 NIGHT_ORDER.ext = fullOrder('ext', ['解谜大师开局就让一名玩家整局醉酒（他不知道），解谜大师白天猜一次谁醉了：猜对得知恶魔。', '传奇角色哨兵：外来者人数可能多一个或少一个。']);

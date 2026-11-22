@@ -281,3 +281,15 @@ test('小剧本发角色：教父 ±1 外来者、传奇角色哨兵 ±1 外来�
   assert.deepEqual([...seen.otr].sort(), [0, 2]);
   assert.deepEqual([...seen.lod].sort(), [0, 1, 2], '哨兵：外来者可能少一个、多一个或照常');
 });
+
+test('结算顺序照官方英文总表（2026-11-23 用户：谁都别动里炼金术士排在了哲学家前面）', () => {
+  const at = (k, id) => MIX_STEPS[k].indexOf(id);
+  assert.ok(at('first', 'philosopher') < at('first', 'alchemist'), '首夜：哲学家在炼金术士前');
+  assert.ok(at('first', 'yaggababble') < at('first', 'sailor'), '首夜：牙噶巴卜在爪牙信息那一段之前');
+  assert.ok(at('first', 'butler') < at('first', 'grandmother'), '首夜：管家在祖母前');
+  assert.equal(MIX_STEPS.other[0], 'duchess', '其他夜晚：公爵夫人最先');
+  assert.ok(at('other', 'philosopher') < at('other', 'poppygrower'));
+  assert.ok(at('other', 'fearmonger') < at('other', 'harpy') && at('other', 'fearmonger') < at('other', 'exorcist'));
+  assert.ok(at('other', 'legion') < at('other', 'imp') && at('other', 'alhadikhia') < at('other', 'lleech'), '痢蛭在其他恶魔之后');
+  assert.deepEqual(NIGHT_ORDER.nfm.first.map(([id]) => id).slice(0, 2), ['philosopher', 'alchemist']);
+});
