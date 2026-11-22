@@ -530,5 +530,18 @@
  "已经黄昏了：明天再猜": "It's already dusk: guess tomorrow",
  "已经黄昏了：明天再用": "It's already dusk: use it tomorrow",
  "{0}{1} {2} 试着用{3}的能力：他没有这个能力": "{0}{1} {2} tried to use the {3} ability: they don't have it",
- "你猜 **{0}** 是醉酒的那个人。说书人告诉你：**{1}** 是恶魔。（说书人不会告诉你猜没猜对）": "You guessed **{0}** is the drunk player. The Storyteller tells you: **{1}** is the Demon. (You won't be told whether you were right.)"
+ "你猜 **{0}** 是醉酒的那个人。说书人告诉你：**{1}** 是恶魔。（说书人不会告诉你猜没猜对）": "You guessed **{0}** is the drunk player. The Storyteller tells you: **{1}** is the Demon. (You won't be told whether you were right.)",
+ "已经黄昏了": "It's already dusk",
+ "等这一轮结束再发起": "Wait until this round is over",
+ "**{0}** 以**异教领袖**的身份发起教派：想加入的人举手（死人也算、不消耗投票标记），{1} 秒。所有善良玩家都加入，异教领袖所在的阵营获胜。": "**{0}** has started a cult as the **Cult Leader**: raise your hand to join (dead players count, no vote token used), {1} seconds. If every good player joins, the Cult Leader's team wins.",
+ "现在没有人在发起教派": "Nobody is starting a cult right now",
+ "教派：{0} 人加入{1}——{2}": "Cult: {0} joined{1}. {2}",
+ "**所有善良玩家都加入了！{0} 所在的阵营获胜。**": "**Every good player joined! {0}'s team wins.**",
+ "等这一轮结束再说": "Wait until this round is over",
+ "黑帮 **{0}** 想杀掉 **{1}**——要另一边的 **{2}** 同意。": "Gangster **{0}** wants to kill **{1}**; **{2}** on the other side must agree.",
+ "现在不用你表态": "You don't need to answer right now",
+ "**{0}** 没有同意，黑帮这次没有动手。": "**{0}** did not agree; the Gangster didn't kill this time.",
+ "**{0}** 同意了——{1}": "**{0}** agreed. {1}",
+ "**{0} 被黑帮杀死了。**": "**{0} was killed by the Gangster.**",
+ "**{0}** 没有死。": "**{0}** did not die."
 }

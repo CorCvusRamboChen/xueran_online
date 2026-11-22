@@ -576,6 +576,33 @@ export class Storyteller {
     return v;
   }
 
+  /** 异教领袖：两个活邻座一善一恶时，说书人决定他变成哪边。善良落后时多半变善良、领先时多半变邪恶（往落后的一方偏）。 */
+  cultSide(p, nb) {
+    const b = this.balance();
+    const evil = this.roll('cultEvil', { balance: b }, { who: p.id, b });
+    this.note(`异教领袖 ${this.g.name(p.id)} 的两个活邻座一善一恶：说书人让他${evil ? '变成邪恶' : '变成 / 保持善良'}`, b);
+    return evil;
+  }
+
+  /**
+   * 国王（死人不少于活人时每晚）：得知一个存活的角色。官方：要给有力的信息——多半给一个活着的邪恶角色（善良落后时更多），
+   * 有时给善良角色；失效时给一个不在场或死人的角色。
+   */
+  kingSees(p, lie) {
+    const g = this.g;
+    const alive = g.alive().filter((q) => q.id !== p.id && !q.traveller);
+    if (!alive.length) return null;
+    if (lie) {
+      const pool = rolesOf(g.script).filter((r) => !alive.some((q) => q.role === r));
+      return pool.length ? this.choose('kingFake', pool, { who: p.id }) : null;
+    }
+    const b = this.balance();
+    const evil = alive.filter((q) => g.evilOf(q));
+    const pick = evil.length && this.roll('kingEvil', { balance: b }, { who: p.id, b }) ? this.choose('kingSees', evil, { who: p.id }) : this.choose('kingSees', alive, { who: p.id });
+    this.note(`国王 ${g.name(p.id)} 得知存活的 ${ROLES[pick.role].name}`, b);
+    return pick.role;
+  }
+
   /**
    * 解谜大师：开局让谁整局醉酒。官方：几乎总是镇民（拿信息的镇民最有戏），给爪牙恶魔要有极好的理由——这里不给。
    */

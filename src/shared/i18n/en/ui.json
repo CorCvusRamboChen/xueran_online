@@ -784,5 +784,21 @@
  "乙": "B",
  "每局只能猜一次。猜对了，说书人告诉你谁是恶魔；猜错了，说书人告诉你一个不是恶魔的人。说书人不会说你猜没猜对。": "You can guess once per game. If you're right, the Storyteller tells you who the Demon is; if wrong, they name a player who is not the Demon. You won't be told whether you were right.",
  "猜谁是醉酒的人": "Guess the drunk player",
- "就猜他": "Guess this player"
+ "就猜他": "Guess this player",
+ "发起教派": "Start a cult",
+ "异教领袖：每天一次，公开发起教派，所有善良玩家都加入，你所在的阵营获胜。谁都可以这么说": "Cult Leader: once per day, publicly start a cult; if all good players join, your team wins. Anyone may claim this",
+ "黑帮 · 动手": "Gangster · Kill",
+ "黑帮：每天一次，杀掉一个活着的邻座，要另一边的活邻座同意": "Gangster: once per day, kill one alive neighbour if your other alive neighbour agrees",
+ "黑帮": "Gangster",
+ "全场都会看到。大家有一小段时间举手加入（死人也算）。只有真异教领袖、而且所有善良玩家都加入，你所在的阵营才获胜。每天一次。": "Everyone will see it. Players get a short time to raise a hand to join (dead players count). Your team wins only if you really are the Cult Leader and every good player joins. Once per day.",
+ "公开发起": "Start it publicly",
+ "选一个活着的邻座。另一边的活邻座同意，他就死。每天一次（对方不同意可以换一边再试）。": "Pick an alive neighbour. If your other alive neighbour agrees, they die. Once per day (if the other one says no, you can try the other side).",
+ "教派": "Cult",
+ "{0} 以异教领袖的身份发起教派。想加入就举手（死人也算、不消耗投票标记）。": "{0} has started a cult as the Cult Leader. Raise your hand to join (dead players count, and it doesn't use your vote token).",
+ "已经 {0} 人加入。所有善良玩家都加入、而且他真是异教领袖，他所在的阵营就获胜。": "{0} have joined. If every good player joins and they really are the Cult Leader, their team wins.",
+ "退出教派": "Leave the cult",
+ "加入教派 ✋": "Join the cult ✋",
+ "黑帮 {0} 想杀掉 {1}，要 {2} 同意。": "Gangster {0} wants to kill {1}; {2} must agree.",
+ "不同意": "Disagree",
+ "等 {0} 表态（到时间没表态就算不同意）。": "Waiting for {0} to answer (no answer in time counts as no)."
 }

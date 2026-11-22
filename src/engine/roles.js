@@ -322,6 +322,13 @@ const EXP = {
   // 2026-11-22 小剧本 Nobody Fucking Move、Chatastrophe 用到的两个（集石百科：戏法师、牙噶巴卜）
   alsaahir: { name: '戏法师', en: 'Alsaahir', team: 'townsfolk', firstNight: 0, otherNight: 0,
     ability: '每个白天，你可以公开进行一次谁是爪牙，谁是恶魔的猜测。如果你猜对，善良阵营获胜。' },
+  // 2026-11-23 Musical Chairs 用到的三个（集石百科：异教领袖、国王、唱诗男孩）
+  cultleader: { name: '异教领袖', en: 'Cult Leader', team: 'townsfolk', firstNight: 1, otherNight: 1,
+    ability: '每个夜晚，你会转变为与你邻近的一名存活的玩家的阵营。每个白天，你可以提议所有玩家加入你的教派，如果所有善良玩家同意加入，你的阵营获胜。' },
+  king: { name: '国王', en: 'King', team: 'townsfolk', firstNight: 0, otherNight: 1,
+    ability: '每个夜晚，如果死亡的玩家数量大于或等于存活的玩家数量，你会得知一个存活的角色。恶魔知道你是国王。' },
+  choirboy: { name: '唱诗男孩', en: 'Choirboy', team: 'townsfolk', firstNight: 0, otherNight: 1,
+    ability: '如果恶魔杀死了国王，你会得知哪名玩家是恶魔。[+国王]' },
   // 2026-11-23 大剧本 Extension Cord、No Roles Barred 用到的两个（集石百科：解谜大师、军团）
   puzzlemaster: { name: '解谜大师', en: 'Puzzlemaster', team: 'outsider', firstNight: 0, otherNight: 0,
     ability: '一名玩家醉酒，即使你已死亡。每局游戏限一次，你可以猜测谁是那个醉酒的玩家，如果猜对了，你会得知谁是恶魔，但如果猜错了，你会得知错误的「谁是恶魔」信息。' },
@@ -373,6 +380,9 @@ const TRAVELLERS = {
     ability: '每个白天，你可以选择至多三对玩家交换座位。玩家不能离开自己的座位进行私聊。' },
   bishop: { name: '主教', en: 'Bishop', team: 'traveller', edition: 'bmr', firstNight: 0, otherNight: 0,
     ability: '只有说书人可以发起提名。每个白天，说书人至少要提名一名你对立阵营的玩家。' },
+  // 实验性旅行者（集石百科「黑帮」）：Musical Chairs 用
+  gangster: { name: '黑帮', en: 'Gangster', team: 'traveller', edition: 'exp', firstNight: 0, otherNight: 0,
+    ability: '每个白天限一次，你可以杀死与你邻近的两名存活的玩家中的一名，但需要另一边那个存活的玩家同意。' },
   deviant: { name: '怪咖', en: 'Deviant', team: 'traveller', edition: 'snv', firstNight: 0, otherNight: 0,
     ability: '如果你表现得很有趣，当天你不能被流放。' },
   bonecollector: { name: '集骨者', en: 'Bone Collector', team: 'traveller', edition: 'snv', firstNight: 0, otherNight: 1, choose: { count: 1, dead: true, optional: true, once: true },
@@ -398,6 +408,7 @@ export const SCRIPT_TRAVELLERS = {
   // 夜半狂欢：剧本卡（botcscripts 104 号 v3.8.0）没列旅行者，网上也没找到别人配好的；用户 2026-11-20 同意借梦殒春宵的五个（同一套引擎、同样玩信息和疯狂）
   mo: ['deviant', 'bonecollector', 'barista', 'harlot', 'butcher'],
   ext: ['bureaucrat', 'butcher', 'matron', 'bonecollector', 'bishop'], // Extension Cord 剧本 JSON 里列的
+  mc: ['gangster', 'harlot', 'matron', 'deviant', 'apprentice'],       // Musical Chairs 剧本 JSON 里列的
 };
 // 传奇角色（集石百科「传奇角色」页）：不是玩家拿的角色，是说书人给这一局加的全场规则；会告诉所有人加了哪些。
 // 剧本里用 sentinel / ivory / fibbin / doomsayer / duchess / bootlegger 标记（夜半狂欢：哨兵、圣洁之魂；裁缝与暴乱：骗人精；小剧本：末日预言者、公爵夫人、私酒贩子）
@@ -490,6 +501,11 @@ export const SCRIPTS = {
   // Nobody Fucking Move v1.0.1（Brockwell，当月推荐剧本）：传奇角色私酒贩子（自定义规则：炼金术士拿不在场的爪牙能力）、公爵夫人、哨兵
   nfm: { id: 'nfm', name: '谁都别动', en: 'Nobody Fucking Move', engine: 'snv', teensy: true, players: [5, 6], sentinel: true, duchess: true, bootlegger: true,
     roles: ['snakecharmer', 'alsaahir', 'slayer', 'philosopher', 'alchemist', 'virgin', 'heretic', 'damsel', 'klutz', 'psychopath', 'goblin', 'boomdandy', 'pukka', 'vortox'] },
+  // Musical Chairs v1.0.1（Chuji，botcscripts 995 号）：抢椅子——舞蛇人、麻脸巫婆、理发师、方古、哲学家都在换角色；
+  // 新角色异教领袖、国王、唱诗男孩，旅行者黑帮。相克：麻脸巫婆把邪恶玩家变成异教领袖，他不会因自己的能力变善良
+  mc: { id: 'mc', name: '抢椅子', en: 'Musical Chairs', engine: 'snv',
+    roles: ['investigator', 'librarian', 'cultleader', 'empath', 'sailor', 'king', 'snakecharmer', 'savant', 'amnesiac', 'philosopher', 'choirboy', 'tealady', 'fool',
+      'acrobat', 'barber', 'drunk', 'recluse', 'pithag', 'devilsadvocate', 'poisoner', 'marionette', 'fanggu', 'nodashii', 'vigormortis', 'lleech'] },
   // 2026-11-23 三个大剧本（角色表取自 botcscripts.com 的剧本 JSON；相克照官方 Djinn 表）
   // Extension Cord v5.1.1（Viva La Sam，当月推荐剧本，botcscripts 收藏第二多）：解谜大师、传奇角色哨兵
   ext: { id: 'ext', name: '延长线', en: 'Extension Cord', engine: 'snv', sentinel: true,

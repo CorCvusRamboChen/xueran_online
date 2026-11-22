@@ -368,6 +368,10 @@ export class Room {
       case 'doomsayer': this.doomsayer(uid); break;
       case 'duchess': this.duchessVisit(uid, p.on !== false); break;
       case 'puzzle': this.puzzle(uid, p.target); break;
+      case 'cult': this.cultStart(uid); break;
+      case 'cultHand': this.cultHand(uid, !!p.up); break;
+      case 'gangster': this.gangster(uid, p.target); break;
+      case 'gangAgree': this.gangAgree(uid, !!p.yes); break;
       case 'knaves': { const g = this.requireGame(); try { g.knavesPick(uid, p.pick); } catch (e) { throw new UserError(e.message); } } break;
       case 'rps': this.rpsHand(uid, p.hand); break;
       case 'hand': this.hand(uid, !!p.up); break;
@@ -2068,6 +2072,74 @@ export class Room {
     let ids;
     try { ids = g.duchessVisit(uid, on); } catch (e) { throw new UserError(e.message); }
     if (before !== ids.includes(uid)) this.pub(`**${g.name(uid)}** ${on ? '报名今晚拜访' : '不去拜访'}**公爵夫人**（现在 ${ids.length} 人${ids.length === 3 ? '，正好三人' : ids.length > 3 ? '：超过三人，今晚不拜访' : ''}）。`, 'vote');
+    this.changed();
+  }
+
+  // ───────────── 2026-11-23 Musical Chairs：异教领袖发起教派、黑帮 ─────────────
+  /** 异教领袖（谁都可以声称）：公开提议所有人加入教派，大家举手（像流放一样，死人也算、不消耗投票标记）。 */
+  cultStart(uid) {
+    const g = this.requireGame();
+    if (this.dusking || this.duskDay === g.day) throw new UserError('已经黄昏了');
+    if (this.cult || this.exile || this.vote || this.pendingNom || this.riotStep || this.rps || this.gangAsk) throw new UserError('等这一轮结束再发起');
+    try { g.cultStart(uid); } catch (e) { throw new UserError(e.message); }
+    this.pauseNoms();
+    const secs = this.settings.exileSeconds ?? 20;
+    const c = this.cult = { by: uid, until: Date.now() + secs * 1000, yes: new Set() };
+    if (!this.isFake(uid)) c.yes.add(uid);
+    // 机器人：善良的多半不加入（不知道真假），邪恶的随便
+    for (const q of g.players) if (this.isFake(q.id) && !q.left && q.id !== uid && Math.random() < (g.evilOf(q) ? 0.5 : 0.25)) c.yes.add(q.id);
+    this.pub(`**${g.name(uid)}** 以**异教领袖**的身份发起教派：想加入的人举手（死人也算、不消耗投票标记），${secs} 秒。所有善良玩家都加入，异教领袖所在的阵营获胜。`, 'vote');
+    c.timer = this.later(secs * 1000, () => this.finishCult(c));
+    this.changed();
+  }
+  cultHand(uid, up) {
+    const c = this.cult; const g = this.requireGame();
+    const p = g.get(uid);
+    if (!c) throw new UserError('现在没有人在发起教派');
+    if (!p || p.left) throw new UserError('你不是这局的玩家');
+    if (up) c.yes.add(uid); else c.yes.delete(uid);
+    this.changed();
+  }
+  finishCult(c) {
+    const g = this.game;
+    if (this.cult !== c || !g) return;
+    this.cult = null;
+    this.cancel(c.timer);
+    const yes = [...c.yes].filter((id) => g.get(id) && !g.get(id).left);
+    const { won } = g.cultResolve(c.by, yes);
+    this.pub(`教派：${yes.length} 人加入${yes.length ? `（${yes.map((id) => g.name(id)).join('、')}）` : ''}——${won ? `**所有善良玩家都加入了！${g.name(c.by)} 所在的阵营获胜。**` : '什么都没有发生。'}`, won ? 'end' : 'vote');
+    if (g.winner) { this.later(0, () => this.endGame()); return; }
+    this.resumeNoms();
+    this.changed();
+  }
+
+  /** 黑帮：选一个活邻座，另一边的活邻座同意（30 秒内）他就死。另一边是机器人时机器人自己决定。 */
+  gangster(uid, target) {
+    const g = this.requireGame();
+    if (this.dusking || this.duskDay === g.day) throw new UserError('已经黄昏了');
+    if (this.gangAsk || this.cult || this.exile || this.vote || this.pendingNom) throw new UserError('等这一轮结束再说');
+    let other;
+    try { other = g.gangsterCheck(uid, target); } catch (e) { throw new UserError(e.message); }
+    const ask = this.gangAsk = { by: uid, target, other, until: Date.now() + 30_000 };
+    this.pub(`黑帮 **${g.name(uid)}** 想杀掉 **${g.name(target)}**——要另一边的 **${g.name(other)}** 同意。`, 'vote');
+    ask.timer = this.later(30_000, () => this.gangDone(ask, false));
+    if (this.isFake(other)) this.later(2000 + Math.random() * 4000, () => { const o = g.get(other); const t = g.get(target); this.gangDone(ask, !!o && !!t && (g.evilOf(o) !== g.evilOf(t) ? Math.random() < 0.6 : Math.random() < 0.15)); });
+    this.changed();
+  }
+  gangAgree(uid, yes) {
+    const ask = this.gangAsk;
+    if (!ask || ask.other !== uid) throw new UserError('现在不用你表态');
+    this.gangDone(ask, yes);
+  }
+  gangDone(ask, yes) {
+    const g = this.game;
+    if (this.gangAsk !== ask || !g) return;
+    this.gangAsk = null;
+    this.cancel(ask.timer);
+    if (!yes) { this.pub(`**${g.name(ask.other)}** 没有同意，黑帮这次没有动手。`, 'vote'); this.changed(); return; }
+    const { died } = g.gangsterKill(ask.by, ask.target);
+    this.pub(`**${g.name(ask.other)}** 同意了——${died ? `**${g.name(ask.target)} 被黑帮杀死了。**` : `**${g.name(ask.target)}** 没有死。`}`, died ? 'death' : 'vote');
+    if (g.winner) this.later(0, () => this.endGame());
     this.changed();
   }
 
@@ -4160,6 +4232,8 @@ export class Room {
       // 旅行者：观战的人可以加入（白天）；流放举手；枪手 / 法官能不能用
       travellers: this.travellersOk(g) ? travellerList(g.script).map((id) => ({ id, name: ROLES[id].name, ability: ROLES[id].ability, taken: !!g.travellerOf(id) })) : null,
       canTravel: spectator && !this.ended && this.travellersOk(g) && uid !== this.stId && g.players.length < 20 && g.townAlive() >= 7, // 官方百科：还有七名或更多玩家存活时才考虑加入旅行者
+      cult: this.cult ? { by: this.cult.by, until: this.cult.until, count: this.cult.yes.size, mine: this.cult.yes.has(uid) } : null,
+      gangAsk: this.gangAsk ? { by: this.gangAsk.by, target: this.gangAsk.target, other: this.gangAsk.other, until: this.gangAsk.until } : null,
       exile: this.exile ? { target: this.exile.target, by: this.exile.by, until: this.exile.until, count: this.exile.yes.size, mine: this.exile.yes.has(uid), need: Math.ceil(g.players.filter((q) => !q.left).length / 2) } : null,
       butcher: this.butcher ? { by: this.butcher.by, stage: this.butcher.stage, target: this.butcher.target, until: this.butcher.until, count: this.butcher.yes.size, mine: this.butcher.yes.has(uid) } : null,
       laughs: this.exile?.laughs?.size ?? 0, laughed: !!this.exile?.laughs?.has(uid),
@@ -4323,6 +4397,8 @@ export class Room {
       canDoom: day && !this.dusking && this.duskDay !== g.day && !!SCRIPTS[g.script]?.doomsayer && g.visAlive(p) && !g.doomUsed?.includes(uid) && g.alive().filter((q) => g.visAlive(q)).length >= 4,
       duchess: SCRIPTS[g.script]?.duchess ? { open: day && !this.dusking && this.duskDay !== g.day, mine: g.duchessToday().includes(uid), ids: g.duchessToday() } : null,
       // 牙噶巴卜的暗号和今天说了几次；疯子以为自己是牙噶巴卜时显示他的假暗号（界面一模一样，不然他一看就知道自己是假的）
+      canCult: day && !this.dusking && this.duskDay !== g.day && inScript('cultleader', g.script) && p.alive && g.cultDay?.[uid] !== g.day && !this.cult,
+      gangTargets: day && !this.dusking && p.alive && p.role === 'gangster' && !p.left && g.gangDay?.[uid] !== g.day && !this.gangAsk && g.aliveNeighbours(p).length === 2 ? g.aliveNeighbours(p).map((q) => q.id) : null,
       canPuzzle: day && p.alive && g.abilityOf(p) === 'puzzlemaster' && !!g.puzzle && !g.puzzle.guessed,
       knaves: g.knaves ? { pick: g.knaves.pick[uid] ?? 'A' } : null, // 诡诈杰克：我现在找哪位说书人（不告诉他哪位说真话）
       yaggPhrase: ((y) => (y ? { phrase: y.phrase, today: y.day === g.day ? y.said : 0 } : null))(p.role === 'yaggababble' ? (g.yagg?.told ? g.yagg : null) : g.yaggFake?.[uid]),

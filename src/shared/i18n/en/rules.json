@@ -431,5 +431,14 @@
  "诡诈杰克（奇遇角色）：两位说书人一真一假，能力信息由你选的那位给；整局最多一次，他们会在黄昏悄悄互换。": "Knaves (Loric): two Storytellers, one truthful and one lying; your ability info comes from the one you pick, and at most once per game they secretly swap at dusk.",
  "四个恶魔：小恶魔、沙巴洛斯、珀、方古。": "Four Demons: Imp, Shabaloth, Po, Fang Gu.",
  "军团夜里不醒：说书人决定今晚死不死人、死谁": "Legion doesn't wake at night: the Storyteller decides whether and who dies",
- "7 人及以上，首夜做爪牙信息和恶魔信息（5–6 人没有）。": "With 7 or more players, the first night includes Minion info and Demon info (not in 5–6 player games)."
+ "7 人及以上，首夜做爪牙信息和恶魔信息（5–6 人没有）。": "With 7 or more players, the first night includes Minion info and Demon info (not in 5–6 player games).",
+ "阵营变了才醒：变成一个活邻座的阵营（两个邻座一善一恶时由说书人选）": "Wakes only if their alignment changes: takes an alive neighbour's alignment (the Storyteller picks if one is good and one evil)",
+ "阵营变了才醒：变成一个活邻座的阵营": "Wakes only if their alignment changes: takes an alive neighbour's alignment",
+ "死人不少于活人时才醒：得知一个存活的角色": "Wakes only when the dead equal or outnumber the living: learns an alive character",
+ "恶魔杀死了国王的那晚才醒：得知谁是恶魔": "Wakes only the night the Demon kills the King: learns who the Demon is",
+ "国王：恶魔首夜就知道谁是国王（7 人以下也告诉）。唱诗男孩在场时一定有国王。": "King: the Demon learns who the King is on the first night (even under 7 players). If the Choirboy is in play, so is the King.",
+ "黑帮（旅行者）、异教领袖的教派都是白天的公开行动。": "The Gangster (Traveller) and the Cult Leader's cult are both public daytime actions.",
+ "阵营变了才醒（说书人竖大拇指朝上或朝下）": "Wakes only if their alignment changes (the Storyteller gives a thumbs up or down)",
+ "死人不少于活人时才醒": "Wakes only when the dead equal or outnumber the living",
+ "恶魔杀死国王的那晚才醒": "Wakes only the night the Demon kills the King"
 }

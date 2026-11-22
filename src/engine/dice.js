@@ -60,6 +60,10 @@ export const DICE = {
   yaggKill: { base: 0.8, balance: 1.2 },
   // 军团（2026-11-23）：军团还多时多半杀军团，善良领先时偶尔杀善良（官方：杀善良通常不公平）
   legionKillGood: { base: 0.15, balance: 1.5 },
+  // 异教领袖（2026-11-23）：两个活邻座一善一恶时变成邪恶的机会。善良领先时多变邪恶（往落后的一方偏）
+  cultEvil: { base: 0.5, balance: 1.5 },
+  // 国王：给一个活着的邪恶角色的机会（官方：给有力的信息）。善良落后时更多给邪恶
+  kingEvil: { base: 0.6, balance: -1.2 },
   // 诡诈杰克：黄昏两位说书人互换（整局一次）。善良领先、越往后越可能（官方：通常在善良开始弄清谁说真话时）
   knavesSwap: { base: 0.12, balance: 1.5, late: 1.2 },
   sweetheartEvil: { base: 0.5 },

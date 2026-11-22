@@ -503,6 +503,21 @@
       <dl><div class="ai-row"><dt>什么时候</dt><dd>米诺陶迷宫，从第 2 天黄昏起，整局最多一次。玩家不会被告知。</dd></div><div class="ai-row"><dt>怎么决定</dt><dd>官方：通常在善良玩家开始弄清谁说真话时换。基础 12%，局势权重 +1.5、越往后越容易（第 4 天起加满 +1.2）：第 2 天局势 −0.5 / 0.1 / +0.5 时 <b>9% / 19% / 30%</b>，第 4 天 <b>18% / 34% / 49%</b>。</dd></div><div class="ai-row"><dt>信息怎么给</dt><dd>选了说假话的那位，能力信息一定是错的（和涡流一样处理）；说真话的照常（博学者两条都给真的，照官方范例）。醉酒中毒的人两位都可能给假。规则、提名投票、爪牙恶魔信息两位都说真话。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/storyteller.js</code> <code>knavesSwap</code>；<code>engine/snv.js</code> <code>knavesLiar</code>、<code>knavesDusk</code>、<code>lieMode</code>。</dd></div></dl>
     </article>
     <article class="ai-card pnl">
+      <header><h3>异教领袖：两个邻座一善一恶时变哪边</h3><span class="tag tag-dark">夜里</span></header>
+      
+      <dl><div class="ai-row"><dt>什么时候</dt><dd>抢椅子，每个夜晚。两个活邻座同一阵营就照邻座变，不用判断；一善一恶时说书人选。</dd></div><div class="ai-row"><dt>怎么决定</dt><dd>往落后的一方偏。掷一次「变邪恶」：基础 50%，局势权重 +1.5（善良领先时多变邪恶）：局势 −0.5 / 0.1 / +0.5 时 <b>32% / 54% / 68%</b>。麻脸巫婆造出来的异教领袖不会因自己的能力变善良（官方相克）。阵营变了才叫醒他，竖大拇指告诉他。</dd></div><div class="ai-row"><dt>教派</dt><dd>白天谁都可以公开发起（每人每天一次），全场举手（死人也算、不消耗投票标记），时长和流放一样。只有真异教领袖、没失效、而且所有善良玩家都举了手，他所在的阵营获胜。机器人：邪恶一半举手，善良四分之一举手。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/storyteller.js</code> <code>cultSide</code>；<code>engine/snv.js</code> <code>cultResolve</code>；<code>server/room.js</code> <code>cultStart</code>、<code>finishCult</code>。</dd></div></dl>
+    </article>
+    <article class="ai-card pnl">
+      <header><h3>国王：死人不少于活人时给哪个角色</h3><span class="tag tag-dark">夜里</span></header>
+      
+      <dl><div class="ai-row"><dt>什么时候</dt><dd>抢椅子，死人不少于活人的每个夜晚。恶魔首夜就知道谁是国王（7 人以下也告诉）。</dd></div><div class="ai-row"><dt>怎么决定</dt><dd>官方：要给有力的信息。掷一次「给邪恶角色」：基础 60%，局势权重 −1.2（善良落后时多给邪恶）：局势 −0.5 / 0.1 / +0.5 时 <b>73% / 57% / 45%</b>；没掷中就从所有活着的角色里随便给一个。失效时给一个不在场的角色。</dd></div><div class="ai-row"><dt>唱诗男孩</dt><dd>恶魔夜里杀死国王的那晚醒来得知恶魔是谁，不用判断。发了唱诗男孩就一定放国王。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/storyteller.js</code> <code>kingSees</code>；<code>engine/snv.js</code> 夜晚 <code>king</code>、<code>choirboy</code>。</dd></div></dl>
+    </article>
+    <article class="ai-card pnl">
+      <header><h3>黑帮（旅行者）：机器人同不同意</h3><span class="tag tag-mot">白天</span></header>
+      
+      <dl><div class="ai-row"><dt>什么时候</dt><dd>黑帮选一个活邻座要杀，另一边的活邻座是机器人时。真人有 30 秒点同意 / 不同意，没表态算不同意。</dd></div><div class="ai-row"><dt>怎么决定</dt><dd>机器人 2–6 秒后表态：自己和被杀的人阵营不同时 60% 同意，相同时 15%。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>server/room.js</code> <code>gangster</code>、<code>gangDone</code>；<code>engine/snv.js</code> <code>gangsterCheck</code>、<code>gangsterKill</code>。</dd></div></dl>
+    </article>
+    <article class="ai-card pnl">
       <header><h3>7 号空座（七步成诗的灯神规则）</h3><span class="tag tag-mot">白天</span><span class="tag tag-dark">夜里</span></header>
       
       <dl><div class="ai-row"><dt>夜里替它选人</dt><dd>按机器人规则（邪恶角色优先挑活着的善良，其余随机）（<code>engine/snv.js:1078</code> <code>autoChooseSNV</code>）。</dd></div><div class="ai-row"><dt>今天用不用唯一一次发言</dt><dd>每天开放提名时掷，基础 35%，被提名时 +1.5、过半人死了 +1.2（35% / 被提名 71% / 后半段 64% / 两者 89%）；活人 ≤ 4 一定用（<code>dice.js:76</code>、<code>server/room.js:2571</code>）。</dd></div><div class="ai-row"><dt>怎么说</dt><dd>邪恶能提名时 35% 拿来提名一个善良玩家、25% 私聊（不能提名时 60% 私聊）、其余公开；善良 30% 私聊、70% 公开（<code>room.js:2615</code> <code>seat7Mode</code>）。对象：邪恶找善良，善良随便找活人（<code>room.js:2624</code>）。</dd></div><div class="ai-row"><dt>说什么</dt><dd>大模型写，失败按规则：善良报角色和最后一条信息，邪恶报一个伪装并怀疑一个善良玩家。</dd></div><div class="ai-row"><dt>炸弹人倒数时</dt><dd>指一个不同阵营的人（<code>room.js:2548-2550</code>）。</dd></div></dl>

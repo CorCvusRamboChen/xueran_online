@@ -303,5 +303,17 @@
  "米诺陶迷宫": "The Minotaur's Labyrinth",
  "解谜大师：让 {0}（{1}）整局醉酒": "Puzzlemaster: {0} ({1}) is drunk all game",
  "军团：说书人让 {0}（{1}）今晚死亡": "Legion: the Storyteller kills {0} ({1}) tonight",
- "博学者 {0}：诡诈杰克说真话的那位，两条都是真的": "Savant {0}: asked the truthful Knaves Storyteller, so both are true"
+ "博学者 {0}：诡诈杰克说真话的那位，两条都是真的": "Savant {0}: asked the truthful Knaves Storyteller, so both are true",
+ "异教领袖": "Cult Leader",
+ "每个夜晚，你会转变为与你邻近的一名存活的玩家的阵营。每个白天，你可以提议所有玩家加入你的教派，如果所有善良玩家同意加入，你的阵营获胜。": "Each night, you become the alignment of an alive neighbour. If all good players choose to join your cult, your team wins.",
+ "国王": "King",
+ "每个夜晚，如果死亡的玩家数量大于或等于存活的玩家数量，你会得知一个存活的角色。恶魔知道你是国王。": "Each night, if the dead equal or outnumber the living, you learn 1 alive character. The Demon knows you are the King.",
+ "唱诗男孩": "Choirboy",
+ "如果恶魔杀死了国王，你会得知哪名玩家是恶魔。[+国王]": "If the Demon kills the King, you learn which player is the Demon. [+the King]",
+ "每个白天限一次，你可以杀死与你邻近的两名存活的玩家中的一名，但需要另一边那个存活的玩家同意。": "Once per day, you may choose to kill an alive neighbour, if your other alive neighbour agrees.",
+ "抢椅子": "Musical Chairs",
+ "异教领袖 {0} 的两个活邻座一善一恶：说书人让他{1}": "Cult Leader {0}'s alive neighbours are one good, one evil: the Storyteller makes them {1}",
+ "变成邪恶": "turn evil",
+ "变成 / 保持善良": "turn / stay good",
+ "国王 {0} 得知存活的 {1}": "King {0} learns that {1} is alive"
 }

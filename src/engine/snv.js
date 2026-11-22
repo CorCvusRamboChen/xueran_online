@@ -169,6 +169,11 @@ export function rollMixed(script, n, rng, { exclude = null } = {}) {
     const swap = sample(towns.filter((r) => r !== 'villageidiot'), extra, rng);
     towns = [...towns.filter((r) => !swap.includes(r)), ...swap.map(() => 'villageidiot')];
   }
+  // 唱诗男孩 [+国王]：国王不在就换掉一个别的镇民（官方：开局装袋前）
+  if (towns.includes('choirboy') && L.tf.includes('king') && !towns.includes('king')) {
+    const drop = pickOne(towns.filter((r) => r !== 'choirboy'), rng);
+    if (drop) towns = [...towns.filter((r) => r !== drop), 'king'];
+  }
   let outs = sample(out, o, rng);
   // 巡山人 [+落难少女]：落难少女一定在场（外来者有空位就换进来，没有就占一个镇民的位置）
   if (towns.includes('huntsman') && out.includes('damsel') && !outs.includes('damsel')) {
@@ -504,6 +509,54 @@ export const SNV_METHODS = {
     return this.duchess.ids;
   },
   duchessToday() { return this.duchess?.day === this.day ? this.duchess.ids : []; },
+
+  // ───────────────────────── 2026-11-23 Musical Chairs ─────────────────────────
+  /** 异教领袖：谁都可以声称发起教派（每人每天一次）。 */
+  cultStart(uid) {
+    if (this.phase !== 'day') throw new Error('只能在白天');
+    const p = this.get(uid);
+    if (!p || p.left) throw new Error('你不在游戏中');
+    this.cultDay ??= {};
+    if (this.cultDay[uid] === this.day) throw new Error('你今天已经发起过了');
+    this.cultDay[uid] = this.day;
+  },
+  /**
+   * 教派举手结束：只有活着、没失效的真异教领袖，而且所有善良玩家（死人也算，旅行者不算）都加入，才算数——他所在的阵营获胜。
+   * 返回 { won }。
+   */
+  cultResolve(uid, yesIds) {
+    const p = this.get(uid);
+    const good = this.players.filter((q) => !q.left && !q.traveller && !this.evilOf(q));
+    const all = good.length > 0 && good.every((q) => yesIds.includes(q.id));
+    const real = p && p.alive && this.abilityOf(p) === 'cultleader';
+    this.record('vote', `${this.tag(uid)} 发起教派：${yesIds.length} 人加入${all ? '，所有善良玩家都加入了' : ''}${real ? '' : '（他不是异教领袖）'}`);
+    if (!real || !all) return { won: false };
+    if (this.snvBroken(p)) { this.flag(p, '异教领袖失效：所有善良玩家都加入了也没有效果'); return { won: false }; }
+    this.setWinner(this.evilOf(p) ? 'evil' : 'good', `所有善良玩家都加入了异教领袖 ${this.name(uid)} 的教派`);
+    return { won: true };
+  },
+  /** 黑帮（旅行者）：要杀的人必须是他的活邻座，另一边的活邻座同意。返回另一边是谁。 */
+  gangsterCheck(uid, targetId) {
+    if (this.phase !== 'day') throw new Error('只能在白天');
+    const p = this.get(uid);
+    if (!p?.alive || p.role !== 'gangster' || p.left) throw new Error('你不是黑帮');
+    this.gangDay ??= {};
+    if (this.gangDay[uid] === this.day) throw new Error('你今天已经用过了');
+    const nb = this.aliveNeighbours(p);
+    if (!nb.some((q) => q.id === targetId)) throw new Error('只能选你活着的邻座');
+    const other = nb.find((q) => q.id !== targetId);
+    if (!other) throw new Error('你只有一个活着的邻座，没人能同意');
+    return other.id;
+  },
+  /** 黑帮：另一边同意了，被选的人死亡（今天用掉）。 */
+  gangsterKill(uid, targetId) {
+    (this.gangDay ??= {})[uid] = this.day;
+    const t = this.get(targetId);
+    const res = this.snvKill(t, 'gangster', this.dayMessages());
+    this.record('slay', `黑帮 ${this.tag(uid)} 杀了 ${this.tag(targetId)}${res === 'died' ? '' : '（没有死）'}`);
+    this.checkWinner();
+    return { died: res === 'died' };
+  },
 
   // ───────────────────────── 2026-11-23 三个大剧本 ─────────────────────────
   /** 诡诈杰克：这个人现在选的是说假话的那位说书人吗。 */
@@ -849,7 +902,7 @@ export const SNV_METHODS = {
       madness: '因疯狂被处决', storyteller: '说书人判定死亡', starpass: '恶魔自杀（传位）', slayer: '被猎手射杀',
       harpy: '没能疯狂地证明，被鹰身女妖的能力杀死', boomdandy: '死于炸弹人的炸弹',
       assassin: '被刺客刺杀', godfather: '被教父杀死', gambler: '赌错了角色', gossip: '因造谣者的声明而死', tinker: '修补匠突然死亡',
-      golem: '被魔像提名，不是恶魔所以死了', doomsayer: '被末日预言者带走', lleech: '宿主死了，痢蛭随之死亡', riot: '被提名，死于暴乱', psychopath: '被精神病患者杀死',
+      golem: '被魔像提名，不是恶魔所以死了', doomsayer: '被末日预言者带走', gangster: '被黑帮杀死', lleech: '宿主死了，痢蛭随之死亡', riot: '被提名，死于暴乱', psychopath: '被精神病患者杀死',
       acrobat: '杂技演员选中的人醉酒或中毒了', lycanthrope: '被半兽人杀死',
       alhadikhia: '被哈迪寂亚选中，选择了死去', alhadikhia3: '被哈迪寂亚选中，三个人都选了活，一起死去', moonchild: '被月之子带走', grandmother: '孙子被恶魔杀死，祖母随之而去',
     }[cause] ?? cause;
@@ -872,6 +925,7 @@ export const SNV_METHODS = {
     if (ab === 'moonchild') this.pendingMoonchild = p.id;
     if (this.pixie && Object.keys(this.pixie).length) this.pixieGain(p);
     if (p.role === 'pukka') this.pukkaVictim = null; // 普卡死亡：「中毒」标记移除，接任的新普卡不会毒死旧普卡毒的人 // 失效的月之子也要选（他不知道），选中善良也不会死
+    if (cause === 'demon' && this.abilityOf(p) === 'king') this.kingKilled = { night: this.night, by: this.hitBy ?? this.demonsAlive()[0]?.id ?? null }; // 唱诗男孩：恶魔杀死了国王
     if (cause === 'demon' && p.id === this.grandchild) { // 孙子被恶魔杀死，祖母随之而去
       const gm = this.holders('grandmother').find((q) => q.alive && !this.snvBroken(q));
       if (gm) this.snvKill(gm, 'grandmother', messages);
@@ -1081,6 +1135,8 @@ export const SNV_METHODS = {
     // 疯子：恶魔知道他是谁（这是疯子能力的一部分，人少没有恶魔信息时也告诉）
     const lunatic = this.players.find((p) => p.role === 'lunatic');
     if (lunatic && demon) this.tellLunatic(demon, say);
+    // 国王：恶魔知道谁是国王（国王能力的一部分，人少也告诉）
+    for (const k of this.players.filter((q) => q.role === 'king')) if (demon) say(demon, `**${this.name(k.id)}** 是**国王**。`);
     // 寡妇首夜看魔典（先看，再选人）
     for (const w of this.players.filter((p) => this.abilityOf(p) === 'widow' && p.alive && !this.used[p.id])) say(w, `魔典（和说书人看到的一样）：
 ${this.grimoire(w.id)}
@@ -1312,6 +1368,34 @@ ${this.grimoire(w.id)}
         case 'hatter': if (this.hatterStep(i, messages, say) === 'pause') return pause(); break;
         case 'bountyhunter': this.bountyStep(tell); break;
         case 'nightwatchman': this.nightwatchStep(say); break;
+        case 'cultleader': for (const p of this.holders('cultleader').filter((q) => q.alive)) {
+          if (broken(p)) continue; // 失效：阵营不变（官方范例）
+          const nb = this.aliveNeighbours(p);
+          if (!nb.length) continue;
+          const evils = nb.filter((q) => this.evilOf(q)).length;
+          const toEvil = evils === nb.length ? true : evils === 0 ? false : this.st.cultSide(p, nb);
+          if (toEvil === this.evilOf(p)) continue;
+          if (!toEvil && p.noTurnGood) { this.record('st', `相克：${this.tag(p.id)} 是麻脸巫婆造出的异教领袖，不会因自己的能力变善良`); continue; }
+          p.evil = toEvil;
+          tell(p, `你的阵营变了：你现在是**${toEvil ? '邪恶' : '善良'}**阵营。（邻座的阵营）`, `说书人对你竖起了大拇指${toEvil ? '朝下' : '朝上'}。`);
+          this.record('st', `异教领袖 ${this.tag(p.id)} 变成了${toEvil ? '邪恶' : '善良'}阵营`);
+        } break;
+        case 'king': for (const p of this.holders('king').filter((q) => q.alive)) {
+          const dead = this.players.filter((q) => !q.traveller && !this.visAlive(q)).length;
+          const live = this.players.filter((q) => !q.traveller && this.visAlive(q)).length;
+          if (dead < live) continue;
+          const seen = this.st.kingSees(p, this.lieMode(p));
+          if (seen) tell(p, `存活的角色里有：**${ROLES[seen].name}**。`, `你得知了一个角色：**${ROLES[seen].name}**。`);
+        } break;
+        case 'choirboy': {
+          const k = this.kingKilled;
+          if (!k || k.night !== this.night) break;
+          for (const p of this.holders('choirboy')) {
+            const demon = (k.by && this.get(k.by)) || this.demonsAlive()[0];
+            const shown = this.lieMode(p) ? this.st.choose('choirboyWrong', this.players.filter((q) => q.id !== p.id && q.id !== demon?.id), { who: p.id }) : demon;
+            if (shown) tell(p, `恶魔杀死了国王：**${this.name(shown.id)}** 是恶魔。`, `你得知了一名玩家：**${this.name(shown.id)}**。`);
+          }
+        } break;
         case 'harlot': if (this.harlotStep(i, messages) === 'pause') return pause(); break;
         case 'bonecollector': if (this.boneStep(i, steps, messages) === 'pause') return pause(); break;
         case 'philosopher': for (const p of this.holders('philosopher')) {
@@ -1339,7 +1423,7 @@ ${this.grimoire(w.id)}
             if (st !== t) this.record('st', `相克：麻脸巫婆要造落难少女，说书人改让 ${this.tag(st.id)} 变成落难少女`);
             this.changeRole(st, 'damsel'); say(st, `你变成了 **${this.amnName(st, 'damsel')}**。你的阵营没有变。`); this.afterChange(say); changed.push(st.id); continue;
           }
-          if (['politician', 'ogre'].includes(c.role) && this.evilOf(t)) t.noTurnGood = true; // 相克：被变成政客 / 食人魔的邪恶玩家不能靠自身能力转为善良
+          if (['politician', 'ogre', 'cultleader'].includes(c.role) && this.evilOf(t)) t.noTurnGood = true; // 异教领袖也一样（官方 Djinn 表） // 相克：被变成政客 / 食人魔的邪恶玩家不能靠自身能力转为善良
           this.changeRole(t, c.role);
           if (c.role === 'drunk') t.shownRole = pickOne(goodOf(this.script).filter((r) => ROLES[r].team === 'townsfolk' && !this.players.some((q) => q.role === r || q.shownRole === r) && !['amnesiac', 'cannibal'].includes(r)), this.rng) ?? 'drunk';
           if (c.role === 'lunatic') t.shownRole = pickOne(rolesOf(this.script, 'demon'), this.rng) ?? 'lunatic';

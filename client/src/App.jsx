@@ -743,12 +743,14 @@ function SnvButtons({ s, act }) {
       {me.canDoom && <Btn kind="secondary" onClick={() => setOpen('doom')} title="传奇角色末日预言者：活人不少于 4 个时，每人每局可以公开用一次，说书人让一名和你同阵营的存活玩家死亡">末日预言者</Btn>}
       {me.duchess?.open && <Btn kind={me.duchess.mine ? 'primary' : 'secondary'} onClick={() => act('duchess', { on: !me.duchess.mine })}
         title="传奇角色公爵夫人：黄昏时正好三人报名，当晚三人各自得知三人里有几个邪恶（其中一人的数是错的）">{me.duchess.mine ? `不去拜访公爵夫人（${me.duchess.ids.length}/3）` : `拜访公爵夫人（${me.duchess.ids.length}/3）`}</Btn>}
+      {me.canCult && <Btn kind={me.role?.id === 'cultleader' ? 'primary' : 'secondary'} onClick={() => setOpen('cult')} title="异教领袖：每天一次，公开发起教派，所有善良玩家都加入，你所在的阵营获胜。谁都可以这么说">发起教派</Btn>}
+      {me.gangTargets && <Btn kind="primary" onClick={() => setOpen('gang')} title="黑帮：每天一次，杀掉一个活着的邻座，要另一边的活邻座同意">黑帮 · 动手</Btn>}
       {me.canPuzzle && <Btn kind="primary" onClick={() => setOpen('puzzle')} title="每局一次：猜谁是被你弄醉的人。猜对了得知谁是恶魔，猜错了得到错误的「谁是恶魔」（说书人不说你猜没猜对）">解谜大师 · 猜谁醉了</Btn>}
       {me.knaves && <KnavesPick me={me} act={act} />}
       {me.yaggPhrase && <span className="muted yagg-note" title="白天每公开说一次，当晚就可能有一名玩家死亡（要开着收音页说）">你的暗号「{me.yaggPhrase.phrase}」· 今天说了 {me.yaggPhrase.today} 次</span>}
       {open && createPortal(
         <div className="sheet-bg gossip-bg" onClick={close} role="presentation">
-          <div className="gossip-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={{ declare: '公开声明', juggle: '公开猜测', artist: '提问', fisherman: '请教说书人', amnesiac: '猜我的能力', pardon: '特赦', harpy: '公开指认', damsel: '猜落难少女', alsaahir: '戏法师', doom: '末日预言者', puzzle: '解谜大师' }[open]}>
+          <div className="gossip-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={{ declare: '公开声明', juggle: '公开猜测', artist: '提问', fisherman: '请教说书人', amnesiac: '猜我的能力', pardon: '特赦', harpy: '公开指认', damsel: '猜落难少女', alsaahir: '戏法师', doom: '末日预言者', puzzle: '解谜大师', cult: '发起教派', gang: '黑帮' }[open]}>
             {open === 'declare' && <DeclareForm s={s} act={act} onClose={close} />}
             {open === 'juggle' && <JuggleForm s={s} act={act} onClose={close} />}
             {open === 'artist' && <ArtistForm act={act} onClose={close} />}
@@ -758,6 +760,9 @@ function SnvButtons({ s, act }) {
             {open === 'damsel' && <DamselForm s={s} act={act} onClose={close} />}
             {open === 'alsaahir' && <AlsaahirForm s={s} act={act} onClose={close} />}
             {open === 'puzzle' && <PuzzleForm s={s} act={act} onClose={close} />}
+            {open === 'cult' && <Confirm title="发起教派" text="全场都会看到。大家有一小段时间举手加入（死人也算）。只有真异教领袖、而且所有善良玩家都加入，你所在的阵营才获胜。每天一次。" ok="公开发起" onOk={() => act('cult')} onClose={close} />}
+            {open === 'gang' && <div className="gossip-form"><h3>黑帮 · 动手</h3><p className="muted">选一个活着的邻座。另一边的活邻座同意，他就死。每天一次（对方不同意可以换一边再试）。</p>
+              <div className="btn-row">{me.gangTargets.map((id) => <Btn key={id} kind="primary" onClick={async () => { if (await act('gangster', { target: id })) close(); }}>{s.players.find((p) => p.id === id)?.seat}号 {s.players.find((p) => p.id === id)?.name}</Btn>)}<Btn onClick={close}>取消</Btn></div></div>}
             {open === 'doom' && <Confirm title="末日预言者" text="每人每局只能用一次，全场都会看到。说书人会挑一名和你同阵营的存活玩家（可能是你自己）当场死亡。现在就用吗？" ok="公开使用" onOk={() => act('doomsayer')} onClose={close} />}
             {open === 'fisherman' && <Confirm title="请教说书人" text="每局只能请教一次。说书人会私下给你一条建议，告诉你该去做什么（不一定是一条事实）。现在就用吗？" ok="现在请教" onOk={() => act('fisherman')} onClose={close} />}
           </div>
@@ -767,6 +772,34 @@ function SnvButtons({ s, act }) {
 }
 
 const scriptRoles = (script) => rolesOf(script);
+
+/** 异教领袖发起了教派：所有人（死人也算）举手加入。 */
+function CultPanel({ s, act, g }) {
+  const c = s.cult;
+  const secs = useCountdown(c.until);
+  const by = g(c.by);
+  return (
+    <Panel title="教派" tone="phy" extra={secs != null ? <span className="nom-clock">{secs}</span> : null}>
+      <p className="lead"><b>{by?.seat}号 {by?.name}</b> 以异教领袖的身份发起教派。想加入就举手（死人也算、不消耗投票标记）。</p>
+      <p className="muted">已经 {c.count} 人加入。所有善良玩家都加入、而且他真是异教领袖，他所在的阵营就获胜。</p>
+      {s.players.some((p) => p.id === s.me) && <div className="btn-row"><Btn kind={c.mine ? 'secondary' : 'primary'} onClick={() => act('cultHand', { up: !c.mine })}>{c.mine ? '退出教派' : '加入教派 ✋'}</Btn></div>}
+    </Panel>
+  );
+}
+
+/** 黑帮要杀一个邻座：等另一边的邻座同意。 */
+function GangPanel({ s, act, g }) {
+  const k = s.gangAsk;
+  const secs = useCountdown(k.until);
+  const nm = (id) => `${g(id)?.seat}号 ${g(id)?.name}`;
+  return (
+    <Panel title="黑帮" tone="phy" extra={secs != null ? <span className="nom-clock">{secs}</span> : null}>
+      <p className="lead">黑帮 <b>{nm(k.by)}</b> 想杀掉 <b>{nm(k.target)}</b>，要 <b>{nm(k.other)}</b> 同意。</p>
+      {k.other === s.me ? <div className="btn-row"><Btn kind="primary" onClick={() => act('gangAgree', { yes: true })}>同意</Btn><Btn onClick={() => act('gangAgree', { yes: false })}>不同意</Btn></div>
+        : <p className="muted">等 {nm(k.other)} 表态（到时间没表态就算不同意）。</p>}
+    </Panel>
+  );
+}
 
 /** 诡诈杰克：选找哪位说书人拿信息（甲 / 乙，一真一假，不知道哪位说真话）。随时能换，下一次拿信息时生效。 */
 function KnavesPick({ me, act }) {
@@ -1281,6 +1314,8 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
   // 诸神黄昏：倒下的人正在决定开不开枪。自己倒下了就先开枪（自由活动也让路）；别人在自由活动时照常活动，看公告
   if (s.ragShot && (s.ragShot.mine || !s.roam)) return <RagShotPanel s={s} act={act} g={g} />;
   if (s.exile) return <ExilePanel s={s} act={act} g={g} />; // 流放举手：自由活动时也要能举
+  if (s.cult) return <CultPanel s={s} act={act} g={g} />; // 异教领袖的教派举手：自由活动时也要能举
+  if (s.gangAsk) return <GangPanel s={s} act={act} g={g} />;
   if (s.butcher) return <ButcherPanel s={s} act={act} g={g} />;
   if (s.roam) return <RoamActions s={s} act={act} name={name} face={face} setMode={setMode} />;
 
@@ -1323,6 +1358,8 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
 
   if (s.boom) return <><BoomPanel s={s} act={act} g={g} />{roomCard}</>;
   if (s.exile) return <><ExilePanel s={s} act={act} g={g} />{roomCard}</>;
+  if (s.cult) return <><CultPanel s={s} act={act} g={g} />{roomCard}</>;
+  if (s.gangAsk) return <><GangPanel s={s} act={act} g={g} />{roomCard}</>;
   if (s.butcher) return <><ButcherPanel s={s} act={act} g={g} />{roomCard}</>;
   if (s.rps) return <><RpsPanel s={s} act={act} g={g} />{roomCard}</>;
   if (s.riot) return <><RiotPanel s={s} act={act} g={g} />{roomCard}</>;
