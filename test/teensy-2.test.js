@@ -236,3 +236,48 @@ test('房间：戏法师、末日预言者是公开行动，全场看得到；�
   assert.ok(room.log.some((l) => /报名今晚拜访\*\*公爵夫人\*\*/.test(l.text)));
   await room.teardown();
 });
+
+// ───────────── 11-22「检查下 bug」查出来的几处 ─────────────
+test('存档：牙噶巴卜的暗号、末日预言者用过的人、公爵夫人的报名、戏法师今天猜过，重启后都还在', () => {
+  const g = mk('nfm', ['snakecharmer', 'alsaahir', 'slayer', 'psychopath', 'pukka', 'virgin']);
+  night(g); g.dawn();
+  g.alsaahirGuess('p1', ['p2'], []);
+  g.duchessVisit('p3', true);
+  g.doomUsed.push('p6');
+  const back = Game.fromJSON(JSON.parse(JSON.stringify(g)));
+  assert.throws(() => back.alsaahirGuess('p1', ['p2'], []), /今天已经猜过了/);
+  assert.deepEqual(back.duchessToday(), ['p3']);
+  assert.deepEqual(back.doomUsed, ['p6']);
+  const c = mk('chat', ['highpriestess', 'savant', 'artist', 'fisherman', 'yaggababble']);
+  night(c);
+  const c2 = Game.fromJSON(JSON.parse(JSON.stringify(c)));
+  assert.equal(c2.yagg.phrase, c.yagg.phrase, '暗号还在');
+  c2.dawn();
+  assert.equal(c2.yaggHeard('p5', c2.yagg.phrase), 1, '重启后说暗号照样算');
+});
+
+test('疯子以为自己是牙噶巴卜：拿到一段假暗号，说了照样计数（界面和真的一样），但没人因此死', () => {
+  const g = mk('chat', ['highpriestess', 'savant', 'lunatic', 'fisherman', 'lleech']);
+  g.get('p3').shownRole = 'yaggababble';
+  const { messages } = night(g, { p5: ['p1'] });
+  const fake = g.yaggFake.p3?.phrase;
+  assert.ok(fake && text(messages, 'p3').includes(fake), '疯子首夜拿到暗号');
+  g.dawn();
+  assert.equal(g.yaggHeard('p3', `我觉得${fake}`), 1, '疯子说假暗号也计数');
+  assert.equal(g.yaggFake.p3.said, 1);
+  g.endDay();
+  night(g);
+  assert.ok(!g.st.journal.some((j) => /牙噶巴卜今天说了/.test(j.text ?? j)), '疯子的假暗号不会让说书人杀人');
+});
+
+test('小剧本发角色：教父 ±1 外来者、传奇角色哨兵 ±1 外来者都生效（以前小剧本只调男爵）', () => {
+  const seen = { otr: new Set(), lod: new Set() };
+  for (let seed = 1; seed <= 400; seed++) {
+    const a = rollTeensy('otr', 6, makeRng(seed));
+    const out = a.filter((r) => ROLES[r].team === 'outsider').length;
+    if (a.includes('godfather')) { assert.notEqual(out, 1, '有教父：外来者不是标准的 1 个'); seen.otr.add(out); }
+    seen.lod.add(rollTeensy('lod', 6, makeRng(seed)).filter((r) => ROLES[r].team === 'outsider').length);
+  }
+  assert.deepEqual([...seen.otr].sort(), [0, 2]);
+  assert.deepEqual([...seen.lod].sort(), [0, 1, 2], '哨兵：外来者可能少一个、多一个或照常');
+});

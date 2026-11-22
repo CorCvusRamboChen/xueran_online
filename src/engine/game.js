@@ -220,7 +220,8 @@ export class Game {
       'pixie', 'mez', 'execHist', 'nomBy', 'blockVoters', 'politicianDone', 'fibbinUsed', 'riotChain',
       'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared', 'aiLead', 'politicianEval', 'scapegoatDay', 'gunDay', 'judgeUsed',
       'leviDue', 'goblinClaimDay', 'widowTold', 'baristaFx', 'harlotAsk', 'matronDay', 'butcherDay', 'mezEasy', 'nomHistory', 'demonSwap', 'monsta', 'lleechHost', 'lleechDue', 'fear', 'fearNews', 'evilHist',
-      'rochDone', 'bhEvilTf', 'fauxPaw', 'bh', 'acro', 'lycanNight', 'hatterDue', 'hatterNight', 'allKnown'];
+      'rochDone', 'bhEvilTf', 'fauxPaw', 'bh', 'acro', 'lycanNight', 'hatterDue', 'hatterNight', 'allKnown',
+      'yagg', 'yaggFake', 'doomUsed', 'duchess', 'alsaahirDay']; // 2026-11-22 小剧本：牙噶巴卜的暗号、末日预言者、公爵夫人、戏法师（漏存的话重启后全丢）
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -247,7 +248,7 @@ export class Game {
     g.bluffsShared ??= false;
     g.id ??= `old-${g.players.map((p) => p.seat + p.id.slice(-3)).join('')}`;
     g.script ??= 'tb';
-    if (g.engine === 'snv') { g.claims ??= {}; g.balloon ??= {}; g.leviGood ??= []; g.amnesiacDay ??= {}; g.amnesiacKnown ??= {}; g.woke ??= []; g.farmerDue ??= []; g.damselTried ??= {}; }
+    if (g.engine === 'snv') { g.claims ??= {}; g.balloon ??= {}; g.leviGood ??= []; g.amnesiacDay ??= {}; g.amnesiacKnown ??= {}; g.woke ??= []; g.farmerDue ??= []; g.damselTried ??= {}; g.doomUsed ??= []; g.alsaahirDay ??= {}; g.yaggFake ??= {}; }
     if (g.script === 'bmr') { g.wokeTonight = new Set(); g.goonHit = false; g.blocked = null; g.nightRevived ??= []; }
     return g;
   }

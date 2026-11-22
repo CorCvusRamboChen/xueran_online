@@ -527,7 +527,6 @@
  "我跟你们说": "let me tell you",
  "没毛病": "no problem",
  "先别急": "hold on",
- "{0} 公开说了暗号「{1}」{2}（今天第 {3} 次）": "{0} said the phrase \"{1}\" publicly{2} (time {3} today)",
  "{0} 次": " {0} times",
  "机器人牙噶巴卜 {0} 今天「说了」{1} 次暗号": "Bot Yaggababble {0} \"said\" the phrase {1} times today",
  "你不在游戏中": "You are not in this game",
@@ -558,5 +557,7 @@
  "今晚的死亡由说书人决定：暗号没有让人死": "Tonight's deaths are the Storyteller's choice: the phrase killed nobody",
  "疯子 {0} 以为自己是牙噶巴卜，拿到的暗号是「{1}」（没有效果）": "Lunatic {0} thinks they are the Yaggababble and was given the phrase \"{1}\" (no effect)",
  "你拜访了公爵夫人：你们三人之中有 **{0}** 个是邪恶的。（三人里有一人拿到的数是错的）": "You visited the Duchess: **{0}** of you three are evil. (One of the three got a wrong number.)",
- "公爵夫人：{0} 拜访，其中 {1} 个邪恶；{2} 拿到错的数 {3}": "Duchess: {0} visited, {1} of them evil; {2} got the wrong number {3}"
+ "公爵夫人：{0} 拜访，其中 {1} 个邪恶；{2} 拿到错的数 {3}": "Duchess: {0} visited, {1} of them evil; {2} got the wrong number {3}",
+ "{0} 公开说了{1}暗号「{2}」{3}（今天第 {4} 次）": "{0} said{1} the phrase \"{2}\" publicly{3} (time {4} today)",
+ "（疯子以为的）": " (the Lunatic's imagined)"
 }

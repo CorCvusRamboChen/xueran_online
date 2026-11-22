@@ -2037,6 +2037,7 @@ export class Room {
   /** 戏法师：公开猜谁是恶魔、谁是爪牙（谁都可以声称，每人每天一次）。猜中（真戏法师、没失效）善良直接获胜。 */
   alsaahir(uid, demons, minions) {
     const g = this.requireGame();
+    if (this.dusking || this.duskDay === g.day) throw new UserError('已经黄昏了：明天再猜');
     if (!Array.isArray(demons) || (minions != null && !Array.isArray(minions))) throw new UserError('猜测格式不对');
     let r;
     try { r = g.alsaahirGuess(uid, demons, minions ?? []); } catch (e) { throw new UserError(e.message); }
@@ -2049,6 +2050,7 @@ export class Room {
   /** 末日预言者（传奇角色）：活着的玩家每局公开用一次，说书人让一名和他同阵营的存活玩家死亡。 */
   doomsayer(uid) {
     const g = this.requireGame();
+    if (this.dusking || this.duskDay === g.day) throw new UserError('已经黄昏了：明天再用');
     let r;
     try { r = g.doomsay(uid); } catch (e) { throw new UserError(e.message); }
     this.pub(`**${g.name(uid)}** 公开使用了**末日预言者**——${r.victim ? (r.died ? `**${g.name(r.victim)} 当场死亡。**` : `说书人选中了 **${g.name(r.victim)}**，但他没有死。`) : '没有人死亡。'}`, r.died ? 'death' : 'vote');
@@ -3016,8 +3018,10 @@ export class Room {
     this.recentLive.set(k, now);
     this.tacitHear(id, text); // 疯狂的默许：别人说他被洗脑 / 跳了他的角色，他要站出来否认
     this.hearBreak(id, text).catch((e) => console.warn('[botc] 判定破坏疯狂出错：', e.message));
-    const y = this.game?.yagg;
-    if (y && this.game.yaggHeard(id, text, translate(y.phrase))) this.changed(); // 牙噶巴卜的暗号：本机转写的文字里数（英文桌也认英文译文），不交给大模型
+    // 牙噶巴卜的暗号：本机转写的文字里数（英文桌也认英文译文），不交给大模型；疯子以为自己是牙噶巴卜时数他的假暗号
+    const gy = this.game;
+    const ph = gy?.get?.(id)?.role === 'lunatic' ? gy.yaggFake?.[id]?.phrase : gy?.yagg?.phrase;
+    if (ph && gy.yaggHeard(id, text, translate(ph))) this.changed();
   }
 
   async hearBreak(id, text) {
@@ -4297,10 +4301,11 @@ export class Room {
       // 谁都可以公开猜落难少女（每人一次，诈身份用）；只有真爪牙的第一次猜测算数
       canDamsel: day && inScript('damsel', g.script) && !g.damselTried?.[uid],
       // 2026-11-22 小剧本：戏法师（谁都能声称，每人每天一次）、末日预言者（活人每局一次，活人不少于 4）、公爵夫人（报名拜访）
-      canAlsaahir: day && inScript('alsaahir', g.script) && g.visAlive(p) && g.alsaahirDay?.[uid] !== g.day,
-      canDoom: day && !!SCRIPTS[g.script]?.doomsayer && g.visAlive(p) && !g.doomUsed?.includes(uid) && g.alive().filter((q) => g.visAlive(q)).length >= 4,
+      canAlsaahir: day && !this.dusking && this.duskDay !== g.day && inScript('alsaahir', g.script) && g.visAlive(p) && g.alsaahirDay?.[uid] !== g.day,
+      canDoom: day && !this.dusking && this.duskDay !== g.day && !!SCRIPTS[g.script]?.doomsayer && g.visAlive(p) && !g.doomUsed?.includes(uid) && g.alive().filter((q) => g.visAlive(q)).length >= 4,
       duchess: SCRIPTS[g.script]?.duchess ? { open: day && !this.dusking && this.duskDay !== g.day, mine: g.duchessToday().includes(uid), ids: g.duchessToday() } : null,
-      yaggPhrase: p.role === 'yaggababble' && g.yagg?.told ? { phrase: g.yagg.phrase, today: g.yagg.day === g.day ? g.yagg.said : 0 } : null,
+      // 牙噶巴卜的暗号和今天说了几次；疯子以为自己是牙噶巴卜时显示他的假暗号（界面一模一样，不然他一看就知道自己是假的）
+      yaggPhrase: ((y) => (y ? { phrase: y.phrase, today: y.day === g.day ? y.said : 0 } : null))(p.role === 'yaggababble' ? (g.yagg?.told ? g.yagg : null) : g.yaggFake?.[uid]),
       harpy: g.harpyMad?.id === uid && g.harpyMad.night === g.night && g.phase === 'day' ? { target: g.harpyMad.target, name: g.name(g.harpyMad.target), claimed: !!g.harpyMad.claimed } : null,
       hearing: !!this.hearing,
       mic: day ? this.mic?.tokenFor(uid) ?? null : null,

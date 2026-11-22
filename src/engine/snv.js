@@ -102,19 +102,9 @@ export function rollSNV(n, rng, { exclude = null } = {}) {
 export function rollTeensy(script, n, rng, { exclude = null } = {}) {
   const [lo, hi] = playersOf(script);
   if (n < lo || n > hi) throw new Error(`《${SCRIPTS[script].name}》是 ${lo}–${hi} 人的小剧本`);
-  const ok = (r) => !exclude?.has(r);
-  const L = listsOf(script);
-  let [t, o, m] = DISTRIBUTION[n];
-  const out = L.out.filter(ok);
-  const minions = sample(L.min.filter(ok), m, rng);
-  const demon = pickOne(L.dem.filter(ok), rng);
-  if (minions.includes('baron')) { const add = Math.max(0, Math.min(2, out.length - o)); t -= add; o += add; }
-  let towns = sample(L.tf.filter(ok), t, rng);
-  if (towns.includes('balloonist') && towns.length > 1 && o < out.length && rng() < 0.5) { // 只剩气球驾驶员一个镇民时没人可换
-    const drop = pickOne(towns.filter((r) => r !== 'balloonist'), rng);
-    towns = towns.filter((r) => r !== drop); o += 1;
-  }
-  return shuffle([...towns, ...sample(out, o, rng), ...minions, demon], rng);
+  // 2026-11-22：以前只调男爵和气球驾驶员，新小剧本里的教父（±1 外来者）、传奇角色哨兵（±1 外来者）都没生效。
+  // 改成和自选角色的大剧本同一套（rollMixed：男爵、教父、亡骨魔 / 方古、哨兵、气球驾驶员、村夫、巡山人都调）
+  return rollMixed(script, n, rng, { exclude });
 }
 
 /** 无神论者局占多少（官方：无神论者是说书人决定放不放的角色）。放了就没有邪恶角色，说书人假装有。 */
@@ -395,6 +385,7 @@ export const SNV_METHODS = {
     this.doomUsed = [];       // 末日预言者（传奇角色）：用过的人（每人每局一次）
     this.duchess = null;      // 公爵夫人（传奇角色）：{ day, ids } 这天报名拜访的人
     this.alsaahirDay = {};    // 戏法师（谁都可以声称）：id → 哪天猜过（每人每天一次）
+    this.yaggFake = {};       // 疯子以为自己是牙噶巴卜：id → { phrase, day, said }（界面和真的一样显示「今天说了几次」，没有效果）
     this.execHist = [];       // 处决记录（政客终局判责任用）：{ day, id, by 提名者, voters }
     this.twinSync(null);
   },
@@ -420,9 +411,9 @@ export const SNV_METHODS = {
    * 官方：自己说出来、夹在别的话里都算；醉酒中毒时说的也算，看夜里他清不清醒。返回这句数到几次。
    */
   yaggHeard(id, text, alt = null) { // alt：暗号的另一种说法（英文桌说的是英文译文）
-    const y = this.yagg;
     const p = this.get(id);
-    if (!y || this.phase !== 'day' || !p || p.role !== 'yaggababble' || !p.alive) return 0;
+    const y = p?.role === 'yaggababble' ? this.yagg : p?.role === 'lunatic' ? this.yaggFake?.[id] : null; // 疯子数他自己的假暗号（没有效果）
+    if (!y || this.phase !== 'day' || !p || !p.alive) return 0;
     const clean = (x) => String(x ?? '').replace(/[\s，。！？、,.!?…「」“”"'：:；;（）()-]/g, '');
     const hay = clean(text).toLowerCase();
     let n = 0;
@@ -433,7 +424,7 @@ export const SNV_METHODS = {
     if (!n) return 0;
     if (y.day !== this.day) { y.day = this.day; y.said = 0; }
     y.said += n; y.total += n;
-    this.record('st', `${this.tag(id)} 公开说了暗号「${y.phrase}」${n > 1 ? ` ${n} 次` : ''}（今天第 ${y.said} 次）`);
+    this.record('st', `${this.tag(id)} 公开说了${p.role === 'lunatic' ? '（疯子以为的）' : ''}暗号「${y.phrase}」${n > 1 ? ` ${n} 次` : ''}（今天第 ${y.said} 次）`);
     return n;
   },
   /** 机器人牙噶巴卜：说不了话，按一个真人恶魔大概会说的次数算（0–2 次，多半 1 次）。 */
@@ -1571,6 +1562,7 @@ ${this.grimoire(w.id)}
         // 疯子以为自己是牙噶巴卜：首夜也「得知」一段暗号（换一段，和真的不一样），之后说了也没用
         if (first) for (const l of this.players.filter((q) => q.role === 'lunatic' && q.shownRole === 'yaggababble' && q.alive)) {
           const fake = this.st.choose('yaggPhraseLunatic', YAGG_PHRASES.filter((x) => x !== this.yagg?.phrase), { who: l.id });
+          (this.yaggFake ??= {})[l.id] = { phrase: fake, day: 0, said: 0, total: 0 };
           say(l, `你的暗号是「**${fake}**」。白天你每公开说一次（夹在别的话里也算），当晚就可能有一名玩家死亡。要开着收音页说，说书人才听得到。`);
           this.record('st', `疯子 ${this.tag(l.id)} 以为自己是牙噶巴卜，拿到的暗号是「${fake}」（没有效果）`);
         }
