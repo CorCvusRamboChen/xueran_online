@@ -321,3 +321,51 @@ export function judgeAfterGame(facts, talk, losers, { court = true, ...opts } = 
       return { recap, moments: (Array.isArray(o?.moments) ? o.moments : []).map((x) => clip(x, 80)).filter(Boolean).slice(0, 3), criminal };
     }, opts);
 }
+
+// ───────────── 给官网「AI 说书人是怎么判的」页用（scripts/site-ai.mjs 读这里生成 site/ai/index.html）─────────────
+// 只是把上面的提示词和每次发给模型的消息格式列出来，不改任何判定；改了提示词重跑一次脚本（test/site-ai.test.js 会提醒）。
+const T = (...parts) => parts.join('\n\n');
+export const PROMPT_CATALOG = [
+  { id: 'gossip', name: '造谣者的声明', fn: 'judgeStatement', system: SYSTEM, models: 'escalate',
+    user: T('【这局的真实情况】\n（每个人的真实角色、阵营、生死 + 到现在为止的复盘时间线）', '【要判断的声明】\n（造谣者白天公开说的那句话）'),
+    out: '{"reason":"…","verdict":"true"|"false"|"unknown"}' },
+  { id: 'artist', name: '艺术家的是非题', fn: 'judgeArtist', system: ARTIST_SYSTEM, models: 'escalate',
+    user: T('【这局的真实情况】\n（同上）', '【艺术家的问题】\n（他私下问的那句话）'),
+    out: '{"reason":"…（有歧义时以「歧义：」开头）","verdict":"true"|"false"|"unknown"}' },
+  { id: 'madness', name: '有没有「疯狂」地证明（洗脑师、畸形秀演员、默许）', fn: 'judgeMadness', system: MADNESS_SYSTEM, models: 'escalate',
+    user: T('【这名玩家今天说的话】\n（他今天在语音里说的话，语音转写，一行一句）', '【要证明的事】\n（比如「我是贞洁者」）'),
+    out: '{"reason":"…","verdict":"true"|"false"|"unknown"}' },
+  { id: 'break', name: '刚才那句话有没有破坏疯狂（当场判）', fn: 'judgeBreak', system: BREAK_SYSTEM, models: 'fast',
+    user: T('【他最近说的话】\n（最近几句转写，最后一句是刚说的）', '【情况】\n他要证明自己是：（角色）\n他自己知道的角色：（疯子、酒鬼这类写「以为的角色」，并注明真实角色他不知道）'),
+    out: '{"reason":"…","verdict":"true"|"false"|"unknown"}' },
+  { id: 'amnesiac', name: '失忆者猜自己的能力', fn: 'judgeAmnesiac', system: AMNESIAC_SYSTEM, models: 'json',
+    user: T('【他真正的能力】\n（能力原文）', '【他的猜测】\n<<<（他写的猜测，去掉里面的 <<< >>>）>>>'),
+    out: '{"reason":"…","level":"无关"|"有关"|"接近"|"完美"}' },
+  { id: 'fisherman', name: '渔夫的建议', fn: 'adviseFisherman', system: FISHERMAN_SYSTEM, models: 'json',
+    user: T('【这局的真实情况】\n（同上）', '【渔夫】\n阵营：（善良/邪恶）；能力正常 / 失效（给坏建议）\n【不能点名】（能力正常时：所有邪恶玩家和被怀疑的人，座位号 + 名字）'),
+    out: '{"advice":"…"}' },
+  { id: 'seat7', name: '七步成诗：7 号空座替自己发言', fn: 'speakSeat7', system: SEAT7_SYSTEM, models: 'json',
+    user: '（7 号座位的角色和阵营、它夜里得到的信息、邪恶的话还有同伴和伪装、白天公开发生的事、这次发言的场合：被提名 / 提名别人 / 私聊）',
+    out: '{"say":"…"}' },
+  { id: 'lead', name: '谁在赢（将军的信息、说书人的局势）', fn: 'judgeLead', system: LEAD_SYSTEM, models: 'json',
+    user: T('【这局的真实情况】\n（同上）', '【今天大家说的话】\n（全员收音的转写；没收到就写「没有收到发言」）'),
+    out: '{"reason":"…","side":"good"|"evil"|"neither"}' },
+  { id: 'responsible', name: '政客：输的一方谁负最大责任', fn: 'judgeResponsible', system: RESPONSIBLE_SYSTEM, models: 'json',
+    user: T('【这局的真实情况】\n（同上）', '【输掉的一方】\n（座位号 + 名字）', '【每天大家说的话】\n（每天的纪要和转写）'),
+    out: '{"reason":"…","seat":座位号或 0}' },
+  { id: 'table', name: '读场：玩家们现在怎么想', fn: 'readTable', system: TABLE_SYSTEM, models: 'json',
+    user: T('【公开情况】\n（座位、生死、提名投票处决记录、公开声明——不含任何人的真实身份）', '【剧本角色表】\n（这个剧本的角色名）', '【大家说的话】\n（每天的转写）'),
+    out: '{"claims":[],"suspects":[],"trusted":[],"accusations":[],"atheist":0,"stVoices":[],"summary":"","minutes":{"points":[],"quotes":[]}}' },
+  { id: 'after', name: '赛后总结和军事法庭', fn: 'judgeAfterGame', system: AFTER_SYSTEM, models: 'json',
+    user: T('【这局的真实情况】\n（同上）', '【输掉的一方】\n（座位号 + 名字）', '【每天的纪要和发言】\n（每天的纪要和转写）'),
+    out: '{"recap":"","moments":[],"criminal":{"reason":"","seat":0,"evidence":[]}}' },
+];
+/** 模型的先后顺序（官网页用）。 */
+export const MODEL_CHAINS = {
+  escalate: '先问不思考的 DeepSeek V4 Pro（约 1 秒，限时 12 秒）；它判「unknown」先记着，再问开深度思考的 Pro（限时 22 秒）；还不行问不思考的 DeepSeek Flash（限时 10 秒）。都失败就按「假」处理。',
+  fast: '只问不思考的模型（V4 Pro，然后 Flash），判不出也不升级到深度思考：要快，拿不准就当没破功。',
+  json: '先问不思考的 DeepSeek V4 Pro，失败再问不思考的 Flash；都失败就用规则兜底（见各条说明）。',
+};
+export const LANG_NOTE = EN_NOTE;
+/** 本机先筛的两道（官网页用）：破坏疯狂的关键词、像在指挥模型的话。 */
+export const LOCAL_FILTERS = { breakWords: BREAK_WORDS.source, injection: INJECTION.source };

@@ -1,0 +1,54 @@
+/* 「AI 说书人是怎么判的」页：在官网 style.css 的零件上加几样（卡片网格、定义表、代码块） */
+.ai-tabs { overflow-x: auto; scrollbar-width: none; }
+.ai-tabs::-webkit-scrollbar { display: none; }
+.ai-tabs a { white-space: nowrap; }
+
+.ai-hero { padding-top: clamp(48px, 6vw, 88px); }
+.ai-hero h1 { font-size: clamp(2.2rem, 1.2rem + 3vw, 3.8rem); line-height: 1.15; letter-spacing: 3px; }
+.ai-hero .lead { max-width: 40em; }
+.ai-layers { list-style: none; margin: 36px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.ai-layers li h3 { margin: 12px 0 6px; font-size: 20px; }
+.ai-layers li p { font-size: 15px; color: var(--cream); }
+
+.ai-sec h2 { margin-bottom: 14px; }
+.ai-para { max-width: 46em; margin-top: 10px; }
+.ai-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 28px; }
+.ai-grid-1 { grid-template-columns: minmax(0, 1fr); }
+
+.ai-card header, .ai-prompt header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 10px; }
+.ai-card h3, .ai-prompt h3 { font-size: 19px; line-height: 1.4; margin-right: auto; }
+.ai-card header .tag { font-size: 12px; letter-spacing: 2px; padding: 5px 14px 5px 8px; }
+.ai-card > p { font-size: 15px; margin-top: 6px; }
+.ai-card dl, .ai-prompt dl { margin: 6px 0 0; }
+.ai-row { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 2px 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 15px; line-height: 1.7; }
+.ai-row dt { font: 900 13px/1.9 var(--sans); letter-spacing: 1px; color: var(--mot); }
+.ai-row dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.ai-row ul { margin: 4px 0 0; padding-left: 1.1em; }
+.ai-row li { margin: 2px 0; }
+
+.ai-sec code, .ai-hero code { font: 400 .88em/1.5 ui-monospace, "SFMono-Regular", Consolas, monospace; background: rgba(233, 228, 216, .08); padding: 1px 5px; border: 1px solid var(--line); overflow-wrap: anywhere; }
+.ai-no { font: 700 26px/1 var(--cond); color: var(--paper); background: var(--red); padding: 6px 8px; }
+.ai-fn { color: var(--muted); }
+.ai-out { display: inline-block; }
+.ai-label { margin: 16px 0 6px; font: 900 13px var(--sans); letter-spacing: 1px; color: var(--muted); }
+.ai-pre {
+  margin: 0; padding: 14px 16px; background: #090b0b; border: 1px solid var(--line); border-left: 3px solid var(--mot);
+  font: 400 14px/1.75 ui-monospace, "SFMono-Regular", Consolas, "Noto Sans SC", monospace; color: var(--cream);
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 70vh; overflow: auto;
+}
+.ai-user { border-left-color: var(--int); }
+.ai-sys { margin-top: 12px; }
+.ai-sys summary { cursor: pointer; font: 900 15px var(--sans); letter-spacing: 1px; color: var(--paper); padding: 8px 0; }
+.ai-sys summary small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.ai-sys[open] summary { color: var(--mot); }
+main { padding-bottom: clamp(72px, 9vw, 128px); }
+
+@media (max-width: 900px) {
+  .ai-layers, .ai-grid { grid-template-columns: minmax(0, 1fr); }
+  .topbar .top-actions { display: none; }
+  .ai-tabs { margin: 0; }
+}
+@media (max-width: 560px) {
+  .ai-row { grid-template-columns: minmax(0, 1fr); }
+  .brand-sub { display: none; }
+}

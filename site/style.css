@@ -148,6 +148,7 @@ button.hud-btn:hover { color: #fff; background: rgba(233, 228, 216, .08); }
 .step-num { display: inline-grid; place-items: center; background: var(--paper); color: #111; font-family: var(--cond); font-weight: 700; line-height: 1; }
 
 /* ── 说书人 ── */
+.st-more { margin-top: 28px; }
 .sec-split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 48px 64px; align-items: start; }
 .st-copy > p { margin-top: 20px; max-width: 32em; }
 .st-copy > .btn { margin-top: 24px; }
