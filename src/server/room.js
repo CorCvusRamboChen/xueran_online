@@ -845,10 +845,12 @@ export class Room {
    * 黯月初升：从"以为自己是恶魔的人"选完（自己选或超时被替选）开始，天亮统一定在之后随机 20–45 秒。
    * 疯子选完以后真恶魔还要想一会儿——要是真恶魔自己选完很快就天亮，疯子就能从"我选完以后等了多久才天亮"看出自己是假的。
    * 现在不管是真恶魔还是疯子，"我选完到天亮"等的时间分布都一样。有疯子时，真恶魔就用这段时间行动（截止在天亮前 2 秒）。
+   * 2026-11-23：梦殒春宵引擎的剧本（混合、社区剧本）有疯子时也这样。原来只开了黯月初升：疯子拖到快截止才选，
+   * 真恶魔（痢蛭）刚看到疯子选了谁时间就到了；疯子超时被替选时，真恶魔还会被同时替选。没有疯子的剧本不加这段等待。
    */
   startDemonClock(uid, night) {
     const g = this.game;
-    if (g?.script !== 'bmr' || this.dawnAt || uid !== this.demonLikeId()) return;
+    if (!g || (g.script !== 'bmr' && !g.players.some((q) => q.role === 'lunatic')) || this.dawnAt || uid !== this.demonLikeId()) return;
     const [lo, hi] = this.dawnPad ?? [20_000, 45_000];
     this.dawnAt = Date.now() + lo + Math.random() * (hi - lo);
     if (g.get(uid)?.role !== 'lunatic') return;

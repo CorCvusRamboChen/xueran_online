@@ -994,6 +994,39 @@ test('夜里：疯子拖到超时被替选，真恶魔不会被同时替选，�
 });
 
 
+test('梦殒春宵引擎的剧本也一样：疯子超时被替选，痢蛭另有一段时间，不会被同时替选', async () => {
+  const { room } = setup('auto');
+  room.settings.script = 'lod';
+  await room.act('u1', 'join');
+  await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 5 });
+  await room.act('u1', 'assignRole', { player: 'u1', role: 'lunatic' });
+  await room.act('u1', 'assignRole', { player: 'u2', role: 'lleech' });
+  await room.act('u1', 'start');
+  try {
+    room.dawnPad = [32_000, 32_000];
+    const g = room.game;
+    g.get('u1').shownRole = 'lleech';
+    assert.equal(g.engine, 'snv');
+    assert.ok(g.nightPrompts().find((x) => x.playerId === 'u1'), '疯子以为自己是痢蛭，首夜要选人');
+    assert.ok(g.nightPrompts().find((x) => x.playerId === 'u2').waiting, '真痢蛭在等疯子');
+    for (let k = 0; k < 200 && !g.choices.u1; k++) await sleep(5);
+    assert.ok(g.choices.u1, '疯子超时被替选');
+    await sleep(30);
+    assert.equal(g.phase, 'night', '还没结算');
+    assert.equal(g.choices.u2, undefined, '痢蛭没被同时替选');
+    assert.ok(room.dueFor.u2 - Date.now() > 25_000, '痢蛭另有一段时间');
+    assert.equal(room.viewFor('u2').deadline, room.dueFor.u2, '痢蛭看到自己的截止时间');
+    assert.ok(room.inbox.get('u2').some((m) => /轮到你/.test(m.text)));
+    const pr = g.nightPrompts().find((x) => x.playerId === 'u2');
+    await room.act('u2', 'choose', { night: g.night, targets: pr.options.slice(0, pr.count) });
+    room.dawnAt = Date.now();
+    await room.finishNight(g.night);
+    for (let k = 0; k < 200 && g.phase === 'night'; k++) await sleep(5);
+    assert.notEqual(g.phase, 'night');
+  } finally { room.reset(); }
+});
+
 test('黯月初升：没有疯子时，真恶魔选完也要等同样的一段时间才天亮（和有疯子时看起来一样）', async () => {
   const { room } = setup('auto');
   room.settings.script = 'bmr';
