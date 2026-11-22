@@ -48,7 +48,7 @@ export function Replay({ timeline }) {
   );
 }
 
-const VOTE_OUTCOME = { block: '送上处决台', tie: '平票（台上清空）', lower: '票数不如台上的人', fail: '票数不够' };
+const VOTE_OUTCOME = { block: '送上处决台', tie: '平票（台上清空）', lower: '票数不如台上的人', fail: '票数不够', secret: '票数保密（街头风琴手）' };
 
 /**
  * 关键信息：按天倒着列——那天早上的刀口（昨晚谁死了 / 平安夜 / 谁复活了）、当天每一次投票的票型、黄昏的处决结果。
@@ -108,7 +108,7 @@ function VoteCard({ v, g, name }) {
     <div className={`vh-card vh-${v.outcome}`}>
       <div className="vh-head">
         <b>{g(v.nominator)?.seat}号 → {g(v.nominee)?.seat}号</b>
-        <span className="vh-count"><b>{v.count}</b> / {v.threshold} 票</span>
+        <span className="vh-count">{v.count != null ? <><b>{v.count}</b> / {v.threshold} 票</> : '闭眼投票'}</span>
       </div>
       <p className="vh-line">{name(v.nominator)} 提名 {name(v.nominee)} · <b>{VOTE_OUTCOME[v.outcome]}</b></p>
       <div className="vh-voters">
@@ -116,7 +116,7 @@ function VoteCard({ v, g, name }) {
           <span key={id} className="vh-voter">
             {g(id) && <Portrait p={g(id)} size={22} prefer="avatar" />}{g(id)?.seat}号
           </span>
-        )) : <span className="muted">没有人举手</span>}
+        )) : <span className="muted">{v.outcome === 'secret' ? '谁举了手保密' : '没有人举手'}</span>}
       </div>
     </div>
   );
@@ -138,7 +138,7 @@ export function VoteHistory({ votes = [], g, name }) {
             <div key={i} className={`vh-card vh-${v.outcome}`}>
               <div className="vh-head">
                 <b>{g(v.nominator)?.seat}号 → {g(v.nominee)?.seat}号</b>
-                <span className="vh-count"><b>{v.count}</b> / {v.threshold} 票</span>
+                <span className="vh-count">{v.count != null ? <><b>{v.count}</b> / {v.threshold} 票</> : '闭眼投票'}</span>
               </div>
               <p className="vh-line">{name(v.nominator)} 提名 {name(v.nominee)} · <b>{VOTE_OUTCOME[v.outcome]}</b></p>
               <div className="vh-voters">
@@ -146,7 +146,7 @@ export function VoteHistory({ votes = [], g, name }) {
                   <span key={id} className="vh-voter">
                     {g(id) && <Portrait p={g(id)} size={22} prefer="avatar" />}{g(id)?.seat}号
                   </span>
-                )) : <span className="muted">没有人举手</span>}
+                )) : <span className="muted">{v.outcome === 'secret' ? '谁举了手保密' : '没有人举手'}</span>}
               </div>
             </div>
           ))}

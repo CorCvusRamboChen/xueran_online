@@ -591,5 +591,17 @@
  "朝上": "up",
  "异教领袖 {0} 变成了{1}阵营": "Cult Leader {0} became {1}",
  "存活的角色里有：**{0}**。": "Among the alive characters: **{0}**.",
- "恶魔杀死了国王：**{0}** 是恶魔。": "The Demon killed the King: **{0}** is the Demon."
+ "恶魔杀死了国王：**{0}** 是恶魔。": "The Demon killed the King: **{0}** is the Demon.",
+ "空座位 {0}": "Empty seat {0}",
+ "{0} 换到了{1}：现在是{2}（{3}），座位上留下{4}": "{0} swapped onto {1}: now {2} ({3}), leaving {4} on the seat",
+ "你换到了**{0}**：你现在是**{1}**，**{2}**阵营。（还能换 {3} 次）": "You swapped onto **{0}**: you are now the **{1}**, **{2}**. (Swaps left: {3})",
+ "{0} 和 {1} 交换了：{2} 现在是{3}（{4}），{5} 现在是{6}（{7}）": "{0} swapped with {1}: {2} is now {3} ({4}), {5} is now {6} ({7})",
+ "你和 **{0}** 交换了：你现在是**{1}**，**{2}**阵营。（还能换 {3} 次）": "You swapped with **{0}**: you are now the **{1}**, **{2}**. (Swaps left: {3})",
+ "有人和你交换了座位：你现在是**{0}**，**{1}**阵营。": "Someone swapped seats with you: you are now the **{0}**, **{1}**.",
+ "现在的邪恶同伴：{0}。": "Your evil teammates now: {0}.",
+ "现在没有别的邪恶玩家。": "There are no other evil players right now.",
+ "现在没有玩家是恶魔{0}。{1}": "No player is the Demon right now{0}. {1}",
+ "：恶魔坐在空座位上": ": the Demon sits on an empty seat",
+ "街头风琴手 {0} 选择醉酒到黄昏：明天投票照常睁眼": "Organ Grinder {0} chose to be drunk until dusk: tomorrow's votes are open",
+ "相克：利维坦在场，祖母的孙子 {0} 被处决": "Jinx: the Leviathan is in play and the Grandmother's grandchild {0} was executed"
 }

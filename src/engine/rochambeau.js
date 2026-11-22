@@ -14,7 +14,7 @@ export const ROCHAMBEAU_METHODS = {
   rochSetup() {
     if (this.rochDone) return;
     this.rochDone = true;
-    if (this.players.some((p) => p.role === 'bountyhunter')) {
+    if (this.players.some((p) => p.role === 'bountyhunter') && !this.chairs) { // 抢椅子（Will 版）：所有玩家开局都是善良
       const pool = this.players.filter((p) => team(p) === 'townsfolk' && p.role !== 'bountyhunter' && !p.traveller && !this.evilOf(p));
       const t = pool.length ? this.st.choose('bhEvil', pool, {}) : null;
       if (t) { t.evil = true; this.bhEvilTf = t.id; this.record('st', `赏金猎人在场：${this.tag(t.id)} 是邪恶的镇民`); }

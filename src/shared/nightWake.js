@@ -54,6 +54,7 @@ const OVERRIDES = {
   riot: { other: ST, note: '本人不醒：说书人记第几天' },
   huntsman: { note: '用掉能力之前每晚醒' },
   engineer: { note: '用掉能力之前每晚醒' },
+  organgrinder: { note: '点头或摇头：醉不醉到下个黄昏' },
   cultleader: { first: IF, other: IF, note: '阵营变了才醒（说书人竖大拇指朝上或朝下）' },
   king: { other: IF, note: '死人不少于活人时才醒' },
   choirboy: { other: IF, note: '恶魔杀死国王的那晚才醒' },

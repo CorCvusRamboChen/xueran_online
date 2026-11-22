@@ -329,6 +329,9 @@ const EXP = {
     ability: '每个夜晚，如果死亡的玩家数量大于或等于存活的玩家数量，你会得知一个存活的角色。恶魔知道你是国王。' },
   choirboy: { name: '唱诗男孩', en: 'Choirboy', team: 'townsfolk', firstNight: 0, otherNight: 1,
     ability: '如果恶魔杀死了国王，你会得知哪名玩家是恶魔。[+国王]' },
+  // 2026-11-23 抢椅子 Will 版用到的（集石百科：街头风琴手）。结算在 engine/snv.js（夜里选醉不醉）、server/room.js（秘密投票）
+  organgrinder: { name: '街头风琴手', en: 'Organ Grinder', team: 'minion', firstNight: 1, otherNight: 1, choose: { count: 0, role: true },
+    ability: '所有玩家在投票时闭眼，且票数会秘密统计。每个夜晚，你要选择自己是否醉酒直到下个黄昏。' },
   // 2026-11-23 大剧本 Extension Cord、No Roles Barred 用到的两个（集石百科：解谜大师、军团）
   puzzlemaster: { name: '解谜大师', en: 'Puzzlemaster', team: 'outsider', firstNight: 0, otherNight: 0,
     ability: '一名玩家醉酒，即使你已死亡。每局游戏限一次，你可以猜测谁是那个醉酒的玩家，如果猜对了，你会得知谁是恶魔，但如果猜错了，你会得知错误的「谁是恶魔」信息。' },
@@ -427,6 +430,11 @@ export const FABLED = {
   // 奇遇角色（Loric，2026-03 官方新出；集石百科「诡诈杰克」）
   knaves: { name: '诡诈杰克', en: 'Knaves', flag: 'knaves', ability: '场上有两位说书人：一人说真话，一人说假话。每局游戏限一次，他们可能会在黄昏互换。',
     detail: '能力给的信息（夜里醒来、白天找说书人）由你选的那位说书人给：说真话的给真的，说假话的给假的。点「找说书人甲 / 乙」随时换。规则、提名投票、爪牙恶魔信息这些两位都说真话。整局最多一次，两位会在某个黄昏悄悄互换。醉酒中毒的人两位都可能给假。' },
+  // 2026-11-23 抢椅子 Will 版（botcscripts 995 号 12.0.0，作者 Will）的自制传奇角色，和推荐的园丁
+  musicalchairs: { name: '抢椅子', en: 'Musical Chairs', flag: 'chairs', ability: '所有玩家开局都是善良。每个夜晚出信息前，每名玩家可以选择和另一名玩家或一个空座位交换：连角色带阵营一起换。每名玩家整局限换 2 次。[-1 爪牙，+1 外来者或镇民]',
+    detail: '角色是跟着座位走的：邪恶角色开局都放在没人坐的空座位上，所有玩家坐的都是善良座位。每晚入夜前大家悄悄决定换不换：和一名活着的玩家换，或者换到一个空座位上（换之前不知道那里是什么）。换完你就是那个座位的角色和阵营，原来的角色留在对方或那个空座位上；被换的人会得知自己的新角色，但不知道是谁换的。空座位上的利维坦也算在场。' },
+  gardener: { name: '园丁', en: 'Gardener', flag: 'gardener', ability: '说书人指定一名或多名玩家的角色。',
+    detail: '房主开局可以在排版台给玩家指定角色。' },
   bootlegger: { name: '私酒贩子', en: 'Bootlegger', flag: 'bootlegger', ability: '这个剧本有自定义的角色或规则。',
     detail: '本剧本的自定义规则：炼金术士拿到的是一个不在场的爪牙的能力（这里本来就这样做）。' },
 };
@@ -444,6 +452,8 @@ const PROMPT_ONLY = {
   ah_die: { name: '死去', en: 'Die', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
   lm_sit: { name: '照看小怪宝', en: "Lil' Monsta", team: 'minion', firstNight: 0, otherNight: 0, choose: { count: 1, alive: true },
     ability: '你们爪牙决定今晚由谁照看小怪宝：选一名活着的爪牙（可以选自己）。照看的人「是恶魔」，他死了善良获胜。' },
+  og_drunk: { name: '醉酒到黄昏', en: 'Drunk until dusk', team: 'minion', firstNight: 0, otherNight: 0, ability: '' },
+  og_sober: { name: '保持清醒', en: 'Stay sober', team: 'minion', firstNight: 0, otherNight: 0, ability: '' },
   harlot_ask: { name: '流莺选中了你', en: 'Harlot', team: 'traveller', firstNight: 0, otherNight: 0, choose: { count: 0, role: true },
     ability: '流莺想知道你的角色。同意的话，她会得知你的角色，但你们两个可能同时死亡。' },
   harlot_yes: { name: '同意', en: 'Yes', team: 'townsfolk', firstNight: 0, otherNight: 0, ability: '' },
@@ -506,6 +516,11 @@ export const SCRIPTS = {
   mc: { id: 'mc', name: '抢椅子', en: 'Musical Chairs', engine: 'snv',
     roles: ['investigator', 'librarian', 'cultleader', 'empath', 'sailor', 'king', 'snakecharmer', 'savant', 'amnesiac', 'philosopher', 'choirboy', 'tealady', 'fool',
       'acrobat', 'barber', 'drunk', 'recluse', 'pithag', 'devilsadvocate', 'poisoner', 'marionette', 'fanggu', 'nodashii', 'vigormortis', 'lleech'] },
+  // Musical Chairs 12.0.0（Will，同在 botcscripts 995 号下）：自制传奇角色「抢椅子」——角色跟着座位走，邪恶角色开局都在空座位上，
+  // 每晚可以和玩家或空座位交换（每人两次）。相克：利维坦在场时祖母的孙子被处决，邪恶获胜；哲学家拿到赏金猎人的能力，可能有一名镇民转为邪恶
+  mcw: { id: 'mcw', name: '抢椅子 · 空座位', en: 'Musical Chairs (Will)', engine: 'snv', chairs: true, gardener: true,
+    roles: ['washerwoman', 'clockmaker', 'grandmother', 'bountyhunter', 'empath', 'dreamer', 'villageidiot', 'snakecharmer', 'fortuneteller', 'artist', 'juggler', 'fisherman', 'philosopher',
+      'puzzlemaster', 'recluse', 'mutant', 'lunatic', 'baron', 'eviltwin', 'organgrinder', 'mastermind', 'leviathan'] },
   // 2026-11-23 三个大剧本（角色表取自 botcscripts.com 的剧本 JSON；相克照官方 Djinn 表）
   // Extension Cord v5.1.1（Viva La Sam，当月推荐剧本，botcscripts 收藏第二多）：解谜大师、传奇角色哨兵
   ext: { id: 'ext', name: '延长线', en: 'Extension Cord', engine: 'snv', sentinel: true,

@@ -194,6 +194,7 @@ export class Room {
     this.lastVote = null;
     this.meets = [];            // 谁和谁进了同一间屋（只进存档）
     this.voteHistory = [];      // 每次投票的票型（谁提名谁、谁举了手），投完公开
+    this.secretDay = null; this.secretGhost = null; this.chairAsk = null; // 街头风琴手的秘密投票日、抢椅子的换座位
     this.knifeLog = [];         // 刀口：每晚谁死了（平安夜也记），谁复活了——「关键信息」页用
     this.execLog = [];          // 每天黄昏的处决结果
     this.pubLog = [];           // 公开事件：公开声明、开枪、公开选人、突然死亡——「关键信息」页按天列
@@ -369,6 +370,7 @@ export class Room {
       case 'duchess': this.duchessVisit(uid, p.on !== false); break;
       case 'puzzle': this.puzzle(uid, p.target); break;
       case 'cult': this.cultStart(uid); break;
+      case 'chair': this.chair(uid, p.target ?? null); break;
       case 'cultHand': this.cultHand(uid, !!p.up); break;
       case 'gangster': this.gangster(uid, p.target); break;
       case 'gangAgree': this.gangAgree(uid, !!p.yes); break;
@@ -758,6 +760,7 @@ export class Room {
     this.pendingNom = null;
     this.clearRiot();
     this.moonchildFakes = null;
+    if (g.chairs) { await this.chairPhase(); if (this.game !== g) return; } // 抢椅子（Will 版）：入夜前先换座位
     const prompts = g.startNight();
     this.resolving = false;
     if (g.evilMessages?.length) { this.deliver(g.evilMessages); g.evilMessages = null; }
@@ -2077,6 +2080,50 @@ export class Room {
     this.changed();
   }
 
+  // ───────────── 2026-11-23 抢椅子（Will 版）：入夜前换座位 ─────────────
+  /**
+   * 每晚出信息前：还能换的活人悄悄决定和一名活着的玩家或一个空座位交换（时间和选人时限一样，最多 20 秒），
+   * 大家都选好（或到点）就结算，然后才正式入夜。机器人 15% 的机会随便换一次。
+   */
+  async chairPhase() {
+    const g = this.game;
+    const can = g.players.filter((p) => g.chairOptions(p.id));
+    if (!can.length) return;
+    const secs = Math.max(0.01, Math.min(20, this.settings.chooseSeconds));
+    const ask = this.chairAsk = { until: Date.now() + secs * 1000, picks: {}, done: new Set() };
+    for (const p of can) {
+      if (!this.isFake(p.id)) continue;
+      ask.done.add(p.id);
+      const o = g.chairOptions(p.id);
+      const all = [...o.players, ...o.chairs.map((k) => `chair:${k}`)];
+      if (all.length && Math.random() < 0.15) ask.picks[p.id] = all[Math.floor(Math.random() * all.length)];
+    }
+    this.announce(`入夜前：**抢椅子**。还能换的人悄悄决定要不要和一名玩家、或一个空座位交换角色和阵营（${Math.round(secs)} 秒）。`, 'night');
+    this.changed();
+    await new Promise((res) => { ask.res = res; ask.timer = this.later(secs * 1000, res); this.chairCheck(); });
+    this.cancel(ask.timer);
+    if (this.chairAsk === ask) this.chairAsk = null;
+    if (this.game !== g) return;
+    const msgs = g.chairSwap(ask.picks);
+    if (msgs.length) this.deliver(msgs);
+  }
+  chairCheck() {
+    const a = this.chairAsk; const g = this.game;
+    if (a && g && g.players.every((p) => !g.chairOptions(p.id) || a.done.has(p.id))) a.res?.();
+  }
+  /** 选好了：target 是玩家 id、'chair:k'，或 null（这晚不换）。 */
+  chair(uid, target) {
+    const a = this.chairAsk; const g = this.requireGame();
+    if (!a) throw new UserError('现在不是换座位的时候');
+    const o = g.chairOptions(uid);
+    if (!o) throw new UserError('你不能再换了');
+    if (target != null && !o.players.includes(target) && !(String(target).startsWith('chair:') && o.chairs.includes(Number(String(target).slice(6))))) throw new UserError('只能选一名活着的玩家或一个空座位');
+    if (target != null) a.picks[uid] = target; else delete a.picks[uid];
+    a.done.add(uid);
+    this.changed();
+    this.chairCheck();
+  }
+
   // ───────────── 2026-11-23 Musical Chairs：异教领袖发起教派、黑帮 ─────────────
   /** 异教领袖（谁都可以声称）：公开提议所有人加入教派，大家举手（像流放一样，死人也算、不消耗投票标记）。 */
   cultStart(uid) {
@@ -2289,6 +2336,9 @@ export class Room {
     this.pendingNom = null;
     this.speakOnly(null);
     this.vote = { nominator: nom.nominator, nominee: nom.nominee, order: this.game.voteOrder(nom.nominee), idx: -1, yes: new Set(), locked: new Set(), result: null, force: nom.force ?? null };
+    // 街头风琴手（集石百科）：他清醒时大家闭眼投票，说书人默默计票，不说几票、也不说被提名的人会不会被处决；黄昏才宣布处决谁
+    if (this.secretDay !== this.game.day) this.secretGhost = null;
+    if (this.game.ogSecret?.()) { this.vote.secret = true; this.secretDay = this.game.day; this.announce('街头风琴手在场：**闭眼投票**，只看得到自己举没举手；票数和结果保密，黄昏时才宣布处决谁。', 'vote'); }
     // 房规：提名的人自动投一票
     if (this.settings.nominatorVotes && this.nominatorAlive(nom.nominator)) this.vote.yes.add(nom.nominator);
     this.deadline = Date.now() + this.settings.voteCountdown * 1000;
@@ -2323,6 +2373,7 @@ export class Room {
       lower: `不如台上 ${before.block ? g.name(before.block) : ''} 的 ${before.votes} 票`,
       fail: `票数不够（存活 ${g.visAliveCount()} 人，需要一半即 ${v.result.threshold} 票）`,
     }[v.result.outcome];
+    if (v.secret) return this.finishSecretVote(v);
     const hands = v.result.voters.length ? `。举手：${v.result.voters.map((id) => g.name(id)).join('、')}` : '。没有人举手';
     this.announce(`对 **${g.name(v.nominee)}** 的投票：${v.result.count} 票（需 ${v.result.threshold}）→ ${what}${hands}`, 'vote');
     this.narrate('vote', { b: g.name(v.nominee), count: v.result.count, need: v.result.threshold, outcome: v.result.outcome });
@@ -2334,6 +2385,21 @@ export class Room {
     this.lastVote = v;
     this.vote = null;
     if (v.force === 'pass') { v.judged = true; this.judgeExecute(v.nominee); return; } // 法官强制成功：直接处决，白天结束
+    this.afterVote();
+  }
+
+  /** 街头风琴手的秘密投票：结果只进说书人手记，公开的只有「投完了」。死人的幽灵票当天结束前看起来还在。 */
+  finishSecretVote(v) {
+    const g = this.game;
+    for (const id of v.result.voters) if (!g.visAlive(g.get(id))) (this.secretGhost ??= new Set()).add(id);
+    this.announce(`对 **${g.name(v.nominee)}** 的投票结束（街头风琴手：票数保密）。`, 'vote');
+    this.stNote(`秘密投票：${g.name(v.nominee)} ${v.result.count} 票（需 ${v.result.threshold}）→ ${v.result.outcome}；举手：${v.result.voters.map((id) => g.name(id)).join('、') || '无'}`);
+    v.endedAt = Date.now();
+    (this.voteHistory ??= []).push({ day: g.day, nominator: v.nominator, nominee: v.nominee, voters: [], count: null, threshold: v.result.threshold, outcome: 'secret', secret: true, at: v.endedAt,
+      real: { voters: v.result.voters, count: v.result.count, outcome: v.result.outcome } });
+    this.lastVote = v;
+    this.vote = null;
+    if (v.force === 'pass') { v.judged = true; this.judgeExecute(v.nominee); return; }
     this.afterVote();
   }
 
@@ -4215,12 +4281,14 @@ export class Room {
       day: g.day,
       threshold: g.threshold(),
       aliveCount: g.visAliveCount() + hushed.size, // 看起来活着的人数：假死的僵怖算死人，不然一看人数就知道谁是僵怖
-      block: g.block,
-      blockVotes: g.blockVotes,
-      blockTied: g.blockTied ?? [],
+      // 街头风琴手：秘密投票那天，处决台上是谁、几票都不公开（说书人看得到）
+      ...(this.secretDay === g.day && !isST && !this.ended ? { block: null, blockVotes: 0, blockTied: [] } : { block: g.block, blockVotes: g.blockVotes, blockTied: g.blockTied ?? [] }),
+      chairs: g.chairs ? g.chairs.length : null, // 抢椅子：有几个空座位（上面是什么不公开）
+      chairUntil: this.chairAsk?.until ?? null,
       executedToday: g.executedToday,
       players: g.players.map((p) => ({
-        id: p.id, seat: p.seat, name: p.name, alive: g.visAlive(p) || hushed.has(p.id), ghostVote: p.ghostVote,
+        id: p.id, seat: p.seat, name: p.name, alive: g.visAlive(p) || hushed.has(p.id), ghostVote: p.ghostVote || (this.secretDay === g.day && !isST && !this.ended && p.id !== uid && !!this.secretGhost?.has(p.id)), // 街头风琴手：幽灵票当天结束才收走
+
         avatar: this.lobby.find((x) => x.id === p.id)?.avatar ?? null,
         char: this.lobby.find((x) => x.id === p.id)?.char ?? null,
         outfit: this.outfits.get(p.id) ?? null,
@@ -4264,18 +4332,19 @@ export class Room {
       timeline: this.ended ? g.timeline : null,
       vote: vote && {
         nominator: vote.nominator, nominee: vote.nominee, order: vote.order, idx: vote.idx,
-        yes: isST || !this.settings.hideVotes ? [...vote.yes] : [...vote.yes].filter((id) => id === uid), // 房规：票型投完才公开
-        hidden: !isST && !!this.settings.hideVotes,
+        yes: isST || (!this.settings.hideVotes && !vote.secret) ? [...vote.yes] : [...vote.yes].filter((id) => id === uid), // 房规：票型投完才公开；街头风琴手：一直不公开
+        hidden: !isST && (!!this.settings.hideVotes || !!vote.secret),
+        secret: !!vote.secret,
         locked: [...vote.locked],
       },
-      votes: this.voteHistory ?? [],
+      votes: (this.voteHistory ?? []).map((x) => (x.secret && (isST || this.ended) ? { ...x, ...x.real, secret: true } : x)),
       knives: this.knifeLog ?? [], // 刀口：每晚谁死了（公开信息：天亮时大家都听到了）
       execs: this.execLog ?? [],   // 每天的处决结果
       pubs: this.pubLog ?? [],     // 公开声明、开枪、公开选人……（大家都听到了）
       voiceChannel: this.square ?? null,
       lastVote: this.lastVote && {
-        nominee: this.lastVote.nominee, yes: this.lastVote.result.voters, outcome: this.lastVote.result.outcome,
-        count: this.lastVote.result.count, threshold: this.lastVote.result.threshold, endedAt: this.lastVote.endedAt ?? 0,
+        nominee: this.lastVote.nominee, yes: this.lastVote.secret && !isST ? [] : this.lastVote.result.voters, outcome: this.lastVote.secret && !isST ? 'secret' : this.lastVote.result.outcome,
+        count: this.lastVote.secret && !isST ? null : this.lastVote.result.count, threshold: this.lastVote.result.threshold, endedAt: this.lastVote.endedAt ?? 0,
       },
       rooms: [...this.rooms.values()].map((r) => ({ id: r.channelId, members: r.members, until: r.until, mine: r.members.includes(uid) })),
       roam: this.roam && {
@@ -4402,6 +4471,8 @@ export class Room {
       canDoom: day && !this.dusking && this.duskDay !== g.day && !!SCRIPTS[g.script]?.doomsayer && g.visAlive(p) && !g.doomUsed?.includes(uid) && g.alive().filter((q) => g.visAlive(q)).length >= 4,
       duchess: SCRIPTS[g.script]?.duchess ? { open: day && !this.dusking && this.duskDay !== g.day, mine: g.duchessToday().includes(uid), ids: g.duchessToday() } : null,
       // 牙噶巴卜的暗号和今天说了几次；疯子以为自己是牙噶巴卜时显示他的假暗号（界面一模一样，不然他一看就知道自己是假的）
+      chair: this.chairAsk && g.chairOptions?.(uid) ? (() => { const o = g.chairOptions(uid); return { until: this.chairAsk.until, left: o.left, players: o.players, chairs: o.chairs.map((k) => ({ id: `chair:${k}`, name: g.chairName(k) })), pick: this.chairAsk.picks[uid] ?? null, done: this.chairAsk.done.has(uid) }; })() : null,
+      chairLeft: g.chairLeft?.[uid] ?? null,
       canCult: day && !this.dusking && this.duskDay !== g.day && inScript('cultleader', g.script) && p.alive && g.cultDay?.[uid] !== g.day && !this.cult,
       gangTargets: day && !this.dusking && p.alive && p.role === 'gangster' && !p.left && g.gangDay?.[uid] !== g.day && !this.gangAsk && g.aliveNeighbours(p).length === 2 ? g.aliveNeighbours(p).map((q) => q.id) : null,
       canPuzzle: day && p.alive && g.abilityOf(p) === 'puzzlemaster' && !!g.puzzle && !g.puzzle.guessed,

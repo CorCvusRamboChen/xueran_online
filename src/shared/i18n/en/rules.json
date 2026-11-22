@@ -440,5 +440,10 @@
  "黑帮（旅行者）、异教领袖的教派都是白天的公开行动。": "The Gangster (Traveller) and the Cult Leader's cult are both public daytime actions.",
  "阵营变了才醒（说书人竖大拇指朝上或朝下）": "Wakes only if their alignment changes (the Storyteller gives a thumbs up or down)",
  "死人不少于活人时才醒": "Wakes only when the dead equal or outnumber the living",
- "恶魔杀死国王的那晚才醒": "Wakes only the night the Demon kills the King"
+ "恶魔杀死国王的那晚才醒": "Wakes only the night the Demon kills the King",
+ "点头或摇头：要不要醉酒到下个黄昏（醉了明天投票照常睁眼）": "Nod or shake: drunk until next dusk? (If drunk, tomorrow's votes are open)",
+ "点头或摇头：要不要醉酒到下个黄昏": "Nod or shake: drunk until next dusk?",
+ "传奇角色抢椅子：每晚入夜前（这张表之前），每名玩家可以悄悄和一名活着的玩家或一个空座位交换角色和阵营，每人整局两次。邪恶角色开局都在空座位上。": "Musical Chairs Fabled: each night before nightfall (before this list), every player may secretly swap character and alignment with an alive player or an empty seat, twice per game. The evil characters start on empty seats.",
+ "利维坦不醒；坐在空座位上也算在场。": "The Leviathan doesn't wake; it is in play even on an empty seat.",
+ "点头或摇头：醉不醉到下个黄昏": "Nod or shake: drunk until next dusk"
 }

@@ -221,7 +221,7 @@ export class Game {
       'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared', 'aiLead', 'politicianEval', 'scapegoatDay', 'gunDay', 'judgeUsed',
       'leviDue', 'goblinClaimDay', 'widowTold', 'baristaFx', 'harlotAsk', 'matronDay', 'butcherDay', 'mezEasy', 'nomHistory', 'demonSwap', 'monsta', 'lleechHost', 'lleechDue', 'fear', 'fearNews', 'evilHist',
       'rochDone', 'bhEvilTf', 'fauxPaw', 'bh', 'acro', 'lycanNight', 'hatterDue', 'hatterNight', 'allKnown',
-      'yagg', 'yaggFake', 'doomUsed', 'duchess', 'alsaahirDay', 'puzzle', 'knaves', 'kingKilled', 'cultDay', 'gangDay']; // 2026-11-22 小剧本：牙噶巴卜的暗号、末日预言者、公爵夫人、戏法师（漏存的话重启后全丢）
+      'yagg', 'yaggFake', 'doomUsed', 'duchess', 'alsaahirDay', 'puzzle', 'knaves', 'kingKilled', 'cultDay', 'gangDay', 'chairs', 'chairLeft', 'ogDrunk']; // 2026-11-22 小剧本：牙噶巴卜的暗号、末日预言者、公爵夫人、戏法师（漏存的话重启后全丢）
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];

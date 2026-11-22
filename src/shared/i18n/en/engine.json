@@ -315,5 +315,12 @@
  "异教领袖 {0} 的两个活邻座一善一恶：说书人让他{1}": "Cult Leader {0}'s alive neighbours are one good, one evil: the Storyteller makes them {1}",
  "变成邪恶": "turn evil",
  "变成 / 保持善良": "turn / stay good",
- "国王 {0} 得知存活的 {1}": "King {0} learns that {1} is alive"
+ "国王 {0} 得知存活的 {1}": "King {0} learns that {1} is alive",
+ "所有玩家在投票时闭眼，且票数会秘密统计。每个夜晚，你要选择自己是否醉酒直到下个黄昏。": "All players keep their eyes closed when voting and the vote tally is secret. Each night, choose if you are drunk until dusk.",
+ "所有玩家开局都是善良。每个夜晚出信息前，每名玩家可以选择和另一名玩家或一个空座位交换：连角色带阵营一起换。每名玩家整局限换 2 次。[-1 爪牙，+1 外来者或镇民]": "Every player starts good. Each night before night info, every player may swap with another player or seat, swapping alignment and character. 2 swaps for each player per game. [-1 Minion, +1 Outsider or Townsfolk]",
+ "角色是跟着座位走的：邪恶角色开局都放在没人坐的空座位上，所有玩家坐的都是善良座位。每晚入夜前大家悄悄决定换不换：和一名活着的玩家换，或者换到一个空座位上（换之前不知道那里是什么）。换完你就是那个座位的角色和阵营，原来的角色留在对方或那个空座位上；被换的人会得知自己的新角色，但不知道是谁换的。空座位上的利维坦也算在场。": "Characters belong to seats: the evil characters start on empty seats nobody occupies, and every player sits on a good seat. Each night before nightfall everyone secretly decides whether to swap, with an alive player or onto an empty seat (you don't know what's there beforehand). After swapping you have that seat's character and alignment, and your old one stays with them or on that seat; a player you swap with learns their new character but not who swapped. A Leviathan on an empty seat is still in play.",
+ "园丁": "Gardener",
+ "说书人指定一名或多名玩家的角色。": "The Storyteller assigns 1 or more players' characters.",
+ "房主开局可以在排版台给玩家指定角色。": "The host can assign players' characters on the setup board before the game.",
+ "抢椅子 · 空座位": "Musical Chairs (Will)"
 }

@@ -543,5 +543,12 @@
  "**{0}** 没有同意，黑帮这次没有动手。": "**{0}** did not agree; the Gangster didn't kill this time.",
  "**{0}** 同意了——{1}": "**{0}** agreed. {1}",
  "**{0} 被黑帮杀死了。**": "**{0} was killed by the Gangster.**",
- "**{0}** 没有死。": "**{0}** did not die."
+ "**{0}** 没有死。": "**{0}** did not die.",
+ "入夜前：**抢椅子**。还能换的人悄悄决定要不要和一名玩家、或一个空座位交换角色和阵营（{0} 秒）。": "Before nightfall: **Musical Chairs**. Anyone with swaps left secretly decides whether to swap character and alignment with a player or an empty seat ({0} seconds).",
+ "现在不是换座位的时候": "It's not time to swap seats",
+ "你不能再换了": "You can't swap any more",
+ "只能选一名活着的玩家或一个空座位": "Pick an alive player or an empty seat",
+ "街头风琴手在场：**闭眼投票**，只看得到自己举没举手；票数和结果保密，黄昏时才宣布处决谁。": "The Organ Grinder is in play: **eyes-closed voting**. You only see your own hand; the tally and result stay secret, and dusk announces who is executed.",
+ "对 **{0}** 的投票结束（街头风琴手：票数保密）。": "The vote on **{0}** is over (Organ Grinder: tally secret).",
+ "秘密投票：{0} {1} 票（需 {2}）→ {3}；举手：{4}": "Secret vote: {0} got {1} (needs {2}) → {3}; hands: {4}"
 }

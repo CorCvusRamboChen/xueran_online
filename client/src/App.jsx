@@ -583,14 +583,14 @@ function Center({ s, name, act, me }) {
   // 处决台：票数够的人一直站在台上；同票的几个人一起站上去（平票时谁都不会被处决）
   const onBlock = s.phase === 'day' ? (s.block ? [s.block] : s.blockTied ?? []) : [];
   if (!recent && !onBlock.length) return null;
-  const what = recent && { block: '送上处决台', tie: '平票', lower: '不如台上的票多', fail: '票数不够' }[lv.outcome];
+  const what = recent && { block: '送上处决台', tie: '平票', lower: '不如台上的票多', fail: '票数不够', secret: '票数保密（街头风琴手）' }[lv.outcome];
   return (
     <div className="center-box">
       {onBlock.length > 0 && (
         <OnBlock s={s} ids={onBlock}
           label={onBlock.length > 1 ? `平票 · ${s.blockVotes} 票 · 谁都不处决` : `处决台 · ${s.blockVotes} 票`} />
       )}
-      {recent && <div className="tally"><b>{lv.count}</b><span>/</span><b className="need">{lv.threshold}</b></div>}
+      {recent && lv.count != null && <div className="tally"><b>{lv.count}</b><span>/</span><b className="need">{lv.threshold}</b></div>}
       {recent && <small>{name(lv.nominee)} · {what}</small>}
     </div>
   );
@@ -772,6 +772,24 @@ function SnvButtons({ s, act }) {
 }
 
 const scriptRoles = (script) => rolesOf(script);
+
+/** 抢椅子（Will 版）：入夜前悄悄决定换不换——和一名活着的玩家，或一个空座位（换之前不知道上面是什么）。 */
+function ChairPanel({ s, me, act }) {
+  const c = me.chair;
+  const secs = useCountdown(c.until);
+  const [t, setT] = useState(c.pick);
+  const pick = async (target) => { if (await act('chair', { target })) setT(target); };
+  return (
+    <Panel title="抢椅子" tone="psy" extra={secs != null ? <span className="nom-clock">{secs}</span> : null}>
+      <p className="lead">入夜前：要不要换座位？换了就拿走那个座位的<b>角色和阵营</b>，你原来的留给对方。你还能换 <b>{c.left}</b> 次。</p>
+      <p className="muted">空座位上是什么，换之前不知道。被你换的人会得知自己的新角色，但不知道是谁换的。</p>
+      <div className="btn-row">{c.chairs.map((x) => <Btn key={x.id} kind={t === x.id ? 'primary' : 'secondary'} onClick={() => pick(x.id)}>{x.name}</Btn>)}</div>
+      <Picker s={s} options={c.players} picked={t && !t.startsWith('chair:') ? [t] : []} onTap={(p) => pick(p.id)} />
+      <div className="btn-row"><Btn kind={c.done && !t ? 'primary' : 'ghost'} onClick={async () => { if (await act('chair', { target: null })) setT(null); }}>这晚不换</Btn></div>
+      {c.done && <p className="muted">{t ? '选好了，到点就换（可以改）。' : '这晚不换（可以改）。'}</p>}
+    </Panel>
+  );
+}
 
 /** 异教领袖发起了教派：所有人（死人也算）举手加入。 */
 function CultPanel({ s, act, g }) {
@@ -1230,6 +1248,8 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
     );
   }
 
+  if (me?.chair) return <ChairPanel s={s} me={me} act={act} />; // 抢椅子（Will 版）：入夜前换座位
+
   if (rk || prompt) {
     const roleId = rk ? 'ravenkeeper' : prompt.roleId;
     const v = voiceOf(roleId, ROLE_NAMES);
@@ -1237,6 +1257,18 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
       return (
         <Panel title={v.who} tone={teamTone(roleId)} extra={<Check color={v.color}>{v.skill}</Check>}>
           <p className="lead">等疯子先行动……他选完，你会知道他选了谁，然后轮到你。</p>
+        </Panel>
+      );
+    }
+    if (prompt?.roleId === 'organgrinder') { // 街头风琴手：点头或摇头
+      return (
+        <Panel title="街头风琴手" tone="phy">
+          <p className="lead">今晚要不要<b>醉酒到下个黄昏</b>？</p>
+          <p className="muted">清醒：明天大家闭眼投票，票数和结果都保密，黄昏才宣布处决谁。醉酒：明天投票照常睁眼、公开票数。</p>
+          <div className="btn-row">
+            <Btn kind="primary" onClick={() => act('choose', { night: prompt.night, targets: [], role: 'og_sober' })}>保持清醒</Btn>
+            <Btn onClick={() => act('choose', { night: prompt.night, targets: [], role: 'og_drunk' })}>醉酒到黄昏</Btn>
+          </div>
         </Panel>
       );
     }
@@ -1337,7 +1369,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
       <Panel title="投票" tone="phy" extra={<span className="muted">指针离开你时锁定</span>}>
         <Faces people={[face(s.vote.nominator, `${g(s.vote.nominator)?.seat}号 提名`), face(s.vote.nominee, `${g(s.vote.nominee)?.seat}号 被提名`)]} />
         <div className="stats">
-          {s.vote.hidden ? <Stat value="?" label="票数投完公开" color="var(--opt)" /> : <Stat value={s.vote.yes.length} label="举手" color="var(--opt)" />}
+          {s.vote.secret ? <Stat value="?" label="闭眼投票 · 票数保密" color="var(--opt)" /> : s.vote.hidden ? <Stat value="?" label="票数投完公开" color="var(--opt)" /> : <Stat value={s.vote.yes.length} label="举手" color="var(--opt)" />}
           <Stat value={s.threshold} label="需要" color="var(--cream)" />
           {s.blockVotes > 0 && <Stat value={s.blockVotes} label="台上" color="var(--phy)" />}
         </div>

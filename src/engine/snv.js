@@ -136,6 +136,8 @@ export function rollMixed(script, n, rng, { exclude = null } = {}) {
   const L = listsOf(script);
   let [t, o, m] = DISTRIBUTION[n];
   let out = L.out.filter(ok);
+  // 抢椅子（Will 版传奇角色）：[-1 爪牙，+1 外来者或镇民]。邪恶角色开局放在空座位上（见 setupSNV）
+  if (SCRIPTS[script]?.chairs && m > 0) { m -= 1; if (o < out.length && rng() < 0.5) o += 1; else t += 1; }
   // 无神论者局：没有爪牙和恶魔，空出来的位置补镇民（官方：拿掉邪恶角色，补上镇民或外来者）
   if (L.tf.includes('atheist') && ok('atheist') && rng() < ATHEIST_SHARE) {
     [t, o] = sentinelShift(script, t + m + 1, o, out.length, rng);
@@ -283,6 +285,20 @@ export const SNV_METHODS = {
       if (free.length) assigned[assigned.indexOf('heretic')] = pickOne(free, rng);
     }
     seatMarionette(assigned, rng);
+    // 抢椅子（Will 版）：角色跟着座位走，所有玩家开局都是善良。邪恶角色放到没人坐的空座位上（玩家不知道是什么），
+    // 玩家坐的位置换成一个不在场的镇民（没有就外来者）。每名玩家整局可以换 2 次
+    this.chairs = null; this.chairLeft = null;
+    if (S.chairs) {
+      const L0 = listsOf(this.script);
+      this.chairs = [];
+      for (let i = 0; i < assigned.length; i++) {
+        if (!isEvilRole(assigned[i])) continue;
+        this.chairs.push({ role: assigned[i], evil: true, gained: null, gainedFake: false, shown: assigned[i] });
+        const free = (list) => list.filter((r) => !assigned.includes(r) && !this.chairs.some((c) => c.role === r));
+        assigned[i] = pickOne(free(L0.tf).length ? free(L0.tf) : free(L0.out).length ? free(L0.out) : L0.tf, rng);
+      }
+      this.chairLeft = Object.fromEntries(players.map((p) => [p.id, 2]));
+    }
     this.players = players.map((p, i) => ({
       id: p.id, name: p.name, seat: i + 1, role: assigned[i], shownRole: assigned[i],
       alive: true, ghostVote: true, evil: isEvilRole(assigned[i]), gained: null, gainedFake: false, kept: false,
@@ -511,6 +527,68 @@ export const SNV_METHODS = {
   duchessToday() { return this.duchess?.day === this.day ? this.duchess.ids : []; },
 
   // ───────────────────────── 2026-11-23 Musical Chairs ─────────────────────────
+  // ───────────── 2026-11-23 抢椅子（Will 版）：每晚入夜前和玩家或空座位交换 ─────────────
+  /** 空座位的名字：A、B、C…… */
+  chairName(k) { return `空座位 ${String.fromCharCode(65 + k)}`; },
+  /** 这个人今晚能不能换、能换给谁。 */
+  chairOptions(uid) {
+    const p = this.get(uid);
+    if (!this.chairs || !p || !p.alive || p.left || p.traveller || !(this.chairLeft?.[uid] > 0)) return null;
+    return { left: this.chairLeft[uid], players: this.alive().filter((q) => q.id !== uid && !q.traveller).map((q) => q.id), chairs: this.chairs.map((_, k) => k) };
+  },
+  /**
+   * 结算大家的交换。picks：{ 谁 → 玩家 id 或 'chair:k' }。按随机顺序一个个换（后换的人换到的是前面换完的结果）。
+   * 和玩家换：两人互换角色和阵营；和空座位换：拿走座位上的角色和阵营，自己原来的留在那里。
+   * 换的人知道换到了什么；被换的人只知道自己的新角色，不知道是谁换的。返回要私下告诉的信息。
+   */
+  chairSwap(picks) {
+    const out = [];
+    const say = (q, text) => out.push({ playerId: q.id, text });
+    if (!this.chairs) return out;
+    const side = (q) => (this.evilOf(q) ? '邪恶' : '善良');
+    const turnedEvil = new Set();
+    for (const id of shuffle(Object.keys(picks), this.rng)) {
+      const p = this.get(id); const t = picks[id];
+      if (!t || !this.chairOptions(id)) continue;
+      const wasEvil = this.evilOf(p);
+      if (String(t).startsWith('chair:')) {
+        const k = Number(String(t).slice(6)); const c = this.chairs[k];
+        if (!c) continue;
+        const mine = { role: p.role, evil: wasEvil, gained: p.gained, gainedFake: p.gainedFake, shown: p.shownRole };
+        this.changeRole(p, c.role);
+        p.gained = c.gained ?? null; p.gainedFake = !!c.gainedFake; p.evil = c.evil;
+        if (c.role === 'lunatic') p.shownRole = c.shown && c.shown !== 'lunatic' ? c.shown : pickOne(rolesOf(this.script, 'demon'), this.rng) ?? 'lunatic';
+        this.chairs[k] = mine;
+        this.chairLeft[id] -= 1;
+        this.record('st', `${this.tag(id)} 换到了${this.chairName(k)}：现在是${ROLES[p.role].name}（${side(p)}），座位上留下${ROLES[mine.role].name}`);
+        say(p, `你换到了**${this.chairName(k)}**：你现在是**${ROLES[p.shownRole].name}**，**${side(p)}**阵营。（还能换 ${this.chairLeft[id]} 次）`);
+      } else {
+        const q = this.get(t);
+        if (!q || !q.alive || q.left || q.traveller || q.id === p.id) continue;
+        const ea = wasEvil; const eb = this.evilOf(q); const sa = p.shownRole; const sb = q.shownRole;
+        this.swapRoles(p, q);
+        p.evil = eb; q.evil = ea;
+        if (p.role === 'lunatic') p.shownRole = sb; // 疯子以为的恶魔跟着走
+        if (q.role === 'lunatic') q.shownRole = sa;
+        this.chairLeft[id] -= 1;
+        if (!eb && this.evilOf(q)) turnedEvil.add(q.id);
+        this.record('st', `${this.tag(id)} 和 ${this.tag(q.id)} 交换了：${this.name(id)} 现在是${ROLES[p.role].name}（${side(p)}），${this.name(q.id)} 现在是${ROLES[q.role].name}（${side(q)}）`);
+        say(p, `你和 **${this.name(q.id)}** 交换了：你现在是**${ROLES[p.shownRole].name}**，**${side(p)}**阵营。（还能换 ${this.chairLeft[id]} 次）`);
+        say(q, `有人和你交换了座位：你现在是**${ROLES[q.shownRole].name}**，**${side(q)}**阵营。`);
+      }
+      if (!wasEvil && this.evilOf(p)) turnedEvil.add(id);
+    }
+    this.afterChange(say);
+    // 首夜的爪牙、恶魔信息在交换之后照常做；之后的夜里新变成邪恶的人，告诉他现在的邪恶同伴（照舞蛇人换身的做法）
+    if (this.night >= 1 && this.evilInfo) for (const id of turnedEvil) {
+      const p = this.get(id);
+      if (!this.evilOf(p) || p.role === 'lunatic') continue;
+      const mates = this.players.filter((q) => q.id !== id && this.evilOf(q) && q.role !== 'lunatic');
+      say(p, mates.length ? `现在的邪恶同伴：${mates.map((q) => `**${this.name(q.id)}**（${ROLES[q.role].name}）`).join('、')}。` : '现在没有别的邪恶玩家。');
+    }
+    return out;
+  },
+
   /** 异教领袖：谁都可以声称发起教派（每人每天一次）。 */
   cultStart(uid) {
     if (this.phase !== 'day') throw new Error('只能在白天');
@@ -680,7 +758,14 @@ export const SNV_METHODS = {
   /** 不知道自己是什么能力的人（失忆者、拿到能力的食人族）：信息只给裸的数字、人名，不说是哪个能力。 */
   hidden(p) { return (!!p?.gained && (p.role === 'amnesiac' || p.role === 'cannibal')) || !!this.allAmn?.(p); }, // 全员失忆：还不知道自己是谁的人
   /** 利维坦在起作用。 */
-  leviOn() { return this.players.some((q) => q.role === 'leviathan' && q.alive && !this.snvBroken(q)); },
+  leviOn() { return this.players.some((q) => q.role === 'leviathan' && q.alive && !this.snvBroken(q)) || !!this.chairs?.some((c) => c.role === 'leviathan'); }, // 抢椅子：空座位上的利维坦也在场
+  /** 街头风琴手在起作用：投票闭眼、票数保密（活着、没失效、昨晚没选醉酒）。 */
+  ogSecret() {
+    const o = this.players.find((q) => q.role === 'organgrinder' && q.alive);
+    return !!o && !this.snvBroken(o) && this.ogDrunk == null;
+  },
+  /** 抢椅子：空座位上有恶魔（没人坐，杀不掉）。 */
+  chairDemon() { return !!this.chairs?.some((c) => ROLES[c.role]?.team === 'demon'); },
   /** 这个死人还留着能力吗（被亡骨魔杀死的爪牙，亡骨魔还在且没失效）。 */
   kept(p) { return !!p && !p.alive && !!p.kept && team(p) === 'minion' && this.vigOn(); },
   /** 还用得了能力吗（活着，或者保留了能力）。不管醉酒中毒。 */
@@ -1196,6 +1281,13 @@ ${this.grimoire(w.id)}
       // 界面上和真恶魔一样：座位圈上的爪牙红框、3 张伪装卡（room.js 的 self 视图读这个）
       this.lunaticFake = { id: lunatic.id, allies: fake.map((x) => x.id), bluffs: fakeBluffs, shared: false };
     }
+    if (!demon) { // 抢椅子（Will 版）：恶魔还坐在空座位上，没有玩家是恶魔
+      for (const m of minions) {
+        const mates = minions.filter((x) => x.id !== m.id).map((x) => this.name(x.id));
+        say(m, `现在没有玩家是恶魔${this.chairDemon() ? '：恶魔坐在空座位上' : ''}。${mates.length ? `其他爪牙：${mates.join('、')}。` : ''}`);
+      }
+      return messages;
+    }
     for (const m of minions) {
       const mates = minions.filter((x) => x.id !== m.id).map((x) => this.name(x.id));
       say(m, `恶魔是 **${this.name(demon.id)}**。${mates.length ? `其他爪牙：${mates.join('、')}。` : ''}`);
@@ -1224,6 +1316,7 @@ ${this.grimoire(w.id)}
     if (roleOptions) roleOptions = roleOptions.filter((r) => r !== 'lilmonsta'); // 小怪宝没有恶魔玩家，工程师、麻脸巫婆不能造出它
     if (role === 'ah_choice') roleOptions = ['ah_live', 'ah_die'];
     if (role === 'harlot_ask') roleOptions = ['harlot_yes', 'harlot_no'];
+    if (role === 'organgrinder') roleOptions = ['og_drunk', 'og_sober'];
     if (role === 'hatter_pick') roleOptions = this.scriptRoles().filter((r) => ROLES[r].team === team(p) && r !== 'lilmonsta' && (r === p.role || !this.players.some((q) => q.role === r))); // 帽匠的茶会：同类型、不在场的角色
     if (role === 'cerenovus' && inScript('goblin', this.script)) roleOptions = [...roleOptions, 'goblin']; // 相克：洗脑师可以让人对「自己是哥布林」疯狂
     return { playerId: p.id, role: this.hidden(p) && role !== 'ah_choice' && role !== 'harlot_ask' && role !== 'hatter_pick' ? (this.allAmn?.(p) ? this.amnRoleOf(p) : p.role) : role, count: spec.count, options, optional: !!spec.optional, pickRole: !!spec.role, roleOptions, waiting: false };
@@ -1287,6 +1380,7 @@ ${this.grimoire(w.id)}
     const p = this.get(playerId);
     const skip = () => { this.choices[playerId] = { targets: [], role: null }; };
     if (pr.role === 'ah_choice') { this.choices[playerId] = { targets: [], role: this.rng() < 0.6 ? 'ah_live' : 'ah_die' }; return; } // 机器人：多半选活
+    if (pr.role === 'organgrinder') { this.choices[playerId] = { targets: [], role: this.rng() < 0.25 ? 'og_drunk' : 'og_sober' }; return; } // 机器人：多半保持清醒（闭眼投票）
     if (pr.role === 'harlot_ask') { this.choices[playerId] = { targets: [], role: this.rng() < (this.evilOf(p) ? 0.35 : 0.6) ? 'harlot_yes' : 'harlot_no' }; return; } // 机器人：善良的多半同意
     if (pr.role === 'hatter_pick') { const others = pr.roleOptions.filter((r) => r !== p.role); this.choices[playerId] = { targets: [], role: others.length && this.rng() < 0.4 ? others[Math.floor(this.rng() * others.length)] : null }; return; } // 机器人：多半不换
     if (pr.optional && this.rng() < 0.5) return skip();
@@ -1433,6 +1527,14 @@ ${this.grimoire(w.id)}
           say(t, `你变成了 **${this.amnName(t, t.shownRole)}**。你的阵营没有变，你仍然是**${this.evilOf(t) ? '邪恶' : '善良'}**的。`); // 变成酒鬼、疯子的人只知道他以为的角色
           this.afterChange(say);
           changed.push(t.id);
+        } break;
+        case 'organgrinder': { // 选了醉酒：到下个黄昏都醉（投票照常睁眼）；没选、失效都按清醒算，结算看白天当时
+          this.ogDrunk = null;
+          for (const p of this.holders('organgrinder')) {
+            if (this.choiceOfSNV(p)?.role !== 'og_drunk') continue;
+            this.ogDrunk = this.night;
+            this.record('st', `街头风琴手 ${this.tag(p.id)} 选择醉酒到黄昏：明天投票照常睁眼`);
+          }
         } break;
         case 'snakecharmer': for (const p of this.holders('snakecharmer')) {
           const t = this.choiceOfSNV(p)?.targets[0]; if (!t) continue;
@@ -2331,6 +2433,7 @@ ${this.grimoire(w.id)}
     // 送葬者看的是「今天死于处决」的人：处决死人、处决了没死都不算（原来的暗流涌动引擎也是这样）
     if (this.phase !== 'night') { if (res === 'died' || res === 'fake') this.lastExecuted = p.id; else if (this.lastExecuted === p.id) this.lastExecuted = null; }
     if (res === 'died' && saint) this.setWinner(this.evilOf(p) ? 'good' : 'evil', `圣徒 ${this.name(p.id)} 被处决`);
+    if (res === 'died' && !this.winner && p.id === this.grandchild && this.leviOn() && this.players.some((q) => q.role === 'grandmother')) this.setWinner('evil', `相克：利维坦在场，祖母的孙子 ${this.name(p.id)} 被处决`);
     if (boom && !this.winner) this.boomStart(p);
     if (res === 'died' && team(p) === 'minion') { // 吟游诗人：爪牙死于处决，除他以外所有人醉酒到明天黄昏
       const min = this.holders('minstrel').find((q) => q.alive && !this.snvBroken(q));
@@ -2384,7 +2487,7 @@ ${this.grimoire(w.id)}
     }
     const harpyDead = this.winner ? [] : this.harpyPenalty();
     if (!this.winner && this.day >= 5 && this.leviOn()) this.setWinner('evil', `第 ${this.day} 个白天结束，利维坦获胜`);
-    else if (!this.winner && this.day >= 5 && this.players.some((q) => q.role === 'leviathan' && q.alive)) this.leviDue = true; // 官方：之后一恢复清醒健康，邪恶立刻获胜（天亮时再看）
+    else if (!this.winner && this.day >= 5 && (this.players.some((q) => q.role === 'leviathan' && q.alive) || this.chairs?.some((c) => c.role === 'leviathan'))) this.leviDue = true; // 官方：之后一恢复清醒健康，邪恶立刻获胜（天亮时再看）
     if (!this.winner && SCRIPTS[this.script]?.riot && this.day >= 3 && this.demonsAlive().length) this.setWinner('evil', '第三个白天结束，暴乱还活着，邪恶获胜');
     this.fx = this.fx.filter((f) => !(typeof f.until === 'number' && f.until <= this.day));
     this.curseFail = null;
@@ -2764,7 +2867,7 @@ ${this.grimoire(w.id)}
       return this.winner;
     }
     if (this.mastermindDay != null) return null; // 主谋的额外一夜一天：胜负在那天黄昏定
-    const noDemon = !this.demonsAlive().length;
+    const noDemon = !this.demonsAlive().length && !this.chairDemon(); // 抢椅子：恶魔还坐在空座位上，善良没赢
     const mm = noDemon && this.demonExecuted && this.holders('mastermind').find((q) => q.alive && !this.snvBroken(q));
     if (mm) { this.mastermindDay = this.day + 1; this.record('st', '恶魔死于处决，但主谋还活着：额外进行一个夜晚和一个白天'); return null; }
     if (noDemon && !this.twinBlocks()) this.setWinner('good', SCRIPTS[this.script]?.riot ? '所有暴乱都死了' : '恶魔已经死亡');

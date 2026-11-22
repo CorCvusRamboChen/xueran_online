@@ -800,5 +800,21 @@
  "加入教派 ✋": "Join the cult ✋",
  "黑帮 {0} 想杀掉 {1}，要 {2} 同意。": "Gangster {0} wants to kill {1}; {2} must agree.",
  "不同意": "Disagree",
- "等 {0} 表态（到时间没表态就算不同意）。": "Waiting for {0} to answer (no answer in time counts as no)."
+ "等 {0} 表态（到时间没表态就算不同意）。": "Waiting for {0} to answer (no answer in time counts as no).",
+ "票数保密（街头风琴手）": "Tally secret (Organ Grinder)",
+ "入夜前：要不要换座位？换了就拿走那个座位的{0}，你原来的留给对方。你还能换 {1} 次。": "Before nightfall: swap seats? You take that seat's {0}, and yours stays with them. Swaps left: {1}.",
+ "角色和阵营": "character and alignment",
+ "空座位上是什么，换之前不知道。被你换的人会得知自己的新角色，但不知道是谁换的。": "You don't know what's on an empty seat until you swap. A player you swap with learns their new character, but not who swapped.",
+ "这晚不换": "Don't swap tonight",
+ "选好了，到点就换（可以改）。": "Chosen: the swap happens when time is up (you can still change).",
+ "这晚不换（可以改）。": "Not swapping tonight (you can still change).",
+ "街头风琴手": "Organ Grinder",
+ "今晚要不要{0}？": "Tonight, do you want to be {0}?",
+ "醉酒到下个黄昏": "drunk until next dusk",
+ "清醒：明天大家闭眼投票，票数和结果都保密，黄昏才宣布处决谁。醉酒：明天投票照常睁眼、公开票数。": "Sober: tomorrow everyone votes with eyes closed; the tally and result stay secret until dusk announces the execution. Drunk: tomorrow's votes are open as usual.",
+ "保持清醒": "Stay sober",
+ "醉酒到黄昏": "Drunk until dusk",
+ "闭眼投票 · 票数保密": "Eyes closed · tally secret",
+ "闭眼投票": "Eyes closed",
+ "谁举了手保密": "Who voted is secret"
 }
