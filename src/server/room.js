@@ -2825,13 +2825,16 @@ export class Room {
       g.record('info', `${g.tag(uid)}${lie ? '【能力失效】' : ''} 得到建议：${text}`);
       this.changed();
     };
-    const fallback = () => reply(g.st.fishermanAdvice(p, lie));
-    if (!(this.judgeReady ?? judgeAvailable)()) { fallback(); return; }
     const fake = lie === 'atheist'; // 无神论者局：按说书人假装的邪恶阵营给正常的建议（以前当成失效、还把「全员善良」的真实情况交给模型）
+    const bad = lie && !fake ? g.st.fishermanMislead(p) : null; // 失效：先定好把他引向谁，AI 和规则版用同一个人
+    const fallback = () => reply(g.st.fishermanAdvice(p, lie, bad));
+    if (!(this.judgeReady ?? judgeAvailable)()) { fallback(); return; }
     const evilSide = g.evilOf(p) && p.role !== 'marionette';
     // 2026-11-20 用户：夜半狂欢那局渔夫的建议「核对 3 号和 8 号」直接把恶魔 8 号打了出去。能力正常的建议不许点邪恶玩家（邪恶渔夫不许点恶魔）
     const avoid = fake ? [] : g.players.filter((q) => (evilSide ? (g.demonNow?.(q) ?? ROLES[q.role].team === 'demon') : g.evilOf(q))).map((q) => ({ seat: q.seat, name: q.name }));
-    this.aiAsk(uid, 'fisherman', (this.advise ?? adviseFisherman)({ team: evilSide ? '邪恶' : '善良', lie: !!lie && !fake, facts: fake ? g.factsFake() : g.factsSNV(), avoid }, { lang: this.aiLang() })) // 提线木偶以为自己是好人
+    const seatOf = (q) => ({ seat: q.seat, name: q.name });
+    const friends = bad ? g.st.fishermanSides(p).friends.map(seatOf) : [];
+    this.aiAsk(uid, 'fisherman', (this.advise ?? adviseFisherman)({ team: evilSide ? '邪恶' : '善良', lie: !!lie && !fake, facts: fake ? g.factsFake() : g.factsSNV(), avoid, mislead: bad ? seatOf(bad) : null, friends }, { lang: this.aiLang() })) // 提线木偶以为自己是好人
       .then((res) => (res?.advice ? reply(res.advice) : fallback()))
       .catch((e) => { console.warn('[botc] 渔夫的建议出错：', e.message); fallback(); });
   }

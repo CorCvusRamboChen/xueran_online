@@ -39,6 +39,25 @@ test('渔夫的 AI 建议：能力正常时点到邪恶玩家就作废（转用�
   assert.doesNotMatch(lie.calls[0].messages[1].content, /不能点名/);
 });
 
+test('渔夫失效（2026-11-23 那局：中毒的渔夫被叫去相信真博学者 1 号）：必须点到误导对象、不许点自己人', async () => {
+  const mislead = { seat: 6, name: 'Rambooo' };
+  const friends = [{ seat: 1, name: 'Corbin' }, { seat: 4, name: 'D4rk37' }];
+  const that = fakeAI('相信1号Corbin的信息，恶魔不具备转移座位的能力。');
+  assert.equal(await adviseFisherman({ team: '善良', lie: true, facts: '…', mislead, friends }, that.opts), null, '点了自己人：作废，转用规则版');
+  assert.match(that.calls[0].messages[1].content, /【误导对象】6号 Rambooo/);
+  assert.match(that.calls[0].messages[1].content, /【不能点名】1号 Corbin、4号 D4rk37/);
+  assert.equal(await adviseFisherman({ team: '善良', lie: true, facts: '…', mislead, friends }, fakeAI('今天别急着处决。').opts), null, '没点到误导对象也作废');
+  assert.equal((await adviseFisherman({ team: '善良', lie: true, facts: '…', mislead, friends }, fakeAI('多听 6 号的判断。').opts)).advice, '多听 6 号的判断。');
+});
+
+test('渔夫失效：规则版用同一个误导对象', () => {
+  const g = mk(3);
+  const p = g.get('p4');
+  const bad = g.st.fishermanMislead(p);
+  assert.ok(g.evilOf(bad), '善良渔夫被引向邪恶玩家');
+  assert.ok(g.st.fishermanAdvice(p, 'fake', bad).includes(g.name(bad.id)));
+});
+
 test('渔夫的规则版建议：能力正常时不点邪恶玩家；邪恶渔夫也不点恶魔', () => {
   for (let seed = 1; seed <= 40; seed++) {
     const g = mk(seed);

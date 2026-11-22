@@ -222,15 +222,16 @@ const FISHERMAN_SYSTEM = `你是《血染钟楼》的说书人。渔夫每局可
   · 不要给"某两个人之中有恶魔 / 有人在骗你"这种话（渔夫页：这并非建议，是信息）。
 - 一到两句中文，不超过 40 字，用玩家的座位号和名字称呼人，不要说出任何人的真实角色或阵营。
 - 能力正常时：给真正有帮助、但需要他自己去想的建议。
-- 能力失效时：给一条听起来合理、其实对他不利的建议（比如让他相信一个邪恶玩家）。
+- 能力失效时：给一条听起来合理、其实对他不利的建议。用户消息里会给【误导对象】：建议必须点到这个人（让渔夫相信他、跟着他走、保住他），不能点名别的玩家；也不要复述或判断任何人得到的信息（比如"他说的 X 是真的"），那等于给真信息。
 只输出一个 JSON 对象：{"advice":"建议"}`;
 
 /** 渔夫的建议。返回 { advice, by } 或 null。 */
-export function adviseFisherman({ team, lie, facts, avoid = [] }, opts = {}) {
-  const ban = lie ? [] : avoid; // 失效时的坏建议可以点邪恶玩家（让他相信一个邪恶玩家）
-  const list = ban.length ? `\n【不能点名】${ban.map((q) => `${q.seat}号 ${q.name}`).join('、')}` : '';
+export function adviseFisherman({ team, lie, facts, avoid = [], mislead = null, friends = [] }, opts = {}) {
+  // 失效：不许点自己人（2026-11-23 中毒的渔夫被叫去「相信 1 号的信息」，1 号是真博学者），有误导对象时必须点到他
+  const ban = lie ? friends.filter((q) => q.seat !== mislead?.seat) : avoid;
+  const list = (ban.length ? `\n【不能点名】${ban.map((q) => `${q.seat}号 ${q.name}`).join('、')}` : '') + (lie && mislead ? `\n【误导对象】${mislead.seat}号 ${mislead.name}` : '');
   return askJson(FISHERMAN_SYSTEM, `【这局的真实情况】\n${facts}\n\n【渔夫】\n阵营：${team}；能力${lie ? '失效（给坏建议）' : '正常'}${list}`,
-    (o) => { const a = String(o.advice ?? '').trim(); return a && [...a].length <= 80 && !namesAny(a, ban) ? { advice: a } : null; }, opts);
+    (o) => { const a = String(o.advice ?? '').trim(); return a && [...a].length <= 80 && !namesAny(a, ban) && (!lie || !mislead || namesAny(a, [mislead])) ? { advice: a } : null; }, opts);
 }
 
 /** 文字里有没有点到这些人（座位号或名字）。「1号」不算「11号」里的。 */

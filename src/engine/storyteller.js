@@ -1214,7 +1214,27 @@ export class Storyteller {
    * 渔夫的建议（没有大模型时用）：让他去做一件事，不是告诉他一条事实（官方建议）。
    * 健康：善良落后就给能直接帮到忙的（处决某个邪恶、保住某个说真话的人），领先就给模糊一点的；失效时给坏建议。
    */
-  fishermanAdvice(p, lie) {
+  /** 渔夫这一边的自己人和对面的人（不含渔夫自己）。邪恶渔夫的自己人不含恶魔（不点恶魔）。 */
+  fishermanSides(p) {
+    const g = this.g;
+    const alive = g.players.filter((q) => q.alive && q.id !== p.id);
+    const evil = alive.filter((q) => g.evilOf(q));
+    const good = alive.filter((q) => !g.evilOf(q));
+    const mine = !g.evilOf(p);
+    return { mine, friends: mine ? good : evil.filter((q) => !(g.demonNow?.(q) ?? ROLES[q.role].team === 'demon')), foes: mine ? evil : good };
+  }
+
+  /**
+   * 渔夫失效：说书人先定好要把他引向谁（对面阵营的一个人），AI 和规则版都用这个人。
+   * 2026-11-23 用户：渔夫中毒还拿到「相信 1 号的信息，恶魔不具备转移座位的能力」——1 号是真博学者，这句还替他挑出了博学者两条里真的那条。
+   * 只告诉模型「给坏建议」管不住，现在指定误导对象、建议里必须点到他、不许点自己人。
+   */
+  fishermanMislead(p) {
+    const { foes } = this.fishermanSides(p);
+    return foes.length ? this.choose('fishBad', foes, { who: p.id }) : null;
+  }
+
+  fishermanAdvice(p, lie, bad = null) {
     // 2026-11-18 用户：渔夫太直接了。集石百科：给「去做什么」的建议，范例是「你不应该相信小八」「让声称自己是外来者的玩家活着」；
     // 不单独点名恶魔，要点到邪恶玩家时和善良玩家放在一起说，让他自己去想。
     const g = this.g;
@@ -1227,7 +1247,7 @@ export class Storyteller {
     const friends = mine ? good : evil.filter((q) => !(g.demonNow?.(q) ?? ROLES[q.role].team === 'demon')); const foes = mine ? evil : good; // 邪恶渔夫也不点恶魔（罂粟种植者在场时爪牙不认识恶魔）
     const broken = friends.filter((q) => g.snvBroken?.(q)); // 自己人里信息不可靠的（醉酒中毒）
     let text;
-    if (lie && foes.length) text = `相信 ${name(this.choose('fishBad', foes, { who: p.id }))}。`; // 失效：让他相信对面的人
+    if (lie && foes.length) text = `相信 ${name(bad ?? this.choose('fishBad', foes, { who: p.id }))}。`; // 失效：让他相信对面的人
     else if (!foes.length || !friends.length) text = '相信你自己的判断，不要被别人带着走。';
     else {
       const realOut = alive.some((q) => ROLES[q.role].team === 'outsider' && !g.evilOf(q)); // 官方范例里声称外来者的都是真外来者

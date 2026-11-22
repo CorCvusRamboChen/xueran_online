@@ -616,7 +616,7 @@
     <article class="ai-card pnl">
       <header><h3>渔夫的建议 <code>adviseFisherman</code></h3><span class="tag tag-mot">白天</span></header>
       
-      <dl><div class="ai-row"><dt>调用</dt><dd><code>server/room.js:2687</code>。</dd></div><div class="ai-row"><dt>喂什么</dt><dd>facts = <code>g.factsSNV()</code>（无神论者局用 <code>factsFake()</code>）；渔夫阵营；能力是否失效；能力正常时的【不能点名】名单 = 所有邪恶玩家（邪恶渔夫是恶魔）。</dd></div><div class="ai-row"><dt>本机后检</dt><dd><code>namesAny</code>（<code>judge.js:237</code>）——回答里出现了不能点名的座位号或名字 → 作废；超过 80 字也作废。</dd></div><div class="ai-row"><dt>回答怎么用</dt><dd>私下发给渔夫（真人说书时只填进卡片，说书人改好再发）。</dd></div><div class="ai-row"><dt>失败兜底</dt><dd><code>fishermanAdvice</code>（<code>storyteller.js:1079</code>）：失效 → 「相信 X」（X 是对面阵营的人）；正常 → 随机三种之一：「相信某个自己人」、「让声称自己是外来者的玩家活着」（真有善良外来者时）、「你不应该相信 X」（X 是信息不可靠的自己人）。</dd></div></dl>
+      <dl><div class="ai-row"><dt>调用</dt><dd><code>server/room.js:2687</code>。</dd></div><div class="ai-row"><dt>喂什么</dt><dd>facts = <code>g.factsSNV()</code>（无神论者局用 <code>factsFake()</code>）；渔夫阵营；能力是否失效；能力正常时的【不能点名】名单 = 所有邪恶玩家（邪恶渔夫是恶魔）。失效时先由 <code>fishermanMislead</code> 从对面阵营抽一个【误导对象】，【不能点名】改成渔夫自己这边的其他人。</dd></div><div class="ai-row"><dt>本机后检</dt><dd><code>namesAny</code>（<code>judge.js:237</code>）——回答里出现了不能点名的座位号或名字 → 作废；失效时没点到误导对象也作废（2026-11-23：中毒的渔夫拿到「相信 1 号的信息，恶魔不具备转移座位的能力」，1 号是真博学者，这句还替他挑出了博学者两条里真的那条）；超过 80 字也作废。</dd></div><div class="ai-row"><dt>回答怎么用</dt><dd>私下发给渔夫（真人说书时只填进卡片，说书人改好再发）。</dd></div><div class="ai-row"><dt>失败兜底</dt><dd><code>fishermanAdvice</code>（<code>storyteller.js:1079</code>）：失效 → 「相信 X」（X 就是那个误导对象）；正常 → 随机三种之一：「相信某个自己人」、「让声称自己是外来者的玩家活着」（真有善良外来者时）、「你不应该相信 X」（X 是信息不可靠的自己人）。</dd></div></dl>
     </article>
     <article class="ai-card pnl">
       <header><h3>7 号空座的发言 <code>speakSeat7</code></h3><span class="tag tag-mot">白天</span></header>
@@ -816,7 +816,7 @@
 【渔夫】
 阵营：（善良/邪恶）；能力正常 / 失效（给坏建议）
 【不能点名】（能力正常时：所有邪恶玩家和被怀疑的人，座位号 + 名字）</pre>
-      <details class="ai-sys"><summary>系统提示词全文 <small>600 字</small></summary><pre class="ai-pre">你是《血染钟楼》的说书人。渔夫每局可以请教你一次，你给他一条帮他的阵营获胜的建议。
+      <details class="ai-sys"><summary>系统提示词全文 <small>676 字</small></summary><pre class="ai-pre">你是《血染钟楼》的说书人。渔夫每局可以请教你一次，你给他一条帮他的阵营获胜的建议。
 用户消息里会给出这局的全部真实情况、渔夫的阵营，以及他的能力是否失效。
 要求：
 - 建议是&quot;去做什么&quot;，不是&quot;某人是什么&quot;（集石百科：行动建议比信息有趣）。官方范例：&quot;你不应该相信小八&quot;（小八的信息是错的）、&quot;让声称自己是外来者的玩家活着&quot;。
@@ -827,7 +827,7 @@
   · 不要给&quot;某两个人之中有恶魔 / 有人在骗你&quot;这种话（渔夫页：这并非建议，是信息）。
 - 一到两句中文，不超过 40 字，用玩家的座位号和名字称呼人，不要说出任何人的真实角色或阵营。
 - 能力正常时：给真正有帮助、但需要他自己去想的建议。
-- 能力失效时：给一条听起来合理、其实对他不利的建议（比如让他相信一个邪恶玩家）。
+- 能力失效时：给一条听起来合理、其实对他不利的建议。用户消息里会给【误导对象】：建议必须点到这个人（让渔夫相信他、跟着他走、保住他），不能点名别的玩家；也不要复述或判断任何人得到的信息（比如&quot;他说的 X 是真的&quot;），那等于给真信息。
 只输出一个 JSON 对象：{&quot;advice&quot;:&quot;建议&quot;}</pre></details>
     </article>
     <article class="ai-prompt pnl" id="p-seat7">
