@@ -182,7 +182,7 @@ test('房间：入夜前换座位（真人换到空座位、机器人随便换�
       await sleep(5);
     }
     await until(() => g.phase === 'day', 5000);
-    if (g.winner) return;
+    if (g.winner || !g.get('u1').alive || g.snvBroken(g.get('u1'))) return; // 随机到解谜大师让他醉了这类：这条测不了
     assert.equal(g.ogSecret(), true);
     room.openNominations?.();
     const target = g.alive().find((q) => q.id !== 'u1');

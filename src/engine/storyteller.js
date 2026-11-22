@@ -1009,7 +1009,10 @@ export class Storyteller {
   }
 
   /** 博学者的两条信息：从真实局面算出来，保证真的就是真的、假的就是假的。 */
-  savantFacts(w = null) {
+  // 2026-11-23 用户：博学者的两条要难分真假。上一局第 2 天给了「死亡的玩家里有 1 名善良」（那时没人死，一看就假，另一条就是真的）。
+  // 现在：① 大家公开知道的事能判出真假的不说（没人死时不说死人；存活的邪恶人数要有人死了才说；假数字不超过死人 / 活人数）；
+  // ② 不说博学者自己的阵营（他知道自己是什么）；③ 两条尽量同一类（都是人数、都是座位、都是角色、都是状态），看形式猜不出哪条是真的。
+  savantFacts(w = null, me = null) {
     const g = this.g; const rng = this.rng;
     const ps = g.players; const n = ps.length;
     const isEvil = (q) => (w ? w.evil.has(q.id) : g.evilOf(q));
@@ -1019,7 +1022,7 @@ export class Storyteller {
     const demons = ps.filter((q) => (w ? q.id === w.demon : g.demonNow ? g.demonNow(q) : ROLES[q.role].team === 'demon'));
     // 官方：「避免提供恶魔是谁这种信息」。点名一两个人的那几条不点恶魔，善良明显落后时才偶尔放开
     const open = !demons.length || this.roll('savantDemon', { balance: this.balance() }, {});
-    const named = open ? ps : ps.filter((q) => !demons.includes(q));
+    const named = (open ? ps : ps.filter((q) => !demons.includes(q))).filter((q) => q.id !== me?.id);
     const two = shuffled(named, rng).slice(0, 2);
     const one = pick(named, rng);
     const dead = ps.filter((q) => !q.alive);
@@ -1037,16 +1040,21 @@ export class Storyteller {
     for (let i = 0; i < n; i++) if (isEvil(ps[i]) && isEvil(ps[(i + 1) % n])) pairs++;
     const same = isEvil(two[0]) === isEvil(two[1]);
     const facts = [
-      { t: `场上有 ${outs} 名外来者`, f: `场上有 ${num(outs, 0, n)} 名外来者` },
-      { t: `死亡的玩家里有 ${evilIn(dead)} 名邪恶`, f: `死亡的玩家里有 ${num(evilIn(dead), 0, n)} 名邪恶`, sharp: pins(dead) },
-      { t: `存活的玩家里有 ${evilIn(alive)} 名邪恶`, f: `存活的玩家里有 ${num(evilIn(alive), 0, n)} 名邪恶` },
-      { t: `相邻而坐的邪恶玩家有 ${pairs} 对`, f: `相邻而坐的邪恶玩家有 ${num(pairs, 0, n)} 对` },
-      { t: `${g.name(two[0].id)} 和 ${g.name(two[1].id)} ${same ? '是' : '不是'}同一阵营`, f: `${g.name(two[0].id)} 和 ${g.name(two[1].id)} ${same ? '不是' : '是'}同一阵营` },
-      ...(w ? [] : [{ t: `恶魔${demonIn ? '在' : '不在'} ${seats[0]} 号到 ${seats.at(-1)} 号之间`, f: `恶魔${demonIn ? '不在' : '在'} ${seats[0]} 号到 ${seats.at(-1)} 号之间` }]), // 无神论者局不说恶魔在哪（假恶魔以后可能要换人）
-      { t: `${g.name(one.id)} 是${isEvil(one) ? '邪恶' : '善良'}的`, f: `${g.name(one.id)} 是${isEvil(one) ? '善良' : '邪恶'}的`, sharp: isEvil(one) },
+      { t: `场上有 ${outs} 名外来者`, f: `场上有 ${num(outs, 0, n)} 名外来者`, cat: 'count' },
+      // 死人、活人里的邪恶人数：没人死时一看就知道（开局人数表是公开的），不说
+      ...(dead.length ? [
+        { t: `死亡的玩家里有 ${evilIn(dead)} 名邪恶`, f: `死亡的玩家里有 ${num(evilIn(dead), 0, dead.length)} 名邪恶`, sharp: pins(dead), cat: 'count' },
+        { t: `存活的玩家里有 ${evilIn(alive)} 名邪恶`, f: `存活的玩家里有 ${num(evilIn(alive), 0, alive.length)} 名邪恶`, cat: 'count' },
+      ] : []),
+      { t: `相邻而坐的邪恶玩家有 ${pairs} 对`, f: `相邻而坐的邪恶玩家有 ${num(pairs, 0, n)} 对`, cat: 'seat' },
+      ...(two.length === 2 ? [{ t: `${g.name(two[0].id)} 和 ${g.name(two[1].id)} ${same ? '是' : '不是'}同一阵营`, f: `${g.name(two[0].id)} 和 ${g.name(two[1].id)} ${same ? '不是' : '是'}同一阵营`, cat: 'people' }] : []),
+      ...(w ? [] : [{ t: `恶魔${demonIn ? '在' : '不在'} ${seats[0]} 号到 ${seats.at(-1)} 号之间`, f: `恶魔${demonIn ? '不在' : '在'} ${seats[0]} 号到 ${seats.at(-1)} 号之间`, cat: 'seat' }]), // 无神论者局不说恶魔在哪（假恶魔以后可能要换人）
+      ...(one ? [{ t: `${g.name(one.id)} 是${isEvil(one) ? '邪恶' : '善良'}的`, f: `${g.name(one.id)} 是${isEvil(one) ? '善良' : '邪恶'}的`, sharp: isEvil(one), cat: 'people' }] : []),
     ];
-    if (absent.length && present.length) facts.push({ t: `场上有${ROLES[pick(present, rng)].name}`, f: `场上有${ROLES[pick(absent, rng)].name}` });
+    if (absent.length && present.length) facts.push({ t: `场上有${ROLES[pick(present.filter((r) => r !== me?.role).length ? present.filter((r) => r !== me?.role) : present, rng)].name}`, f: `场上有${ROLES[pick(absent, rng)].name}`, cat: 'role' });
     facts.push(...this.savantMore(w, { isEvil, demons, dead, num, pins }));
+    // 说「场上有博学者」等于白给真的：真的那条不提博学者自己的角色
+    for (const f of facts) if (me && f.cat === 'role' && f.t.includes(ROLES[me.role]?.name ?? '\u0000')) f.cat = 'skip';
     return shuffled(facts, rng);
   }
 
@@ -1067,7 +1075,7 @@ export class Storyteller {
     const odd = ps.filter((q) => q.seat % 2 === 1 && isEvil(q)).length;
     const cmp = ['更多', '更少', '一样多'];
     const truth = even > odd ? '更多' : even < odd ? '更少' : '一样多';
-    out.push({ t: `坐在双数号的邪恶玩家比单数号的${truth}`, f: `坐在双数号的邪恶玩家比单数号的${pick(cmp.filter((x) => x !== truth), rng)}` });
+    out.push({ t: `坐在双数号的邪恶玩家比单数号的${truth}`, f: `坐在双数号的邪恶玩家比单数号的${pick(cmp.filter((x) => x !== truth), rng)}`, cat: 'seat' });
     // ②③ 爪牙 / 外来者对座、邻座
     const name = { minion: '爪牙', outsider: '外来者' };
     const combos = [['minion', 'outsider'], ['minion', 'minion'], ['outsider', 'outsider']]
@@ -1076,8 +1084,8 @@ export class Storyteller {
     const hasPair = (a, b, step) => ps.some((q, i) => { const r = ps[(i + step) % n]; return (kind(q) === a && kind(r) === b) || (kind(q) === b && kind(r) === a); });
     if (combos.length) {
       const [a, b] = pick(combos, rng);
-      out.push(neg(hasPair(a, b, 1), `有${pairText(a, b)}相邻而坐`, `没有${pairText(a, b)}相邻而坐`));
-      if (n % 2 === 0) out.push(neg(hasPair(a, b, n / 2), `有${pairText(a, b)}坐在正对面`, `没有${pairText(a, b)}坐在正对面`));
+      out.push({ ...neg(hasPair(a, b, 1), `有${pairText(a, b)}相邻而坐`, `没有${pairText(a, b)}相邻而坐`), cat: 'seat' });
+      if (n % 2 === 0) out.push({ ...neg(hasPair(a, b, n / 2), `有${pairText(a, b)}坐在正对面`, `没有${pairText(a, b)}坐在正对面`), cat: 'seat' });
     }
     // ④ 某四个角色中有且只有两个在场（不点邪恶角色、不点无神论者）
     const roles = rolesOf(g.script).filter((r) => ['townsfolk', 'outsider'].includes(ROLES[r].team) && r !== 'atheist');
@@ -1086,20 +1094,20 @@ export class Storyteller {
     const four = (k) => (inPlay.length >= k && outPlay.length >= 4 - k ? shuffled([...shuffled(inPlay, rng).slice(0, k), ...shuffled(outPlay, rng).slice(0, 4 - k)], rng) : null);
     const yes4 = four(2); const no4 = four(pick([1, 3], rng)) ?? four(1) ?? four(3);
     const say4 = (list) => `${list.map((r) => ROLES[r].name).join('、')}这四个角色中，有且只有两个在场`;
-    if (yes4 && no4) out.push({ t: say4(yes4), f: say4(no4) });
+    if (yes4 && no4) out.push({ t: say4(yes4), f: say4(no4), cat: 'role' });
     // ⑧ 死人里有几个善良
     const goodDead = dead.filter((q) => !isEvil(q)).length;
-    out.push({ t: `死亡的玩家里有 ${goodDead} 名善良`, f: `死亡的玩家里有 ${num(goodDead, 0, n)} 名善良`, sharp: pins(dead) });
+    if (dead.length) out.push({ t: `死亡的玩家里有 ${goodDead} 名善良`, f: `死亡的玩家里有 ${num(goodDead, 0, dead.length)} 名善良`, sharp: pins(dead), cat: 'count' }); // 没人死时一看就知道
     // ⑨ 邪恶座位号加起来和某数比
     const sum = ps.filter(isEvil).reduce((a, q) => a + q.seat, 0);
     if (sum > 0) {
       const T = Math.max(1, sum + pick([-4, -3, -2, 2, 3, 4], rng));
-      out.push(neg(sum > T, `所有邪恶玩家的座位号加起来大于 ${T}`, `所有邪恶玩家的座位号加起来小于 ${T}`));
+      out.push({ ...neg(sum > T, `所有邪恶玩家的座位号加起来大于 ${T}`, `所有邪恶玩家的座位号加起来小于 ${T}`), cat: 'seat' });
     }
     // ⑩ 有没有能让别人死亡的镇民（杀手、造谣者、贞洁者、拿了精神病患者能力的炼金术士）
     const KILL = new Set(['slayer', 'gossip', 'virgin']);
     const killer = ps.some((q) => kind(q) === 'townsfolk' && (KILL.has(q.role) || (q.role === 'alchemist' && q.gained === 'psychopath')));
-    out.push(neg(killer, '这局有镇民的能力可以导致别人死亡', '这局没有镇民的能力可以导致别人死亡'));
+    out.push({ ...neg(killer, '这局有镇民的能力可以导致别人死亡', '这局没有镇民的能力可以导致别人死亡'), cat: 'role' });
     // ⑪ 从第几夜开始邪恶数量异常
     const start = w ? w.evil.size : (g.evilStart ?? ps.filter((q) => g.evilOf(q)).length);
     const odd1 = w ? null : (g.evilHist ?? []).find((h) => h.count !== start);
@@ -1108,21 +1116,21 @@ export class Storyteller {
       const never = '邪恶玩家的数量一直和开局时一样';
       const from = (k) => `从第 ${k} 个夜晚开始，邪恶玩家的数量就和开局时不一样了`;
       const other = Array.from({ length: Math.max(1, night) }, (_, i) => i + 1).filter((k) => k !== odd1?.night);
-      out.push(odd1 ? { t: from(odd1.night), f: other.length && rng() < 0.5 ? from(pick(other, rng)) : never } : { t: never, f: from(pick(other, rng)) });
+      out.push({ ...(odd1 ? { t: from(odd1.night), f: other.length && rng() < 0.5 ? from(pick(other, rng)) : never } : { t: never, f: from(pick(other, rng)) }), cat: 'state' });
     }
     if (!w) {
       // ⑤ 几人醉酒中毒（活人）
       const broken = ps.filter((q) => q.alive && g.snvBroken?.(q)).length;
-      out.push({ t: `场上有 ${broken} 名玩家醉酒或中毒`, f: `场上有 ${num(broken, 0, n)} 名玩家醉酒或中毒` });
+      out.push({ t: `场上有 ${broken} 名玩家醉酒或中毒`, f: `场上有 ${num(broken, 0, n)} 名玩家醉酒或中毒`, cat: 'state' });
       const live = demons.filter((q) => q.alive);
       if (live.length) {
         // ⑥ 恶魔醉酒中毒
         const off = live.some((q) => g.snvBroken?.(q));
-        out.push(neg(off, '有一名恶魔正处于醉酒或中毒状态', '没有恶魔处于醉酒或中毒状态'));
+        out.push({ ...neg(off, '有一名恶魔正处于醉酒或中毒状态', '没有恶魔处于醉酒或中毒状态'), cat: 'state' });
         // ⑦ 恶魔能不能转移座位（小恶魔自杀传位、方古跳到外来者身上、小怪宝换人照看）
         const MOVE = new Set(['imp', 'fanggu', 'lilmonsta']);
         const move = live.some((q) => MOVE.has(q.role)) || !!g.monsta;
-        out.push(neg(move, '场上的恶魔具备转移座位的能力', '场上的恶魔不具备转移座位的能力'));
+        out.push({ ...neg(move, '场上的恶魔具备转移座位的能力', '场上的恶魔不具备转移座位的能力'), cat: 'state' });
       }
     }
     return out;
@@ -1135,11 +1143,12 @@ export class Storyteller {
     if (w) lie = null;
     // 2026-11-20 用户：夜半狂欢那局博学者第二天的真信息「死亡的玩家里有 1 名邪恶」（只死了一个人）等于点名。
     // 一下子把人圈到一两个里的真话（sharp）少给：善良落后时才多放
-    const facts = this.savantFacts(w);
+    const facts = this.savantFacts(w, p).filter((f) => f.cat !== 'skip');
     const soft = facts.filter((f) => !f.sharp);
     const keep = (f, other) => (!f.sharp || !soft.some((x) => x !== other) || this.roll('savantSharp', { balance: this.balance() }, { who: p.id }) ? f : soft.find((x) => x !== other));
     const a = lie === 'must' ? facts[0] : keep(facts[0], null); // 涡流两条都假，不用挑
-    let b = facts.find((f) => f !== a);
+    // 两条尽量同一类（2026-11-23 用户：要难分清哪条真）：都是人数、都是座位、都是角色、都是状态，看形式猜不出来
+    let b = facts.find((f) => f !== a && f.cat === a.cat && !f.sharp) ?? facts.find((f) => f !== a && f.cat === a.cat) ?? facts.find((f) => f !== a);
     if (lie === 'fake') b = keep(b, a); // 醉酒中毒可能两条都真
     if (lie === 'true2') { // 诡诈杰克：说真话的那位说书人，两条都给真的
       const both = [a.t, b.t];

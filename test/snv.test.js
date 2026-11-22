@@ -257,7 +257,7 @@ test('博学者：涡流在场两条都假', () => {
   let pair;
   g.st.savantFacts = () => { pair = real(); return pair; };
   const { lines } = g.savantAsk('p1');
-  assert.deepEqual([...lines].sort(), [pair[0].f, pair[1].f].sort());
+  for (const l of lines) assert.ok(pair.some((f) => f.f === l) && !pair.some((f) => f.t === l), l); // 两条都是某条信息的假说法（2026-11-23 起两条挑同一类，不一定是前两条）
 });
 
 test('女裁缝：看阵营不看角色；每局一次；不用不算用掉', () => {

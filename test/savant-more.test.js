@@ -74,3 +74,31 @@ test('博学者：邪恶数量从第几夜开始异常；无神论者局不说�
   night(a); a.dawn();
   for (let k = 0; k < 20; k++) for (const line of a.st.savantLines(a.get('p2'), 'atheist')) assert.doesNotMatch(line, /醉酒或中毒|转移座位|无神论者/, line);
 });
+
+// 2026-11-23 用户：博学者两条要难分真假。上一局第 2 天给了「死亡的玩家里有 1 名善良」（那时没人死，一看就是假的）
+test('博学者：公开就能判真假的不说（没人死不说死人；假数字不超过死人数）；不说博学者自己；两条尽量同一类', () => {
+  for (let seed = 1; seed <= 40; seed++) {
+    const roles = ROLESETS[seed % ROLESETS.length];
+    const g = new Game(players(roles.length), { roles, rng: makeRng(seed), script: 'snv' });
+    const me = g.get('p1');
+    const facts = g.st.savantFacts(null, me);
+    assert.ok(!facts.some((f) => /死亡的玩家|存活的玩家/.test(f.t)), `seed ${seed}：还没人死就说死人 / 活人里的邪恶人数`);
+    assert.ok(!facts.some((f) => /玩家1(?!\d)/.test(f.t) && / 是(善良|邪恶)的$/.test(f.t)), '不说博学者自己是什么阵营');
+    night(g); g.dawn();
+    const dead = g.players.filter((q) => !q.alive).length;
+    for (const f of g.st.savantFacts(null, me)) {
+      const m = f.f.match(/^死亡的玩家里有 (\d+) 名/);
+      if (m) assert.ok(Number(m[1]) <= dead, `${f.f}（只死了 ${dead} 个）`);
+    }
+    let same = 0;
+    for (let k = 0; k < 10; k++) {
+      const real = g.st.savantFacts.bind(g.st); let pool;
+      g.st.savantFacts = (w, p) => { pool = real(w, p); return pool; };
+      const lines = g.st.savantLines(me, null);
+      g.st.savantFacts = real;
+      const cat = (l) => pool.find((f) => f.t === l || f.f === l)?.cat;
+      if (cat(lines[0]) === cat(lines[1])) same++;
+    }
+    assert.ok(same >= 8, `seed ${seed}：两条同一类只有 ${same}/10`);
+  }
+});
