@@ -207,7 +207,7 @@ export class Storyteller {
   // ───────────── 开局 ─────────────
 
   /**
-   * 红鲱鱼：一名善良玩家。偏向镇民（被怀疑更有戏剧性），一般不选占卜师自己。
+   * 红鲱鱼：一名善良玩家。只从善良镇民里挑（被怀疑更有戏剧性；一个都没有才从所有善良里挑），新手少当，一般不选占卜师自己。
    * 例外：官方占卜师页「在小型游戏中…我们建议你在某些情况下将占卜师本人作为"干扰项"」——5–6 人局有时让占卜师自己当，
    * 这样他不查自己时的结果都是干净的；新手占卜师不这么做（他想不到）。
    */
@@ -491,15 +491,26 @@ export class Storyteller {
     return who;
   }
 
-  /** 沙巴洛斯反刍：偶尔（每局一两次）把上一夜吃掉的人吐回来，通常是善良玩家；邪恶领先时更常发生。 */
-  /** 醉酒中毒的教父首夜：给一份假的"在场外来者"名单（随机换一两个，有时说没有）。 */
-  fakeOutsidersBMR(p, truthNames) { // eslint-disable-line no-unused-vars
+  /**
+   * 醉酒中毒的教父首夜：给一份假的"在场外来者"名单——人数比真的多一个或少一个（随机），角色从本剧本外来者里挑。
+   * 一定和真名单不一样（以前人数被截到 0 或剧本上限时，可能碰巧报出真名单）。truth：角色 id 或中文名都行。
+   */
+  fakeOutsidersBMR(p, truth) {
     const all = rolesOf(this.g.script ?? 'bmr', 'outsider'); // 只从这个剧本的外来者里编，报出剧本外的角色等于露馅
-    const n = Math.max(0, Math.min(all.length, truthNames.length + (this.rng() < 0.5 ? 1 : -1)));
-    const said = [...all].sort(() => this.rng() - 0.5).slice(0, n);
-    this.decide('fakeOutsiders', { who: p.id, options: all, chosen: said, truth: truthNames });
+    const ids = truth.map((x) => (ROLES[x] ? x : Object.keys(ROLES).find((k) => ROLES[k].name === x) ?? x));
+    const key = (a) => [...a].sort().join();
+    const lens = [ids.length + 1, ids.length - 1].filter((k) => k >= 0 && k <= all.length);
+    let said = [];
+    for (let i = 0; i < 20; i++) {
+      const n = lens.length ? lens[Math.floor(this.rng() * lens.length)] : ids.length;
+      said = [...all].sort(() => this.rng() - 0.5).slice(0, n);
+      if (key(said) !== key(ids)) break;
+    }
+    this.decide('fakeOutsiders', { who: p.id, options: all, chosen: said, truth: ids });
     return said;
   }
+
+  /** 沙巴洛斯反刍：偶尔（每局一两次）把上一夜吃掉的人吐回来，通常是善良玩家；邪恶领先时更常发生。 */
 
   shabaRegurgitate(cands) {
     if (!cands.length) return null;

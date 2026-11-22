@@ -2444,7 +2444,8 @@ ${this.grimoire(w.id)}
   /** 骗人精（传奇角色）：每局一次，一名善良玩家可能得到错误信息。说书人掷骰子，用掉了就再也不会。 */
   fibbinLie(p) {
     if (!SCRIPTS[this.script]?.fibbin || this.fibbinUsed || this.evilOf(p)) return false;
-    if (!this.st.roll('fibbin', {}, { who: p.id })) return false;
+    const b = this.st.balance(); // 局势：善良领先时多发生（以前没传，权重一直不起作用，固定 20%）
+    if (!this.st.roll('fibbin', { balance: b }, { who: p.id, b })) return false;
     this.fibbinUsed = true;
     this.record('st', `骗人精：${this.tag(p.id)} 这次拿到的是错误信息（每局一次）`);
     return true;

@@ -242,7 +242,7 @@
     <article class="ai-card pnl">
       <header><h3>教父失效时的外来者名单</h3><span class="tag tag-dark">首夜</span></header>
       
-      <dl><div class="ai-row"><dt>怎么决定</dt><dd>人数 = 真人数 ±1（各 50%），从本剧本外来者里随机挑（只用本剧本的，免得露馅）。</dd></div><div class="ai-row"><dt>说明</dt><dd>从本剧本外来者里随机挑，可能碰巧和真名单一样。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/storyteller.js:496</code> <code>fakeOutsidersBMR</code>。</dd></div></dl>
+      <dl><div class="ai-row"><dt>怎么决定</dt><dd>人数 = 真人数 ±1（各 50%），从本剧本外来者里随机挑（只用本剧本的，免得露馅）。</dd></div><div class="ai-row"><dt>说明</dt><dd>从本剧本外来者里随机挑，一定和真名单不一样（人数到了 0 或剧本上限时只能往另一边变）。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/storyteller.js:496</code> <code>fakeOutsidersBMR</code>。</dd></div></dl>
     </article>
     <article class="ai-card pnl">
       <header><h3>筑梦师看到的两个角色</h3><span class="tag tag-dark">夜里</span></header>
@@ -297,7 +297,7 @@
     <article class="ai-card pnl">
       <header><h3>骗人精：这次给不给错</h3><span class="tag tag-dark">夜里</span></header>
       
-      <dl><div class="ai-row"><dt>什么时候</dt><dd>裁缝与暴乱的传奇角色骗人精在场，每局一次。</dd></div><div class="ai-row"><dt>怎么决定</dt><dd><b>20%</b>。</dd></div><div class="ai-row"><dt>说明</dt><dd>目前固定 20%，不看局势。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/snv.js:2445</code> <code>fibbinLie</code>。</dd></div></dl>
+      <dl><div class="ai-row"><dt>什么时候</dt><dd>裁缝与暴乱的传奇角色骗人精在场，每局一次。</dd></div><div class="ai-row"><dt>怎么决定</dt><dd>基础 <b>20%</b>，局势权重 +1.2（善良领先时多发生）：局势 −0.5 / 0.1 / +0.5 时约 <b>12% / 22% / 31%</b>。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/snv.js:2445</code> <code>fibbinLie</code>。</dd></div></dl>
     </article>
   </div>
 </section>
@@ -435,7 +435,7 @@
     <article class="ai-card pnl">
       <header><h3>旅行者站哪个阵营</h3><span class="tag tag-dark">白天加入时</span></header>
       
-      <dl><div class="ai-row"><dt>怎么决定</dt><dd>基础 <b>20%</b> 邪恶；已经有一个邪恶旅行者 −2.5（约 5%）。存活不到 7 人不再加入。</dd></div><div class="ai-row"><dt>说明</dt><dd>目前不看局势。</dd></div><div class="ai-row"><dt>依据</dt><dd>官方「大多数是善良」。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>server/room.js:1600</code> <code>joinTraveller</code>。</dd></div></dl>
+      <dl><div class="ai-row"><dt>怎么决定</dt><dd>基础 <b>20%</b> 邪恶，局势权重 +1.2（善良领先时多给邪恶）：局势 −0.5 / 0.1 / +0.5 时约 <b>12% / 22% / 31%</b>；已经有一个邪恶旅行者再 −2.5。存活不到 7 人不再加入。</dd></div><div class="ai-row"><dt>依据</dt><dd>官方「大多数是善良」。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>server/room.js:1600</code> <code>joinTraveller</code>。</dd></div></dl>
     </article>
     <article class="ai-card pnl">
       <header><h3>侏儒的同伴</h3><span class="tag tag-dark">加入时</span></header>
@@ -591,7 +591,7 @@
     <article class="ai-card pnl">
       <header><h3>当场判破坏疯狂 <code>judgeBreak</code></h3><span class="tag tag-mot">白天</span><span class="tag tag-dark">实时</span></header>
       
-      <dl><div class="ai-row"><dt>调用</dt><dd><code>server/room.js:2965</code>（<code>hearBreak</code>）。</dd></div><div class="ai-row"><dt>触发源</dt><dd>只有<b>收音页</b>的转写会触发（<code>mic.onLine</code>，<code>room.js:3080-3083</code>）；机器人在广场转写的话只用来判默许（<code>hearing.onLine</code>，<code>room.js:3032</code>）。</dd></div><div class="ai-row"><dt>本机预筛</dt><dd><code>looksBroken</code>（<code>judge.js:66</code>）——说到「洗脑/被逼/假装/演的/我其实/真实身份/懂的都懂/只能说我是……」或者说出了自己知道的角色名（疯子、酒鬼按他以为的角色，说「疯子」不算）才问；被洗脑扮的就是自己真角色的不判；每次疯狂最多问 <b>6 次</b>。</dd></div><div class="ai-row"><dt>喂什么</dt><dd>要证明的角色、他自己知道的角色（疯子/酒鬼附注真实角色但他不知道）、最近 5 句。只用便宜的模型、不升级到深度思考（拿不准判 unknown，因为判 true 会立刻处决）。</dd></div><div class="ai-row"><dt>回答怎么用</dt><dd>true → 掷「说漏嘴」骰（93%），一次疯狂只掷一次。</dd></div><div class="ai-row"><dt>失败兜底</dt><dd>什么都不做。</dd></div></dl>
+      <dl><div class="ai-row"><dt>调用</dt><dd><code>server/room.js:2965</code>（<code>hearBreak</code>）。</dd></div><div class="ai-row"><dt>触发源</dt><dd>收音页的转写和机器人在广场语音里的转写都会触发（同一句两边都转写到时只判一次，<code>room.js</code> <code>liveLine</code>）。</dd></div><div class="ai-row"><dt>本机预筛</dt><dd><code>looksBroken</code>（<code>judge.js:66</code>）——说到「洗脑/被逼/假装/演的/我其实/真实身份/懂的都懂/只能说我是……」或者说出了自己知道的角色名（疯子、酒鬼按他以为的角色，说「疯子」不算）才问；被洗脑扮的就是自己真角色的不判；每次疯狂最多问 <b>6 次</b>。</dd></div><div class="ai-row"><dt>喂什么</dt><dd>要证明的角色、他自己知道的角色（疯子/酒鬼附注真实角色但他不知道）、最近 5 句。只用便宜的模型、不升级到深度思考（拿不准判 unknown，因为判 true 会立刻处决）。</dd></div><div class="ai-row"><dt>回答怎么用</dt><dd>true → 掷「说漏嘴」骰（93%），一次疯狂只掷一次。</dd></div><div class="ai-row"><dt>失败兜底</dt><dd>什么都不做。</dd></div></dl>
     </article>
     <article class="ai-card pnl">
       <header><h3>灵言师关键词、默许</h3><span class="tag tag-mot">白天</span><span class="tag tag-dark">实时</span><span class="tag tag-dark">不用大模型</span></header>

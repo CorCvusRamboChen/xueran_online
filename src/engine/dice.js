@@ -47,14 +47,14 @@ export const DICE = {
   savantSharp: { base: 0.25, balance: -1.5 },
   // 能力正常的气球驾驶员看到恶魔：善良领先、前两晚少给（还有外来者、爪牙可以给）
   balloonDemon: { base: 0.5, balance: -1.5, early: -0.8 },
-  mathFar: { base: 0.5 },
-  boffinProof: { base: 0.75 },
+  mathFar: { base: 0.5 },                           // 涡流下数学家的数字离真相远一点（官方范例：六人异常，得知 3）
+  boffinProof: { base: 0.75 },                      // 官方科学怪人页：「说书人通常会给恶魔一个可验证的能力」。开局定，不看局势
   // 官方麻脸巫婆页范例：最后一夜造出善良恶魔，「说书人只杀死了邪恶的恶魔」。善良落后时多照做（storyteller.pitPlan）
   pitOldDies: { base: 0.5, balance: -1.5 },
   // 官方麻脸巫婆页：造出恶魔那晚「你能在当晚杀死任意数量的玩家或阻止被恶魔攻击的玩家死亡来平衡游戏」。只在局势一边倒时掷
   pitBalance: { base: 0.5 },
   // 官方旅店老板页：醉的那个「可以是善良的或邪恶的，但几乎总会是善良的，这取决于你的游戏走向」。两人里有邪恶时掷（storyteller.innkeeperDrunk）
-  innkeeperEvil: { base: 0.1, balance: -1.5 },                      // 官方科学怪人页：「说书人通常会给恶魔一个可验证的能力」。开局定，不看局势                           // 涡流下数学家的数字离真相远一点（官方范例：六人异常，得知 3）
+  innkeeperEvil: { base: 0.1, balance: -1.5 },
   gossipEvil: { base: 0.5 },
   sweetheartEvil: { base: 0.5 },
   dreamerSeen: { base: 0.85 },                      // 官方：邪恶项几乎都用在场爪牙
@@ -65,8 +65,9 @@ export const DICE = {
   // 旅行者的阵营（官方：大多数是善良；一名可以是邪恶，三名以上才考虑更多）。善良领先时多给邪恶；已经有邪恶旅行者就少给
   travellerEvil: { base: 0.2, balance: 1.2, evilTravellers: -2.5 },
   // 替罪羊：同阵营的人被处决，说书人决定他替不替（官方「可能」）。不看局势
-  scapegoat: { base: 0.15, demon: 3.6, late: 1.2 }, // 替罪羊页：邪恶替罪羊「几乎总是会等到恶魔被处决的时候」，善良的留到中后期
-  harlotDeath: { base: 0.3 }, // 流莺：同意以后两人一起死的机会（官方：说书人选最有趣、最平衡的做法） // 官方：邪恶替罪羊大多数情况下要用能力阻止邪恶输掉（被处决的是恶魔时约九成替死）
+  // 替罪羊页：邪恶替罪羊「几乎总是会等到恶魔被处决的时候」（被处决的是恶魔时约九成替死），善良的留到中后期
+  scapegoat: { base: 0.15, demon: 3.6, late: 1.2 },
+  harlotDeath: { base: 0.3 }, // 流莺：同意以后两人一起死的机会（官方：说书人选最有趣、最平衡的做法）
   priestessGood: { base: 0.75 },                    // 善良落后：女祭司多被指向拿着真信息的善良玩家
   priestessEvil: { base: 0.5 },                     // 善良领先：女祭司常被指向一个邪恶玩家（听他满嘴假话）
   goblinClaim: { base: 0.6 },                       // 机器人哥布林被提名时声明身份
@@ -102,8 +103,8 @@ export const DRAW = {
   // 接班的是外来者说明说书人在帮善良，是能力已经用掉的人说明势均力敌，是强力角色说明善良快赢了
   farmerHeir: { newbie: 0.5, lift: 1.5 },
   boomSurvivor: { pressure: 1.5 },            // 炸弹人引爆后留谁：往落后的一方偏（善良落后多留善良）
-  shugenjaTie: { pressure: 1.5 },
-  pitVictim: { newbie: -2, hits: -0.5 },
+  shugenjaTie: { pressure: 1.5 },            // 修行者两边一样近：善良落后多指恶魔那一侧，领先多指爪牙那一侧（官方：说书人决定）
+  pitVictim: { newbie: -2, hits: -0.5 },      // 麻脸巫婆那晚说书人多杀的人：别总挑新手、同一个人
   // 无神论者局（2026-11-19 用户：要胜过真人说书人）：假恶魔照聪明的真恶魔杀人。
   // 杀大家信任的、在指认假恶魔的、在报信息的；留着被怀疑的人背锅；在推「处决说书人」的人真邪恶最想留着，基本不杀
   atheistKill: { trusted: 1.5, accuser: 1.4, info: 0.7, suspected: -2, stVoice: -3, newbie: -1, hits: -0.5 },
@@ -111,7 +112,7 @@ export const DRAW = {
   atheistDemon: { suspected: -1.5, trusted: -0.5 },
   // 小怪宝（夜半狂欢的恶魔开关）：说书人替恶魔杀人，和聪明的恶魔一样挑；爪牙没定照看的人时，说书人挑最不被怀疑的，多半不换人
   monstaKill: { trusted: 1.2, accuser: 1.2, info: 0.6, suspected: -1, newbie: -1, hits: -0.5 },
-  monstaSitter: { suspected: -2, keep: 0.7 },      // 麻脸巫婆那晚说书人多杀的人：别总挑新手、同一个人             // 修行者两边一样近：善良落后多指恶魔那一侧，领先多指爪牙那一侧（官方：说书人决定）
+  monstaSitter: { suspected: -2, keep: 0.7 },
 };
 
 const logit = (p) => Math.log(p / (1 - p));

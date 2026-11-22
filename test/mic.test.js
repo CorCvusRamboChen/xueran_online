@@ -442,3 +442,13 @@ test('收音页的疯狂定义：被洗脑的拿到要证明的角色，畸形�
   assert.deepEqual(micAbout('没有这个令牌'), {});
   await room.teardown();
 });
+
+test('广场转写（机器人在语音里听到的）也能当场判破坏疯狂；同一句收音页和广场都转写到只判一次', async () => {
+  const { room, asked } = await breakRoom('false');
+  room.liveLine('u2', '我是被逼的');
+  room.liveLine('u2', '我是 被逼的'); // 另一边转写到的同一句
+  for (let k = 0; k < 50 && !asked.length; k++) await new Promise((r) => setTimeout(r, 5));
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(asked.length, 1);
+  await room.teardown();
+});

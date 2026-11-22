@@ -1608,7 +1608,8 @@ export class Room {
     if (!user) throw new UserError('先进房间');
     if (!travellerList(g.script).includes(role)) throw new UserError('这个剧本不用这个旅行者');
     const evilNow = g.players.filter((q) => q.traveller && !q.left && g.evilOf(q)).length;
-    const evil = g.st.roll('travellerEvil', { evilTravellers: evilNow }, { who: uid });
+    const b = g.st.balance(); // 局势：善良领先时多给邪恶（以前没传，权重一直不起作用，固定 20%）
+    const evil = g.st.roll('travellerEvil', { evilTravellers: evilNow, balance: b }, { who: uid, b });
     let msg;
     try { msg = g.addTraveller({ id: uid, name: user.name }, role, evil); } catch (e) { throw new UserError(e.message); }
     this.tell(uid, msg, 'clock');
@@ -2950,6 +2951,21 @@ export class Room {
     this.changed();
   }
 
+  /**
+   * 白天转写到的一句话（收音页，或者机器人在广场语音里转写的）：疯狂的默许、当场判破坏疯狂 / 畸形秀。
+   * 以前广场转写只判默许，说漏嘴只听收音页（2026-11-22 改成两边都判）。同一个人同一句话两边都转写到时只判一次。
+   */
+  liveLine(id, text) {
+    const k = `${id}|${String(text).replace(/\s+/g, '')}`;
+    const now = Date.now();
+    this.recentLive ??= new Map();
+    for (const [x, t] of this.recentLive) if (now - t > 15_000) this.recentLive.delete(x);
+    if (this.recentLive.has(k)) return;
+    this.recentLive.set(k, now);
+    this.tacitHear(id, text); // 疯狂的默许：别人说他被洗脑 / 跳了他的角色，他要站出来否认
+    this.hearBreak(id, text).catch((e) => console.warn('[botc] 判定破坏疯狂出错：', e.message));
+  }
+
   async hearBreak(id, text) {
     if (this.game?.engine === 'snv' && this.game.abilityOf(this.game.get(id)) === 'mutant') await this.hearMutant(id, text);
     const g = this.game;
@@ -3029,7 +3045,7 @@ export class Room {
     if (g.engine !== 'snv' || !this.settings.hearMadness || !this.square || !this.hearingFor) return;
     this.hearing = await this.hearingFor(this.square).catch(() => null);
     if (this.hearing) this.hearing.onAudio = (id, audio, text) => this.saveTalk('square', 'ogg', id, audio, text);
-    if (this.hearing) this.hearing.onLine = (id, text) => this.tacitHear(id, text);
+    if (this.hearing) this.hearing.onLine = (id, text) => this.liveLine(id, text);
     if (this.hearing) this.announce('本局开了语音判定：机器人留在广场语音里，转写被疯狂的玩家说的话；有人被洗脑的那天，也转写大家在广场上说的话（看有没有人说他被洗脑、跳他的角色，他有没有站出来否认）。', 'info');
     else this.announce('语音判定没有打开：说书人听不到语音，疯狂由说书人按局势判定（被洗脑的人可以打开收音页，让说书人听到自己）。', 'info');
   }
@@ -3079,8 +3095,7 @@ export class Room {
       this.mic ??= this.micFor();
       this.mic.onLine = (id, text) => {
         this.game?.mezHeard?.(id, text); // 灵言师的关键词：本机转写的文字里找，不交给大模型
-        this.tacitHear(id, text); // 疯狂的默许：别人说他被洗脑 / 跳了他的角色，他要站出来否认
-        this.hearBreak(id, text).catch((e) => console.warn('[botc] 判定破坏疯狂出错：', e.message));
+        this.liveLine(id, text);
       };
       // 收音页上显示哪种疯狂的定义（被洗脑的要证明的角色；畸形秀演员）
       this.mic.about = (id) => {
