@@ -823,5 +823,7 @@
  "· 空座位 {0}": " · Empty seats {0}",
  "{0}：没有人坐{1}。入夜前可以换过去（每人整局两次）": "{0}: nobody sits here{1}. You can swap onto it before nightfall (twice per game)",
  "，上面是{0}": ", it holds the {0}",
- "，上面是什么不公开": "; what's on it is secret"
+ "，上面是什么不公开": "; what's on it is secret",
+ "传奇角色：{0}": "Fabled: {0}",
+ "传奇：{0}": "Fabled: {0}"
 }

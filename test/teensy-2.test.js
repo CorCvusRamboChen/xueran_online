@@ -128,6 +128,7 @@ test('末日预言者：活人不少于 4 才能用，每人一次，死的是�
   assert.throws(() => g.doomsay('p4'), /用过了|只有活着/);
   const r2 = g.doomsay('p1');
   assert.ok(r2.victim && !g.evilOf(g.get(r2.victim)), '善良用，死善良');
+  assert.notEqual(r2.victim, 'p1', '有别人可选就不选用的人自己（2026-11-23 用户；百科例子里死的都是别人）');
   while (g.alive().filter((q) => g.visAlive(q)).length >= 4) g.snvDie(g.alive().find((q) => !g.evilOf(q) && q.id !== 'p2'), 'storyteller', []);
   if (g.get('p2').alive && !g.winner) assert.throws(() => g.doomsay('p2'), /不到 4 个/);
 });

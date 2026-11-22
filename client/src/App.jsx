@@ -100,7 +100,10 @@ function BoardBar({ n, script, inline = false }) {
   const d = script === 'rag' && DISTRIBUTION[n] ? [n - ragnarokWolves(n), 0, 0, ragnarokWolves(n)] : DISTRIBUTION[n]; // 诸神黄昏：猎手和狼人
   if (!d) return null;
   const parts = [['镇民', d[0], 'var(--int)'], ['外来者', d[1], 'var(--psy)'], ['爪牙', d[2], '#c9762e'], ['恶魔', d[3], 'var(--phy)']];
-  const full = boardNote(script, rolesOf('mo', 'demon').find((r) => r !== 'alhadikhia'));
+  const full0 = boardNote(script, rolesOf('mo', 'demon').find((r) => r !== 'alhadikhia'));
+  // 2026-11-23 用户：有传奇角色的剧本，顶栏都要写出来（说明里没提到的补在后面，名字画下划线、悬停看介绍）
+  const fab = fabledOf(script).map((id) => FABLED[id].name).filter((nm) => !(full0?.[1] ?? '').includes(nm));
+  const full = fab.length ? [[full0?.[0], `传奇角色：${fab.join('、')}`].filter(Boolean).join('；'), [full0?.[1], `传奇：${fab.join('、')}`].filter(Boolean).join(' · ')] : full0;
   const note = full?.[1] ?? '';
   return (
     <div className={`board-bar${inline ? ' inline' : ' solo'}`} title={full?.[0] ?? ''}>{/* 说明和人数在同一排（2026-11-20 用户）；太长就截断，悬停看全文 */}

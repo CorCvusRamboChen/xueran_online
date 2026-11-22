@@ -571,6 +571,8 @@ export class Storyteller {
     let can = g.alive().filter((q) => !q.apparentDead && g.evilOf(q) === evil && (ROLES[q.role].team !== 'demon' || heir));
     if (!can.length) can = g.alive().filter((q) => g.evilOf(q) === evil);
     if (!can.length) return null;
+    // 2026-11-23 用户：为什么末日预言者杀了我自己。规则只说「同阵营」，没排除他自己，但百科的例子里死的都是别人：有别人可选就不选他
+    if (can.some((q) => q.id !== uid)) can = can.filter((q) => q.id !== uid);
     const v = this.draw('doomVictim', can, (q) => ({ hits: this.hits(q.id), self: q.id === uid ? 1 : 0 }), { who: uid });
     this.note(`${g.name(uid)} 用了末日预言者：说书人选 ${g.name(v.id)}（同为${evil ? '邪恶' : '善良'}）死亡`);
     return v;
