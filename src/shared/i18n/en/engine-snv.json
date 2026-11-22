@@ -559,5 +559,16 @@
  "你拜访了公爵夫人：你们三人之中有 **{0}** 个是邪恶的。（三人里有一人拿到的数是错的）": "You visited the Duchess: **{0}** of you three are evil. (One of the three got a wrong number.)",
  "公爵夫人：{0} 拜访，其中 {1} 个邪恶；{2} 拿到错的数 {3}": "Duchess: {0} visited, {1} of them evil; {2} got the wrong number {3}",
  "{0} 公开说了{1}暗号「{2}」{3}（今天第 {4} 次）": "{0} said{1} the phrase \"{2}\" publicly{3} (time {4} today)",
- "（疯子以为的）": " (the Lunatic's imagined)"
+ "（疯子以为的）": " (the Lunatic's imagined)",
+ "这个剧本没有诡诈杰克": "This script has no Knaves",
+ "只能选说书人甲或乙": "Pick Storyteller A or B",
+ "诡诈杰克：黄昏时两位说书人互换了，现在说书人{0}说假话": "Knaves: the two Storytellers swapped at dusk; Storyteller {0} now lies",
+ "{0} 猜 {1} 是被解谜大师弄醉的人 → {2}，说书人告诉他「{3} 是恶魔」{4}": "{0} guessed {1} is the Puzzlemaster's drunk → {2}; the Storyteller told them \"{3} is the Demon\"{4}",
+ "猜对了": "correct",
+ "猜错了": "wrong",
+ "（错的）": " (false)",
+ "解谜大师失效：猜对了也拿到了错的恶魔": "The Puzzlemaster was drunk or poisoned: a correct guess still got a false Demon",
+ "你们都是**军团**：{0}。\n善良玩家：{1}。\n夜里说书人决定死不死人；只有邪恶玩家投票的提名，投票无效。": "You are all **Legion**: {0}.\nGood players: {1}.\nAt night the Storyteller decides whether someone dies; a nomination voted only by evil players fails.",
+ "军团都失效了：今晚没有人因军团死亡": "Every Legion is drunk or poisoned: nobody dies from Legion tonight",
+ "只剩一名善良玩家，军团获胜": "Only one good player remains: Legion wins"
 }

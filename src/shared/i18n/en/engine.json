@@ -290,5 +290,18 @@
  "没有让人死亡": "nobody dies",
  "牙噶巴卜今天没说暗号：今晚没人因他死亡": "The Yaggababble didn't say the phrase today: nobody dies from them tonight",
  "{0} 用了末日预言者：说书人选 {1}（同为{2}）死亡": "{0} used the Doomsayer: the Storyteller chose {1} (also {2}) to die",
- "公爵夫人：三名拜访者里有 {0} 个邪恶，{1} 拿到错的数 {2}": "Duchess: {0} of the three visitors are evil; {1} gets the wrong number {2}"
+ "公爵夫人：三名拜访者里有 {0} 个邪恶，{1} 拿到错的数 {2}": "Duchess: {0} of the three visitors are evil; {1} gets the wrong number {2}",
+ "军团：对 {0} 举手的只有邪恶玩家，投票无效（算 0 票）": "Legion: only evil players voted on {0}, so the vote fails (counts as 0)",
+ "一名玩家醉酒，即使你已死亡。每局游戏限一次，你可以猜测谁是那个醉酒的玩家，如果猜对了，你会得知谁是恶魔，但如果猜错了，你会得知错误的「谁是恶魔」信息。": "1 player is drunk, even if you die. If you guess (once) who it is, learn the Demon player, but guess wrong & get false info.",
+ "军团": "Legion",
+ "每个夜晚*，可能有一名玩家死亡。如果一项提名只有邪恶玩家投票，投票无效。你也会被当作是爪牙。[多数玩家为军团]": "Each night*, a player might die. Executions fail if only evil voted. You register as a Minion too. [Most players are Legion]",
+ "诡诈杰克": "Knaves",
+ "场上有两位说书人：一人说真话，一人说假话。每局游戏限一次，他们可能会在黄昏互换。": "There are 2 Storytellers: one lies & one tells the truth. Once per game, at dusk, they might switch.",
+ "能力给的信息（夜里醒来、白天找说书人）由你选的那位说书人给：说真话的给真的，说假话的给假的。点「找说书人甲 / 乙」随时换。规则、提名投票、爪牙恶魔信息这些两位都说真话。整局最多一次，两位会在某个黄昏悄悄互换。醉酒中毒的人两位都可能给假。": "Ability information (waking at night, visiting the Storyteller by day) comes from the Storyteller you pick: the truthful one gives true info, the liar gives false info. Tap \"Storyteller A / B\" to switch any time. Both always tell the truth about rules, nominations, votes and Minion/Demon info. At most once per game they secretly swap at dusk. Drunk or poisoned players may get false info from either.",
+ "延长线": "Extension Cord",
+ "百无禁忌": "No Roles Barred",
+ "米诺陶迷宫": "The Minotaur's Labyrinth",
+ "解谜大师：让 {0}（{1}）整局醉酒": "Puzzlemaster: {0} ({1}) is drunk all game",
+ "军团：说书人让 {0}（{1}）今晚死亡": "Legion: the Storyteller kills {0} ({1}) tonight",
+ "博学者 {0}：诡诈杰克说真话的那位，两条都是真的": "Savant {0}: asked the truthful Knaves Storyteller, so both are true"
 }

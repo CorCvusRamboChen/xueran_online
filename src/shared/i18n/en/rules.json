@@ -422,5 +422,13 @@
  "爪牙互认、得知恶魔": "Minions learn each other and the Demon",
  "恶魔得知爪牙和 3 个伪装": "The Demon learns the Minions and 3 bluffs",
  "全员失忆：角色从暗流涌动、黯月初升、梦殒春宵里发。夜里每个人照自己真实角色的能力、按官方总表的顺序醒；这一局在场的角色才会醒。": "All Amnesiacs: characters come from Trouble Brewing, Bad Moon Rising and Sects & Violets. At night everyone wakes for their real character's ability, in the official night order; only characters in play wake.",
- "7 人及以上，首夜先做爪牙信息和恶魔信息（5–6 人没有）。": "With 7 or more players, Minion info and Demon info come first on the first night (not in 5–6 player games)."
+ "7 人及以上，首夜先做爪牙信息和恶魔信息（5–6 人没有）。": "With 7 or more players, Minion info and Demon info come first on the first night (not in 5–6 player games).",
+ "本人不醒：说书人决定今晚死不死人、死谁（多半是一名军团）": "Doesn't wake: the Storyteller decides whether and who dies tonight (usually one of the Legion)",
+ "解谜大师开局就让一名玩家整局醉酒（他不知道），解谜大师白天猜一次谁醉了：猜对得知恶魔。": "The Puzzlemaster makes one player drunk all game from the start (they don't know); the Puzzlemaster may guess once by day who it is, and learns the Demon if right.",
+ "传奇角色哨兵：外来者人数可能多一个或少一个。": "Sentinel Fabled: there might be one more or one fewer Outsider.",
+ "恶魔可能是小怪宝（爪牙轮流照看）、军团（大多数人都是军团，说书人决定夜里死谁）或涡流。": "The Demon may be Lil' Monsta (Minions take turns babysitting), Legion (most players are Legion and the Storyteller decides who dies at night) or the Vortox.",
+ "军团局没有爪牙：首夜所有军团一起醒来互认，说书人指给他们谁是善良。": "A Legion game has no Minions: on the first night all Legion wake together and the Storyteller points out the good players.",
+ "诡诈杰克（奇遇角色）：两位说书人一真一假，能力信息由你选的那位给；整局最多一次，他们会在黄昏悄悄互换。": "Knaves (Loric): two Storytellers, one truthful and one lying; your ability info comes from the one you pick, and at most once per game they secretly swap at dusk.",
+ "四个恶魔：小恶魔、沙巴洛斯、珀、方古。": "Four Demons: Imp, Shabaloth, Po, Fang Gu.",
+ "军团夜里不醒：说书人决定今晚死不死人、死谁": "Legion doesn't wake at night: the Storyteller decides whether and who dies"
 }

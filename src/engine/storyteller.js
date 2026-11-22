@@ -576,6 +576,53 @@ export class Storyteller {
     return v;
   }
 
+  /**
+   * 解谜大师：开局让谁整局醉酒。官方：几乎总是镇民（拿信息的镇民最有戏），给爪牙恶魔要有极好的理由——这里不给。
+   */
+  puzzleDrunk(pm) {
+    const g = this.g;
+    const tf = g.players.filter((q) => q.id !== pm.id && ROLES[q.role].team === 'townsfolk');
+    const pool = tf.length ? tf : g.players.filter((q) => q.id !== pm.id && !isEvilRole(q.role));
+    const v = pool.length ? this.draw('puzzleDrunk', pool, () => ({})) : null;
+    if (v) this.note(`解谜大师：让 ${g.name(v.id)}（${ROLES[v.role].name}）整局醉酒`);
+    return v;
+  }
+
+  /** 解谜大师的回答：猜对（且没失效）告诉他恶魔；否则告诉他一个不是恶魔的人（有多个恶魔时告诉一个活着的邪恶恶魔）。 */
+  puzzleAnswer(pm, lie) {
+    const g = this.g;
+    const demons = g.players.filter((q) => ROLES[q.role].team === 'demon');
+    if (!lie) return demons.find((q) => q.alive && g.evilOf(q)) ?? demons[0] ?? null;
+    const others = g.players.filter((q) => q.id !== pm.id && ROLES[q.role].team !== 'demon');
+    return others.length ? this.choose('puzzleWrong', others, { who: pm.id }) : null;
+  }
+
+  /**
+   * 军团：今晚死谁（说书人决定）。官方运作方式：大多数夜晚杀一个军团（杀善良通常不公平），目标是走到三人（两善一军团）；
+   * 那天没处决就杀一名善良，邪恶获胜。这里：军团还多就杀军团（善良领先时偶尔杀善良），只剩一个军团时杀善良。
+   */
+  legionVictim() {
+    const g = this.g;
+    const alive = g.alive().filter((q) => !q.traveller);
+    const legion = alive.filter((q) => q.role === 'legion');
+    const good = alive.filter((q) => !g.evilOf(q) && !g.safeFrom?.(q, 'demon'));
+    const b = this.balance();
+    let pool;
+    if (legion.length > 1 && good.length > 2 && !this.roll('legionKillGood', { balance: b }, { b })) pool = legion;
+    else pool = good.length ? good : legion;
+    const v = pool.length ? this.draw('legionVictim', pool, (q) => ({ hits: this.hits(q.id) }), { b }) : null;
+    if (v) this.note(`军团：说书人让 ${g.name(v.id)}（${g.evilOf(v) ? '军团' : '善良'}）今晚死亡`, b);
+    return v;
+  }
+
+  /** 诡诈杰克：今天黄昏两位说书人互换吗（整局一次）。官方：通常在善良玩家开始弄清谁说真话时换。善良领先、天数越往后越可能换。 */
+  knavesSwap() {
+    const g = this.g;
+    if ((g.day ?? 0) < 2) return false;
+    const b = this.balance();
+    return this.roll('knavesSwap', { balance: b, late: Math.min(1, ((g.day ?? 0) - 1) / 3) }, { b });
+  }
+
   /** 公爵夫人（传奇角色）：三名拜访者里谁拿错的数，和那个错的数（0–3 里随便一个不对的，尽量只差一）。 */
   duchessFalse(visitors, truth) {
     const who = this.choose('duchessFalse', visitors);
@@ -1067,6 +1114,12 @@ export class Storyteller {
     const a = lie === 'must' ? facts[0] : keep(facts[0], null); // 涡流两条都假，不用挑
     let b = facts.find((f) => f !== a);
     if (lie === 'fake') b = keep(b, a); // 醉酒中毒可能两条都真
+    if (lie === 'true2') { // 诡诈杰克：说真话的那位说书人，两条都给真的
+      const both = [a.t, b.t];
+      this.decide('savant', { who: p.id, options: [a.t, a.f, b.t, b.f], chosen: both, lie });
+      this.note(`博学者 ${this.g.name(p.id)}：诡诈杰克说真话的那位，两条都是真的`);
+      return both;
+    }
     const lines = lie === 'must' ? [a.f, b.f] : lie === 'fake' ? (this.roll('savantTrue', {}, { who: p.id }) ? [a.t, b.t] : [a.f, b.f]) : [a.t, b.f];
     this.decide('savant', { who: p.id, options: [a.t, a.f, b.t, b.f], chosen: lines, lie });
     this.note(`博学者 ${this.g.name(p.id)}：${lie ? `失效，给了${lie === 'must' || lines[0] === a.f ? '两条假' : '两条真'}` : `真：${a.t}；假：${b.f}`}`);

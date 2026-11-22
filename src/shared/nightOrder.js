@@ -683,7 +683,7 @@ export const MIX_STEPS = {
     'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'grandmother', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress', 'noble', 'balloonist', 'shugenja', 'villageidiot', 'bountyhunter', 'nightwatchman',
     'butler', 'spy', 'ogre', 'highpriestess', 'general', 'chambermaid', 'mathematician'],
   other: ['barista', 'bureaucrat', 'thief', 'harlot', 'bonecollector', 'poppygrower', 'philosopher', 'sailor', 'engineer', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'acrobat', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist', 'fearmonger', 'lycanthrope',
-    'imp', 'lleech', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'alhadikhia', 'lilmonsta', 'yaggababble', 'assassin', 'godfather', 'gossip', 'hatter',
+    'imp', 'lleech', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'alhadikhia', 'lilmonsta', 'yaggababble', 'legion', 'assassin', 'godfather', 'gossip', 'hatter',
     'barber', 'sweetheart', 'sage', 'professor', 'huntsman', 'farmer', 'tinker', 'moonchild', 'grandmother', 'ravenkeeper', // 照官方英文总表（11-11 用户定：和集石百科不一样时以英文新表为准）
     'washerwoman', 'librarian', 'investigator', 'chef', 'clockmaker', 'noble', 'shugenja', 'empath', 'fortuneteller', 'undertaker', 'dreamer', 'amn_detect', 'amn_echo', 'flowergirl', 'towncrier', 'oracle', 'seamstress',
     'juggler', 'balloonist', 'villageidiot', 'bountyhunter', 'nightwatchman', 'butler', 'spy', 'highpriestess', 'general', 'duchess', 'chambermaid', 'mathematician'],
@@ -696,7 +696,7 @@ export const MIX_STEPS = {
 const DESC = { first: {}, other: {} };
 for (const o of Object.values(NIGHT_ORDER)) for (const k of ['first', 'other']) for (const [id, what] of o[k] ?? []) DESC[k][id] ??= what;
 Object.assign(DESC.first, { yaggababble: '得知自己的秘密短语（暗号）', godfatherInfo: DESC.first.godfather });
-Object.assign(DESC.other, { yaggababble: '本人不醒：他今天白天每公开说一次暗号，说书人今晚就可能让一人死亡', duchess: '今天正好三人拜访过公爵夫人：三人各自得知三人里有几个邪恶，其中一人的数是错的' });
+Object.assign(DESC.other, { legion: '本人不醒：说书人决定今晚死不死人、死谁（多半是一名军团）', yaggababble: '本人不醒：他今天白天每公开说一次暗号，说书人今晚就可能让一人死亡', duchess: '今天正好三人拜访过公爵夫人：三人各自得知三人里有几个邪恶，其中一人的数是错的' });
 const TEENSY_WHY = '人少（5–6 人），没有爪牙信息和恶魔信息：恶魔不知道谁是爪牙，爪牙也不知道谁是恶魔。';
 function autoOrder(roles, extra = {}, why = []) {
   const has = (id) => roles.includes(id === 'godfatherInfo' ? 'godfather' : id) || extra[id];
@@ -723,6 +723,16 @@ NIGHT_ORDER.amn = (() => {
     '7 人及以上，首夜先做爪牙信息和恶魔信息（5–6 人没有）。'];
   return o;
 })();
+// 2026-11-23 三个大剧本（7 人以上首夜先做爪牙和恶魔信息）
+const fullOrder = (script, why) => {
+  const o = autoOrder(rolesOf(script));
+  o.first = [['minioninfo', DESC.first.minioninfo ?? '爪牙互认、得知恶魔'], ['demoninfo', DESC.first.demoninfo ?? '恶魔得知爪牙和 3 个伪装'], ...o.first];
+  o.why = ['7 人及以上，首夜先做爪牙信息和恶魔信息（5–6 人没有）。', ...why];
+  return o;
+};
+NIGHT_ORDER.ext = fullOrder('ext', ['解谜大师开局就让一名玩家整局醉酒（他不知道），解谜大师白天猜一次谁醉了：猜对得知恶魔。', '传奇角色哨兵：外来者人数可能多一个或少一个。']);
+NIGHT_ORDER.nrb = fullOrder('nrb', ['恶魔可能是小怪宝（爪牙轮流照看）、军团（大多数人都是军团，说书人决定夜里死谁）或涡流。', '军团局没有爪牙：首夜所有军团一起醒来互认，说书人指给他们谁是善良。']);
+NIGHT_ORDER.mino = fullOrder('mino', ['诡诈杰克（奇遇角色）：两位说书人一真一假，能力信息由你选的那位给；整局最多一次，他们会在黄昏悄悄互换。', '四个恶魔：小恶魔、沙巴洛斯、珀、方古。']);
 NIGHT_ORDER.chat = autoOrder(['highpriestess', 'savant', 'artist', 'fisherman', 'juggler', 'amnesiac', 'lunatic', 'drunk', 'cerenovus', 'goblin', 'yaggababble', 'lleech'], {},
   ['牙噶巴卜首夜得知暗号；之后夜里不醒，白天每公开说一次暗号，当晚就可能多死一人（要开收音页，说书人才听得到）。', '相克：洗脑师可以让人疯狂地证明自己是哥布林。']);
 

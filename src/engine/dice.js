@@ -58,6 +58,10 @@ export const DICE = {
   gossipEvil: { base: 0.5 },
   // 牙噶巴卜（2026-11-22）：白天每说一次暗号，当晚「可能」死一人（官方：说书人可以少杀）。善良领先时多杀
   yaggKill: { base: 0.8, balance: 1.2 },
+  // 军团（2026-11-23）：军团还多时多半杀军团，善良领先时偶尔杀善良（官方：杀善良通常不公平）
+  legionKillGood: { base: 0.15, balance: 1.5 },
+  // 诡诈杰克：黄昏两位说书人互换（整局一次）。善良领先、越往后越可能（官方：通常在善良开始弄清谁说真话时）
+  knavesSwap: { base: 0.12, balance: 1.5, late: 1.2 },
   sweetheartEvil: { base: 0.5 },
   dreamerSeen: { base: 0.85 },                      // 官方：邪恶项几乎都用在场爪牙
   savantTrue: { base: 0.5 },
@@ -97,6 +101,8 @@ export const DRAW = {
   redHerring: { newbie: -1 },                 // 新手被红鲱鱼坑了很难自己想明白
   mayorVictim: { newbie: -2, hits: -0.5 },
   gossipVictim: { hits: -0.5 },
+  puzzleDrunk: { newbie: -1 },                 // 解谜大师弄醉谁：新手少挨（醉了自己不知道）
+  legionVictim: { hits: -0.5 },
   yaggVictim: { hits: -0.5, trusted: 1.2, info: 0.6, suspected: -1, newbie: -1 }, // 牙噶巴卜：照聪明的恶魔挑（杀被信任的、报了信息的，留被怀疑的）
   doomVictim: { hits: -0.5, newbie: -1.5, self: 0.3 },        // 末日预言者：说书人挑同阵营的谁死（能不挑新手就不挑）               // 新手在 gossipVictim() 里直接排除，这个人会死
   sweetheartDrunk: { newbie: -2, hits: -0.5 },

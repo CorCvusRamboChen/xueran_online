@@ -148,6 +148,11 @@ export function rollMixed(script, n, rng, { exclude = null } = {}) {
   const tfPool = L.tf.filter((r) => ok(r) && r !== 'atheist'); // 不是无神论者局：无神论者不发（可以被酒鬼以为、被邪恶拿来伪装）
   const minions = sample(L.min.filter(ok), m, rng);
   const demon = pickOne(L.dem.filter(ok), rng);
+  // 军团（集石百科）：人数反过来，平常邪恶有几个、善良就只有几个，其余全是军团；没有爪牙；善良可以是镇民或外来者
+  if (demon === 'legion') {
+    const good = sample([...tfPool, ...out], m + 1, rng);
+    return shuffle([...good, ...Array(n - good.length).fill('legion')], rng);
+  }
   if (demon === 'lleech') out = out.filter((r) => r !== 'heretic'); // 官方相克：痢蛭和异端分子只能有一个在场
   if (minions.includes('baron')) { const add = Math.max(0, Math.min(2, out.length - o)); t -= add; o += add; }
   if (minions.includes('godfather')) { if (o === 0 || (o < out.length && rng() < 0.5)) { t -= 1; o += 1; } else { t += 1; o -= 1; } }
@@ -197,7 +202,7 @@ const BOFFIN_PROOF = new Set(['washerwoman', 'librarian', 'investigator', 'chef'
 // ───────────── AI 配板 ─────────────
 // 分数是经验估计（官方没有公式）：正数对善良有利，负数对邪恶有利，只用来比较同人数的几套配板。
 // 2026-11-11：混合剧本（冒名钓鱼、生死未卜、人人可玩）里暗流涌动、黯月初升的角色以前没有权重（按 0 算），AI 配板等于没在平衡，补上
-const DEMON_W = { yaggababble: 2.2, vortox: 3.0, nodashii: 2.6, vigormortis: 2.4, fanggu: 2.2, imp: 2.3, pukka: 2.0, zombuul: 2.2, shabaloth: 2.3, po: 2.2, leviathan: 2.0, lleech: 2.4 };
+const DEMON_W = { legion: 2.4, yaggababble: 2.2, vortox: 3.0, nodashii: 2.6, vigormortis: 2.4, fanggu: 2.2, imp: 2.3, pukka: 2.0, zombuul: 2.2, shabaloth: 2.3, po: 2.2, leviathan: 2.0, lleech: 2.4 };
 const MINION_W = { pithag: 1.8, witch: 1.8, eviltwin: 1.6, cerenovus: 1.4, harpy: 1.5, boffin: 1.4, boomdandy: 1.0, scarletwoman: 1.2, baron: 0.8,
   poisoner: 1.7, spy: 1.3, widow: 1.7, godfather: 1.6, assassin: 1.5, devilsadvocate: 1.2, mastermind: 1.0, marionette: 1.3, goblin: 0.9, fearmonger: 1.3 };
 const GOOD_W = {
@@ -385,6 +390,11 @@ export const SNV_METHODS = {
     this.doomUsed = [];       // 末日预言者（传奇角色）：用过的人（每人每局一次）
     this.duchess = null;      // 公爵夫人（传奇角色）：{ day, ids } 这天报名拜访的人
     this.alsaahirDay = {};    // 戏法师（谁都可以声称）：id → 哪天猜过（每人每天一次）
+    // 解谜大师：开局说书人让一名玩家整局醉酒（几乎总是镇民），解谜大师每局猜一次
+    const pm = this.players.find((p) => p.role === 'puzzlemaster');
+    this.puzzle = pm ? { by: pm.id, drunk: this.st.puzzleDrunk(pm)?.id ?? null, guessed: false } : null;
+    // 诡诈杰克（奇遇角色）：两位说书人甲、乙，一真一假；每人选找哪位（默认甲）；每局最多在黄昏互换一次
+    this.knaves = SCRIPTS[this.script]?.knaves ? { liar: this.rng() < 0.5 ? 'A' : 'B', pick: {}, swapped: false } : null;
     this.yaggFake = {};       // 疯子以为自己是牙噶巴卜：id → { phrase, day, said }（界面和真的一样显示「今天说了几次」，没有效果）
     this.execHist = [];       // 处决记录（政客终局判责任用）：{ day, id, by 提名者, voters }
     this.twinSync(null);
@@ -494,6 +504,48 @@ export const SNV_METHODS = {
     return this.duchess.ids;
   },
   duchessToday() { return this.duchess?.day === this.day ? this.duchess.ids : []; },
+
+  // ───────────────────────── 2026-11-23 三个大剧本 ─────────────────────────
+  /** 诡诈杰克：这个人现在选的是说假话的那位说书人吗。 */
+  knavesLiar(id) { return !!this.knaves && (this.knaves.pick[id] ?? 'A') === this.knaves.liar; },
+  /** 诡诈杰克：选找哪位说书人（甲 A / 乙 B），随时可以换，下一次拿信息时生效。 */
+  knavesPick(uid, pick) {
+    if (!this.knaves) throw new Error('这个剧本没有诡诈杰克');
+    if (!this.get(uid)) throw new Error('你不在游戏中');
+    if (!['A', 'B'].includes(pick)) throw new Error('只能选说书人甲或乙');
+    this.knaves.pick[uid] = pick;
+  },
+  /** 诡诈杰克：黄昏时两位说书人可能互换（整局一次，由说书人决定）。返回换没换。 */
+  knavesDusk() {
+    const k = this.knaves;
+    if (!k || k.swapped || !this.st.knavesSwap()) return false;
+    k.swapped = true;
+    k.liar = k.liar === 'A' ? 'B' : 'A';
+    this.record('st', `诡诈杰克：黄昏时两位说书人互换了，现在说书人${k.liar === 'A' ? '甲' : '乙'}说假话`);
+    return true;
+  },
+
+  /** 解谜大师：猜谁是被他弄醉的人（每局一次，活着才能猜）。猜对得知恶魔，猜错得知一个不是恶魔的人；不告诉他猜没猜对。 */
+  puzzleGuess(uid, targetId) {
+    const p = this.get(uid); const t = this.get(targetId);
+    if (!p || !t) throw new Error('玩家不在游戏中');
+    if (!p.alive || this.abilityOf(p) !== 'puzzlemaster') throw new Error('你没有这个能力');
+    if (!this.puzzle || this.puzzle.guessed) throw new Error('你已经猜过了');
+    if (this.phase !== 'day') throw new Error('只能在白天猜');
+    this.puzzle.guessed = true;
+    const right = t.id === this.puzzle.drunk;
+    const lie = !right || this.snvBroken(p);
+    const shown = this.st.puzzleAnswer(p, lie);
+    this.record('info', `${this.tag(uid)} 猜 ${this.tag(t.id)} 是被解谜大师弄醉的人 → ${right ? '猜对了' : '猜错了'}，说书人告诉他「${shown ? this.name(shown.id) : '没有人'} 是恶魔」${lie ? '（错的）' : ''}`);
+    if (lie && right) this.flag(p, '解谜大师失效：猜对了也拿到了错的恶魔');
+    return { shown: shown?.id ?? null };
+  },
+
+  /** 军团：在场且有活着、没失效的军团时，只有邪恶玩家投票的提名「投票无效」（票数算 0）。 */
+  legionZero(voters) {
+    if (!voters.length || !this.players.some((q) => q.role === 'legion' && q.alive && !this.snvBroken(q))) return false;
+    return voters.every((id) => this.evilOf(this.get(id)));
+  },
 
   /** 魔像整局只能提名一次：第二次就不让提（在记下提名之前查）。 */
   golemBlocked(a) { return this.has(a, 'golem') && a.role === 'golem' && !!this.used[`golem-${a.id}`]; },
@@ -651,6 +703,8 @@ export const SNV_METHODS = {
     if (seen.has(p.id)) return false;
     if (p.gainedFake || p.role === 'drunk' || p.role === 'marionette') return true; // 提线木偶的「能力」从来不生效，说书人假装生效（和酒鬼一样）
     const next = new Set(seen); next.add(p.id);
+    // 解谜大师选的人整局醉酒，解谜大师死了也照样（官方）；解谜大师自己失效时这一层不生效
+    if (this.puzzle?.drunk === p.id) { const pm = this.get(this.puzzle.by); if (pm && !pm.left && pm.role === 'puzzlemaster' && !next.has(pm.id) && !this.snvBroken(pm, next)) return true; }
     return this.fx.some((f) => (f.kind === 'drunk' || f.kind === 'poison') && f.target === p.id && this.snvFxLive(f, next)) || this.seatPoisoned(p, next);
   },
   snvFxLive(f, seen = new Set()) {
@@ -672,6 +726,8 @@ export const SNV_METHODS = {
     if (this.atheist && !this.evilOf(p)) return 'atheist'; // 无神论者局：所有信息都按说书人假装的那个邪恶阵营给（整局共用一个假世界）
     if (team(p) === 'demon' && this.extraAbility(p)) return null; // 科学怪人给的能力：恶魔醉酒中毒也照样有（恶魔自己的能力不拿信息）
     if (this.isTownsfolk(p) && this.vortoxOn()) return 'must';
+    // 诡诈杰克：选了说假话的那位说书人，能力信息一定是错的（醉酒中毒的照下面的老规矩，两位都可能给假）
+    if (this.knaves && !this.snvBroken(p) && this.knavesLiar(p.id)) return 'must';
     if (!this.snvBroken(p)) return null;
     // 邪恶碾压时，真酒鬼偶尔拿真信息（官方《给说书人的建议》）
     if (p.role === 'drunk' && this.st.drunkTruth(p)) return null;
@@ -1048,6 +1104,12 @@ ${this.grimoire(w.id)}
       this.evilKnown = Object.fromEntries(this.players.filter((p) => this.evilOf(p)).map((p) => [p.id, []]));
       if (demon) say(demon, `**罂粟种植者在场**：你不知道你的爪牙是谁（他死了，你们才会在那晚互相认识）。\n不在场的角色（可用来伪装）：${this.bluffs.map((r) => ROLES[r].name).join('、')}。`);
       for (const m of minions) say(m, '**罂粟种植者在场**：你不知道恶魔和其他爪牙是谁（他死了，你们才会在那晚互相认识）。');
+      return messages;
+    }
+    if (this.players.some((p) => p.role === 'legion')) { // 军团：所有军团一起醒来互认，说书人指给他们谁是善良（官方运作方式）；不给伪装
+      const legion = this.players.filter((p) => p.role === 'legion');
+      const good = this.players.filter((p) => p.role !== 'legion' && !p.traveller);
+      for (const l of legion) say(l, `你们都是**军团**：${legion.filter((x) => x.id !== l.id).map((x) => `**${this.name(x.id)}**`).join('、') || '只有你一个'}。\n善良玩家：${good.map((x) => `**${this.name(x.id)}**`).join('、')}。\n夜里说书人决定死不死人；只有邪恶玩家投票的提名，投票无效。`);
       return messages;
     }
     if (SCRIPTS[this.script]?.riot) { // 裁缝与暴乱：没有爪牙，所有暴乱一起醒来互认（官方 v1：在恶魔信息这一步唤醒所有暴乱）；没有伪装
@@ -1546,6 +1608,14 @@ ${this.grimoire(w.id)}
           if (p.role === 'butler') this.butlerMaster = t.id;
           say(p, `你的主人是 ${this.name(t.id)}。明天只有他举手时你才能投票。`);
         } break;
+        case 'legion': {
+          if (first || !this.players.some((q) => q.role === 'legion' && q.alive)) break;
+          const sober = this.players.some((q) => q.role === 'legion' && q.alive && !broken(q));
+          if (!sober) { this.record('st', '军团都失效了：今晚没有人因军团死亡'); break; }
+          if (this.pitNight?.suppress) break;
+          const v = this.st.legionVictim();
+          if (v) this.snvKill(v, 'demon', messages);
+        } break;
         case 'yaggababble': for (const p of this.players.filter((q) => q.role === 'yaggababble' && q.alive)) {
           const y = this.yagg;
           if (!y) continue;
@@ -2033,8 +2103,9 @@ ${this.grimoire(w.id)}
     if (!p || !p.alive || !this.has(p, 'savant')) throw new Error('只有博学者可以这样问');
     if (this.savantDay[uid] === this.day) throw new Error('你今天已经问过了');
     this.savantDay[uid] = this.day;
-    const lie = this.lieMode(p);
-    if (lie) this.flag(p, '博学者的两条信息不是一真一假');
+    let lie = this.lieMode(p);
+    if (!lie && this.knaves) lie = 'true2'; // 诡诈杰克：说真话的那位给两条都是真的（官方范例），说假话的给两条假的
+    if (lie && lie !== 'true2') this.flag(p, '博学者的两条信息不是一真一假');
     const lines = this.st.savantLines(p, lie);
     this.record('info', `${this.tag(uid)}${lie ? '【能力失效】' : ''} 问了说书人：${lines.join('；')}`);
     return { lines };
@@ -2615,6 +2686,8 @@ ${this.grimoire(w.id)}
     if (noDemon && !this.twinBlocks()) this.setWinner('good', SCRIPTS[this.script]?.riot ? '所有暴乱都死了' : '恶魔已经死亡');
     else if (this.townAlive() <= 2) this.setWinner('evil', noDemon ? '恶魔已死，但双子挡着善良，只剩两名存活玩家，邪恶获胜' : '只剩两名存活玩家，恶魔获胜'); // 官方：邪恶的胜利条件只看人数，不看恶魔死活
     else if (!noDemon && this.allAliveEvil()) this.setWinner('evil', '存活的玩家全是邪恶，善良已经无法获胜');
+    // 军团：只剩一名善良玩家时善良已经赢不了（官方：说书人可以宣布邪恶获胜）
+    else if (!noDemon && this.players.some((q) => q.role === 'legion' && q.alive) && this.alive().filter((q) => !q.traveller && !this.evilOf(q)).length <= 1) this.setWinner('evil', '只剩一名善良玩家，军团获胜');
     return this.winner;
   },
 

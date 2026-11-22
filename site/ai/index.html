@@ -488,6 +488,21 @@
       <dl><div class="ai-row"><dt>什么时候</dt><dd>谁都别动。黄昏时正好三人报名拜访，当晚三人各自得知三人里有几个邪恶。</dd></div><div class="ai-row"><dt>怎么决定</dt><dd>三人里随机一人拿错的数；错的数尽量只差一（真相 ±1，在 0–3 之内）。拜访不满三人、超过三人都不拜访。机器人在已经有真人报名、还差人时凑满三个（没人报名时 40% 主动报名）。</dd></div><div class="ai-row"><dt>依据</dt><dd>集石百科公爵夫人页。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/storyteller.js</code> <code>duchessFalse</code>；<code>server/room.js</code> <code>teensyBots</code>。</dd></div></dl>
     </article>
     <article class="ai-card pnl">
+      <header><h3>解谜大师：让谁整局醉酒</h3><span class="tag tag-light">开局</span></header>
+      
+      <dl><div class="ai-row"><dt>什么时候</dt><dd>延长线。开局时说书人让一名玩家整局醉酒（解谜大师死了也照样）。</dd></div><div class="ai-row"><dt>怎么决定</dt><dd>从镇民里抽（新手 −1，少挨）；没有镇民才从善良里抽。官方：几乎总是镇民，给爪牙或恶魔要有极好的理由——这里不给。</dd></div><div class="ai-row"><dt>解谜大师猜的时候</dt><dd>猜对（而且他没失效）告诉他恶魔是谁；猜错告诉他一个随机的、不是恶魔的人。不告诉他猜没猜对。机器人解谜大师第 2 天起每天一半机会随便猜一个。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/storyteller.js</code> <code>puzzleDrunk</code>、<code>puzzleAnswer</code>；<code>engine/snv.js</code> <code>puzzleGuess</code>。</dd></div></dl>
+    </article>
+    <article class="ai-card pnl">
+      <header><h3>军团：今晚死谁</h3><span class="tag tag-dark">夜里</span></header>
+      
+      <dl><div class="ai-row"><dt>什么时候</dt><dd>百无禁忌抽到军团时，每个夜晚（首夜除外）。</dd></div><div class="ai-row"><dt>怎么决定</dt><dd>官方运作方式是大多数夜晚杀一个军团（杀善良通常不公平），最后走到三人（两善一军团）。这里：军团还剩不止一个、善良还剩三个以上时，多半杀军团；掷一次「杀善良」：基础 15%，局势权重 +1.5（善良领先时多杀善良）：局势 −0.5 / 0.1 / +0.5 时 <b>8% / 17% / 27%</b>。只剩一个军团或善良只剩两个时杀善良。只剩一名善良时宣布邪恶获胜（官方：善良已经赢不了）。</dd></div><div class="ai-row"><dt>人数</dt><dd>反过来——平常邪恶有几个，善良就只有几个，其余都是军团，没有爪牙；善良可以是镇民或外来者。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/storyteller.js</code> <code>legionVictim</code>；<code>engine/snv.js</code> <code>rollMixed</code>、<code>legionZero</code>（只有邪恶投票的提名算 0 票）。</dd></div></dl>
+    </article>
+    <article class="ai-card pnl">
+      <header><h3>诡诈杰克：两位说书人什么时候互换</h3><span class="tag tag-dark">黄昏</span></header>
+      
+      <dl><div class="ai-row"><dt>什么时候</dt><dd>米诺陶迷宫，从第 2 天黄昏起，整局最多一次。玩家不会被告知。</dd></div><div class="ai-row"><dt>怎么决定</dt><dd>官方：通常在善良玩家开始弄清谁说真话时换。基础 12%，局势权重 +1.5、越往后越容易（第 4 天起加满 +1.2）：第 2 天局势 −0.5 / 0.1 / +0.5 时 <b>9% / 19% / 30%</b>，第 4 天 <b>18% / 34% / 49%</b>。</dd></div><div class="ai-row"><dt>信息怎么给</dt><dd>选了说假话的那位，能力信息一定是错的（和涡流一样处理）；说真话的照常（博学者两条都给真的，照官方范例）。醉酒中毒的人两位都可能给假。规则、提名投票、爪牙恶魔信息两位都说真话。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/storyteller.js</code> <code>knavesSwap</code>；<code>engine/snv.js</code> <code>knavesLiar</code>、<code>knavesDusk</code>、<code>lieMode</code>。</dd></div></dl>
+    </article>
+    <article class="ai-card pnl">
       <header><h3>7 号空座（七步成诗的灯神规则）</h3><span class="tag tag-mot">白天</span><span class="tag tag-dark">夜里</span></header>
       
       <dl><div class="ai-row"><dt>夜里替它选人</dt><dd>按机器人规则（邪恶角色优先挑活着的善良，其余随机）（<code>engine/snv.js:1078</code> <code>autoChooseSNV</code>）。</dd></div><div class="ai-row"><dt>今天用不用唯一一次发言</dt><dd>每天开放提名时掷，基础 35%，被提名时 +1.5、过半人死了 +1.2（35% / 被提名 71% / 后半段 64% / 两者 89%）；活人 ≤ 4 一定用（<code>dice.js:76</code>、<code>server/room.js:2571</code>）。</dd></div><div class="ai-row"><dt>怎么说</dt><dd>邪恶能提名时 35% 拿来提名一个善良玩家、25% 私聊（不能提名时 60% 私聊）、其余公开；善良 30% 私聊、70% 公开（<code>room.js:2615</code> <code>seat7Mode</code>）。对象：邪恶找善良，善良随便找活人（<code>room.js:2624</code>）。</dd></div><div class="ai-row"><dt>说什么</dt><dd>大模型写，失败按规则：善良报角色和最后一条信息，邪恶报一个伪装并怀疑一个善良玩家。</dd></div><div class="ai-row"><dt>炸弹人倒数时</dt><dd>指一个不同阵营的人（<code>room.js:2548-2550</code>）。</dd></div></dl>

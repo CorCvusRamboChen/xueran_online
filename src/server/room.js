@@ -367,6 +367,8 @@ export class Room {
       case 'alsaahir': this.alsaahir(uid, p.demons, p.minions); break;
       case 'doomsayer': this.doomsayer(uid); break;
       case 'duchess': this.duchessVisit(uid, p.on !== false); break;
+      case 'puzzle': this.puzzle(uid, p.target); break;
+      case 'knaves': { const g = this.requireGame(); try { g.knavesPick(uid, p.pick); } catch (e) { throw new UserError(e.message); } } break;
       case 'rps': this.rpsHand(uid, p.hand); break;
       case 'hand': this.hand(uid, !!p.up); break;
       case 'history': return { games: this.history?.list(this.guildId) ?? [] };
@@ -2069,9 +2071,24 @@ export class Room {
     this.changed();
   }
 
+  /** 解谜大师：猜谁是被弄醉的人（可以公开也可以私下：这里私下猜，结果只给他）。 */
+  puzzle(uid, target) {
+    const g = this.requireGame();
+    let res;
+    try { res = g.puzzleGuess(uid, target); } catch (e) { throw new UserError(e.message); }
+    this.deliver([{ playerId: uid, text: `你猜 **${g.name(target)}** 是醉酒的那个人。说书人告诉你：**${res.shown ? g.name(res.shown) : '没有人'}** 是恶魔。（说书人不会告诉你猜没猜对）` }]);
+    this.changed();
+  }
+
   /** 黄昏：机器人替它们会做的事——机器人牙噶巴卜「说」暗号；公爵夫人还差人时机器人凑满三个（已经有真人报名才凑）。 */
   teensyBots(g) {
     for (const p of g.players) if (this.isFake(p.id) && p.role === 'yaggababble') g.yaggBotSay?.(p.id);
+    // 机器人解谜大师：第 2、3 天随便猜一个人；诡诈杰克：机器人每天随便换一位说书人找
+    for (const p of g.players) if (this.isFake(p.id) && p.alive && p.role === 'puzzlemaster' && g.puzzle && !g.puzzle.guessed && g.day >= 2 && Math.random() < 0.5) {
+      const t = g.players.filter((q) => q.id !== p.id); try { g.puzzleGuess(p.id, t[Math.floor(Math.random() * t.length)].id); } catch { /* 猜不了就算了 */ }
+    }
+    if (g.knaves) for (const p of g.players) if (this.isFake(p.id)) g.knaves.pick[p.id] = Math.random() < 0.5 ? 'A' : 'B';
+    if (g.knaves) g.knavesDusk(); // 诡诈杰克：两位说书人可能在黄昏悄悄互换（整局一次）
     if (!SCRIPTS[g.script]?.duchess) return;
     const ids = g.duchessToday();
     if (ids.length >= 3 || (!ids.length && Math.random() < 0.6)) return;
@@ -4306,6 +4323,8 @@ export class Room {
       canDoom: day && !this.dusking && this.duskDay !== g.day && !!SCRIPTS[g.script]?.doomsayer && g.visAlive(p) && !g.doomUsed?.includes(uid) && g.alive().filter((q) => g.visAlive(q)).length >= 4,
       duchess: SCRIPTS[g.script]?.duchess ? { open: day && !this.dusking && this.duskDay !== g.day, mine: g.duchessToday().includes(uid), ids: g.duchessToday() } : null,
       // 牙噶巴卜的暗号和今天说了几次；疯子以为自己是牙噶巴卜时显示他的假暗号（界面一模一样，不然他一看就知道自己是假的）
+      canPuzzle: day && p.alive && g.abilityOf(p) === 'puzzlemaster' && !!g.puzzle && !g.puzzle.guessed,
+      knaves: g.knaves ? { pick: g.knaves.pick[uid] ?? 'A' } : null, // 诡诈杰克：我现在找哪位说书人（不告诉他哪位说真话）
       yaggPhrase: ((y) => (y ? { phrase: y.phrase, today: y.day === g.day ? y.said : 0 } : null))(p.role === 'yaggababble' ? (g.yagg?.told ? g.yagg : null) : g.yaggFake?.[uid]),
       harpy: g.harpyMad?.id === uid && g.harpyMad.night === g.night && g.phase === 'day' ? { target: g.harpyMad.target, name: g.name(g.harpyMad.target), claimed: !!g.harpyMad.claimed } : null,
       hearing: !!this.hearing,

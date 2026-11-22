@@ -221,7 +221,7 @@ export class Game {
       'atheist', 'evilStart', 'poppyHid', 'poppyDue', 'poppyRevealed', 'ahNight', 'ahNews', 'psychoDay', 'psychoSpared', 'aiLead', 'politicianEval', 'scapegoatDay', 'gunDay', 'judgeUsed',
       'leviDue', 'goblinClaimDay', 'widowTold', 'baristaFx', 'harlotAsk', 'matronDay', 'butcherDay', 'mezEasy', 'nomHistory', 'demonSwap', 'monsta', 'lleechHost', 'lleechDue', 'fear', 'fearNews', 'evilHist',
       'rochDone', 'bhEvilTf', 'fauxPaw', 'bh', 'acro', 'lycanNight', 'hatterDue', 'hatterNight', 'allKnown',
-      'yagg', 'yaggFake', 'doomUsed', 'duchess', 'alsaahirDay']; // 2026-11-22 小剧本：牙噶巴卜的暗号、末日预言者、公爵夫人、戏法师（漏存的话重启后全丢）
+      'yagg', 'yaggFake', 'doomUsed', 'duchess', 'alsaahirDay', 'puzzle', 'knaves']; // 2026-11-22 小剧本：牙噶巴卜的暗号、末日预言者、公爵夫人、戏法师（漏存的话重启后全丢）
     const out = Object.fromEntries(keys.map((k) => [k, this[k]]));
     out.nominators = [...this.nominators];
     out.nominees = [...this.nominees];
@@ -753,6 +753,7 @@ export class Game {
     let count = voters.reduce((a, id) => a + (this.voteWeight?.(id) ?? 1), 0);
     if (force === 'pass') count = Math.max(count, this.threshold(), this.blockVotes + 1); // 法官：强制成功
     if (force === 'fail') count = 0; // 法官：强制失败，官方「视为得到了 0 票」，台上的人不变
+    if (!force && this.legionZero?.(voters)) { count = 0; this.record('st', `军团：对 ${this.name(nomineeId)} 举手的只有邪恶玩家，投票无效（算 0 票）`); }
     this.suspicion[nomineeId] = (this.suspicion[nomineeId] ?? 0) + count;
     const threshold = this.threshold();
     let outcome = 'fail';

@@ -54,6 +54,7 @@ const OVERRIDES = {
   riot: { other: ST, note: '本人不醒：说书人记第几天' },
   huntsman: { note: '用掉能力之前每晚醒' },
   engineer: { note: '用掉能力之前每晚醒' },
+  legion: { other: ST, note: '军团夜里不醒：说书人决定今晚死不死人、死谁' },
   yaggababble: { first: W, other: ST, note: '首夜睁眼得知暗号；之后本人不醒：他白天公开说了几次暗号，说书人夜里就可能让几个人死' },
   mezepheles: { first: W, other: IF, note: '首夜得知关键词；之后有善良玩家说出关键词，叫醒的是那个人' },
 };

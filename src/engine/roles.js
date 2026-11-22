@@ -322,6 +322,11 @@ const EXP = {
   // 2026-11-22 小剧本 Nobody Fucking Move、Chatastrophe 用到的两个（集石百科：戏法师、牙噶巴卜）
   alsaahir: { name: '戏法师', en: 'Alsaahir', team: 'townsfolk', firstNight: 0, otherNight: 0,
     ability: '每个白天，你可以公开进行一次谁是爪牙，谁是恶魔的猜测。如果你猜对，善良阵营获胜。' },
+  // 2026-11-23 大剧本 Extension Cord、No Roles Barred 用到的两个（集石百科：解谜大师、军团）
+  puzzlemaster: { name: '解谜大师', en: 'Puzzlemaster', team: 'outsider', firstNight: 0, otherNight: 0,
+    ability: '一名玩家醉酒，即使你已死亡。每局游戏限一次，你可以猜测谁是那个醉酒的玩家，如果猜对了，你会得知谁是恶魔，但如果猜错了，你会得知错误的「谁是恶魔」信息。' },
+  legion: { name: '军团', en: 'Legion', team: 'demon', firstNight: 0, otherNight: 1,
+    ability: '每个夜晚*，可能有一名玩家死亡。如果一项提名只有邪恶玩家投票，投票无效。你也会被当作是爪牙。[多数玩家为军团]' },
   yaggababble: { name: '牙噶巴卜', en: 'Yaggababble', team: 'demon', firstNight: 1, otherNight: 1,
     ability: '在你的首个夜晚，你会得知一段秘密短语。每次你在白天公开说出这段短语，当天便可能会有一名玩家在这之后死亡。（要开着收音页说才听得到）' },
 };
@@ -392,6 +397,7 @@ export const SCRIPT_TRAVELLERS = {
   cat: ['barista', 'harlot', 'bonecollector', 'apprentice', 'beggar'], // botcscripts 第 3 号 v11.1.10
   // 夜半狂欢：剧本卡（botcscripts 104 号 v3.8.0）没列旅行者，网上也没找到别人配好的；用户 2026-11-20 同意借梦殒春宵的五个（同一套引擎、同样玩信息和疯狂）
   mo: ['deviant', 'bonecollector', 'barista', 'harlot', 'butcher'],
+  ext: ['bureaucrat', 'butcher', 'matron', 'bonecollector', 'bishop'], // Extension Cord 剧本 JSON 里列的
 };
 // 传奇角色（集石百科「传奇角色」页）：不是玩家拿的角色，是说书人给这一局加的全场规则；会告诉所有人加了哪些。
 // 剧本里用 sentinel / ivory / fibbin / doomsayer / duchess / bootlegger 标记（夜半狂欢：哨兵、圣洁之魂；裁缝与暴乱：骗人精；小剧本：末日预言者、公爵夫人、私酒贩子）
@@ -407,6 +413,9 @@ export const FABLED = {
     detail: '白天任何时候，存活的玩家可以点「末日预言者」公开使用（每人每局一次，活人不到 4 个就不能用）。说书人挑一名和他同阵营的存活玩家，那人当场死亡（可能是他自己）。' },
   duchess: { name: '公爵夫人', en: 'Duchess', flag: 'duchess', ability: '每个白天，三名玩家可以一起拜访你。当晚*，他们会得知他们之中有几个是邪恶的，但其中一人的信息是错的。',
     detail: '白天点「拜访公爵夫人」报名，黄昏时正好三个人报名才算数（多了少了今晚都不拜访）。当晚三人各自得知三人里有几个邪恶，其中一人（说书人选）的数字是错的。' },
+  // 奇遇角色（Loric，2026-03 官方新出；集石百科「诡诈杰克」）
+  knaves: { name: '诡诈杰克', en: 'Knaves', flag: 'knaves', ability: '场上有两位说书人：一人说真话，一人说假话。每局游戏限一次，他们可能会在黄昏互换。',
+    detail: '能力给的信息（夜里醒来、白天找说书人）由你选的那位说书人给：说真话的给真的，说假话的给假的。点「找说书人甲 / 乙」随时换。规则、提名投票、爪牙恶魔信息这些两位都说真话。整局最多一次，两位会在某个黄昏悄悄互换。醉酒中毒的人两位都可能给假。' },
   bootlegger: { name: '私酒贩子', en: 'Bootlegger', flag: 'bootlegger', ability: '这个剧本有自定义的角色或规则。',
     detail: '本剧本的自定义规则：炼金术士拿到的是一个不在场的爪牙的能力（这里本来就这样做）。' },
 };
@@ -481,6 +490,19 @@ export const SCRIPTS = {
   // Nobody Fucking Move v1.0.1（Brockwell，当月推荐剧本）：传奇角色私酒贩子（自定义规则：炼金术士拿不在场的爪牙能力）、公爵夫人、哨兵
   nfm: { id: 'nfm', name: '谁都别动', en: 'Nobody Fucking Move', engine: 'snv', teensy: true, players: [5, 6], sentinel: true, duchess: true, bootlegger: true,
     roles: ['snakecharmer', 'alsaahir', 'slayer', 'philosopher', 'alchemist', 'virgin', 'heretic', 'damsel', 'klutz', 'psychopath', 'goblin', 'boomdandy', 'pukka', 'vortox'] },
+  // 2026-11-23 三个大剧本（角色表取自 botcscripts.com 的剧本 JSON；相克照官方 Djinn 表）
+  // Extension Cord v5.1.1（Viva La Sam，当月推荐剧本，botcscripts 收藏第二多）：解谜大师、传奇角色哨兵
+  ext: { id: 'ext', name: '延长线', en: 'Extension Cord', engine: 'snv', sentinel: true,
+    roles: ['investigator', 'pixie', 'empath', 'mathematician', 'dreamer', 'oracle', 'monk', 'huntsman', 'artist', 'fisherman', 'soldier', 'cannibal', 'ravenkeeper',
+      'recluse', 'barber', 'mutant', 'damsel', 'puzzlemaster', 'poisoner', 'spy', 'marionette', 'boomdandy', 'scarletwoman', 'nodashii'] },
+  // No Roles Barred v1.0.1（Andrew Pichot，No Rolls Barred 剧本比赛冠军）：恶魔是小怪宝、军团或涡流
+  nrb: { id: 'nrb', name: '百无禁忌', en: 'No Roles Barred', engine: 'snv',
+    roles: ['alchemist', 'noble', 'pixie', 'bountyhunter', 'balloonist', 'empath', 'snakecharmer', 'gossip', 'amnesiac', 'artist', 'philosopher', 'huntsman', 'poppygrower',
+      'goon', 'mutant', 'damsel', 'drunk', 'godfather', 'poisoner', 'fearmonger', 'goblin', 'boomdandy', 'lilmonsta', 'legion', 'vortox'] },
+  // The Minotaur's Labyrinth v3.0.0（Urban Minotaur）：四个恶魔，加奇遇角色诡诈杰克（两位说书人一真一假）
+  mino: { id: 'mino', name: '米诺陶迷宫', en: "The Minotaur's Labyrinth", engine: 'snv', knaves: true,
+    roles: ['investigator', 'clockmaker', 'mathematician', 'fortuneteller', 'towncrier', 'monk', 'savant', 'seamstress', 'professor', 'slayer', 'fisherman', 'cannibal', 'ravenkeeper',
+      'recluse', 'klutz', 'mutant', 'politician', 'godfather', 'witch', 'cerenovus', 'scarletwoman', 'imp', 'shabaloth', 'po', 'fanggu'] },
   // Chatastrophe v1.1.0（TieGuyTravis）：2025 Beardy Does Teensies 比赛冠军。牙噶巴卜要听语音：全员收音。相克：洗脑师可以让人疯狂地证明自己是哥布林
   chat: { id: 'chat', name: '话多成灾', en: 'Chatastrophe', engine: 'snv', teensy: true, players: [5, 6], sentinel: true,
     roles: ['highpriestess', 'savant', 'artist', 'fisherman', 'juggler', 'amnesiac', 'lunatic', 'drunk', 'cerenovus', 'goblin', 'yaggababble', 'lleech'] },

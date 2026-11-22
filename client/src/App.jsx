@@ -743,10 +743,12 @@ function SnvButtons({ s, act }) {
       {me.canDoom && <Btn kind="secondary" onClick={() => setOpen('doom')} title="传奇角色末日预言者：活人不少于 4 个时，每人每局可以公开用一次，说书人让一名和你同阵营的存活玩家死亡">末日预言者</Btn>}
       {me.duchess?.open && <Btn kind={me.duchess.mine ? 'primary' : 'secondary'} onClick={() => act('duchess', { on: !me.duchess.mine })}
         title="传奇角色公爵夫人：黄昏时正好三人报名，当晚三人各自得知三人里有几个邪恶（其中一人的数是错的）">{me.duchess.mine ? `不去拜访公爵夫人（${me.duchess.ids.length}/3）` : `拜访公爵夫人（${me.duchess.ids.length}/3）`}</Btn>}
+      {me.canPuzzle && <Btn kind="primary" onClick={() => setOpen('puzzle')} title="每局一次：猜谁是被你弄醉的人。猜对了得知谁是恶魔，猜错了得到错误的「谁是恶魔」（说书人不说你猜没猜对）">解谜大师 · 猜谁醉了</Btn>}
+      {me.knaves && <KnavesPick me={me} act={act} />}
       {me.yaggPhrase && <span className="muted yagg-note" title="白天每公开说一次，当晚就可能有一名玩家死亡（要开着收音页说）">你的暗号「{me.yaggPhrase.phrase}」· 今天说了 {me.yaggPhrase.today} 次</span>}
       {open && createPortal(
         <div className="sheet-bg gossip-bg" onClick={close} role="presentation">
-          <div className="gossip-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={{ declare: '公开声明', juggle: '公开猜测', artist: '提问', fisherman: '请教说书人', amnesiac: '猜我的能力', pardon: '特赦', harpy: '公开指认', damsel: '猜落难少女', alsaahir: '戏法师', doom: '末日预言者' }[open]}>
+          <div className="gossip-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={{ declare: '公开声明', juggle: '公开猜测', artist: '提问', fisherman: '请教说书人', amnesiac: '猜我的能力', pardon: '特赦', harpy: '公开指认', damsel: '猜落难少女', alsaahir: '戏法师', doom: '末日预言者', puzzle: '解谜大师' }[open]}>
             {open === 'declare' && <DeclareForm s={s} act={act} onClose={close} />}
             {open === 'juggle' && <JuggleForm s={s} act={act} onClose={close} />}
             {open === 'artist' && <ArtistForm act={act} onClose={close} />}
@@ -755,6 +757,7 @@ function SnvButtons({ s, act }) {
             {open === 'harpy' && <Confirm title="公开指认" text={`全场都会看到你说「${me.harpy.name} 是邪恶的」。这就算你疯狂地证明过了；今天不说的话，黄昏时你们之中可能有人死亡。`} ok="公开说" onOk={() => act('harpyClaim')} onClose={close} />}
             {open === 'damsel' && <DamselForm s={s} act={act} onClose={close} />}
             {open === 'alsaahir' && <AlsaahirForm s={s} act={act} onClose={close} />}
+            {open === 'puzzle' && <PuzzleForm s={s} act={act} onClose={close} />}
             {open === 'doom' && <Confirm title="末日预言者" text="每人每局只能用一次，全场都会看到。说书人会挑一名和你同阵营的存活玩家（可能是你自己）当场死亡。现在就用吗？" ok="公开使用" onOk={() => act('doomsayer')} onClose={close} />}
             {open === 'fisherman' && <Confirm title="请教说书人" text="每局只能请教一次。说书人会私下给你一条建议，告诉你该去做什么（不一定是一条事实）。现在就用吗？" ok="现在请教" onOk={() => act('fisherman')} onClose={close} />}
           </div>
@@ -764,6 +767,34 @@ function SnvButtons({ s, act }) {
 }
 
 const scriptRoles = (script) => rolesOf(script);
+
+/** 诡诈杰克：选找哪位说书人拿信息（甲 / 乙，一真一假，不知道哪位说真话）。随时能换，下一次拿信息时生效。 */
+function KnavesPick({ me, act }) {
+  const pick = me.knaves.pick;
+  return (
+    <div className="btn-row knaves-pick" title="诡诈杰克：两位说书人一真一假。能力给的信息由你选的那位给，随时能换">
+      <span className="muted">找说书人</span>
+      {['A', 'B'].map((k) => <Btn key={k} kind={pick === k ? 'primary' : 'secondary'} onClick={() => act('knaves', { pick: k })}>{k === 'A' ? '甲' : '乙'}</Btn>)}
+    </div>
+  );
+}
+
+/** 解谜大师：猜谁是被弄醉的那个人（每局一次，结果只告诉他自己）。 */
+function PuzzleForm({ s, act, onClose }) {
+  const [target, setTarget] = useState('');
+  const send = async () => { if (await act('puzzle', { target })) onClose(); };
+  return (
+    <div className="gossip-form">
+      <h3>解谜大师 · 猜谁醉了</h3>
+      <p className="muted">每局只能猜一次。猜对了，说书人告诉你谁是恶魔；猜错了，说书人告诉你一个不是恶魔的人。说书人不会说你猜没猜对。</p>
+      <select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="猜谁是醉酒的人">
+        <option value="">选一名玩家</option>
+        {s.players.filter((p) => p.id !== s.me).map((p) => <option key={p.id} value={p.id}>{p.seat}号 {p.name}</option>)}
+      </select>
+      <div className="btn-row"><Btn kind="primary" disabled={!target} onClick={send}>就猜他</Btn><Btn onClick={onClose}>取消</Btn></div>
+    </div>
+  );
+}
 
 /** 戏法师：公开猜每个人是恶魔、爪牙还是都不是。每人每天一次；真戏法师全猜对（所有恶魔和爪牙，死了的也算），善良获胜。 */
 function AlsaahirForm({ s, act, onClose }) {
@@ -1196,6 +1227,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
       <Panel title={v.who} tone={teamTone(roleId)} className="choose-pnl" extra={<Check color={v.color}>{v.skill}</Check>}>
         <p className="flavor-line">「{rk ? FLAVOR.ravenkeeper.wake : v.flavor?.wake}」</p>
         {prompt?.lunaticPick && <p className="lead lunatic-pick">{prompt.lunaticPick}</p>}
+        {me?.knaves && <KnavesPick me={me} act={act} />}
         <p className="lead">{hint}</p>
         {roleId === 'imp' && <p className="muted">也可以选你自己：你会死去，一个活着的爪牙接任小恶魔（官方规则的"自杀传位"）。想空刀就选一名已经死了的玩家：今晚没人死。</p>}
         {roleId === 'po' && pickSpec.count === 3 && <p className="muted">你上次没有选人：今晚要选三名玩家。</p>}
@@ -1220,6 +1252,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
             : s.isST ? '夜里的选择和结算都在「魔典」面板里。'
               : me && !me.alive ? '你已经死了，但还在这座镇子里。' : '闭上眼睛，等天亮。'}
         </p>
+        {me?.knaves && <KnavesPick me={me} act={act} />}
         {s.isHost && !s.isST && <div className="btn-row"><Btn onClick={() => act('dawn')}>立刻天亮</Btn></div>}
         <TravellerJoin s={s} act={act} />
       </Panel>
