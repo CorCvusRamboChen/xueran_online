@@ -333,6 +333,8 @@ function Game({ s, act, ask }) {
   useEffect(() => { setPicked([]); setPickedRole(null); }, [pickKey]);
   // 换阶段就取消正在选人的操作；自由活动开始/结束时也取消，只有"开枪"例外（官方规则：白天任何时候都能开枪）
   useEffect(() => { setMode((m) => (s.phase !== 'day' ? null : s.roam && m !== 'slay' && m !== 'psycho' && m !== 'pelt' && m !== 'gun' ? null : m)); }, [s.phase, !!s.roam]);
+  // 有人提名了 / 开始投票：「提名」的选人模式退出（这时本来也提名不了）。以前一直停在选人面板上，被提名的哥布林看不到「我是哥布林」（2026-11-23）
+  useEffect(() => { if (s.pendingNom || s.vote) setMode((m) => (m === 'nominate' ? null : m)); }, [!!s.pendingNom, !!s.vote]);
 
   const onTap = (p) => {
     if (pickSpec) {
@@ -1224,11 +1226,13 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
     );
   }
 
-  if (mode === 'pelt') return <PeltPanel s={s} act={act} onClose={() => setMode(null)} />;
+  // 停在别的选人模式（开枪、扔东西……）里被提名了：「我是哥布林」也照样显示，不被选人面板盖住
+  const goblinClaim = s.pendingNom && me?.canGoblin ? <GoblinClaim act={act} /> : null;
+  if (mode === 'pelt') return <>{goblinClaim}<PeltPanel s={s} act={act} onClose={() => setMode(null)} /></>;
   if (mode) {
     const M = MODES[mode];
     return (
-      <Panel title={M.title} tone="mot">
+      <>{goblinClaim}<Panel title={M.title} tone="mot">
         <p className="lead">{M.hint}</p>
         {/* 手机上面板盖住了广场：直接在名单里点人（电脑上点广场上的肖像） */}
         <div className="dock-picker"><Picker s={s} options={pickSpec.options} picked={picked} onTap={onTap} /></div>
@@ -1237,7 +1241,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
           <Btn kind="primary" disabled={!picked.length} onClick={confirm}>{M.confirm}</Btn>
           <Btn kind="ghost" onClick={() => setMode(null)}>取消</Btn>
         </div>
-      </Panel>
+      </Panel></>
     );
   }
 
