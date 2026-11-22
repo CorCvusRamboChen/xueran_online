@@ -40,7 +40,7 @@ export function AliveStrip({ s, watching = null, onWatch = null }) {
     <div className="alive-strip" onPointerDown={(e) => e.stopPropagation()}>
       {menuPlayer && <MarkMenu s={s} player={menuPlayer} mark={marks[menu.id]} at={menu} onClose={() => setMenu(null)} />}
       <MadChip me={s.self} />{/* 被洗脑：须知小牌子放在存活条上面（2026-11-20 用户） */}
-      <span className="as-label">存活 {alive.length} / {s.players.length}</span>
+      <span className="as-label">存活 {alive.length} / {s.players.length}{s.chairs?.length ? ` · 空座位 ${s.chairs.length}` : ''}</span>
       <div className="as-faces">
         {s.players.map((p) => {
           const h = houseOf(p.id);
@@ -56,8 +56,20 @@ export function AliveStrip({ s, watching = null, onWatch = null }) {
             </button>
           );
         })}
+        {s.chairs?.map((c) => <ChairToken key={c.id} c={c} size={44} />)}
       </div>
     </div>
+  );
+}
+
+/** 抢椅子（Will 版）的空座位：一把没人坐的椅子。上面是什么不公开（说书人、终局时写出角色）。 */
+export function ChairToken({ c, size = 44 }) {
+  return (
+    <span className={`chair-token${c.evil ? ' evil' : ''}`} style={{ '--ct': `${size}px` }} title={`${c.name}：没有人坐${c.roleName ? `，上面是${c.roleName}` : '，上面是什么不公开'}。入夜前可以换过去（每人整局两次）`}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v8H7zM6 12h12v2H6zM7 14h2v7H7zm8 0h2v7h-2z" fill="currentColor" /></svg>
+      <i>{c.letter}</i>
+      {c.roleName && <b>{c.roleName}</b>}
+    </span>
   );
 }
 

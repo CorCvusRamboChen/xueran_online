@@ -8,6 +8,7 @@ import { useMarks, TAGS, MarkMenu, MarkBadge, LinkLines, LINKS, addLink, useLink
 import { ClockTower, Tree, Lamp, MAP_COLORS as C, INK } from './art/TownArt.jsx';
 import { SCENE_ART } from './art.js';
 import { PeltStack } from './Pelt.jsx';
+import { ChairToken } from './TownMap.jsx';
 
 // 手绘广场（白天 / 夜里两张同构图，夜里淡入）；没有就用线稿。
 // 每个剧本一张：square-day-<剧本>.webp（暗流涌动不带后缀）；还没画的剧本先用暗流涌动的
@@ -24,14 +25,17 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
   }, []);
 
   const n = s.players.length;
+  // 抢椅子（Will 版）：空座位也摆在圈里，放在最后一号和 1 号之间（2026-11-23 用户：要看得到空座位）。判断邻座时跳过空座位
+  const chairs = s.chairs ?? [];
+  const slots = n + chairs.length;
   // 竖屏把圆拉成竖椭圆，用上下的空白：手机上总是拉（中间要放台上的人和举手），平板 / 窄窗口人多时才拉
   const portrait = window.innerHeight > window.innerWidth * 1.2;
   const tall = portrait && window.innerWidth < 600 ? 1.35 : portrait && n > 9 ? 1.25 : 1;
   const h = w * tall;
-  const tk = Math.round(Math.min(52, Math.max(28, ((w * Math.PI * 0.78 * (1 + tall) / 2) / n) * 0.38)));
+  const tk = Math.round(Math.min(52, Math.max(28, ((w * Math.PI * 0.78 * (1 + tall) / 2) / slots) * 0.38)));
   const Rx = 50 - ((tk / 2 + 18) / w) * 100;
   const Ry = 50 - ((tk * 0.6 + 26) / h) * 100;
-  const rad = (i) => ((-90 + (i * 360) / n) * Math.PI) / 180;
+  const rad = (i) => ((-90 + (i * 360) / slots) * Math.PI) / 180;
   const vote = s.vote;
   const voterIdx = vote && vote.idx >= 0 ? s.players.findIndex((p) => p.id === vote.order[vote.idx]) : -1;
   const yes = new Set(vote?.yes ?? []);
@@ -139,6 +143,15 @@ export function Town({ s, picked = [], pickable = null, onTap, children }) {
           <StSeat s={s} pickable={pickable} picked={picked} vote={vote} tk={tk} onTap={onTap} />
         </div>
       )}
+      {chairs.map((c, k) => {
+        const a = rad(n + k);
+        return (
+          <div key={c.id} className="token chair-seat" style={{ left: `${50 + Rx * Math.cos(a)}%`, top: `${50 + Ry * Math.sin(a)}%` }}>
+            <ChairToken c={c} size={tk} />
+            <div className="token-name">{c.name}</div>
+          </div>
+        );
+      })}
       {s.players.map((p, i) => {
         const a = rad(i);
         const can = !pickable || pickable.includes(p.id);

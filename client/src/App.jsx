@@ -3,7 +3,7 @@ import { isEn } from './i18n.js';
 import { createPortal } from 'react-dom';
 import { openMic, login, openSocket, report, listenSpeaking, fromKook, fromBrowserLink, soloMode } from './connect.js';
 import { Town, PaintFilters } from './Town.jsx';
-import { TownMap, AliveStrip } from './TownMap.jsx';
+import { TownMap, AliveStrip, ChairToken } from './TownMap.jsx';
 import { MadChip, MAD_OPEN } from './MadChip.jsx';
 import { CheatSheet, useSheetMode } from './CheatSheet.jsx';
 import { DemonDash, DoorKick } from './KillScenes.jsx';
@@ -38,6 +38,7 @@ const ROLE_ABILITY = Object.fromEntries(Object.entries(ROLE_DEFS).map(([id, r]) 
  * 生死未卜没有男爵也显示了（11-11 用户报的）。没写的剧本宁可不显示，也不显示别的剧本的规则。
  */
 const BOARD_NOTE = {
+  mcw: ['抢椅子：少 1 个爪牙、多 1 个镇民或外来者；恶魔和爪牙都坐在空座位上，所有玩家开局都是善良', '邪恶都在空座位上 · 爪牙−1'],
   tb: ['男爵在场时：外来者 +2、镇民 −2', '男爵在场 外来者+2'],
   bmr: ['教父在场时：外来者 +1 或 −1（说书人决定）', '教父在场 外来者±1'],
   snv: ['方古在场时外来者 +1；亡骨魔在场时外来者 −1', '方古 +1 · 亡骨魔 −1'],
@@ -1972,6 +1973,12 @@ export function Roster({ s, onTap }) {
           );
         })}
       </div>
+      {s.chairs?.length > 0 && (
+        <div className="mg-chairs">
+          <span className="muted">空座位（没人坐，上面是什么不公开）</span>
+          <div>{s.chairs.map((c) => <ChairToken key={c.id} c={c} size={36} />)}</div>
+        </div>
+      )}
       {links.length > 0 && (
         <div className="mg-list">
           {links.map((l) => (

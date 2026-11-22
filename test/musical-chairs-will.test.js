@@ -169,7 +169,7 @@ test('房间：入夜前换座位（真人换到空座位、机器人随便换�
     assert.equal(g.evilOf(g.get('u1')), false, '开局是善良');
     const me = room.viewFor('u1').self.chair;
     assert.equal(me.left, 2);
-    assert.ok(room.viewFor('u1').chairs >= 2);
+    assert.ok(room.viewFor('u1').chairs.length >= 2 && room.viewFor('u1').chairs.every((c) => !c.roleName), '空座位看得到，上面是什么看不到');
     room.chairAsk.picks = {}; // 这条测真人：机器人这晚都不换（不然可能先换走那个座位）
     const k = g.chairs.findIndex((c) => c.role === 'organgrinder');
     await room.act('u1', 'chair', { target: `chair:${k}` });

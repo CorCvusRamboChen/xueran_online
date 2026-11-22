@@ -657,7 +657,6 @@
  "说书人 · {0}": "Storyteller · {0}",
  "AI 说书人": "AI Storyteller",
  "处决台上": "On the block",
- "存活 {0} / {1}": "Alive {0} / {1}",
  "{0}号 {1}{2}（右键做标记）": "#{0} {1}{2} (right-click to mark)",
  "· 在{0}{1}": "· in {0}{1}",
  "（锁门）": ", locked",
@@ -816,5 +815,13 @@
  "醉酒到黄昏": "Drunk until dusk",
  "闭眼投票 · 票数保密": "Eyes closed · tally secret",
  "闭眼投票": "Eyes closed",
- "谁举了手保密": "Who voted is secret"
+ "谁举了手保密": "Who voted is secret",
+ "抢椅子：少 1 个爪牙、多 1 个镇民或外来者；恶魔和爪牙都坐在空座位上，所有玩家开局都是善良": "Musical Chairs: 1 fewer Minion, 1 more Townsfolk or Outsider; the Demon and Minions sit on empty seats, and every player starts good",
+ "邪恶都在空座位上 · 爪牙−1": "Evil on empty seats · Minion −1",
+ "空座位（没人坐，上面是什么不公开）": "Empty seats (nobody sits there; what's on them is secret)",
+ "存活 {0} / {1}{2}": "Alive {0} / {1}{2}",
+ "· 空座位 {0}": " · Empty seats {0}",
+ "{0}：没有人坐{1}。入夜前可以换过去（每人整局两次）": "{0}: nobody sits here{1}. You can swap onto it before nightfall (twice per game)",
+ "，上面是{0}": ", it holds the {0}",
+ "，上面是什么不公开": "; what's on it is secret"
 }

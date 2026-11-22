@@ -4283,7 +4283,8 @@ export class Room {
       aliveCount: g.visAliveCount() + hushed.size, // 看起来活着的人数：假死的僵怖算死人，不然一看人数就知道谁是僵怖
       // 街头风琴手：秘密投票那天，处决台上是谁、几票都不公开（说书人看得到）
       ...(this.secretDay === g.day && !isST && !this.ended ? { block: null, blockVotes: 0, blockTied: [] } : { block: g.block, blockVotes: g.blockVotes, blockTied: g.blockTied ?? [] }),
-      chairs: g.chairs ? g.chairs.length : null, // 抢椅子：有几个空座位（上面是什么不公开）
+      // 抢椅子（Will 版）：空座位（2026-11-23 用户：要看得到）。上面是什么不公开，说书人和终局时才看得到
+      chairs: g.chairs ? g.chairs.map((c, k) => ({ id: `chair:${k}`, name: g.chairName(k), letter: String.fromCharCode(65 + k), ...(isST || this.ended ? { roleName: ROLES[c.role]?.name ?? '', evil: !!c.evil } : {}) })) : null,
       chairUntil: this.chairAsk?.until ?? null,
       executedToday: g.executedToday,
       players: g.players.map((p) => ({

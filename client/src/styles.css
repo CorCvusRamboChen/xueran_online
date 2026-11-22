@@ -2337,3 +2337,18 @@ span.lr-newbie { cursor: default; }
 .mad-chip.loose { position: absolute; left: 72px; bottom: 12px; z-index: 950; } /* 没有存活条时也放在左下角同一个位置 */
 .scene:has(.alive-strip .mad-chip) .mad-chip.loose { display: none; } /* 有存活条：用存活条上面那个 */
 @media (max-width: 859px) { .mad-chip { font-size: 12px; } .mad-chip.loose { left: 8px; bottom: 8px; } }
+
+/* 抢椅子（Will 版）的空座位：存活条、座位圈下面（2026-11-23 用户：要看得到空座位） */
+.chair-token { position: relative; flex: none; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: var(--ct); height: var(--ct);
+  border: 2px dashed #f4f4f0; background: rgba(16, 18, 18, .92); color: #f4f4f0; cursor: help; box-shadow: 0 3px 10px rgba(0, 0, 0, .5); }
+.chair-token svg { width: 60%; height: 60%; }
+.chair-token i { position: absolute; left: -3px; top: -5px; background: #111; color: #fff; font: 900 9px/1.4 var(--sans); padding: 0 3px; font-style: normal; }
+.chair-token b { position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%); white-space: nowrap; font: 900 9px/1.3 var(--sans); padding: 0 3px; background: var(--int); color: #fff; }
+.chair-token.evil b { background: var(--phy); }
+.alive-strip .chair-token { margin-bottom: 14px; }
+@media (max-width: 859px) { .alive-strip .chair-token { width: 24px; height: 24px; } }
+.mg-chairs { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; font-size: 12px; }
+.mg-chairs > div { display: flex; gap: 10px; flex-wrap: wrap; padding-bottom: 12px; }
+.chair-seat { cursor: help; }
+.chair-seat .chair-token { margin: 0 auto; }
+.chair-seat .token-name { opacity: .85; }
