@@ -196,6 +196,9 @@ export const MEZ_WORDS_EASY = ['下雨', '月亮', '生日', '蛋糕', '足球',
 export const MEZ_WORDS = ['琥珀', '灯塔', '狐狸', '樱桃', '风筝', '珊瑚', '萤火虫', '冰糖', '望远镜', '海螺', '蒲公英', '雪橇', '石榴', '鹦鹉', '指南针', '薄荷',
   '仙人掌', '火烈鸟', '万花筒', '橄榄', '企鹅', '彩虹', '棉花糖', '向日葵', '水晶球', '松鼠', '秋千', '柠檬', '热气球', '章鱼'];
 
+// 牙噶巴卜的暗号（2026-11-22）。官方建议用普通、像真话的短语：太怪的一说就露馅，或者根本没机会说；常说的又会天天死人。
+export const YAGG_PHRASES = ['说实话', '相信我', '有道理', '不对劲', '我敢保证', '你仔细想想', '这很合理', '我跟你们说', '没毛病', '先别急'];
+
 export const BOFFIN_POOL = ['empath', 'oracle', 'noble', 'shugenja', 'librarian', 'washerwoman', 'investigator', 'chef', 'balloonist', 'undertaker',
   'clockmaker', 'flowergirl', 'towncrier', 'mathematician', 'soldier', 'mayor', 'slayer', 'savant', 'fisherman'];
 /** 恶魔拿到也能拿来证明自己的：信息具体、别人能核对（士兵、镇长、杀手、博学者、渔夫这类恶魔拿了也证明不了什么）。 */
@@ -204,7 +207,7 @@ const BOFFIN_PROOF = new Set(['washerwoman', 'librarian', 'investigator', 'chef'
 // ───────────── AI 配板 ─────────────
 // 分数是经验估计（官方没有公式）：正数对善良有利，负数对邪恶有利，只用来比较同人数的几套配板。
 // 2026-11-11：混合剧本（冒名钓鱼、生死未卜、人人可玩）里暗流涌动、黯月初升的角色以前没有权重（按 0 算），AI 配板等于没在平衡，补上
-const DEMON_W = { vortox: 3.0, nodashii: 2.6, vigormortis: 2.4, fanggu: 2.2, imp: 2.3, pukka: 2.0, zombuul: 2.2, shabaloth: 2.3, po: 2.2, leviathan: 2.0, lleech: 2.4 };
+const DEMON_W = { yaggababble: 2.2, vortox: 3.0, nodashii: 2.6, vigormortis: 2.4, fanggu: 2.2, imp: 2.3, pukka: 2.0, zombuul: 2.2, shabaloth: 2.3, po: 2.2, leviathan: 2.0, lleech: 2.4 };
 const MINION_W = { pithag: 1.8, witch: 1.8, eviltwin: 1.6, cerenovus: 1.4, harpy: 1.5, boffin: 1.4, boomdandy: 1.0, scarletwoman: 1.2, baron: 0.8,
   poisoner: 1.7, spy: 1.3, widow: 1.7, godfather: 1.6, assassin: 1.5, devilsadvocate: 1.2, mastermind: 1.0, marionette: 1.3, goblin: 0.9, fearmonger: 1.3 };
 const GOOD_W = {
@@ -388,6 +391,10 @@ export const SNV_METHODS = {
     }
     this.pixie = {};          // 小精灵：id → { role 被告知的镇民角色, target 那个镇民是谁（可能没有：醉酒时给了不在场的）, mad 疯狂过没有 }
     this.mez = inPlay.has('mezepheles') ? { word: this.st.choose('mezWord', this.mezEasy ? MEZ_WORDS_EASY : MEZ_WORDS), used: false, hit: null } : null; // 灵言师的关键词
+    this.yagg = inPlay.has('yaggababble') ? { phrase: this.st.choose('yaggPhrase', YAGG_PHRASES), day: 0, said: 0, total: 0 } : null; // 牙噶巴卜的暗号；said：day 那天说了几次
+    this.doomUsed = [];       // 末日预言者（传奇角色）：用过的人（每人每局一次）
+    this.duchess = null;      // 公爵夫人（传奇角色）：{ day, ids } 这天报名拜访的人
+    this.alsaahirDay = {};    // 戏法师（谁都可以声称）：id → 哪天猜过（每人每天一次）
     this.execHist = [];       // 处决记录（政客终局判责任用）：{ day, id, by 提名者, voters }
     this.twinSync(null);
   },
@@ -407,6 +414,96 @@ export const SNV_METHODS = {
     this.record('st', `${this.tag(id)} 说出了灵言师的关键词「${m.word}」：今晚变成邪恶`);
     return true;
   },
+  // ───────────────────────── 2026-11-22 小剧本的新角色 ─────────────────────────
+  /**
+   * 牙噶巴卜：收音页（或广场）转写出的一句话。是牙噶巴卜本人在白天说的，就数里面有几次暗号（一句里说两次算两次）。
+   * 官方：自己说出来、夹在别的话里都算；醉酒中毒时说的也算，看夜里他清不清醒。返回这句数到几次。
+   */
+  yaggHeard(id, text, alt = null) { // alt：暗号的另一种说法（英文桌说的是英文译文）
+    const y = this.yagg;
+    const p = this.get(id);
+    if (!y || this.phase !== 'day' || !p || p.role !== 'yaggababble' || !p.alive) return 0;
+    const clean = (x) => String(x ?? '').replace(/[\s，。！？、,.!?…「」“”"'：:；;（）()-]/g, '');
+    const hay = clean(text).toLowerCase();
+    let n = 0;
+    for (const key of [...new Set([clean(y.phrase), clean(alt).toLowerCase()])].filter(Boolean)) {
+      for (let i = hay.indexOf(key); i >= 0; i = hay.indexOf(key, i + key.length)) n++;
+      if (n) break;
+    }
+    if (!n) return 0;
+    if (y.day !== this.day) { y.day = this.day; y.said = 0; }
+    y.said += n; y.total += n;
+    this.record('st', `${this.tag(id)} 公开说了暗号「${y.phrase}」${n > 1 ? ` ${n} 次` : ''}（今天第 ${y.said} 次）`);
+    return n;
+  },
+  /** 机器人牙噶巴卜：说不了话，按一个真人恶魔大概会说的次数算（0–2 次，多半 1 次）。 */
+  yaggBotSay(id) {
+    const y = this.yagg;
+    const p = this.get(id);
+    if (!y || !p?.alive || p.role !== 'yaggababble' || this.phase !== 'day') return 0;
+    const r = this.rng(); const n = r < 0.3 ? 0 : r < 0.85 ? 1 : 2;
+    if (y.day !== this.day) { y.day = this.day; y.said = 0; }
+    y.said += n; y.total += n;
+    if (n) this.record('st', `机器人牙噶巴卜 ${this.tag(id)} 今天「说了」${n} 次暗号`);
+    return n;
+  },
+
+  /**
+   * 戏法师：白天公开猜谁是恶魔、谁是爪牙（谁都可以声称，每人每天一次）。只有活着、没失效的真戏法师猜得完全对才算：
+   * 所有恶魔（死了的也要猜）和所有爪牙都要点到、不能多点，善良获胜。返回 { won }。
+   */
+  alsaahirGuess(uid, demons = [], minions = []) {
+    if (this.phase !== 'day') throw new Error('只能在白天猜');
+    const p = this.get(uid);
+    if (!p) throw new Error('你不在游戏中');
+    if (!this.visAlive(p)) throw new Error('死亡的玩家不能用这个能力');
+    if (this.alsaahirDay[uid] === this.day) throw new Error('你今天已经猜过了');
+    const ds = [...new Set(demons)]; const ms = [...new Set(minions)];
+    if (!ds.length) throw new Error('至少要猜一个恶魔');
+    if ([...ds, ...ms].some((id) => !this.get(id))) throw new Error('只能猜这局的玩家');
+    if (ds.some((id) => ms.includes(id))) throw new Error('同一个人不能既是恶魔又是爪牙');
+    this.alsaahirDay[uid] = this.day;
+    const truth = (t) => this.players.filter((q) => !q.traveller && team(q) === t).map((q) => q.id).sort().join();
+    const right = [...ds].sort().join() === truth('demon') && [...ms].sort().join() === truth('minion');
+    const real = this.abilityOf(p) === 'alsaahir';
+    const list = (ids) => ids.map((id) => this.name(id)).join('、') || '没有';
+    this.record('slay', `${this.tag(uid)} 以戏法师的身份公开猜：恶魔 ${list(ds)}；爪牙 ${list(ms)} → ${right ? (real ? '全对' : '全对，但他不是戏法师') : '不对'}`);
+    if (!real || !right) return { won: false };
+    if (this.snvBroken(p)) { this.flag(p, '戏法师失效：猜对了也没有效果'); return { won: false }; }
+    this.setWinner('good', '戏法师猜中了所有的恶魔和爪牙');
+    return { won: true };
+  },
+
+  /** 末日预言者（传奇角色）：活人不少于 4 个时，活着的玩家每局可以公开用一次，说书人让一名和他同阵营的存活玩家死亡。 */
+  doomsay(uid) {
+    if (!SCRIPTS[this.script]?.doomsayer) throw new Error('这个剧本没有末日预言者');
+    if (this.phase !== 'day') throw new Error('只能在白天用');
+    const p = this.get(uid);
+    if (!p || !this.visAlive(p)) throw new Error('只有活着的玩家能用');
+    if (this.alive().filter((q) => this.visAlive(q)).length < 4) throw new Error('存活的玩家不到 4 个，不能再用末日预言者');
+    if (this.doomUsed.includes(uid)) throw new Error('你这局已经用过了');
+    this.doomUsed.push(uid);
+    const v = this.st.doomVictim(uid);
+    this.record('slay', `${this.tag(uid)} 公开使用末日预言者${v ? `：说书人让 ${this.tag(v.id)} 死亡` : '：没有人能死'}`);
+    if (!v) return { victim: null, died: false };
+    const res = this.snvKill(v, 'doomsayer', this.dayMessages());
+    this.checkWinner();
+    return { victim: v.id, died: res === 'died' };
+  },
+
+  /** 公爵夫人（传奇角色）：白天报名 / 取消拜访。黄昏时正好三人报名，当晚才拜访。 */
+  duchessVisit(uid, on = true) {
+    if (!SCRIPTS[this.script]?.duchess) throw new Error('这个剧本没有公爵夫人');
+    if (this.phase !== 'day') throw new Error('只能在白天报名');
+    if (!this.get(uid)) throw new Error('你不在游戏中');
+    if (this.duchess?.day !== this.day) this.duchess = { day: this.day, ids: [] };
+    const ids = this.duchess.ids;
+    if (on && !ids.includes(uid)) ids.push(uid);
+    if (!on) this.duchess.ids = ids.filter((x) => x !== uid);
+    return this.duchess.ids;
+  },
+  duchessToday() { return this.duchess?.day === this.day ? this.duchess.ids : []; },
+
   /** 魔像整局只能提名一次：第二次就不让提（在记下提名之前查）。 */
   golemBlocked(a) { return this.has(a, 'golem') && a.role === 'golem' && !!this.used[`golem-${a.id}`]; },
   /** 魔像提名：被提名的人不是恶魔就死（陌客可能被当作恶魔）。失效时不死，但这一次也用掉了。返回死没死。 */
@@ -705,7 +802,7 @@ export const SNV_METHODS = {
       madness: '因疯狂被处决', storyteller: '说书人判定死亡', starpass: '恶魔自杀（传位）', slayer: '被猎手射杀',
       harpy: '没能疯狂地证明，被鹰身女妖的能力杀死', boomdandy: '死于炸弹人的炸弹',
       assassin: '被刺客刺杀', godfather: '被教父杀死', gambler: '赌错了角色', gossip: '因造谣者的声明而死', tinker: '修补匠突然死亡',
-      golem: '被魔像提名，不是恶魔所以死了', lleech: '宿主死了，痢蛭随之死亡', riot: '被提名，死于暴乱', psychopath: '被精神病患者杀死',
+      golem: '被魔像提名，不是恶魔所以死了', doomsayer: '被末日预言者带走', lleech: '宿主死了，痢蛭随之死亡', riot: '被提名，死于暴乱', psychopath: '被精神病患者杀死',
       acrobat: '杂技演员选中的人醉酒或中毒了', lycanthrope: '被半兽人杀死',
       alhadikhia: '被哈迪寂亚选中，选择了死去', alhadikhia3: '被哈迪寂亚选中，三个人都选了活，一起死去', moonchild: '被月之子带走', grandmother: '孙子被恶魔杀死，祖母随之而去',
     }[cause] ?? cause;
@@ -1458,6 +1555,39 @@ ${this.grimoire(w.id)}
           if (p.role === 'butler') this.butlerMaster = t.id;
           say(p, `你的主人是 ${this.name(t.id)}。明天只有他举手时你才能投票。`);
         } break;
+        case 'yaggababble': for (const p of this.players.filter((q) => q.role === 'yaggababble' && q.alive)) {
+          const y = this.yagg;
+          if (!y) continue;
+          if (!y.told) { y.told = true; tell(p, `你的暗号是「**${y.phrase}**」。白天你每公开说一次（夹在别的话里也算），当晚就可能有一名玩家死亡。要开着收音页说，说书人才听得到。`, `你得知了一段短语：「**${y.phrase}**」。`); }
+          if (first) continue;
+          const said = y.day === this.day ? y.said : 0;
+          y.said = 0;
+          if (!said) continue;
+          if (this.blocked === p.id) { this.record('st', '牙噶巴卜被驱魔人选中：今晚不会因他死人'); continue; } // 相克（官方）
+          if (broken(p)) { this.flag(p, `牙噶巴卜失效：今天说的 ${said} 次暗号都没有让人死`); continue; }
+          if (this.pitNight?.suppress) { this.record('st', '今晚的死亡由说书人决定：暗号没有让人死'); continue; }
+          for (const v of this.st.yaggVictims(said)) this.demonHit(p, v, messages);
+        }
+        // 疯子以为自己是牙噶巴卜：首夜也「得知」一段暗号（换一段，和真的不一样），之后说了也没用
+        if (first) for (const l of this.players.filter((q) => q.role === 'lunatic' && q.shownRole === 'yaggababble' && q.alive)) {
+          const fake = this.st.choose('yaggPhraseLunatic', YAGG_PHRASES.filter((x) => x !== this.yagg?.phrase), { who: l.id });
+          say(l, `你的暗号是「**${fake}**」。白天你每公开说一次（夹在别的话里也算），当晚就可能有一名玩家死亡。要开着收音页说，说书人才听得到。`);
+          this.record('st', `疯子 ${this.tag(l.id)} 以为自己是牙噶巴卜，拿到的暗号是「${fake}」（没有效果）`);
+        }
+        break;
+        case 'duchess': {
+          const ids = this.duchessToday();
+          this.duchess = null;
+          if (first || ids.length !== 3) break;
+          const vs = ids.map((id) => this.get(id)).filter(Boolean);
+          const truth = vs.filter((v) => this.evilOf(v)).length;
+          const { who, n } = this.st.duchessFalse(vs, truth);
+          for (const v of vs) {
+            const k = v.id === who.id ? n : truth;
+            tell(v, `你拜访了公爵夫人：你们三人之中有 **${k}** 个是邪恶的。（三人里有一人拿到的数是错的）`, `你得知了一个数字：**${k}**。`);
+          }
+          this.record('st', `公爵夫人：${vs.map((v) => this.tag(v.id)).join('、')} 拜访，其中 ${truth} 个邪恶；${this.tag(who.id)} 拿到错的数 ${n}`);
+        } break;
         case 'mezepheles': for (const p of this.holders('mezepheles')) {
           const m = this.mez;
           if (!m) continue;
@@ -1969,7 +2099,9 @@ ${this.grimoire(w.id)}
     const kind = GUNS[this.abilityOf(s)] ?? (this.extraAbility(s) === 'slayer' ? 'demon' : null);
     if (kind && s.alive && !this.used[`slay-${s.id}`]) {
       this.used[`slay-${s.id}`] = true;
-      const target = kind === 'anyone' || (kind === 'evil' ? this.evilOf(t) : this.seenDemon(t, '猎手开枪'));
+      // 相克（官方）：猎手射中痢蛭的宿主，宿主死亡
+      const host = kind === 'demon' && this.lleechHost === t.id && this.players.some((q) => q.role === 'lleech' && q.alive);
+      const target = kind === 'anyone' || host || (kind === 'evil' ? this.evilOf(t) : this.seenDemon(t, '猎手开枪'));
       if (!this.abilityOn(s, this.extraAbility(s) === 'slayer' ? 'slayer' : this.abilityOf(s))) { if (target) this.flag(s, '枪失效了，打中也没有效果'); } else if (t.alive && target) hit = true;
     }
     this.log.push(`${this.name(s.id)} 对 ${this.name(t.id)} 开枪 → ${hit ? '命中' : '无事发生'}`);

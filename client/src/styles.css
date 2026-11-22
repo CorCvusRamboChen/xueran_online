@@ -932,6 +932,11 @@ body:has(.lobby) { padding-top: 0; } /* 大厅背景图铺到灵动岛底下，�
 .gossip-form { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; padding: 8px; border: 1px solid var(--mot); }
 .gossip-form select, .preset-select { background: #111; color: var(--paper); border: 1px solid var(--line); padding: 6px; font: 400 13px var(--sans); }
 .gossip-form p { margin: 0; font-size: 12px; }
+/* 戏法师：每人一行，点「恶魔」「爪牙」 */
+.alsaahir-list { list-style: none; margin: 4px 0; padding: 0; max-height: 50vh; overflow: auto; }
+.alsaahir-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); font: 400 13px var(--sans); }
+.alsaahir-list .btn-row { flex-wrap: nowrap; }
+.yagg-note { align-self: center; font: 700 12px var(--sans); }
 .gossip-form textarea { background: #111; color: var(--paper); border: 1px solid var(--line); padding: 6px; font: 400 14px/1.5 var(--sans); resize: vertical; }
 .moonchild-pnl { margin-bottom: 10px; }
 

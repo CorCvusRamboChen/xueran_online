@@ -539,6 +539,53 @@ export class Storyteller {
     return v;
   }
 
+  /**
+   * 牙噶巴卜（2026-11-22，集石百科）：他今天白天公开说了 said 次暗号，今晚就可能死 said 个人，死谁由说书人选，也可以少杀。
+   * 每一次掷「杀不杀」（善良领先时多杀）；杀谁照聪明的恶魔挑（读场：杀被信任的、报了信息的，留被怀疑的背锅），不杀邪恶。
+   */
+  yaggVictims(said) {
+    const g = this.g;
+    const t = this.tableOrRules();
+    const out = [];
+    for (let i = 0; i < said; i++) {
+      const b = this.balance();
+      if (!this.roll('yaggKill', { balance: b }, { b, nth: i + 1, said })) continue;
+      const can = g.alive().filter((q) => !q.apparentDead && !g.evilOf(q) && !out.includes(q) && !g.safeFrom(q, 'demon'));
+      if (!can.length) break;
+      const v = this.draw('yaggVictim', can, (q) => { const f = tableFeatures(t, q.id); return { hits: this.hits(q.id), trusted: f.trusted ?? 0, info: f.info ?? 0, suspected: f.suspected ?? 0 }; }, { b });
+      out.push(v);
+    }
+    this.note(said ? `牙噶巴卜今天说了 ${said} 次暗号：今晚${out.length ? `让 ${out.map((q) => g.name(q.id)).join('、')} 死亡` : '没有让人死亡'}` : '牙噶巴卜今天没说暗号：今晚没人因他死亡');
+    return out;
+  }
+
+  /**
+   * 末日预言者（传奇角色）：uid 公开用了一次，说书人挑一名和他同阵营的存活玩家死亡（可以是他自己）。
+   * 官方建议：别拿它杀恶魔，除非游戏还能继续（红唇女郎能接）；能不挑新手就不挑。
+   */
+  doomVictim(uid) {
+    const g = this.g;
+    const me = g.get(uid);
+    const evil = g.evilOf(me);
+    const heir = g.players.some((q) => q.alive && q.role === 'scarletwoman' && !g.snvBroken?.(q)) && g.alive().length >= 5;
+    let can = g.alive().filter((q) => !q.apparentDead && g.evilOf(q) === evil && (ROLES[q.role].team !== 'demon' || heir));
+    if (!can.length) can = g.alive().filter((q) => g.evilOf(q) === evil);
+    if (!can.length) return null;
+    const v = this.draw('doomVictim', can, (q) => ({ hits: this.hits(q.id), self: q.id === uid ? 1 : 0 }), { who: uid });
+    this.note(`${g.name(uid)} 用了末日预言者：说书人选 ${g.name(v.id)}（同为${evil ? '邪恶' : '善良'}）死亡`);
+    return v;
+  }
+
+  /** 公爵夫人（传奇角色）：三名拜访者里谁拿错的数，和那个错的数（0–3 里随便一个不对的，尽量只差一）。 */
+  duchessFalse(visitors, truth) {
+    const who = this.choose('duchessFalse', visitors);
+    const near = [truth - 1, truth + 1].filter((n) => n >= 0 && n <= 3);
+    const pool = near.length ? near : [0, 1, 2, 3].filter((n) => n !== truth);
+    const n = this.choose('duchessNumber', pool, { truth });
+    this.note(`公爵夫人：三名拜访者里有 ${truth} 个邪恶，${this.g.name(who.id)} 拿到错的数 ${n}`);
+    return { who, n };
+  }
+
   /** 修补匠：随时可能死。善良领先时更容易死；剩的人少时绝不让他的死结束游戏。 */
   tinkerDies(p) {
     const g = this.g;

@@ -319,6 +319,11 @@ const EXP = {
     ability: '被提名的玩家死亡，但他可以立刻再次发起提名（第三天白天他必须这么做）。在第三个白天结束时，邪恶阵营获胜。[所有邪恶阵营都是暴乱]' },
   mezepheles: { name: '灵言师', en: 'Mezepheles', team: 'minion', firstNight: 1, otherNight: 1,
     ability: '在你的首个夜晚，你会得知一个关键词。第一个说出这个关键词的善良玩家，当晚变成邪恶阵营。（要他开着收音页说才听得到）' },
+  // 2026-11-22 小剧本 Nobody Fucking Move、Chatastrophe 用到的两个（集石百科：戏法师、牙噶巴卜）
+  alsaahir: { name: '戏法师', en: 'Alsaahir', team: 'townsfolk', firstNight: 0, otherNight: 0,
+    ability: '每个白天，你可以公开进行一次谁是爪牙，谁是恶魔的猜测。如果你猜对，善良阵营获胜。' },
+  yaggababble: { name: '牙噶巴卜', en: 'Yaggababble', team: 'demon', firstNight: 1, otherNight: 1,
+    ability: '在你的首个夜晚，你会得知一段秘密短语。每次你在白天公开说出这段短语，当天便可能会有一名玩家在这之后死亡。（要开着收音页说才听得到）' },
 };
 
 // ───────────────────────── 失忆者专用的原创能力 ─────────────────────────
@@ -389,7 +394,7 @@ export const SCRIPT_TRAVELLERS = {
   mo: ['deviant', 'bonecollector', 'barista', 'harlot', 'butcher'],
 };
 // 传奇角色（集石百科「传奇角色」页）：不是玩家拿的角色，是说书人给这一局加的全场规则；会告诉所有人加了哪些。
-// 剧本里用 sentinel / ivory / fibbin 标记（夜半狂欢：哨兵、圣洁之魂；裁缝与暴乱：骗人精）
+// 剧本里用 sentinel / ivory / fibbin / doomsayer / duchess / bootlegger 标记（夜半狂欢：哨兵、圣洁之魂；裁缝与暴乱：骗人精；小剧本：末日预言者、公爵夫人、私酒贩子）
 export const FABLED = {
   sentinel: { name: '哨兵', en: 'Sentinel', flag: 'sentinel', ability: '可能会额外增加或减少一个外来者。',
     detail: '开局配置时，说书人三选一：多 1 个外来者（少 1 个镇民）、少 1 个外来者（多 1 个镇民），或者不变。外来者人数因此说不准，邪恶伪装外来者更安全。' },
@@ -397,6 +402,13 @@ export const FABLED = {
     detail: '第一次有人转成邪恶照常生效；已经多出一名邪恶后，再有人要转成邪恶就不转（保持善良）。有邪恶转回善良时，限制重新放开。交换阵营不算多出邪恶。' },
   fibbin: { name: '骗人精', en: 'Fibbin', flag: 'fibbin', ability: '每局游戏限一次，一名善良玩家可能会得知错误的信息。',
     detail: '说书人整局最多用一次：让某个善良玩家拿到一条假信息。用掉以后，所有善良玩家的信息都按正常处理。' },
+  // 2026-11-22（集石百科「末日预言者」「公爵夫人」；私酒贩子是剧本卡上写的自定义规则）
+  doomsayer: { name: '末日预言者', en: 'Doomsayer', flag: 'doomsayer', ability: '如果大于等于四名玩家存活，每名当前存活的玩家可以公开要求你杀死一名与他阵营相同的玩家（每名玩家限一次）。',
+    detail: '白天任何时候，存活的玩家可以点「末日预言者」公开使用（每人每局一次，活人不到 4 个就不能用）。说书人挑一名和他同阵营的存活玩家，那人当场死亡（可能是他自己）。' },
+  duchess: { name: '公爵夫人', en: 'Duchess', flag: 'duchess', ability: '每个白天，三名玩家可以一起拜访你。当晚*，他们会得知他们之中有几个是邪恶的，但其中一人的信息是错的。',
+    detail: '白天点「拜访公爵夫人」报名，黄昏时正好三个人报名才算数（多了少了今晚都不拜访）。当晚三人各自得知三人里有几个邪恶，其中一人（说书人选）的数字是错的。' },
+  bootlegger: { name: '私酒贩子', en: 'Bootlegger', flag: 'bootlegger', ability: '这个剧本有自定义的角色或规则。',
+    detail: '本剧本的自定义规则：炼金术士拿到的是一个不在场的爪牙的能力（这里本来就这样做）。' },
 };
 /** 这个剧本加了哪些传奇角色（id 列表）。 */
 export const fabledOf = (script) => Object.keys(FABLED).filter((id) => SCRIPTS[script]?.[FABLED[id].flag]);
@@ -453,6 +465,25 @@ export const SCRIPTS = {
     roles: ['clockmaker', 'investigator', 'empath', 'chambermaid', 'artist', 'sage', 'drunk', 'klutz', 'scarletwoman', 'baron', 'imp'] },
   luf: { id: 'luf', name: '窃窃私语', en: 'Laissez un Faire', engine: 'snv', teensy: true, players: [5, 6],
     roles: ['balloonist', 'savant', 'amnesiac', 'fisherman', 'artist', 'cannibal', 'mutant', 'lunatic', 'widow', 'goblin', 'leviathan'] },
+  // 2026-11-22 又加六个 5–6 人小剧本（角色表取自 botcscripts.com 的剧本 JSON；相克照官方 Djinn 表）
+  // Over the River（Andrew Nathenson）：官方出的第三个小剧本（bloodontheclocktower.com/teensyville）
+  otr: { id: 'otr', name: '去外婆家', en: 'Over the River', engine: 'snv', teensy: true, players: [5, 6],
+    roles: ['grandmother', 'clockmaker', 'innkeeper', 'snakecharmer', 'professor', 'slayer', 'lunatic', 'recluse', 'godfather', 'spy', 'imp'] },
+  // A Lleech of Distrust v2.1.1（OJ，官方推荐）：botcscripts 收藏最多的小剧本。相克：猎手射中痢蛭的宿主，宿主死亡
+  lod: { id: 'lod', name: '疑心痢蛭', en: 'A Lleech of Distrust', engine: 'snv', teensy: true, players: [5, 6], sentinel: true,
+    roles: ['pixie', 'undertaker', 'exorcist', 'fisherman', 'slayer', 'juggler', 'drunk', 'lunatic', 'devilsadvocate', 'marionette', 'lleech'] },
+  // Late Night Drive By v1.6.0（Aero，官方推荐）：两个恶魔
+  lnd: { id: 'lnd', name: '深夜飞车', en: 'Late Night Drive By', engine: 'snv', teensy: true, players: [5, 6],
+    roles: ['snakecharmer', 'lycanthrope', 'slayer', 'fool', 'alchemist', 'minstrel', 'tinker', 'recluse', 'golem', 'godfather', 'psychopath', 'scarletwoman', 'pukka', 'imp'] },
+  // Race to the Bottom v1.2.1（Evin Donohoe，官方推荐）：涡流 + 传奇角色末日预言者、哨兵
+  rtb: { id: 'rtb', name: '逐底竞赛', en: 'Race to the Bottom', engine: 'snv', teensy: true, players: [5, 6], sentinel: true, doomsayer: true,
+    roles: ['clockmaker', 'empath', 'dreamer', 'slayer', 'courtier', 'mayor', 'lunatic', 'klutz', 'scarletwoman', 'spy', 'vortox'] },
+  // Nobody Fucking Move v1.0.1（Brockwell，当月推荐剧本）：传奇角色私酒贩子（自定义规则：炼金术士拿不在场的爪牙能力）、公爵夫人、哨兵
+  nfm: { id: 'nfm', name: '谁都别动', en: 'Nobody Fucking Move', engine: 'snv', teensy: true, players: [5, 6], sentinel: true, duchess: true, bootlegger: true,
+    roles: ['snakecharmer', 'alsaahir', 'slayer', 'philosopher', 'alchemist', 'virgin', 'heretic', 'damsel', 'klutz', 'psychopath', 'goblin', 'boomdandy', 'pukka', 'vortox'] },
+  // Chatastrophe v1.1.0（TieGuyTravis）：2025 Beardy Does Teensies 比赛冠军。牙噶巴卜要听语音：全员收音。相克：洗脑师可以让人疯狂地证明自己是哥布林
+  chat: { id: 'chat', name: '话多成灾', en: 'Chatastrophe', engine: 'snv', teensy: true, players: [5, 6], sentinel: true,
+    roles: ['highpriestess', 'savant', 'artist', 'fisherman', 'juggler', 'amnesiac', 'lunatic', 'drunk', 'cerenovus', 'goblin', 'yaggababble', 'lleech'] },
   // 2025 剧本世界杯冠军（作者 TrashWarlock）。灯神规则：7 号座位没有人坐，由说书人替它做决定，每局可以替它发言一次（seat7）。
   // players 是真人（含机器人）的人数，开局时再插进 7 号空座；旅行者没有做。
   bs7: { id: 'bs7', name: '七步成诗', en: 'The Ballad of Seat 7', engine: 'snv', seat7: true, players: [6, 14],

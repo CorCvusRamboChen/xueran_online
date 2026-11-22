@@ -3,6 +3,7 @@
 import { Game, shuffle, balancedTB, setupScoreTB, rollRoles, rollRagnarok } from '../engine/game.js';
 import { balancedBMR, setupScore, rollBMR } from '../engine/bmr.js';
 import { balancedSNV, setupScoreSNV, rollSNV, rollTeensy, rollMixed, balancedMixed, MAX_DECLARES, AMNESIAC_DAY, seatMarionette, rollRiot, swapMoDemon } from '../engine/snv.js';
+import { translate } from '../shared/i18n/server.js';
 import { TRAVELLER_IDS, SCRIPT_TRAVELLERS, travellersOf, ROLES, SCRIPTS, TEAM_NAME, DISTRIBUTION, MIN_PLAYERS, MAX_PLAYERS, isEvilRole, engineOf, inScript, rolesOf, playersOf, ragnarokWolves } from '../engine/roles.js';
 import { getMap, houseAt, houseCenter, doorPoint, pathLength, positionAt, speedOf } from '../shared/map.js';
 import { CHARACTERS, CHARACTER_IDS } from '../shared/characters.js';
@@ -363,6 +364,9 @@ export class Room {
       case 'butcherHand': this.butcherHand(uid, !!p.up); break;
       case 'laugh': this.laugh(uid, !!p.up); break;
       case 'psycho': this.psycho(uid, p.target); break;
+      case 'alsaahir': this.alsaahir(uid, p.demons, p.minions); break;
+      case 'doomsayer': this.doomsayer(uid); break;
+      case 'duchess': this.duchessVisit(uid, p.on !== false); break;
       case 'rps': this.rpsHand(uid, p.hand); break;
       case 'hand': this.hand(uid, !!p.up); break;
       case 'history': return { games: this.history?.list(this.guildId) ?? [] };
@@ -1497,8 +1501,8 @@ export class Room {
 
   // ───────────── 局势和政客：听大家的发言（2026-11-16 用户要的）─────────────
   /** 有灵言师、将军或政客的剧本：每天给所有活着的真人发收音（谁都收到，所以不暴露谁是什么角色）。 */
-  listenAll(g) { return g?.engine === 'snv' && ['mezepheles', 'general', 'politician'].some((r) => inScript(r, g.script)); }
-  listenWhy(g) { return ['mezepheles', 'general', 'politician'].filter((r) => inScript(r, g.script)); }
+  listenAll(g) { return g?.engine === 'snv' && ['mezepheles', 'general', 'politician', 'yaggababble'].some((r) => inScript(r, g.script)); }
+  listenWhy(g) { return ['mezepheles', 'general', 'politician', 'yaggababble'].filter((r) => inScript(r, g.script)); }
   /** 有将军或政客：今天的转写留到这局结束（只在内存和临时存档里，不进往期对局文件）。每人每天最多 30 句。 */
   keepTalk(g) {
     if (!this.mic || !this.listenAll(g)) return; // 2026-11-19：全员收音的剧本都留着（读场用），以前只留将军、政客的
@@ -2029,6 +2033,53 @@ export class Room {
     this.changed();
   }
 
+  // ───────────── 2026-11-22 小剧本：戏法师、末日预言者、公爵夫人 ─────────────
+  /** 戏法师：公开猜谁是恶魔、谁是爪牙（谁都可以声称，每人每天一次）。猜中（真戏法师、没失效）善良直接获胜。 */
+  alsaahir(uid, demons, minions) {
+    const g = this.requireGame();
+    if (!Array.isArray(demons) || (minions != null && !Array.isArray(minions))) throw new UserError('猜测格式不对');
+    let r;
+    try { r = g.alsaahirGuess(uid, demons, minions ?? []); } catch (e) { throw new UserError(e.message); }
+    const list = (ids) => ids.map((id) => `**${g.name(id)}**`).join('、') || '没有';
+    this.pub(`**${g.name(uid)}** 以**戏法师**的身份公开猜：恶魔是 ${list([...new Set(demons)])}；爪牙是 ${list([...new Set(minions ?? [])])}。${r.won ? '**猜中了！善良获胜。**' : '什么都没有发生。'}`, r.won ? 'end' : 'vote');
+    if (g.winner) this.later(0, () => this.endGame());
+    this.changed();
+  }
+
+  /** 末日预言者（传奇角色）：活着的玩家每局公开用一次，说书人让一名和他同阵营的存活玩家死亡。 */
+  doomsayer(uid) {
+    const g = this.requireGame();
+    let r;
+    try { r = g.doomsay(uid); } catch (e) { throw new UserError(e.message); }
+    this.pub(`**${g.name(uid)}** 公开使用了**末日预言者**——${r.victim ? (r.died ? `**${g.name(r.victim)} 当场死亡。**` : `说书人选中了 **${g.name(r.victim)}**，但他没有死。`) : '没有人死亡。'}`, r.died ? 'death' : 'vote');
+    if (g.winner) this.later(0, () => this.endGame());
+    this.changed();
+  }
+
+  /** 公爵夫人（传奇角色）：报名 / 取消拜访，全场看得到谁报了名。 */
+  duchessVisit(uid, on) {
+    const g = this.requireGame();
+    if (this.dusking || this.duskDay === g.day) throw new UserError('已经黄昏了：明天再报名');
+    const before = g.duchessToday().includes(uid);
+    let ids;
+    try { ids = g.duchessVisit(uid, on); } catch (e) { throw new UserError(e.message); }
+    if (before !== ids.includes(uid)) this.pub(`**${g.name(uid)}** ${on ? '报名今晚拜访' : '不去拜访'}**公爵夫人**（现在 ${ids.length} 人${ids.length === 3 ? '，正好三人' : ids.length > 3 ? '：超过三人，今晚不拜访' : ''}）。`, 'vote');
+    this.changed();
+  }
+
+  /** 黄昏：机器人替它们会做的事——机器人牙噶巴卜「说」暗号；公爵夫人还差人时机器人凑满三个（已经有真人报名才凑）。 */
+  teensyBots(g) {
+    for (const p of g.players) if (this.isFake(p.id) && p.role === 'yaggababble') g.yaggBotSay?.(p.id);
+    if (!SCRIPTS[g.script]?.duchess) return;
+    const ids = g.duchessToday();
+    if (ids.length >= 3 || (!ids.length && Math.random() < 0.6)) return;
+    for (const p of g.players.filter((q) => this.isFake(q.id) && !ids.includes(q.id)).sort(() => Math.random() - 0.5)) {
+      if (g.duchessToday().length >= 3) break;
+      g.duchessVisit(p.id, true);
+      this.pub(`**${g.name(p.id)}** 报名今晚拜访**公爵夫人**（现在 ${g.duchessToday().length} 人）。`, 'vote');
+    }
+  }
+
   // ───────────── 夜半狂欢：精神病患者 ─────────────
   /** 白天提名开始前：精神病患者公开选一名玩家，他死亡。 */
   psycho(uid, target) {
@@ -2240,6 +2291,7 @@ export class Room {
     if (g.winner) return this.endGame();
     await this.psychoRps(g);
     if (this.game !== g) return undefined;
+    if (g.engine === 'snv') this.teensyBots(g);
     const already = g.executedToday;
     const { executed, result, harpyDead } = g.endDay();
     this.duskDay = g.day; // 读档时：今天黄昏已经结算过，直接入夜
@@ -2964,6 +3016,8 @@ export class Room {
     this.recentLive.set(k, now);
     this.tacitHear(id, text); // 疯狂的默许：别人说他被洗脑 / 跳了他的角色，他要站出来否认
     this.hearBreak(id, text).catch((e) => console.warn('[botc] 判定破坏疯狂出错：', e.message));
+    const y = this.game?.yagg;
+    if (y && this.game.yaggHeard(id, text, translate(y.phrase))) this.changed(); // 牙噶巴卜的暗号：本机转写的文字里数（英文桌也认英文译文），不交给大模型
   }
 
   async hearBreak(id, text) {
@@ -4242,6 +4296,11 @@ export class Room {
       canGoblin: day && inScript('goblin', g.script) && this.pendingNom?.nominee === uid && !this.vote && !(g.claims?.[uid] === 'goblin' && g.goblinClaimDay?.[uid] === g.day), // 每天都能重新声明（官方）
       // 谁都可以公开猜落难少女（每人一次，诈身份用）；只有真爪牙的第一次猜测算数
       canDamsel: day && inScript('damsel', g.script) && !g.damselTried?.[uid],
+      // 2026-11-22 小剧本：戏法师（谁都能声称，每人每天一次）、末日预言者（活人每局一次，活人不少于 4）、公爵夫人（报名拜访）
+      canAlsaahir: day && inScript('alsaahir', g.script) && g.visAlive(p) && g.alsaahirDay?.[uid] !== g.day,
+      canDoom: day && !!SCRIPTS[g.script]?.doomsayer && g.visAlive(p) && !g.doomUsed?.includes(uid) && g.alive().filter((q) => g.visAlive(q)).length >= 4,
+      duchess: SCRIPTS[g.script]?.duchess ? { open: day && !this.dusking && this.duskDay !== g.day, mine: g.duchessToday().includes(uid), ids: g.duchessToday() } : null,
+      yaggPhrase: p.role === 'yaggababble' && g.yagg?.told ? { phrase: g.yagg.phrase, today: g.yagg.day === g.day ? g.yagg.said : 0 } : null,
       harpy: g.harpyMad?.id === uid && g.harpyMad.night === g.night && g.phase === 'day' ? { target: g.harpyMad.target, name: g.name(g.harpyMad.target), claimed: !!g.harpyMad.claimed } : null,
       hearing: !!this.hearing,
       mic: day ? this.mic?.tokenFor(uid) ?? null : null,

@@ -56,6 +56,8 @@ export const DICE = {
   // 官方旅店老板页：醉的那个「可以是善良的或邪恶的，但几乎总会是善良的，这取决于你的游戏走向」。两人里有邪恶时掷（storyteller.innkeeperDrunk）
   innkeeperEvil: { base: 0.1, balance: -1.5 },
   gossipEvil: { base: 0.5 },
+  // 牙噶巴卜（2026-11-22）：白天每说一次暗号，当晚「可能」死一人（官方：说书人可以少杀）。善良领先时多杀
+  yaggKill: { base: 0.8, balance: 1.2 },
   sweetheartEvil: { base: 0.5 },
   dreamerSeen: { base: 0.85 },                      // 官方：邪恶项几乎都用在场爪牙
   savantTrue: { base: 0.5 },
@@ -94,7 +96,9 @@ export const DRAW = {
   // hits 最多算 2 次（共 -1）：比 newbie 轻，老手被挑得再多也不会轮到新手更容易被挑
   redHerring: { newbie: -1 },                 // 新手被红鲱鱼坑了很难自己想明白
   mayorVictim: { newbie: -2, hits: -0.5 },
-  gossipVictim: { hits: -0.5 },               // 新手在 gossipVictim() 里直接排除，这个人会死
+  gossipVictim: { hits: -0.5 },
+  yaggVictim: { hits: -0.5, trusted: 1.2, info: 0.6, suspected: -1, newbie: -1 }, // 牙噶巴卜：照聪明的恶魔挑（杀被信任的、报了信息的，留被怀疑的）
+  doomVictim: { hits: -0.5, newbie: -1.5, self: 0.3 },        // 末日预言者：说书人挑同阵营的谁死（能不挑新手就不挑）               // 新手在 gossipVictim() 里直接排除，这个人会死
   sweetheartDrunk: { newbie: -2, hits: -0.5 },
   innkeeperDrunk: { newbie: -2, hits: -0.5 },
   starpassHeir: { heat: -2 },                 // 被怀疑最少的最值得接任

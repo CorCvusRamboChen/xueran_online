@@ -1,8 +1,8 @@
-import { travellersOf } from '../engine/roles.js';
+import { travellersOf, ROLES } from '../engine/roles.js';
 // 三个剧本的夜晚顺序（照官方英文 App 的夜晚总表 nightsheet.json；2026-11-11 用户定：和集石百科不一样的地方以英文新表为准）：前端「角色」页的夜间顺序说明用，黯月初升和梦殒春宵的结算顺序（engine/bmr.js、engine/snv.js）也读这里。
 // 每一步：[角色 id 或步骤 id, 这一步做什么]。不是角色的步骤（爪牙信息、恶魔信息）在 STEP_NAMES 里起名字。
 
-export const STEP_NAMES = { minioninfo: '爪牙信息', demoninfo: '恶魔信息', seat7: '7 号空座' };
+export const STEP_NAMES = { minioninfo: '爪牙信息', demoninfo: '恶魔信息', seat7: '7 号空座', duchess: '公爵夫人' };
 /**
  * 技能表里列出来、但不在结算步骤表（MIX_STEPS）里的角色：在别处结算或只是给说书人的提醒——
  * 疯子跟着恶魔、红唇女郎在死亡时、失忆者和食人族按隐藏能力的位置、提线木偶 / 魔术师 / 科学怪人 / 落难少女在开局信息里、利维坦在天亮。
@@ -679,15 +679,44 @@ for (const [script, o] of Object.entries(NIGHT_ORDER)) {
  * 失忆者、食人族拿到的能力也按这张表的位置醒。
  */
 export const MIX_STEPS = {
-  first: ['alchemist', 'apprentice', 'barista', 'bureaucrat', 'thief', 'philosopher', 'sailor', 'lleech', 'lilmonsta', 'engineer', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'fearmonger', 'pukka', 'pixie', 'huntsman',
+  first: ['alchemist', 'apprentice', 'barista', 'bureaucrat', 'thief', 'philosopher', 'sailor', 'lleech', 'lilmonsta', 'engineer', 'poisoner', 'widow', 'courtier', 'snakecharmer', 'godfatherInfo', 'devilsadvocate', 'eviltwin', 'witch', 'cerenovus', 'harpy', 'mezepheles', 'fearmonger', 'pukka', 'yaggababble', 'pixie', 'huntsman',
     'washerwoman', 'librarian', 'investigator', 'chef', 'empath', 'fortuneteller', 'grandmother', 'clockmaker', 'dreamer', 'amn_detect', 'seamstress', 'noble', 'balloonist', 'shugenja', 'villageidiot', 'bountyhunter', 'nightwatchman',
     'butler', 'spy', 'ogre', 'highpriestess', 'general', 'chambermaid', 'mathematician'],
   other: ['barista', 'bureaucrat', 'thief', 'harlot', 'bonecollector', 'poppygrower', 'philosopher', 'sailor', 'engineer', 'poisoner', 'courtier', 'innkeeper', 'gambler', 'acrobat', 'snakecharmer', 'monk', 'devilsadvocate', 'witch', 'cerenovus', 'pithag', 'harpy', 'mezepheles', 'exorcist', 'fearmonger', 'lycanthrope',
-    'imp', 'lleech', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'alhadikhia', 'lilmonsta', 'assassin', 'godfather', 'gossip', 'hatter',
+    'imp', 'lleech', 'zombuul', 'pukka', 'shabaloth', 'po', 'fanggu', 'nodashii', 'vortox', 'vigormortis', 'alhadikhia', 'lilmonsta', 'yaggababble', 'assassin', 'godfather', 'gossip', 'hatter',
     'barber', 'sweetheart', 'sage', 'professor', 'huntsman', 'farmer', 'tinker', 'moonchild', 'grandmother', 'ravenkeeper', // 照官方英文总表（11-11 用户定：和集石百科不一样时以英文新表为准）
     'washerwoman', 'librarian', 'investigator', 'chef', 'clockmaker', 'noble', 'shugenja', 'empath', 'fortuneteller', 'undertaker', 'dreamer', 'amn_detect', 'amn_echo', 'flowergirl', 'towncrier', 'oracle', 'seamstress',
-    'juggler', 'balloonist', 'villageidiot', 'bountyhunter', 'nightwatchman', 'butler', 'spy', 'highpriestess', 'general', 'chambermaid', 'mathematician'],
+    'juggler', 'balloonist', 'villageidiot', 'bountyhunter', 'nightwatchman', 'butler', 'spy', 'highpriestess', 'general', 'duchess', 'chambermaid', 'mathematician'],
 };
+
+/**
+ * 2026-11-22 加的六个小剧本：夜晚顺序表照 MIX_STEPS（官方英文总表）自动排，每步的说明从上面各剧本已经写好的说明里取。
+ * 7 人以下没有爪牙信息和恶魔信息；疯子、红唇女郎这类不是自己一步的写在最前面说明。
+ */
+const DESC = { first: {}, other: {} };
+for (const o of Object.values(NIGHT_ORDER)) for (const k of ['first', 'other']) for (const [id, what] of o[k] ?? []) DESC[k][id] ??= what;
+Object.assign(DESC.first, { yaggababble: '得知自己的秘密短语（暗号）', godfatherInfo: DESC.first.godfather });
+Object.assign(DESC.other, { yaggababble: '本人不醒：他今天白天每公开说一次暗号，说书人今晚就可能让一人死亡', duchess: '今天正好三人拜访过公爵夫人：三人各自得知三人里有几个邪恶，其中一人的数是错的' });
+const TEENSY_WHY = '人少（5–6 人），没有爪牙信息和恶魔信息：恶魔不知道谁是爪牙，爪牙也不知道谁是恶魔。';
+function autoOrder(roles, extra = {}, why = []) {
+  const has = (id) => roles.includes(id === 'godfatherInfo' ? 'godfather' : id) || extra[id];
+  // 角色表里这一夜不醒的（钟表匠其他夜、白天能力的角色）不列；教父其他夜、祖母其他夜照角色表
+  const wakes = (k) => (id) => extra[id] || id === 'godfatherInfo' || (ROLES[id] && ROLES[id][k === 'first' ? 'firstNight' : 'otherNight']);
+  const pick = (k) => MIX_STEPS[k].filter(has).filter(wakes(k)).map((id) => [id === 'godfatherInfo' ? 'godfather' : id, DESC[k][id] ?? DESC[k === 'first' ? 'other' : 'first'][id] ?? '按自己的能力行动']);
+  return { first: pick('first'), other: pick('other'), why: [TEENSY_WHY, ...why] };
+}
+NIGHT_ORDER.otr = autoOrder(['grandmother', 'clockmaker', 'innkeeper', 'snakecharmer', 'professor', 'slayer', 'lunatic', 'recluse', 'godfather', 'spy', 'imp'], {},
+  ['疯子以为自己是小恶魔：小恶魔醒的时候他也醒、也选人（没有效果），恶魔会得知他选了谁。', '祖母首夜得知孙子；孙子被恶魔杀死时祖母一起死（说书人结算）。']);
+NIGHT_ORDER.lod = autoOrder(['pixie', 'undertaker', 'exorcist', 'fisherman', 'slayer', 'juggler', 'drunk', 'lunatic', 'devilsadvocate', 'marionette', 'lleech'], {},
+  ['痢蛭首夜选宿主（宿主中毒）：宿主活着，痢蛭就杀不死；宿主死了，痢蛭跟着死。相克：猎手射中宿主，宿主死亡。', '提线木偶以为自己是善良角色，按他以为的角色醒。']);
+NIGHT_ORDER.lnd = autoOrder(['snakecharmer', 'lycanthrope', 'slayer', 'fool', 'alchemist', 'minstrel', 'tinker', 'recluse', 'golem', 'godfather', 'psychopath', 'scarletwoman', 'pukka', 'imp'], {},
+  ['恶魔可能是小恶魔（当晚杀）或普卡（下一晚毒发）。教父今天有外来者死了才醒来杀人。']);
+NIGHT_ORDER.rtb = autoOrder(['clockmaker', 'empath', 'dreamer', 'slayer', 'courtier', 'mayor', 'lunatic', 'klutz', 'scarletwoman', 'spy', 'vortox'], {},
+  ['涡流在场时，镇民拿到的信息都是错的；白天没有处决，邪恶获胜。', '末日预言者（传奇角色）是白天的公开行动，不在夜里。']);
+NIGHT_ORDER.nfm = autoOrder(['snakecharmer', 'alsaahir', 'slayer', 'philosopher', 'alchemist', 'virgin', 'heretic', 'damsel', 'klutz', 'psychopath', 'goblin', 'boomdandy', 'pukka', 'vortox'], { duchess: true },
+  ['戏法师、精神病患者、哥布林、炸弹人都是白天的公开行动。公爵夫人（传奇角色）：今天正好三人拜访时，夜里叫醒这三人。']);
+NIGHT_ORDER.chat = autoOrder(['highpriestess', 'savant', 'artist', 'fisherman', 'juggler', 'amnesiac', 'lunatic', 'drunk', 'cerenovus', 'goblin', 'yaggababble', 'lleech'], {},
+  ['牙噶巴卜首夜得知暗号；之后夜里不醒，白天每公开说一次暗号，当晚就可能多死一人（要开收音页，说书人才听得到）。', '相克：洗脑师可以让人疯狂地证明自己是哥布林。']);
 
 /** 黯月初升的结算步骤（engine/bmr.js 用）：去掉不是角色的信息步骤；教父首夜那一步是"得知外来者"。 */
 export const BMR_STEPS = {

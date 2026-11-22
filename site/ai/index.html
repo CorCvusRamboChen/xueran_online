@@ -473,6 +473,21 @@
       <dl><div class="ai-row"><dt>怎么决定</dt><dd>先在「和给出去的信息都对得上」的活着的假邪恶里挑（每次给跟恶魔有关的信息时，记下哪些人当恶魔还对得上，<code>pinAtheist</code>）；没有就从活着的假邪恶里挑；都死光了才从活人里补。挑的时候越不被怀疑越像（−1.5）、越被信任略减（−0.5）。舞蛇人选中假恶魔时同样换人。</dd></div><div class="ai-row"><dt>依据</dt><dd>官方无神论者页（说书人可以打破规则模拟邪恶在场）。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/storyteller.js:592</code> <code>pinAtheist</code>、<code>:634</code> <code>atheistHeir</code>；<code>engine/snv.js:2400</code> <code>atheistMoveDemon</code>、<code>:2417</code> <code>atheistSnake</code>；<code>dice.js:111</code>。</dd></div></dl>
     </article>
     <article class="ai-card pnl">
+      <header><h3>牙噶巴卜：说了几次暗号，今晚杀几个、杀谁</h3><span class="tag tag-dark">夜里</span></header>
+      
+      <dl><div class="ai-row"><dt>什么时候</dt><dd>话多成灾。牙噶巴卜白天每公开说一次暗号（收音页或广场转写里数，一句里说两次算两次），当晚说书人就「可能」让一人死亡。</dd></div><div class="ai-row"><dt>怎么决定</dt><dd>每一次掷一次杀不杀：基础 80%，局势权重 +1.2（善良领先时多杀）：局势 −0.5 / 0.1 / +0.5 时 <b>69% / 82% / 88%</b>。杀谁照聪明的恶魔挑：大家信任的 +1.2、报了身份给信息的 +0.6、被怀疑的 −1（留着背锅）、新手 −1、这局被说书人挑中过 −0.5/次；不杀邪恶。牙噶巴卜醉酒中毒、被驱魔人选中时不杀。机器人牙噶巴卜说不了话，按每天 0 次 30%、1 次 55%、2 次 15% 算。</dd></div><div class="ai-row"><dt>依据</dt><dd>集石百科牙噶巴卜页（说书人可以少杀；死谁由说书人选）；暗号用普通、像真话的短语（官方建议）。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/storyteller.js</code> <code>yaggVictims</code>；<code>engine/snv.js</code> <code>yaggHeard</code>、<code>yaggBotSay</code>。</dd></div></dl>
+    </article>
+    <article class="ai-card pnl">
+      <header><h3>末日预言者：谁死</h3><span class="tag tag-mot">白天</span></header>
+      
+      <dl><div class="ai-row"><dt>什么时候</dt><dd>逐底竞赛。活人不少于 4 个时，活着的玩家每局可以公开用一次。</dd></div><div class="ai-row"><dt>怎么决定</dt><dd>从和他同阵营的存活玩家里抽（可能是他自己，+0.3）：新手 −1.5、这局被说书人挑中过 −0.5/次。不拿它杀恶魔，除非红唇女郎能接任、游戏还能继续。</dd></div><div class="ai-row"><dt>依据</dt><dd>集石百科末日预言者页（「不要用这个能力杀死恶魔，除非游戏还能继续」）。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/storyteller.js</code> <code>doomVictim</code>。</dd></div></dl>
+    </article>
+    <article class="ai-card pnl">
+      <header><h3>公爵夫人：谁拿错的数</h3><span class="tag tag-dark">夜里</span></header>
+      
+      <dl><div class="ai-row"><dt>什么时候</dt><dd>谁都别动。黄昏时正好三人报名拜访，当晚三人各自得知三人里有几个邪恶。</dd></div><div class="ai-row"><dt>怎么决定</dt><dd>三人里随机一人拿错的数；错的数尽量只差一（真相 ±1，在 0–3 之内）。拜访不满三人、超过三人都不拜访。机器人在已经有真人报名、还差人时凑满三个（没人报名时 40% 主动报名）。</dd></div><div class="ai-row"><dt>依据</dt><dd>集石百科公爵夫人页。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/storyteller.js</code> <code>duchessFalse</code>；<code>server/room.js</code> <code>teensyBots</code>。</dd></div></dl>
+    </article>
+    <article class="ai-card pnl">
       <header><h3>7 号空座（七步成诗的灯神规则）</h3><span class="tag tag-mot">白天</span><span class="tag tag-dark">夜里</span></header>
       
       <dl><div class="ai-row"><dt>夜里替它选人</dt><dd>按机器人规则（邪恶角色优先挑活着的善良，其余随机）（<code>engine/snv.js:1078</code> <code>autoChooseSNV</code>）。</dd></div><div class="ai-row"><dt>今天用不用唯一一次发言</dt><dd>每天开放提名时掷，基础 35%，被提名时 +1.5、过半人死了 +1.2（35% / 被提名 71% / 后半段 64% / 两者 89%）；活人 ≤ 4 一定用（<code>dice.js:76</code>、<code>server/room.js:2571</code>）。</dd></div><div class="ai-row"><dt>怎么说</dt><dd>邪恶能提名时 35% 拿来提名一个善良玩家、25% 私聊（不能提名时 60% 私聊）、其余公开；善良 30% 私聊、70% 公开（<code>room.js:2615</code> <code>seat7Mode</code>）。对象：邪恶找善良，善良随便找活人（<code>room.js:2624</code>）。</dd></div><div class="ai-row"><dt>说什么</dt><dd>大模型写，失败按规则：善良报角色和最后一条信息，邪恶报一个伪装并怀疑一个善良玩家。</dd></div><div class="ai-row"><dt>炸弹人倒数时</dt><dd>指一个不同阵营的人（<code>room.js:2548-2550</code>）。</dd></div></dl>

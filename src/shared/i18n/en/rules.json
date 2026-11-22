@@ -403,5 +403,20 @@
  "谨慎推理": "Careful reasoning",
  "诺-达鲺有很多下毒目标；博学者、数学家够聪明就能看出谁中毒。适合善思的玩家。": "The No Dashii has many poisoning targets; a sharp Savant or Mathematician can spot who is poisoned. For thoughtful players.",
  "狂野之夜": "Wild night",
- "涡流让关键信息全错，洗脑师和畸形秀演员带来疯狂。开局前先讲清楚疯狂怎么判。": "The Vortox makes key information wrong, and the Cerenovus and Mutant bring madness. Explain how madness is judged before the game starts."
+ "涡流让关键信息全错，洗脑师和畸形秀演员带来疯狂。开局前先讲清楚疯狂怎么判。": "The Vortox makes key information wrong, and the Cerenovus and Mutant bring madness. Explain how madness is judged before the game starts.",
+ "得知自己的秘密短语（暗号）": "Learns their secret phrase",
+ "本人不醒：他今天白天每公开说一次暗号，说书人今晚就可能让一人死亡": "Doesn't wake: for each time they said the phrase publicly today, the Storyteller may kill a player tonight",
+ "今天正好三人拜访过公爵夫人：三人各自得知三人里有几个邪恶，其中一人的数是错的": "If exactly three players visited the Duchess today: each learns how many of the three are evil, one gets a wrong number",
+ "按自己的能力行动": "Acts by their ability",
+ "疯子以为自己是小恶魔：小恶魔醒的时候他也醒、也选人（没有效果），恶魔会得知他选了谁。": "The Lunatic thinks they are the Imp: they wake and choose when the Imp does (no effect), and the Demon learns whom they chose.",
+ "祖母首夜得知孙子；孙子被恶魔杀死时祖母一起死（说书人结算）。": "The Grandmother learns her grandchild on the first night; if the Demon kills the grandchild, she dies too (resolved by the Storyteller).",
+ "痢蛭首夜选宿主（宿主中毒）：宿主活着，痢蛭就杀不死；宿主死了，痢蛭跟着死。相克：猎手射中宿主，宿主死亡。": "The Lleech picks a host on the first night (the host is poisoned): while the host lives, the Lleech can't die; when the host dies, so does the Lleech. Jinx: if the Slayer shoots the host, the host dies.",
+ "提线木偶以为自己是善良角色，按他以为的角色醒。": "The Marionette thinks they are a good character and wakes as that character.",
+ "恶魔可能是小恶魔（当晚杀）或普卡（下一晚毒发）。教父今天有外来者死了才醒来杀人。": "The Demon may be the Imp (kills that night) or the Pukka (the poison kills the next night). The Godfather only wakes to kill if an Outsider died today.",
+ "涡流在场时，镇民拿到的信息都是错的；白天没有处决，邪恶获胜。": "With the Vortox in play, Townsfolk information is false; if nobody is executed during the day, evil wins.",
+ "末日预言者（传奇角色）是白天的公开行动，不在夜里。": "The Doomsayer (Fabled) is a public daytime action, not a night step.",
+ "戏法师、精神病患者、哥布林、炸弹人都是白天的公开行动。公爵夫人（传奇角色）：今天正好三人拜访时，夜里叫醒这三人。": "The Alsaahir, Psychopath, Goblin and Boomdandy all act publicly during the day. Duchess (Fabled): if exactly three players visited today, those three wake at night.",
+ "牙噶巴卜首夜得知暗号；之后夜里不醒，白天每公开说一次暗号，当晚就可能多死一人（要开收音页，说书人才听得到）。": "The Yaggababble learns the phrase on the first night; afterwards they don't wake, and each time they say it publicly during the day one more player might die that night (the listening page must be open for the Storyteller to hear).",
+ "相克：洗脑师可以让人疯狂地证明自己是哥布林。": "Jinx: the Cerenovus may make a player mad that they are the Goblin.",
+ "首夜睁眼得知暗号；之后本人不醒：他白天公开说了几次暗号，说书人夜里就可能让几个人死": "Wakes on the first night to learn the phrase; afterwards doesn't wake: for each time they said it publicly that day, the Storyteller may kill a player at night"
 }

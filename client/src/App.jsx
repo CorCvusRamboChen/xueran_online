@@ -737,9 +737,14 @@ function SnvButtons({ s, act }) {
       {me.canJuggle && <Btn kind={me.role?.id === 'juggler' ? 'primary' : 'secondary'} onClick={() => setOpen('juggle')} title="公开猜最多五次玩家的角色；只有真杂耍艺人当晚会得知猜对几个">公开猜测</Btn>}
       {me.harpy && !me.harpy.claimed && <Btn kind="primary" onClick={() => setOpen('harpy')} title={`鹰身女妖要你疯狂地证明 ${me.harpy.name} 是邪恶的`}>公开指认</Btn>}
       {me.canDamsel && <Btn kind="secondary" onClick={() => setOpen('damsel')} title="爪牙合计有一次机会：公开猜谁是落难少女，猜中了邪恶获胜。谁都可以这么说">猜落难少女</Btn>}
+      {me.canAlsaahir && <Btn kind={me.role?.id === 'alsaahir' ? 'primary' : 'secondary'} onClick={() => setOpen('alsaahir')} title="每个白天一次：公开猜谁是恶魔、谁是爪牙。真戏法师全猜对，善良直接获胜。谁都可以这么说">戏法师 · 猜恶魔和爪牙</Btn>}
+      {me.canDoom && <Btn kind="secondary" onClick={() => setOpen('doom')} title="传奇角色末日预言者：活人不少于 4 个时，每人每局可以公开用一次，说书人让一名和你同阵营的存活玩家死亡">末日预言者</Btn>}
+      {me.duchess?.open && <Btn kind={me.duchess.mine ? 'primary' : 'secondary'} onClick={() => act('duchess', { on: !me.duchess.mine })}
+        title="传奇角色公爵夫人：黄昏时正好三人报名，当晚三人各自得知三人里有几个邪恶（其中一人的数是错的）">{me.duchess.mine ? `不去拜访公爵夫人（${me.duchess.ids.length}/3）` : `拜访公爵夫人（${me.duchess.ids.length}/3）`}</Btn>}
+      {me.yaggPhrase && <span className="muted yagg-note" title="白天每公开说一次，当晚就可能有一名玩家死亡（要开着收音页说）">你的暗号「{me.yaggPhrase.phrase}」· 今天说了 {me.yaggPhrase.today} 次</span>}
       {open && createPortal(
         <div className="sheet-bg gossip-bg" onClick={close} role="presentation">
-          <div className="gossip-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={{ declare: '公开声明', juggle: '公开猜测', artist: '提问', fisherman: '请教说书人', amnesiac: '猜我的能力', pardon: '特赦', harpy: '公开指认', damsel: '猜落难少女' }[open]}>
+          <div className="gossip-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={{ declare: '公开声明', juggle: '公开猜测', artist: '提问', fisherman: '请教说书人', amnesiac: '猜我的能力', pardon: '特赦', harpy: '公开指认', damsel: '猜落难少女', alsaahir: '戏法师', doom: '末日预言者' }[open]}>
             {open === 'declare' && <DeclareForm s={s} act={act} onClose={close} />}
             {open === 'juggle' && <JuggleForm s={s} act={act} onClose={close} />}
             {open === 'artist' && <ArtistForm act={act} onClose={close} />}
@@ -747,6 +752,8 @@ function SnvButtons({ s, act }) {
             {open === 'pardon' && <Confirm title="公开特赦" text="每局只能用一次。全场都会看到：台上的人走下处决台，今天不再处决任何人。" ok="特赦" onOk={() => act('pardon')} onClose={close} />}
             {open === 'harpy' && <Confirm title="公开指认" text={`全场都会看到你说「${me.harpy.name} 是邪恶的」。这就算你疯狂地证明过了；今天不说的话，黄昏时你们之中可能有人死亡。`} ok="公开说" onOk={() => act('harpyClaim')} onClose={close} />}
             {open === 'damsel' && <DamselForm s={s} act={act} onClose={close} />}
+            {open === 'alsaahir' && <AlsaahirForm s={s} act={act} onClose={close} />}
+            {open === 'doom' && <Confirm title="末日预言者" text="每人每局只能用一次，全场都会看到。说书人会挑一名和你同阵营的存活玩家（可能是你自己）当场死亡。现在就用吗？" ok="公开使用" onOk={() => act('doomsayer')} onClose={close} />}
             {open === 'fisherman' && <Confirm title="请教说书人" text="每局只能请教一次。说书人会私下给你一条建议，告诉你该去做什么（不一定是一条事实）。现在就用吗？" ok="现在请教" onOk={() => act('fisherman')} onClose={close} />}
           </div>
         </div>, document.body)}
@@ -755,6 +762,33 @@ function SnvButtons({ s, act }) {
 }
 
 const scriptRoles = (script) => rolesOf(script);
+
+/** 戏法师：公开猜每个人是恶魔、爪牙还是都不是。每人每天一次；真戏法师全猜对（所有恶魔和爪牙，死了的也算），善良获胜。 */
+function AlsaahirForm({ s, act, onClose }) {
+  const [pick, setPick] = useState({}); // id → 'demon' | 'minion'
+  const demons = Object.keys(pick).filter((id) => pick[id] === 'demon');
+  const minions = Object.keys(pick).filter((id) => pick[id] === 'minion');
+  const send = async () => { if (await act('alsaahir', { demons, minions })) onClose(); };
+  const set = (id, v) => setPick((p) => ({ ...p, [id]: p[id] === v ? undefined : v }));
+  return (
+    <div className="gossip-form">
+      <h3>戏法师 · 猜恶魔和爪牙</h3>
+      <p className="muted">全场都会看到你的猜测。要把所有恶魔（死了的也算）和所有爪牙都点对、不能多点：只有真戏法师猜对，善良才直接获胜。每人每天一次。</p>
+      <ul className="alsaahir-list">
+        {s.players.filter((p) => !p.traveller).map((p) => (
+          <li key={p.id}>
+            <span>{p.seat}号 {p.name}{p.alive ? '' : '（已死亡）'}</span>
+            <span className="btn-row">
+              <Btn kind={pick[p.id] === 'demon' ? 'primary' : 'secondary'} onClick={() => set(p.id, 'demon')}>恶魔</Btn>
+              <Btn kind={pick[p.id] === 'minion' ? 'primary' : 'secondary'} onClick={() => set(p.id, 'minion')}>爪牙</Btn>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="btn-row"><Btn kind="primary" disabled={!demons.length} onClick={send}>公开猜（{demons.length} 恶魔 · {minions.length} 爪牙）</Btn><Btn onClick={onClose}>取消</Btn></div>
+    </div>
+  );
+}
 
 /** 公开猜谁是落难少女：每人每局一次。只有爪牙的第一次猜测算数（爪牙合计一次），猜中邪恶获胜。 */
 function DamselForm({ s, act, onClose }) {
