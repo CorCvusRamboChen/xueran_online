@@ -206,7 +206,22 @@ export const YAGG_PHRASES = [
   '话说回来', '依我看', '有点东西', '好家伙', '太巧了', '我有个想法', '冷静一下', '大家听我说', '绝对没问题', '你品你品',
   '这不重要', '我打包票', '敲黑板', '我跟你讲', '一码归一码', '心里有数', '不是我说', '讲道理', '这波稳了', '你懂我意思吧',
   '实不相瞒', '明摆着的', '八九不离十', '别想太多', '我猜对了', '板上钉钉', '有一说一', '这事不简单', '我早就说过', '说来话长',
+  '这很可疑', // 百科范例（that sounds fishy）
 ];
+// 2026-11-24 用户：房主可以选暗号难度。百科：常见、可信的短语恶魔会天天说、一天说好几次；不寻常的短语他要么很少说、要么一说就露馅。
+// 简单：几乎每句话都能带上的口头话（天天能杀人，但也最容易被听出来）；困难：成语、俗语这类平时不太说的
+export const YAGG_PHRASES_EASY = [
+  '我觉得', '对啊', '是吗', '好吧', '等一下', '怎么说呢', '其实吧', '确实', '有可能', '为什么',
+  '你说的对', '然后呢', '可以啊', '我也是', '真的吗', '不好说', '我不知道', '离谱', '听我说', '没错',
+  '我同意', '好问题', '有意思', '不会吧', '我信了',
+];
+export const YAGG_PHRASES_HARD = [
+  '真相只有一个', '我掐指一算', '此言差矣', '天机不可泄露', '细思极恐', '格局打开', '有内鬼', '妙啊', '我愿称之为', '鱼腥味',
+  '月黑风高', '此地无银三百两', '醍醐灌顶', '我悟了', '狐狸尾巴', '掩耳盗铃', '打草惊蛇', '欲盖弥彰', '葫芦里卖的什么药', '事出反常必有妖',
+  '知人知面不知心', '君子一言', '火眼金睛', '真金不怕火炼', '路遥知马力',
+];
+/** 这局的暗号从哪一组里抽（房间设置 yaggLevel：easy / normal / hard，默认普通）。 */
+export const yaggPhrases = (level) => (level === 'easy' ? YAGG_PHRASES_EASY : level === 'hard' ? YAGG_PHRASES_HARD : YAGG_PHRASES);
 
 export const BOFFIN_POOL = ['empath', 'oracle', 'noble', 'shugenja', 'librarian', 'washerwoman', 'investigator', 'chef', 'balloonist', 'undertaker',
   'clockmaker', 'flowergirl', 'towncrier', 'mathematician', 'soldier', 'mayor', 'slayer', 'savant', 'fisherman'];
@@ -414,7 +429,7 @@ export const SNV_METHODS = {
     }
     this.pixie = {};          // 小精灵：id → { role 被告知的镇民角色, target 那个镇民是谁（可能没有：醉酒时给了不在场的）, mad 疯狂过没有 }
     this.mez = inPlay.has('mezepheles') ? { word: this.st.choose('mezWord', this.mezEasy ? MEZ_WORDS_EASY : MEZ_WORDS), used: false, hit: null } : null; // 灵言师的关键词
-    this.yagg = inPlay.has('yaggababble') ? { phrase: this.st.choose('yaggPhrase', YAGG_PHRASES), day: 0, said: 0, total: 0 } : null; // 牙噶巴卜的暗号；said：day 那天说了几次
+    this.yagg = inPlay.has('yaggababble') ? { phrase: this.st.choose('yaggPhrase', yaggPhrases(this.yaggLevel)), day: 0, said: 0, total: 0 } : null; // 牙噶巴卜的暗号；said：day 那天说了几次
     this.doomUsed = [];       // 末日预言者（传奇角色）：用过的人（每人每局一次）
     this.duchess = null;      // 公爵夫人（传奇角色）：{ day, ids } 这天报名拜访的人
     this.alsaahirDay = {};    // 戏法师（谁都可以声称）：id → 哪天猜过（每人每天一次）
@@ -1824,7 +1839,7 @@ ${this.grimoire(w.id)}
         }
         // 疯子以为自己是牙噶巴卜：首夜也「得知」一段暗号（换一段，和真的不一样），之后说了也没用
         if (first) for (const l of this.players.filter((q) => q.role === 'lunatic' && q.shownRole === 'yaggababble' && q.alive)) {
-          const fake = this.st.choose('yaggPhraseLunatic', YAGG_PHRASES.filter((x) => x !== this.yagg?.phrase), { who: l.id });
+          const fake = this.st.choose('yaggPhraseLunatic', yaggPhrases(this.yaggLevel).filter((x) => x !== this.yagg?.phrase), { who: l.id });
           (this.yaggFake ??= {})[l.id] = { phrase: fake, day: 0, said: 0, total: 0 };
           say(l, `你的暗号是「**${fake}**」。白天你每公开说一次（夹在别的话里也算），当晚就可能有一名玩家死亡。要开着收音页说，说书人才听得到。`);
           this.record('st', `疯子 ${this.tag(l.id)} 以为自己是牙噶巴卜，拿到的暗号是「${fake}」（没有效果）`);

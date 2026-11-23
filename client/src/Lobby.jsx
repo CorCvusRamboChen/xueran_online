@@ -323,6 +323,14 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                   <Select label="选人时限" value={st.chooseSeconds} options={[30, 45, 60, 90, 120]} unit="秒" onChange={(v) => set({ chooseSeconds: v })} />
                   {['tb', 'bmr'].includes(engineOf(st.script)) && <Toggle rule label="夜里死了仍拿信息（醉酒）" on={!!st.deadDrunk} onChange={(v) => set({ deadDrunk: v })} />}
                   {st.script === 'bmr' && <Toggle rule label="疯子（以为是僵怖）死后照样醒" on={!!st.lunaticGhost} onChange={(v) => set({ lunaticGhost: v })} />}
+                  {inScript('yaggababble', st.script) && (
+                    <label className="setting">
+                      <span>牙噶巴卜的暗号</span>
+                      <select value={st.yaggLevel ?? 'normal'} onChange={(e) => set({ yaggLevel: e.target.value })}>
+                        {[['easy', '简单 · 口头话'], ['normal', '普通'], ['hard', '困难 · 成语俗语']].map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                      </select>
+                    </label>
+                  )}
                   {inScript('mezepheles', st.script) && <Toggle rule label={st.mezEasy !== false ? '灵言师的关键词：简单（日常词，好引导）' : '灵言师的关键词：普通（不常见的词，官方口径）'} on={st.mezEasy !== false} onChange={(v) => set({ mezEasy: v })} />}
                   {(inScript('mutant', st.script) || inScript('cerenovus', st.script)) && s.hearAvailable && <Toggle label="语音判定疯狂（机器人留在广场转写被疯狂的人，开局前告诉大家）" on={!!st.hearMadness} onChange={(v) => set({ hearMadness: v })} />}
                 </div>

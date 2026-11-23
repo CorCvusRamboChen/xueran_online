@@ -108,6 +108,7 @@ export const DEFAULT_SETTINGS = {
   chooseSeconds: 45,     // 夜里选人时限（大家都选完就立刻结算，没选完的等到时限替他随机选）
   voteSeconds: 3,        // 投票时钟每人停留
   voteCountdown: 8,      // 时钟开始转动前的倒计时
+  yaggLevel: 'normal',   // 牙噶巴卜的暗号：easy 简单（天天挂嘴边的口头话）/ normal 普通 / hard 困难（成语俗语）（2026-11-24 用户）
   mezEasy: true,         // 灵言师的关键词：简单（日常话题词，好引导）；关掉是普通（不常见的词，官方口径）（2026-11-19 用户：默认简单）
   warCourt: true,        // 赛后军事法庭：AI 在输的一方里判一名「战犯」，全场看他被吊起来（2026-11-19 用户：房主的开关）
   moDemon: 'vigormortis', // 夜半狂欢的第二个恶魔：亡骨魔（原版）/ 小怪宝 / 利维坦（2026-11-19 用户要的开关）
@@ -529,6 +530,7 @@ export class Room {
     if (typeof p.shuffle === 'boolean') s.shuffle = p.shuffle;
     if (typeof p.nightDeafen === 'boolean') { s.nightDeafen = p.nightDeafen; s.nightDeafenAuto = false; } // 房主自己定了，就不再自动改
     if (typeof p.mezEasy === 'boolean') s.mezEasy = p.mezEasy;
+    if (['easy', 'normal', 'hard'].includes(p.yaggLevel)) s.yaggLevel = p.yaggLevel;
     if (['vigormortis', 'lilmonsta', 'leviathan'].includes(p.moDemon)) s.moDemon = p.moDemon;
     if (typeof p.warCourt === 'boolean') s.warCourt = p.warCourt;
     if (typeof p.nominatorVotes === 'boolean') s.nominatorVotes = p.nominatorVotes;
@@ -669,7 +671,7 @@ export class Room {
   /** 照 plan 开局：建 Game、发身份、入第一夜。pick：真人说书人排版时改过的（酒鬼以为的、红鲱鱼、伪装）。 */
   async launch({ seats, script, roles, drunkAs, noBaron, newbies: nb, demonSwap, custom, preset, pure, ragnarok, teensy, mixed, riot, assigned, pick = null }) {
     const newbies = new Set(nb);
-    this.game = new Game(seats.map(({ id, name }) => ({ id, name })), { roles, drunkAs, script, noBaron, evilInfo: seats.length >= 7 || this.settings.smallEvilInfo, deadDrunk: !this.tutorial && !!this.settings.deadDrunk, lunaticGhost: !!this.settings.lunaticGhost, newbies: [...newbies], mezEasy: this.settings.mezEasy !== false, demonSwap });
+    this.game = new Game(seats.map(({ id, name }) => ({ id, name })), { roles, drunkAs, script, noBaron, evilInfo: seats.length >= 7 || this.settings.smallEvilInfo, deadDrunk: !this.tutorial && !!this.settings.deadDrunk, lunaticGhost: !!this.settings.lunaticGhost, newbies: [...newbies], mezEasy: this.settings.mezEasy !== false, demonSwap, yaggLevel: this.settings.yaggLevel });
     if (pick) applyDraft(this.game, pick);
     if (!this.tutorial && this.evilTilt && !ragnarok) { // 按真实胜率调帮邪恶的程度（index.js 接上 server/winrate.js；测试和教学局不接）
       try { const t = this.evilTilt(script); this.game.st.tilt = t.tilt; if (t.tilt) this.stNote(`帮邪恶的程度 ${t.tilt > 0 ? '+' : ''}${t.tilt.toFixed(2)}：${t.why}`); } catch (e) { console.warn('[botc] 算胜率出错：', e.message); }

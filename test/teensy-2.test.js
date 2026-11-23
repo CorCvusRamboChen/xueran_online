@@ -294,3 +294,24 @@ test('结算顺序照官方英文总表（2026-11-23 用户：谁都别动里炼
   assert.ok(at('other', 'legion') < at('other', 'imp') && at('other', 'alhadikhia') < at('other', 'lleech'), '痢蛭在其他恶魔之后');
   assert.deepEqual(NIGHT_ORDER.nfm.first.map(([id]) => id).slice(0, 2), ['philosopher', 'alchemist']);
 });
+
+// 2026-11-24 用户：房主可以选牙噶巴卜的暗号难度
+test('牙噶巴卜的暗号难度：简单 / 普通 / 困难各抽各的，存档里留着；房间设置只认这三档', async () => {
+  const { YAGG_PHRASES_EASY, YAGG_PHRASES_HARD } = await import('../src/engine/snv.js');
+  const roles = ['highpriestess', 'savant', 'artist', 'fisherman', 'cerenovus', 'yaggababble'];
+  const ps = roles.map((_, i) => ({ id: `p${i + 1}`, name: `玩家${i + 1}` }));
+  for (const [level, list] of [['easy', YAGG_PHRASES_EASY], ['normal', YAGG_PHRASES], ['hard', YAGG_PHRASES_HARD]]) {
+    for (let seed = 1; seed <= 5; seed++) {
+      const g = new Game(ps, { roles, rng: makeRng(seed), script: 'chat', yaggLevel: level });
+      assert.ok(list.includes(g.yagg.phrase), `${level}：${g.yagg.phrase}`);
+      assert.equal(g.toJSON().yaggLevel, level);
+    }
+  }
+  assert.equal(new Game(ps, { roles, rng: makeRng(1), script: 'chat', yaggLevel: '乱写' }).yaggLevel, 'normal');
+  const { Room } = await import('../src/server/room.js');
+  const room = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: { async findSquare() { return 'square'; } }, settings: {} });
+  room.users.set('u1', { id: 'u1', name: '阿一', avatar: null });
+  await room.act('u1', 'settings', { yaggLevel: 'hard' });
+  assert.equal(room.settings.yaggLevel, 'hard');
+  await room.teardown?.();
+});
