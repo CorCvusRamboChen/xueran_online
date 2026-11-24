@@ -15,7 +15,7 @@ cat "${TMPDIR:-/tmp}/botc-play.tgz" | $SSH 'set -e
   rm -rf ~/apps/.botc-play_new && mkdir ~/apps/.botc-play_new
   tar -xzf - -C ~/apps/.botc-play_new
   for keep in data node_modules; do [ -e ~/apps/botc-play/$keep ] && mv ~/apps/botc-play/$keep ~/apps/.botc-play_new/; done
-  rm -rf ~/apps/botc-play && mv ~/apps/.botc-play_new ~/apps/botc-play
+  rm -rf ~/apps/.botc-play_old; mv ~/apps/botc-play ~/apps/.botc-play_old && mv ~/apps/.botc-play_new ~/apps/botc-play; rm -rf ~/apps/.botc-play_old || true # 改名挪开，不会因为旧进程还在写而中断（2026-11-24 正式服出过）
   cd ~/apps/botc-play && PATH=~/.local/node/bin:$PATH npm ci --omit=dev --no-audit --no-fund
   chmod +x scripts/botc-play-start.sh
   P=~/Library/LaunchAgents/com.rambochen.botc-play.plist
