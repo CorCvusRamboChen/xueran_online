@@ -119,3 +119,13 @@ test('房间：发起教派后大家举手、到点结算，一轮里不能再�
     assert.ok(room.log.some((l) => /教派：\d+ 人加入/.test(l.text)));
   } finally { await room.teardown(); }
 });
+
+test('酒鬼不重身份：以为的镇民不在场，也不和提线木偶以为的撞', () => {
+  for (let seed = 1; seed <= 300; seed++) {
+    const roles = ['marionette', 'drunk', 'fanggu', 'empath', 'investigator', 'librarian', 'sailor'];
+    const g = new Game(players(7), { roles, rng: makeRng(seed), script: 'mc' });
+    const d = g.players.find((q) => q.role === 'drunk'); const m = g.players.find((q) => q.role === 'marionette');
+    assert.ok(!g.players.some((q) => q.role === d.shownRole), `seed ${seed}：酒鬼以为的 ${d.shownRole} 在场`);
+    assert.notEqual(d.shownRole, m.shownRole, `seed ${seed}：酒鬼和提线木偶都以为自己是 ${d.shownRole}`);
+  }
+});

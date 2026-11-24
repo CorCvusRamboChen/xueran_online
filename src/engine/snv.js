@@ -329,7 +329,8 @@ export const SNV_METHODS = {
     // 酒鬼以为自己是一个不在场的镇民；疯子以为自己是这个剧本的恶魔；失忆者的能力说书人定（他自己不知道）
     const L = listsOf(this.script);
     for (const p of this.players) {
-      if (p.role === 'drunk') p.shownRole = pickOne(L.tf.filter((r) => !inPlay.has(r) && !['amnesiac', 'cannibal'].includes(r)), rng); // 以为自己是失忆者/食人族的酒鬼永远不醒，等于露馅
+      // 酒鬼以为自己是一个不在场的镇民（官方）。2026-11-24 用户问酒鬼会不会重身份：也别和提线木偶以为的撞（提线木偶坐前面时原来会撞）
+      if (p.role === 'drunk') p.shownRole = pickOne(L.tf.filter((r) => !inPlay.has(r) && !['amnesiac', 'cannibal'].includes(r) && !this.players.some((q) => q !== p && q.shownRole === r && q.role !== r)), rng); // 以为自己是失忆者/食人族的酒鬼永远不醒，等于露馅
       // 提线木偶：以为自己是一个善良角色（官方：抽到的是镇民标记）。和酒鬼一样挑不在场的，别和酒鬼撞
       if (p.role === 'marionette') p.shownRole = pickOne(L.tf.filter((r) => !inPlay.has(r) && !['amnesiac', 'cannibal', 'huntsman', 'balloonist'].includes(r) && !this.players.some((q) => q.shownRole === r)), rng) ?? 'chef';
       if (p.role === 'lunatic') p.shownRole = pickOne(L.dem, rng);
