@@ -825,5 +825,8 @@
  "，上面是{0}": ", it holds the {0}",
  "，上面是什么不公开": "; what's on it is secret",
  "传奇角色：{0}": "Fabled: {0}",
- "传奇：{0}": "Fabled: {0}"
+ "传奇：{0}": "Fabled: {0}",
+ "悄悄开一枪": "Secret shot",
+ "你还不知道自己的能力是什么，可以悄悄试一枪：选一个人。能力是枪就按枪结算——打中了大家只知道他突然倒下，没打中谁都不知道你开过枪。每局一次。": "You don't know your ability yet, so you can try a secret shot: pick a player. If your ability is a gun it resolves as one: on a hit everyone only learns they suddenly fell; on a miss nobody knows you fired. Once per game.",
+ "只有你看得到这个按钮：悄悄试一枪，别人不会知道是你开的。每局一次。": "Only you can see this button: try a secret shot, nobody will know it was you. Once per game."
 }

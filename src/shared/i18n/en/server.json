@@ -550,5 +550,9 @@
  "只能选一名活着的玩家或一个空座位": "Pick an alive player or an empty seat",
  "街头风琴手在场：**闭眼投票**，只看得到自己举没举手；票数和结果保密，黄昏时才宣布处决谁。": "The Organ Grinder is in play: **eyes-closed voting**. You only see your own hand; the tally and result stay secret, and dusk announces who is executed.",
  "对 **{0}** 的投票结束（街头风琴手：票数保密）。": "The vote on **{0}** is over (Organ Grinder: tally secret).",
- "秘密投票：{0} {1} 票（需 {2}）→ {3}；举手：{4}": "Secret vote: {0} got {1} (needs {2}) → {3}; hands: {4}"
+ "秘密投票：{0} {1} 票（需 {2}）→ {3}；举手：{4}": "Secret vote: {0} got {1} (needs {2}) → {3}; hands: {4}",
+ "你悄悄开了一枪：**{0} 倒下了。**（大家只知道他突然死了，不知道是谁开的枪）": "You fired a secret shot: **{0} fell.** (Everyone only knows they suddenly died, not who fired.)",
+ "你悄悄开了一枪：什么都没有发生。（没有人知道你开过枪）": "You fired a secret shot: nothing happened. (Nobody knows you fired.)",
+ "失忆者 {0} 悄悄向 {1} 开了一枪 → {2}": "Amnesiac {0} secretly shot {1} → {2}",
+ "**{0}** 突然倒下了！": "**{0}** suddenly fell!"
 }

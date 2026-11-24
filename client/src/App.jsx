@@ -308,6 +308,7 @@ const MODES = {
   pelt: { title: '惩罚场外', hint: '选一个人和一样东西，叠在他头上。', confirm: '扔' }, // 面板是 Pelt.jsx 的 PeltPanel，这里只给选人模式占个位
   psycho: { title: '精神病患者 · 杀人', hint: '公开站出来说你是精神病患者，选一名玩家：他死亡。每天一次，要在提名开始之前。', confirm: '杀死' },
   nominate: { title: '提名', hint: '选一个人，站出来指着他。', confirm: '提名' },
+  slaySecret: { title: '悄悄开一枪', hint: '你还不知道自己的能力是什么，可以悄悄试一枪：选一个人。能力是枪就按枪结算——打中了大家只知道他突然倒下，没打中谁都不知道你开过枪。每局一次。', confirm: '开枪' },
   slay: { title: '声称是猎手 · 开枪', hint: '任何人都可以站出来声称自己是猎手，当众向一个人开枪（可以用来诈身份）。只有真猎手打中恶魔，对方才会倒下；每人每局只能开一次。', confirm: '开枪' },
   pull: { title: '拉进密室', hint: '选人拉进私聊房间；只选一个人就是和你单独谈。', confirm: '带走', max: 3 },
 };
@@ -718,8 +719,10 @@ function SlayButton({ s, setMode }) {
   if ((engineOf(s.script) !== 'tb' && !inScript('slayer', s.script) && !me?.canSlay) || s.script === 'rag' || s.phase !== 'day' || !me || s.players.find((p) => p.id === s.me)?.shot) return null; // 诸神黄昏的猎手死了才开枪（RagShotPanel）
   return (
     <div className="btn-row gossip-row">
-      <Btn kind={me.role?.id === 'slayer' || me.canSlay ? 'primary' : 'secondary'} onClick={() => setMode('slay')}
-        title="谁都可以声称自己是猎手开一枪；只有真猎手打中恶魔才会有人倒下。每人每局一次。">声称猎手 · 开枪</Btn>
+      {me.slaySecret
+        ? <Btn kind="secondary" onClick={() => setMode('slay')} title="只有你看得到这个按钮：悄悄试一枪，别人不会知道是你开的。每局一次。">悄悄开一枪</Btn>
+        : <Btn kind={me.role?.id === 'slayer' || me.canSlay ? 'primary' : 'secondary'} onClick={() => setMode('slay')}
+          title="谁都可以声称自己是猎手开一枪；只有真猎手打中恶魔才会有人倒下。每人每局一次。">声称猎手 · 开枪</Btn>}
     </div>
   );
 }
@@ -1332,7 +1335,7 @@ function Actions({ s, act, me, name, g, mode, setMode, picked, onTap, prompt, rk
   const goblinClaim = s.pendingNom && me?.canGoblin ? <GoblinClaim act={act} /> : null;
   if (mode === 'pelt') return <>{goblinClaim}<PeltPanel s={s} act={act} onClose={() => setMode(null)} /></>;
   if (mode) {
-    const M = MODES[mode];
+    const M = mode === 'slay' && me?.slaySecret ? MODES.slaySecret : MODES[mode];
     return (
       <>{goblinClaim}<Panel title={M.title} tone="mot">
         <p className="lead">{M.hint}</p>

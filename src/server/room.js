@@ -195,7 +195,7 @@ export class Room {
     this.lastVote = null;
     this.meets = [];            // 谁和谁进了同一间屋（只进存档）
     this.voteHistory = [];      // 每次投票的票型（谁提名谁、谁举了手），投完公开
-    this.secretDay = null; this.secretGhost = null; this.chairAsk = null; // 街头风琴手的秘密投票日、抢椅子的换座位
+    this.secretDay = null; this.secretGhost = null; this.chairAsk = null; this.secretShots = null; // 街头风琴手的秘密投票日、抢椅子的换座位
     this.knifeLog = [];         // 刀口：每晚谁死了（平安夜也记），谁复活了——「关键信息」页用
     this.execLog = [];          // 每天黄昏的处决结果
     this.pubLog = [];           // 公开事件：公开声明、开枪、公开选人、突然死亡——「关键信息」页按天列
@@ -3340,7 +3340,19 @@ export class Room {
     const amnesiacGun = g.engine === 'snv' && p?.role === 'amnesiac'; // 失忆者都能试着开枪：能力是枪就照常结算，不是就什么也没发生（每局一次）
     if (g.script !== 'tb' && !inScript('slayer', g.script) && !amnesiacGun) throw new UserError('这个剧本没有猎手');
     if (SCRIPTS[g.script].ragnarok) throw new UserError('诸神黄昏的猎手死了才能开枪');
+    // 2026-11-24 用户（话多成灾）：没有猎手的剧本里只有失忆者有这把枪，一开枪大家就知道他是失忆者。
+    // 还没猜出自己能力的失忆者悄悄开：打中了全场只知道那人突然倒下，没打中谁都不知道；只有他自己和说书人知道是他开的
+    const secret = amnesiacGun && !g.amnesiacKnown?.[uid] && g.script !== 'tb' && !inScript('slayer', g.script);
     const { hit } = g.slay(uid, target);
+    if (secret) {
+      (this.secretShots ??= new Set()).add(uid);
+      this.tell(uid, hit ? `你悄悄开了一枪：**${g.name(target)} 倒下了。**（大家只知道他突然死了，不知道是谁开的枪）` : '你悄悄开了一枪：什么都没有发生。（没有人知道你开过枪）', 'storyteller');
+      this.stNote(`失忆者 ${g.name(uid)} 悄悄向 ${g.name(target)} 开了一枪 → ${hit ? '命中' : '无事发生'}`);
+      if (hit) this.pub(`**${g.name(target)}** 突然倒下了！`, 'death');
+      if (g.winner) this.later(0, () => this.endGame());
+      this.changed();
+      return;
+    }
     this.pub(`**${g.name(uid)}** ${amnesiacGun ? '举起枪' : '声称自己是猎手'}，向 **${g.name(target)}** 开了一枪……${hit ? `**${g.name(target)}** 倒下了！` : '什么都没有发生。'}`, hit ? 'death' : 'info');
     this.narrate('slay', { a: g.name(uid), b: g.name(target), hit });
     if (g.winner) this.later(0, () => this.endGame());
@@ -4296,7 +4308,7 @@ export class Room {
         char: this.lobby.find((x) => x.id === p.id)?.char ?? null,
         outfit: this.outfits.get(p.id) ?? null,
         fake: this.isFake(p.id), seat7: !!p.seat7,
-        nominated: g.nominees.has(p.id), nominator: g.nominators.has(p.id), shot: (g.shooters ?? []).includes(p.id),
+        nominated: g.nominees.has(p.id), nominator: g.nominators.has(p.id), shot: (g.shooters ?? []).includes(p.id) && (!this.secretShots?.has(p.id) || isST || p.id === uid || this.ended), // 失忆者悄悄开的枪不公开
         traveller: !!p.traveller, left: !!p.left, travellerRole: p.traveller ? ROLES[p.role].name : null, // 旅行者的角色是公开的（阵营不公开）
         mic: this.mics?.[p.id] ?? null, // 'server' 被闭麦 / 'self' 自己闭麦
         online: this.online.has(p.id),
@@ -4454,6 +4466,7 @@ export class Room {
       canArtist: day && p.alive && tryAs('artist') && !g.used?.[uid] && !this.triedToday(uid, 'artist'),
       canFisherman: day && p.alive && tryAs('fisherman') && !g.used?.[`fish-${uid}`] && !this.triedToday(uid, 'fisherman'),
       canAmnesiac: day && (g.allAmnMode?.() ? !!g.allAmn(p) : p.alive && p.role === 'amnesiac') && g.amnesiacDay?.[uid] !== g.day, // 全员失忆：死了也能问
+      slaySecret: p.role === 'amnesiac' && !g.amnesiacKnown?.[uid] && g.script !== 'tb' && !inScript('slayer', g.script), // 失忆者悄悄开枪（没有猎手的剧本）
       canSlay: day && p.alive && (['slayer', 'amn_gun', 'amn_judge'].includes(ab) || g.extraAbility(p) === 'slayer' || amn) && !g.shooters?.includes(uid),
       canGun: day && p.alive && p.role === 'gunslinger' && g.gunDay !== g.day && (this.voteHistory ?? []).some((v) => v.day === g.day && !v.exile) && !this.vote,
       canJudge: day && p.alive && p.role === 'judge' && !g.judgeUsed && this.judgeDay !== g.day && !!this.judgeTarget() && this.judgeTarget().nom.nominator !== uid,

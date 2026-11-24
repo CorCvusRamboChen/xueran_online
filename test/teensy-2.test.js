@@ -315,3 +315,36 @@ test('牙噶巴卜的暗号难度：简单 / 普通 / 困难各抽各的，存�
   assert.equal(room.settings.yaggLevel, 'hard');
   await room.teardown?.();
 });
+
+// 2026-11-24 用户（话多成灾）：没有猎手的剧本里只有失忆者有枪，一开枪就暴露。还没猜出能力时悄悄开
+test('失忆者悄悄开枪：别人看不到是谁开的；打中了只说那人突然倒下，没打中谁都不知道', async () => {
+  const { Room } = await import('../src/server/room.js');
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+  const until = async (cond, ms = 8000) => { const end = Date.now() + ms; while (!cond() && Date.now() < end) await sleep(5); };
+  const voice = () => { let n = 0; return { async findSquare() { return 'square'; }, async setAsleep() {}, async openRoom() { return `room${++n}`; }, async closeRoom() {}, async addToRoom() {}, async removeFromRoom() {}, async moveAll() {}, async setMuted() {} }; };
+  const room = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: voice(), settings: { chooseSeconds: 0.05, voteSeconds: 0.002, voteCountdown: 0.005, pauseMs: 5, killSceneMs: 0, mode: 'auto', shuffle: false, script: 'chat' } });
+  room.moonchildWaitMs = 5; room.judgeReady = () => false; room.dawnPad = [0, 0];
+  for (const [id, name] of [['u1', '阿一'], ['u2', '阿二']]) room.users.set(id, { id, name, avatar: null });
+  await room.act('u1', 'join'); await room.act('u2', 'join');
+  await room.act('u1', 'addBots', { count: 4 });
+  await room.act('u1', 'assignRole', { player: 'u1', role: 'amnesiac' });
+  await room.act('u1', 'start');
+  const g = room.game;
+  try {
+    for (let k = 0; k < 400 && g.phase === 'night'; k++) { if (!room.resolving) for (const pr of g.nightPrompts()) if (!room.isFake(pr.playerId) && !g.choices[pr.playerId]) await room.act(pr.playerId, 'choose', { night: g.night, targets: pr.optional ? [] : pr.options.slice(0, pr.count) }).catch(() => {}); await sleep(3); }
+    await until(() => g.phase === 'day', 3000);
+    if (g.winner || !g.get('u1').alive) return;
+    assert.equal(room.viewFor('u1').self.slaySecret, true);
+    g.get('u1').gained = 'amn_gun'; // 能力是「一发子弹」：打谁谁死
+    const t = g.alive().find((q) => q.id !== 'u1' && q.id !== 'u2' && !q.apparentDead);
+    const before = room.log.length;
+    await room.act('u1', 'slay', { target: t.id });
+    const said = room.log.slice(before).map((l) => l.text).join('\n');
+    assert.doesNotMatch(said, /阿一/, '公开的消息里没有开枪的人');
+    assert.match(said, /突然倒下/);
+    assert.equal(g.get(t.id).alive, false);
+    assert.equal(room.viewFor('u2').players.find((p) => p.id === 'u1').shot, false, '别人看不到他开过枪');
+    assert.equal(room.viewFor('u1').players.find((p) => p.id === 'u1').shot, true);
+    assert.ok(room.inbox.get('u1').some((m) => /悄悄开了一枪/.test(m.text)));
+  } finally { await room.teardown(); }
+});

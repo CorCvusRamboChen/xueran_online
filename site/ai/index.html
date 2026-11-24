@@ -138,7 +138,7 @@
     </article>
     <article class="ai-card pnl">
       <header><h3>失忆者、炼金术士、学徒拿到什么能力</h3><span class="tag tag-light">开局</span></header>
-      
+      <p>• <b>悄悄开枪</b>（2026-11-24）：没有猎手的剧本（如话多成灾）里，还没猜出能力的失忆者有一个只有自己看得到的「悄悄开一枪」（每局一次）：能力是枪就照常结算，打中了全场只听到「某某突然倒下了」，没打中谁都不知道；开枪的人只有他自己和说书人知道。有猎手的剧本谁都能声称猎手开枪，照常公开。</p>
       <dl><div class="ai-row"><dt>什么时候</dt><dd>发身份时（学徒在他加入后的首个夜晚）。</dd></div><div class="ai-row"><dt>做什么决定</dt><dd>给他哪个能力。</dd></div><div class="ai-row"><dt>怎么决定</dt><dd><ul><li>失忆者：从 20 个可用能力里挑不在场的，白天能力（杀手、博学者、艺术家、渔夫等）只占 <b>20%</b>（<code>DAY_SHARE = 0.2</code>），其余是夜里的能力。</li><li>炼金术士：随机一个不在场的爪牙能力。</li><li>学徒：善良给镇民能力、邪恶给爪牙能力，优先不在场的，随机。</li></ul></dd></div><div class="ai-row"><dt>依据</dt><dd>官方失忆者页「让这一能力容易被猜测」→夜里能察觉到的能力优先。</dd></div><div class="ai-row"><dt>代码</dt><dd><code>engine/snv.js:42</code>、<code>:295-306</code>；<code>engine/travellers.js:89</code> <code>apprenticeSetup</code>。</dd></div></dl>
     </article>
     <article class="ai-card pnl">
