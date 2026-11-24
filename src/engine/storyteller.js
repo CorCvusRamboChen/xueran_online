@@ -1026,7 +1026,6 @@ export class Storyteller {
     const open = !demons.length || this.roll('savantDemon', { balance: this.balance() }, {});
     const named = (open ? ps : ps.filter((q) => !demons.includes(q))).filter((q) => q.id !== me?.id);
     const two = shuffled(named, rng).slice(0, 2);
-    const one = pick(named, rng);
     const dead = ps.filter((q) => !q.alive);
     const alive = ps.filter((q) => q.alive);
     const outs = ps.filter((q) => ROLES[q.role].team === 'outsider').length;
@@ -1051,7 +1050,7 @@ export class Storyteller {
       { t: `相邻而坐的邪恶玩家有 ${pairs} 对`, f: `相邻而坐的邪恶玩家有 ${num(pairs, 0, n)} 对`, cat: 'seat' },
       ...(two.length === 2 ? [{ t: `${g.name(two[0].id)} 和 ${g.name(two[1].id)} ${same ? '是' : '不是'}同一阵营`, f: `${g.name(two[0].id)} 和 ${g.name(two[1].id)} ${same ? '不是' : '是'}同一阵营`, cat: 'people' }] : []),
       ...(w ? [] : [{ t: `恶魔${demonIn ? '在' : '不在'} ${seats[0]} 号到 ${seats.at(-1)} 号之间`, f: `恶魔${demonIn ? '不在' : '在'} ${seats[0]} 号到 ${seats.at(-1)} 号之间`, cat: 'seat' }]), // 无神论者局不说恶魔在哪（假恶魔以后可能要换人）
-      ...(one ? [{ t: `${g.name(one.id)} 是${isEvil(one) ? '邪恶' : '善良'}的`, f: `${g.name(one.id)} 是${isEvil(one) ? '善良' : '邪恶'}的`, sharp: isEvil(one), cat: 'people' }] : []),
+      // 「某某是善良 / 邪恶的」不再给（2026-11-24 用户：博学者直接给了「3 号是善良的」，太有指向性）
     ];
     if (absent.length && present.length) facts.push({ t: `场上有${ROLES[pick(present.filter((r) => r !== me?.role).length ? present.filter((r) => r !== me?.role) : present, rng)].name}`, f: `场上有${ROLES[pick(absent, rng)].name}`, cat: 'role' });
     facts.push(...this.savantMore(w, { isEvil, demons, dead, num, pins }));
@@ -1145,7 +1144,9 @@ export class Storyteller {
     if (w) lie = null;
     // 2026-11-20 用户：夜半狂欢那局博学者第二天的真信息「死亡的玩家里有 1 名邪恶」（只死了一个人）等于点名。
     // 一下子把人圈到一两个里的真话（sharp）少给：善良落后时才多放
-    const facts = this.savantFacts(w, p).filter((f) => f.cat !== 'skip');
+    const all = this.savantFacts(w, p).filter((f) => f.cat !== 'skip');
+    const paired = (f) => all.some((x) => x !== f && x.cat === f.cat);
+    const facts = [...all.filter(paired), ...all.filter((f) => !paired(f))]; // 有同类搭档的排前面：第一条从这里挑，第二条才找得到同类
     const soft = facts.filter((f) => !f.sharp);
     const keep = (f, other) => (!f.sharp || !soft.some((x) => x !== other) || this.roll('savantSharp', { balance: this.balance() }, { who: p.id }) ? f : soft.find((x) => x !== other));
     const a = lie === 'must' ? facts[0] : keep(facts[0], null); // 涡流两条都假，不用挑

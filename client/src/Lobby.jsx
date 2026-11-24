@@ -323,6 +323,7 @@ export function Lobby({ s, act, ask, onTutorial, toast }) {
                   <Select label="选人时限" value={st.chooseSeconds} options={[30, 45, 60, 90, 120]} unit="秒" onChange={(v) => set({ chooseSeconds: v })} />
                   {['tb', 'bmr'].includes(engineOf(st.script)) && <Toggle rule label="夜里死了仍拿信息（醉酒）" on={!!st.deadDrunk} onChange={(v) => set({ deadDrunk: v })} />}
                   {st.script === 'bmr' && <Toggle rule label="疯子（以为是僵怖）死后照样醒" on={!!st.lunaticGhost} onChange={(v) => set({ lunaticGhost: v })} />}
+                  {rolesOf(st.script, 'demon').includes('yaggababble') && <Toggle rule label="牙噶巴卜多出场（恶魔约八成是牙噶巴卜）" on={st.yaggMore !== false} onChange={(v) => set({ yaggMore: v })} />}
                   {inScript('yaggababble', st.script) && (
                     <label className="setting">
                       <span>牙噶巴卜的暗号</span>

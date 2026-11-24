@@ -108,6 +108,7 @@ export const DEFAULT_SETTINGS = {
   chooseSeconds: 45,     // 夜里选人时限（大家都选完就立刻结算，没选完的等到时限替他随机选）
   voteSeconds: 3,        // 投票时钟每人停留
   voteCountdown: 8,      // 时钟开始转动前的倒计时
+  yaggMore: true,        // 有牙噶巴卜可选的剧本（话多成灾）：恶魔多半是牙噶巴卜（约 80%，原来一半一半）（2026-11-24 用户：增加概率，弄个开关）
   yaggLevel: 'normal',   // 牙噶巴卜的暗号：easy 简单（天天挂嘴边的口头话）/ normal 普通 / hard 困难（成语俗语）（2026-11-24 用户）
   mezEasy: true,         // 灵言师的关键词：简单（日常话题词，好引导）；关掉是普通（不常见的词，官方口径）（2026-11-19 用户：默认简单）
   warCourt: true,        // 赛后军事法庭：AI 在输的一方里判一名「战犯」，全场看他被吊起来（2026-11-19 用户：房主的开关）
@@ -531,6 +532,7 @@ export class Room {
     if (typeof p.nightDeafen === 'boolean') { s.nightDeafen = p.nightDeafen; s.nightDeafenAuto = false; } // 房主自己定了，就不再自动改
     if (typeof p.mezEasy === 'boolean') s.mezEasy = p.mezEasy;
     if (['easy', 'normal', 'hard'].includes(p.yaggLevel)) s.yaggLevel = p.yaggLevel;
+    if (typeof p.yaggMore === 'boolean') s.yaggMore = p.yaggMore;
     if (['vigormortis', 'lilmonsta', 'leviathan'].includes(p.moDemon)) s.moDemon = p.moDemon;
     if (typeof p.warCourt === 'boolean') s.warCourt = p.warCourt;
     if (typeof p.nominatorVotes === 'boolean') s.nominatorVotes = p.nominatorVotes;
@@ -663,6 +665,12 @@ export class Room {
     // 夜半狂欢的恶魔开关：抽到亡骨魔就换成小怪宝 / 利维坦（人数跟着调）；房主指定了亡骨魔的不换
     const demonSwap = script === 'mo' && ['lilmonsta', 'leviathan'].includes(this.settings.moDemon) ? this.settings.moDemon : null;
     if (demonSwap && !this.tutorial) roles = swapMoDemon(roles ?? balancedMixed(script, seats.length, Math.random), demonSwap, Math.random, new Set(seats.map((p, i) => (assign[p.id] ? i : -1)).filter((i) => i >= 0)));
+    // 牙噶巴卜多出场（房间设置，默认开）：抽到别的恶魔时 60% 换成牙噶巴卜（两个恶魔的剧本里合计约 80%）；房主指定了恶魔的不换
+    if (this.settings.yaggMore !== false && !this.tutorial && rolesOf(script, 'demon').includes('yaggababble') && !Object.values(assign).some((r) => ROLES[r]?.team === 'demon')) {
+      roles ??= teensy ? rollTeensy(script, seats.length, Math.random) : mixed ? balancedMixed(script, seats.length, Math.random) : roles;
+      const i = roles ? roles.findIndex((r) => ROLES[r]?.team === 'demon' && r !== 'yaggababble') : -1;
+      if (i >= 0 && Math.random() < 0.6) { roles = [...roles]; roles[i] = 'yaggababble'; }
+    }
     // 提线木偶要坐在恶魔旁边：房主指定了角色的座位不动（引擎开局还会再检查一次，那时已经相邻就不挪）
     if (roles?.includes('marionette')) roles = seatMarionette([...roles], Math.random, new Set(seats.map((p, i) => (assign[p.id] ? i : -1)).filter((i) => i >= 0)));
     return { seats, script, roles, drunkAs: custom ? null : preset?.drunkAs, noBaron, newbies: [...newbies], demonSwap, custom, preset, pure, ragnarok, teensy, mixed, riot, assigned: Object.keys(assign).length };
@@ -3346,9 +3354,10 @@ export class Room {
     const { hit } = g.slay(uid, target);
     if (secret) {
       (this.secretShots ??= new Set()).add(uid);
-      this.tell(uid, hit ? `你悄悄开了一枪：**${g.name(target)} 倒下了。**（大家只知道他突然死了，不知道是谁开的枪）` : '你悄悄开了一枪：什么都没有发生。（没有人知道你开过枪）', 'storyteller');
-      this.stNote(`失忆者 ${g.name(uid)} 悄悄向 ${g.name(target)} 开了一枪 → ${hit ? '命中' : '无事发生'}`);
-      if (hit) this.pub(`**${g.name(target)}** 突然倒下了！`, 'death');
+      const fell = hit && !g.visAlive(g.get(target)); // 打中了也可能没倒（宿主还活着的痢蛭这类）：没倒就什么都不播
+      this.tell(uid, fell ? `你悄悄开了一枪：**${g.name(target)} 倒下了。**（大家只知道他突然死了，不知道是谁开的枪）` : '你悄悄开了一枪：什么都没有发生。（没有人知道你开过枪）', 'storyteller');
+      this.stNote(`失忆者 ${g.name(uid)} 悄悄向 ${g.name(target)} 开了一枪 → ${fell ? '命中' : hit ? '命中但没有倒下' : '无事发生'}`);
+      if (fell) this.pub(`**${g.name(target)}** 突然倒下了！`, 'death');
       if (g.winner) this.later(0, () => this.endGame());
       this.changed();
       return;

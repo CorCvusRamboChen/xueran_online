@@ -554,5 +554,6 @@
  "你悄悄开了一枪：**{0} 倒下了。**（大家只知道他突然死了，不知道是谁开的枪）": "You fired a secret shot: **{0} fell.** (Everyone only knows they suddenly died, not who fired.)",
  "你悄悄开了一枪：什么都没有发生。（没有人知道你开过枪）": "You fired a secret shot: nothing happened. (Nobody knows you fired.)",
  "失忆者 {0} 悄悄向 {1} 开了一枪 → {2}": "Amnesiac {0} secretly shot {1} → {2}",
- "**{0}** 突然倒下了！": "**{0}** suddenly fell!"
+ "**{0}** 突然倒下了！": "**{0}** suddenly fell!",
+ "命中但没有倒下": "hit, but they did not fall"
 }

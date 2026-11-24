@@ -333,10 +333,10 @@ test('失忆者悄悄开枪：别人看不到是谁开的；打中了只说那�
   try {
     for (let k = 0; k < 400 && g.phase === 'night'; k++) { if (!room.resolving) for (const pr of g.nightPrompts()) if (!room.isFake(pr.playerId) && !g.choices[pr.playerId]) await room.act(pr.playerId, 'choose', { night: g.night, targets: pr.optional ? [] : pr.options.slice(0, pr.count) }).catch(() => {}); await sleep(3); }
     await until(() => g.phase === 'day', 3000);
-    if (g.winner || !g.get('u1').alive) return;
+    if (g.winner || !g.get('u1').alive || g.snvBroken(g.get('u1'))) return; // 随机到被痢蛭寄生（中毒）：枪本来就没用，这条测不了
     assert.equal(room.viewFor('u1').self.slaySecret, true);
     g.get('u1').gained = 'amn_gun'; // 能力是「一发子弹」：打谁谁死
-    const t = g.alive().find((q) => q.id !== 'u1' && q.id !== 'u2' && !q.apparentDead);
+    const t = g.alive().find((q) => q.id !== 'u1' && q.id !== 'u2' && !q.apparentDead && q.role !== 'lleech'); // 痢蛭宿主活着时打不死
     const before = room.log.length;
     await room.act('u1', 'slay', { target: t.id });
     const said = room.log.slice(before).map((l) => l.text).join('\n');
@@ -347,4 +347,30 @@ test('失忆者悄悄开枪：别人看不到是谁开的；打中了只说那�
     assert.equal(room.viewFor('u1').players.find((p) => p.id === 'u1').shot, true);
     assert.ok(room.inbox.get('u1').some((m) => /悄悄开了一枪/.test(m.text)));
   } finally { await room.teardown(); }
+});
+
+// 2026-11-24 用户：话多成灾里牙噶巴卜多出场，弄个开关；博学者别直接说「某某是善良的」
+test('牙噶巴卜多出场：开关开着恶魔约八成是牙噶巴卜，关掉一半一半；房主指定了恶魔不换', async () => {
+  const { Room } = await import('../src/server/room.js');
+  const room = new Room({ key: 'k', guildId: 'g', hostId: 'u1', voice: { async findSquare() { return 'square'; } }, settings: { script: 'chat' } });
+  const seats = Array.from({ length: 6 }, (_, i) => ({ id: `s${i}`, name: `玩家${i}` }));
+  const rate = (n = 400) => { let y = 0; for (let k = 0; k < n; k++) if ((room.planSetup(seats, 'chat').roles ?? rollTeensy('chat', 6, Math.random)).includes('yaggababble')) y++; return y / n; };
+  room.settings.yaggMore = true;
+  const on = rate();
+  room.settings.yaggMore = false;
+  const off = rate();
+  assert.ok(on > 0.7 && on < 0.9, `开：${on}`);
+  assert.ok(off > 0.35 && off < 0.65, `关：${off}`);
+  room.settings.yaggMore = true;
+  room.roleAssign = { s0: 'lleech' };
+  assert.ok(Array.from({ length: 50 }, () => room.planSetup(seats, 'chat').roles).every((r) => r.includes('lleech')), '指定了痢蛭就是痢蛭');
+  await room.teardown?.();
+});
+
+test('博学者：不再给「某某是善良 / 邪恶的」', () => {
+  const roles = ['savant', 'artist', 'fisherman', 'juggler', 'cerenovus', 'lleech'];
+  for (let seed = 1; seed <= 40; seed++) {
+    const g = new Game(roles.map((_, i) => ({ id: `p${i + 1}`, name: `玩家${i + 1}` })), { roles, rng: makeRng(seed), script: 'chat' });
+    for (const f of g.st.savantFacts(null, g.get('p1'))) assert.doesNotMatch(f.t, / 是(善良|邪恶)的$/, f.t);
+  }
 });
